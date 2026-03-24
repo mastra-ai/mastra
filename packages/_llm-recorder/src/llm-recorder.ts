@@ -306,6 +306,8 @@ export interface LLMRecorderInstance {
   stop(): void;
   /** Save recordings to disk (only in record mode) */
   save(): Promise<void>;
+  /** Reset fuzzy match tracking so recordings can be reused across tests */
+  resetFuzzyMatches(): void;
   /** Current test mode */
   mode: LLMTestMode;
   /** Whether we're in record mode (legacy, use .mode instead) */
@@ -616,14 +618,46 @@ function findRecording(
     return undefined;
   }
 
-  // 2. Fuzzy match via string similarity on serialized request content.
-  //    Prefer recordings that match the request URL to avoid cross-API mismatches
-  //    (e.g. /v1/chat/completions vs /v1/responses).
+  // 2. Fuzzy match fallback.
   //    Skip recordings already consumed by a previous fuzzy match.
-  //    When multiple candidates score within a narrow band (< 0.05 apart),
-  //    prefer the earliest unused one to preserve recording order — this is
-  //    critical for binary requests (e.g. audio) where serialized forms are
-  //    nearly identical and similarity scores are essentially random.
+
+  // For binary requests, string similarity is unreliable because the serialized
+  // form mainly differs in the random multipart boundary and binary digest, making
+  // all candidates score nearly identically.  Instead, match by body size proximity
+  // (replayed audio is deterministic so sizes should be very close).
+  const isBinary = typeof body === 'object' && body !== null && (body as Record<string, unknown>).__binary === true;
+
+  if (isBinary) {
+    const incomingSize = (body as Record<string, unknown>).size as number;
+    let bestIndex: number | undefined;
+    let bestSizeDiff = Infinity;
+
+    for (let i = 0; i < recordings.length; i++) {
+      if (usedHashes?.has(recordings[i]!.hash)) continue;
+      if (recordings[i]!.request.url !== url) continue;
+
+      const recBody = recordings[i]!.request.body as Record<string, unknown> | undefined;
+      if (!recBody?.__binary) continue;
+
+      const recSize = recBody.size as number;
+      const diff = Math.abs(incomingSize - recSize);
+      if (diff < bestSizeDiff) {
+        bestSizeDiff = diff;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex != null) {
+      usedHashes?.add(recordings[bestIndex]!.hash);
+      return recordings[bestIndex]!;
+    }
+    // Fall through to string similarity if no binary match found
+  }
+
+  // For non-binary requests, use string similarity on serialized request content.
+  // Prefer recordings that match the request URL to avoid cross-API mismatches.
+  // When multiple candidates score within a narrow band, prefer the earliest
+  // unused one to preserve recording order.
   const incoming = serializeRequestContent(url, body);
 
   type Candidate = { index: number; rating: number; urlMatch: boolean };
@@ -733,6 +767,9 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       },
       async save() {
         // no-op
+      },
+      resetFuzzyMatches() {
+        // no-op in live mode
       },
     };
     return instance;
@@ -1035,6 +1072,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           (deduped > 0 ? ` (${deduped} duplicates removed)` : ''),
       );
     },
+
+    resetFuzzyMatches() {
+      fuzzyUsedHashes.clear();
+    },
   };
 
   return instance;
@@ -1060,6 +1101,10 @@ export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 
 
   beforeAll(() => {
     recorder.start();
+  });
+
+  beforeEach(() => {
+    recorder.resetFuzzyMatches();
   });
 
   afterAll(async () => {
