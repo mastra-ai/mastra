@@ -3,8 +3,6 @@ import { openai } from '@ai-sdk/openai-v5';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
-import { logDataMiddleware } from '../../model-middleware';
-import { wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
 import {
   advancedModerationWorkflow,
@@ -76,10 +74,7 @@ export const chefModelV2Agent = new Agent({
       `,
     role: 'system',
   },
-  model: wrapLanguageModel({
-    model: openai('gpt-4o-mini'),
-    middleware: logDataMiddleware,
-  }),
+  model: 'openai/gpt-5-mini',
   tools: {
     weatherInfo,
     cookingTool,

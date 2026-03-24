@@ -24,6 +24,11 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support batch creating metrics',
     },
     {
+      name: 'listMetrics',
+      callThunk: () => storage.listMetrics({}),
+      expectedMessage: 'does not support listing metrics',
+    },
+    {
       name: 'getMetricAggregate',
       callThunk: () => storage.getMetricAggregate({ name: 'test', aggregation: 'sum' }),
       expectedMessage: 'does not support metric aggregation',

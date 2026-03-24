@@ -1,6 +1,6 @@
 import { tool, ToolLoopAgent } from '@internal/ai-v6';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MockLanguageModelV3, convertArrayToReadableStreamV3 } from '../../agent/__tests__/mock-model';
 import { Agent } from '../../agent/agent';
 import { Mastra } from '../../mastra';

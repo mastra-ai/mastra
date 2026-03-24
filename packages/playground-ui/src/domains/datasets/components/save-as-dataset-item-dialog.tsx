@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
 import { DatabaseIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Label } from '@/ds/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
-import { Button } from '@/ds/components/Button';
-import { Label } from '@/ds/components/Label';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { toast } from '@/lib/toast';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 type SaveAsDatasetItemDialogProps = {
   initialInput: string;
@@ -20,6 +21,7 @@ type SaveAsDatasetItemDialogProps = {
   isOpen: boolean;
   onClose: () => void;
   level?: SideDialogRootProps['level'];
+  source?: { type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result'; referenceId?: string };
 };
 
 export function SaveAsDatasetItemDialog({
@@ -29,10 +31,12 @@ export function SaveAsDatasetItemDialog({
   isOpen,
   onClose,
   level = 2,
+  source,
 }: SaveAsDatasetItemDialogProps) {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
+  // source is passed through — not editable in the UI
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
@@ -77,6 +81,7 @@ export function SaveAsDatasetItemDialog({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        ...(source ? { source } : {}),
       });
 
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);

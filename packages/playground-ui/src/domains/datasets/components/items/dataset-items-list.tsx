@@ -1,10 +1,10 @@
-import { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
+import { Plus, Upload, FileJson } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Plus, Upload, FileJson } from 'lucide-react';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];

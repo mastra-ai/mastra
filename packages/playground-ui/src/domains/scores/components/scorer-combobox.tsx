@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { toast } from '@/lib/toast';
-import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useScorers } from '../hooks/use-scorers';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 export interface ScorerComboboxProps {
   value?: string;

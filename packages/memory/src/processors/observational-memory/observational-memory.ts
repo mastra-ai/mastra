@@ -5,6 +5,7 @@ import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/age
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
   Processor,
@@ -71,6 +72,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from './markers';
+import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -86,9 +88,11 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
+  MAX_COMPRESSION_LEVEL,
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import type { CompressionLevel } from './reflector-agent';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
@@ -110,6 +114,33 @@ import type {
   DataOmStatusPart,
   ObservationMarkerConfig,
 } from './types';
+
+/**
+ * Returns true when a message contains at least one part with visible user/assistant
+ * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
+ * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ */
+function messageHasVisibleContent(msg: MastraDBMessage): boolean {
+  const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
+  if (content?.parts && Array.isArray(content.parts)) {
+    return content.parts.some(p => {
+      const t = p?.type;
+      return t && !t.startsWith('data-') && t !== 'step-start';
+    });
+  }
+  if (content?.content) return true;
+  return false;
+}
+
+/**
+ * Build a messageRange string from the first and last messages that have visible
+ * content.  Falls back to the full array boundaries when every message is data-only.
+ */
+function buildMessageRange(messages: MastraDBMessage[]): string {
+  const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
+  const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
+  return `${first.id}:${last.id}`;
+}
 
 /**
  * Debug event emitted when observation-related events occur.
@@ -168,6 +199,17 @@ export interface ObservationalMemoryConfig {
    * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
    */
   storage: MemoryStorage;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -267,6 +309,7 @@ interface ResolvedReflectionConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
+  retrieval: false,
   observation: {
     model: 'google/gemini-2.5-flash',
     messageTokens: 30_000,
@@ -337,6 +380,48 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
+export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+
+### When to use recall
+- The user asks you to **repeat, show, or reproduce** something from a past conversation
+- The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
+- Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
+- You want to **verify or expand on** an observation before responding
+
+**Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
+
+### How to use recall
+Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+
+1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
+2. Call \`recall\` with that ID as the \`cursor\`.
+3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
+4. If the first page doesn't have what you need, increment the page number to keep paginating.
+5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
+
+### Detail levels
+By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+
+- Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
+- Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
+
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
+
+### Following up on truncated parts
+Low-detail results may include truncation hints like:
+\`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
+
+**When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
+### When recall is NOT needed
+- The user is asking for a high-level summary and your observations already cover it
+- The question is about general preferences or facts that don't require source text
+- There is no relevant range in your observations for the topic
+
+Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -390,6 +475,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
+  private retrieval: boolean = false;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -793,6 +879,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -968,6 +1055,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
+    retrieval: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
@@ -978,6 +1066,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   } {
     return {
       scope: this.scope,
+      retrieval: this.retrieval,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
@@ -1006,7 +1095,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
     if (typeof model === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
-      return async ctx => {
+      return async (ctx: { requestContext: RequestContext; mastra?: Mastra }) => {
         const result = await model(ctx);
         if (Array.isArray(result)) {
           return (result[0]?.model ?? 'unknown') as MastraModelConfig;
@@ -1039,6 +1128,28 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       provider: resolved.provider,
       modelId: resolved.modelId,
     };
+  }
+
+  /**
+   * Get the default compression start level based on model behavior.
+   * gemini-2.5-flash is a faithful transcriber that needs explicit pressure to compress effectively.
+   */
+  private async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
+    try {
+      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
+      const modelId = resolved?.modelId ?? '';
+
+      // gemini-2.5-flash is conservative about compression - start at level 2
+      if (modelId.includes('gemini-2.5-flash')) {
+        return 2;
+      }
+
+      // Default for all other models
+      return 1;
+    } catch {
+      // Silently fallback to level 1 on error - not worth disrupting the operation
+      return 1; // safe default
+    }
   }
 
   private getRuntimeModelContext(
@@ -1314,6 +1425,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           observation: this.observationConfig,
           reflection: this.reflectionConfig,
           scope: this.scope,
+          retrieval: this.retrieval,
         },
         observedTimezone,
       });
@@ -2137,7 +2249,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2 | 3,
+    compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
   ): Promise<{
     observations: string;
@@ -2155,9 +2267,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Attempt reflection with escalating compression levels.
-    // Start at the provided level and retry up to level 3 if compression fails.
-    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
-    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    // Start at the provided level and retry upward, but cap retries relative to the start level
+    // and never go past the highest defined compression level.
+    const startLevel: CompressionLevel = compressionStartLevel ?? 0;
+    let currentLevel: CompressionLevel = startLevel;
+    const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
@@ -2224,7 +2338,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text);
+      parsed = parseReflectorOutput(result.text, observations);
 
       // If degenerate repetition detected, treat as compression failure
       if (parsed.degenerate) {
@@ -2250,6 +2364,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         break;
       }
 
+      if (currentLevel >= maxLevel) {
+        break;
+      }
+
+      const nextLevel = (currentLevel + 1) as CompressionLevel;
+
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = createObservationFailedMarker({
@@ -2257,7 +2377,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${nextLevel}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -2280,7 +2400,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Escalate to next compression level
-      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
+      currentLevel = nextLevel;
     }
 
     return {
@@ -2309,16 +2429,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
+    retrieval = false,
   ): string[] {
-    // Optimize observations to save tokens
-    let optimized = optimizeObservationsForContext(observations);
+    // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
+    let optimized = retrieval
+      ? (renderObservationGroupsForReflection(observations) ?? observations)
+      : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    const messages = [`${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`];
+    const messages = [
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+    ];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -3026,6 +3151,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
+      this.retrieval,
     );
 
     // Clear any existing observation system messages and re-add them with the
@@ -3978,11 +4104,13 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
+    const groupedObservations =
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
-    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -4188,10 +4316,11 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const messageRange = this.retrieval ? buildMessageRange(messagesToObserve) : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         newObservations = this.replaceOrAppendThreadSection(
           existingObservations,
           threadId,
@@ -4199,10 +4328,14 @@ ${formattedMessages}
           lastObservedAt,
         );
       } else {
-        // In thread scope: simple append with message boundary delimiter for cache stability
+        // In thread scope: append grouped observations with a message boundary delimiter for cache stability
+        const groupedObservations =
+          this.retrieval && messageRange
+            ? wrapInObservationGroup(result.observations, messageRange)
+            : result.observations;
         newObservations = existingObservations
-          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${result.observations}`
-          : result.observations;
+          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${groupedObservations}`
+          : groupedObservations;
       }
 
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -4651,11 +4784,15 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
+    const messageRange = this.retrieval ? buildMessageRange(messagesToBuffer) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
-      newObservations = result.observations;
+      newObservations =
+        this.retrieval && messageRange
+          ? wrapInObservationGroup(result.observations, messageRange)
+          : result.observations;
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -4986,15 +5123,11 @@ ${formattedMessages}
     // Store cycleId so tryActivateBufferedReflection can use it for UI markers
     ObservationalMemory.reflectionBufferCycleIds.set(_bufferKey, cycleId);
 
-    // Slice activeObservations to only the first N lines that fit within the
-    // activation-point token budget. This keeps the reflector prompt small
-    // (avoiding LLM hangs on huge prompts) and matches the portion that will
-    // be replaced at activation time.
     const fullObservations = currentRecord.activeObservations ?? '';
     const allLines = fullObservations.split('\n');
     const totalLines = allLines.length;
 
-    // Calculate how many lines fit within the activation point budget
+    // Approximate tokens per line to pick a slice matching bufferActivation * threshold
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
     const linesToReflect =
@@ -5003,20 +5136,13 @@ ${formattedMessages}
     const activeObservations = allLines.slice(0, linesToReflect).join('\n');
     const reflectedObservationLineCount = linesToReflect;
     const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
-    // Compression target: ask for 75% of the slice size. This is a modest reduction
-    // that LLMs can reliably achieve on dense observation text, unlike the more
-    // aggressive bufferActivation ratio which often fails on already-compressed content.
+    // Compression target: 75% of slice size. This gives breathing room while still making progress.
     const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
     );
 
-    omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
-    );
-
-    // Emit buffering start marker (after slice so we report the actual token count)
     if (writer) {
       const startMarker = createBufferingStartMarker({
         cycleId,
@@ -5030,8 +5156,11 @@ ${formattedMessages}
       void writer.custom(startMarker).catch(() => {});
     }
 
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
+
     // Call reflector with compression target.
-    // Start at compression level 1 (standard guidance), retry at level 2 (aggressive).
     const reflectResult = await this.callReflector(
       activeObservations,
       undefined, // No manual prompt
@@ -5039,7 +5168,7 @@ ${formattedMessages}
       compressionTarget,
       undefined, // No abort signal for background ops
       true, // Skip continuation hints for async buffering
-      1, // Start at compression level 1 for buffered reflection
+      await this.getCompressionStartLevel(requestContext),
       requestContext,
     );
 
@@ -5589,13 +5718,18 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,
           threadId,
           threadSection,
           threadLastObservedAt,
         );
+
+        // Update thread-specific metadata:
+        // - lastObservedAt: ALWAYS update to track per-thread observation progress
+        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           // Determine new title if thread title generation is enabled

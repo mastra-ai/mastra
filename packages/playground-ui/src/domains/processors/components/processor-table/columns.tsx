@@ -1,9 +1,9 @@
+import type { ColumnDef, Row } from '@tanstack/react-table';
+import type { ProcessorRow } from './processor-table';
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
-import { ColumnDef, Row } from '@tanstack/react-table';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useLinkComponent } from '@/lib/framework';
-import type { ProcessorRow } from './processor-table';
 
 export type NameCellProps = { row: Row<ProcessorRow> };
 export type PhasesCellProps = { row: Row<ProcessorRow> };

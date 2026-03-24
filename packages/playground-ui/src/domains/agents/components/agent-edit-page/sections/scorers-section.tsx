@@ -1,18 +1,19 @@
-import { useMemo, useState } from 'react';
-import { Controller, Control, useWatch } from 'react-hook-form';
 import { Trash2, ChevronRight } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { Control } from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
 
-import { JudgeIcon, Icon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { IconButton } from '@/ds/components/IconButton';
-import { Label } from '@/ds/components/Label';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import type { AgentFormValues, ScorerConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { MultiCombobox } from '@/ds/components/Combobox';
+import { IconButton } from '@/ds/components/IconButton';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Textarea } from '@/ds/components/Textarea';
+import { JudgeIcon, Icon } from '@/ds/icons';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
