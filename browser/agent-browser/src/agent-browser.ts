@@ -1000,7 +1000,19 @@ export class AgentBrowser extends MastraBrowser {
 
   override async injectKeyboardEvent(event: KeyboardEventParams): Promise<void> {
     if (!this.browserManager) throw new Error('Browser not launched');
-    await this.browserManager.injectKeyboardEvent(event);
+
+    // Use CDP directly to include windowsVirtualKeyCode
+    // The agent-browser package's injectKeyboardEvent doesn't pass this field,
+    // which breaks non-printable keys like Enter, Backspace, and arrows
+    const cdp = await this.browserManager.getCDPSession();
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: event.type,
+      key: event.key,
+      code: event.code,
+      text: event.text,
+      modifiers: event.modifiers ?? 0,
+      windowsVirtualKeyCode: event.windowsVirtualKeyCode,
+    });
   }
 }
 
