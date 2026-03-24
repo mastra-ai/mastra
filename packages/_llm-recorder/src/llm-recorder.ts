@@ -570,15 +570,43 @@ function createStreamingResponse(
 /** Minimum similarity score to accept a fuzzy match */
 const SIMILARITY_THRESHOLD = 0.6;
 
+/** When candidates score within this band of the top score, prefer the earliest one */
+const SIMILARITY_TIE_BAND = 0.05;
+
+/**
+ * From a list of candidates, pick the earliest one whose score is within
+ * SIMILARITY_TIE_BAND of the best score.  Returns the recording index or
+ * undefined if the list is empty.
+ */
+function pickBestCandidate(candidates: { index: number; rating: number }[]): number | undefined {
+  if (candidates.length === 0) return undefined;
+  const best = Math.max(...candidates.map(c => c.rating));
+  const tied = candidates.filter(c => best - c.rating < SIMILARITY_TIE_BAND);
+  // Earliest index wins among tied candidates
+  tied.sort((a, b) => a.index - b.index);
+  return tied[0]!.index;
+}
+
 /**
  * Find a matching recording — first by exact hash, then by string similarity.
  *
  * The fuzzy fallback handles cases where the request body changed slightly
  * between test runs (e.g. different prompt wording, extra metadata fields)
  * but the intent is clearly the same recording.
+ *
+ * `usedHashes` tracks recordings already consumed by fuzzy matches so that
+ * multiple similar requests (e.g. binary audio transcription calls that all
+ * serialize to near-identical strings) don't all resolve to the same recording.
+ * Exact hash matches are exempt — they are deterministic and always correct.
  */
-function findRecording(recordings: LLMRecording[], hash: string, url: string, body: unknown): LLMRecording | undefined {
-  // 1. Exact hash match (fast path)
+function findRecording(
+  recordings: LLMRecording[],
+  hash: string,
+  url: string,
+  body: unknown,
+  usedHashes?: Set<string>,
+): LLMRecording | undefined {
+  // 1. Exact hash match (fast path) — always valid regardless of used set
   const exact = recordings.find(r => r.hash === hash);
   if (exact) {
     return exact;
@@ -591,32 +619,37 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
   // 2. Fuzzy match via string similarity on serialized request content.
   //    Prefer recordings that match the request URL to avoid cross-API mismatches
   //    (e.g. /v1/chat/completions vs /v1/responses).
+  //    Skip recordings already consumed by a previous fuzzy match.
+  //    When multiple candidates score within a narrow band (< 0.05 apart),
+  //    prefer the earliest unused one to preserve recording order — this is
+  //    critical for binary requests (e.g. audio) where serialized forms are
+  //    nearly identical and similarity scores are essentially random.
   const incoming = serializeRequestContent(url, body);
-  let bestRating = -1;
-  let bestIndex = -1;
-  let bestUrlMatchRating = -1;
-  let bestUrlMatchIndex = -1;
+
+  type Candidate = { index: number; rating: number; urlMatch: boolean };
+  const candidates: Candidate[] = [];
 
   for (let i = 0; i < recordings.length; i++) {
+    if (usedHashes?.has(recordings[i]!.hash)) continue;
+
     const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
     const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
-    if (rating > bestRating) {
-      bestRating = rating;
-      bestIndex = i;
-    }
-    if (recordings[i]!.request.url === url && rating > bestUrlMatchRating) {
-      bestUrlMatchRating = rating;
-      bestUrlMatchIndex = i;
+    if (rating >= SIMILARITY_THRESHOLD) {
+      candidates.push({ index: i, rating, urlMatch: recordings[i]!.request.url === url });
     }
   }
 
-  // Prefer URL-matching recording when available and above threshold
-  if (bestUrlMatchRating >= SIMILARITY_THRESHOLD && bestUrlMatchIndex >= 0) {
-    return recordings[bestUrlMatchIndex]!;
+  if (candidates.length === 0) {
+    return undefined;
   }
 
-  if (bestRating >= SIMILARITY_THRESHOLD && bestIndex >= 0) {
-    return recordings[bestIndex]!;
+  // Among URL-matching candidates, pick the earliest one within 0.05 of the top score
+  const urlCandidates = candidates.filter(c => c.urlMatch);
+  const pick = pickBestCandidate(urlCandidates) ?? pickBestCandidate(candidates);
+
+  if (pick != null) {
+    usedHashes?.add(recordings[pick]!.hash);
+    return recordings[pick]!;
   }
 
   return undefined;
@@ -707,6 +740,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   const recordings: LLMRecording[] = [];
   const isRecordMode = mode === 'record';
+  const fuzzyUsedHashes = new Set<string>();
   let saved = false;
 
   // Create handlers for each LLM API host (or a filtered subset)
@@ -860,7 +894,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           console.log(`[llm-recorder]   Available hashes: ${savedRecordings.map(r => r.hash).join(', ')}`);
         }
 
-        const recording = findRecording(savedRecordings, hash, url, body);
+        const recording = findRecording(savedRecordings, hash, url, body, fuzzyUsedHashes);
 
         if (!recording) {
           console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
