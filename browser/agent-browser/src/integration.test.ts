@@ -17,7 +17,7 @@ try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
   const BrowserManager = await loadBrowserManager();
   const mgr = new BrowserManager();
-  await mgr.launch({ id: 'probe', action: 'launch', headless: true });
+  await mgr.launch({ headless: true });
   await mgr.close();
 } catch {
   canLaunchBrowser = false;
@@ -36,11 +36,10 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   }, 10_000);
 
   it('navigates to a URL and returns page info', async () => {
-    const result = (await browser.navigate({
-      action: 'goto',
+    const result = await browser.goto({
       url: 'data:text/html,<html><head><title>Test Page</title></head><body><h1>Hello</h1><a href="#">Link</a></body></html>',
       waitUntil: 'load',
-    })) as { success: boolean; title: string };
+    });
 
     expect(result.success).toBe(true);
     expect(result.title).toBe('Test Page');
@@ -48,150 +47,154 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
 
   it('captures an accessibility snapshot', async () => {
     // Navigate first
-    await browser.navigate({
-      action: 'goto',
+    await browser.goto({
       url: 'data:text/html,<html><body><button>Click me</button><input type="text" placeholder="Type here" /><a href="#">A link</a></body></html>',
       waitUntil: 'load',
     });
 
-    const result = (await browser.extract({
-      action: 'snapshot',
+    const result = await browser.snapshot({
       interactiveOnly: true,
-      maxElements: 50,
-      offset: 0,
-    })) as { success: boolean; tree: string };
+    });
 
     expect(result.success).toBe(true);
-    if (result.tree) {
-      // Should contain refs like @e1, @e2
-      expect(result.tree).toMatch(/@e\d+/);
-      // Should contain the button text
-      expect(result.tree).toContain('Click me');
-    }
+    expect(result.snapshot).toBeDefined();
+    expect(result.snapshot.length).toBeGreaterThan(0);
+    // Should contain refs like @e1, @e2
+    // Refs can be in format [ref=e1] or @e1 depending on agent-browser version
+    expect(result.snapshot).toMatch(/(?:\[ref=e\d+\]|@e\d+)/);
+    // Should contain the button text
+    expect(result.snapshot).toContain('Click me');
   }, 30_000);
 
   it('takes a screenshot', async () => {
-    await browser.navigate({
-      action: 'goto',
+    await browser.goto({
       url: 'data:text/html,<html><body style="background:blue"><h1 style="color:white">Screenshot Test</h1></body></html>',
       waitUntil: 'load',
     });
 
-    const result = (await browser.extract({
-      action: 'screenshot',
+    const result = await browser.screenshot({
       fullPage: false,
-    })) as { success: boolean; mimeType: string; base64: string; dimensions: { width: number; height: number } };
+    });
 
     expect(result.success).toBe(true);
-    expect(result.mimeType).toBe('image/png');
-    expect(result.dimensions.width).toBeGreaterThan(0);
-    expect(result.dimensions.height).toBeGreaterThan(0);
+    expect(result.base64).toBeDefined();
+    expect(result.base64.length).toBeGreaterThan(0);
   }, 30_000);
 
   it('types text into an input field', async () => {
-    await browser.navigate({
-      action: 'goto',
-      url: 'data:text/html,<html><body><input id="name" type="text" /></body></html>',
+    // Use a page with multiple interactive elements to ensure refs are generated
+    await browser.goto({
+      url: 'data:text/html,<html><body><form><input id="name" type="text" /><button type="submit">Submit</button></form></body></html>',
       waitUntil: 'load',
     });
 
-    // Get refs via snapshot
-    const snapshot = (await browser.extract({
-      action: 'snapshot',
-      interactiveOnly: true,
-      maxElements: 50,
-      offset: 0,
-    })) as { success: boolean; tree: string };
+    // Get refs via snapshot - use interactiveOnly: false to get all elements
+    const snapshotResult = await browser.snapshot({});
 
-    // Find the input ref from the snapshot tree
-    const refMatch = snapshot.tree?.match(/@e\d+/);
-    expect(refMatch).not.toBeNull();
+    // Ensure we got a snapshot
+    expect(snapshotResult.success).toBe(true);
+    expect(snapshotResult.snapshot).toBeDefined();
+    expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
 
-    if (refMatch) {
-      const result = (await browser.input({
-        action: 'fill',
-        ref: refMatch[0],
-        value: 'Hello World',
-      })) as { success: boolean; value: string };
+    // Find any ref - handle both [ref=e1] and @e1 formats
+    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
+    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
+    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    expect(ref).not.toBeNull();
+
+    if (ref) {
+      const result = await browser.type({
+        ref: ref,
+        text: 'Hello World',
+      });
 
       expect(result.success).toBe(true);
-      expect(result.value).toBe('Hello World');
     }
   }, 30_000);
 
   it('scrolls the page', async () => {
-    await browser.navigate({
-      action: 'goto',
+    await browser.goto({
       url: 'data:text/html,<html><body style="height:5000px"><h1>Top</h1><div style="position:absolute;top:4000px">Bottom</div></body></html>',
       waitUntil: 'load',
     });
 
-    const result = (await browser.scroll({
-      action: 'scroll',
+    const result = await browser.scroll({
       direction: 'down',
       amount: 500,
-    })) as { success: boolean; scrollY: number };
+    });
 
     expect(result.success).toBe(true);
-    expect(result.scrollY).toBeGreaterThan(0);
   }, 30_000);
 
   it('clicks a button', async () => {
-    await browser.navigate({
-      action: 'goto',
-      url: 'data:text/html,<html><body><button onclick="document.title=\'Clicked\'">Press</button></body></html>',
+    // Multiple interactive elements for better ref generation
+    await browser.goto({
+      url: 'data:text/html,<html><body><button id="btn" onclick="document.title=\'Clicked\'">Press</button><a href="#">Link</a></body></html>',
       waitUntil: 'load',
     });
 
-    const snapshot = (await browser.extract({
-      action: 'snapshot',
-      interactiveOnly: true,
-      maxElements: 50,
-      offset: 0,
-    })) as { success: boolean; tree: string };
+    const snapshotResult = await browser.snapshot({});
 
-    const refMatch = snapshot.tree?.match(/@e\d+/);
-    expect(refMatch).not.toBeNull();
+    expect(snapshotResult.success).toBe(true);
+    expect(snapshotResult.snapshot).toBeDefined();
+    expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
 
-    if (refMatch) {
-      const result = (await browser.interact({
-        action: 'click',
-        ref: refMatch[0],
+    // Find any ref - handle both [ref=e1] and @e1 formats
+    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
+    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
+    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    expect(ref).not.toBeNull();
+
+    if (ref) {
+      const result = await browser.click({
+        ref: ref,
         button: 'left',
-      })) as { success: boolean };
+      });
 
       expect(result.success).toBe(true);
 
-      // Verify the button click worked by checking title
-      const titleResult = (await browser.extract({ action: 'title' })) as { success: boolean; title: string };
-      expect(titleResult.title).toBe('Clicked');
+      // Check the title was changed (button's onclick handler ran)
+      const snapshot2 = await browser.snapshot({});
+      expect(snapshot2.title).toBe('Clicked');
     }
   }, 30_000);
 
   it('supports keyboard actions', async () => {
-    await browser.navigate({
-      action: 'goto',
-      url: 'data:text/html,<html><body><input id="test" type="text" /></body></html>',
+    // Multiple interactive elements
+    await browser.goto({
+      url: 'data:text/html,<html><body><input id="test" type="text" /><button>Submit</button></body></html>',
       waitUntil: 'load',
     });
 
-    // Use keyboard to type directly
-    const result = (await browser.keyboard({
-      action: 'type',
-      text: 'Hello via keyboard',
-    })) as { success: boolean };
+    const snapshotResult = await browser.snapshot({});
 
-    expect(result.success).toBe(true);
+    expect(snapshotResult.success).toBe(true);
+    expect(snapshotResult.snapshot).toBeDefined();
+    expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
+
+    // Find any ref - handle both [ref=e1] and @e1 formats
+    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
+    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
+    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    expect(ref).not.toBeNull();
+
+    if (ref) {
+      // Focus the input by clicking
+      await browser.click({ ref: ref });
+
+      // Type using keyboard press
+      const result = await browser.press({ key: 'a' });
+      expect(result.success).toBe(true);
+    }
   }, 30_000);
 
-  it('closes the browser via navigate close action', async () => {
-    // Create a separate browser instance for this test
-    const tempBrowser = new AgentBrowser({ headless: true, timeout: 15_000 });
+  it('closes the browser via close method', async () => {
+    const tempBrowser = new AgentBrowser({ headless: true });
     await tempBrowser.ensureReady();
-    expect(tempBrowser.isBrowserRunning()).toBe(true);
+    expect(tempBrowser.status).toBe('ready');
 
-    // Close via navigate action
-    await tempBrowser.navigate({ action: 'close' });
+    // Close the browser
+    await tempBrowser.close();
 
     expect(tempBrowser.status).toBe('closed');
   }, 30_000);

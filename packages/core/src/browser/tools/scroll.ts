@@ -1,40 +1,23 @@
 /**
- * Browser Scroll Tool
- *
- * Handles scrolling operations:
- * - scroll: Scroll in a direction
- * - into_view: Scroll element into view
+ * browser_scroll - Scroll the page or element
  */
 
 import { createTool } from '../../tools';
-import { createError } from '../errors';
 import { scrollInputSchema } from '../schemas';
+import { BROWSER_TOOLS } from './constants';
+import { handleBrowserError } from './error-handler';
 import { requireBrowser } from './helpers';
 
 export const browserScrollTool = createTool({
-  id: 'browser_scroll',
-  description: `Scroll the page or elements. Actions:
-- scroll: Scroll up/down/left/right by amount (default 300px)
-- into_view: Scroll an element into view`,
+  id: BROWSER_TOOLS.SCROLL,
+  description: 'Scroll the page or a specific element.',
   inputSchema: scrollInputSchema,
   execute: async (input, context) => {
     const browser = requireBrowser(context);
-
     try {
-      return await browser.scroll(input as Parameters<typeof browser.scroll>[0]);
+      return await browser.scroll(input);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-
-      if (msg.includes('STALE_REF:')) {
-        const ref = msg.split('STALE_REF:')[1];
-        return createError(
-          'stale_ref',
-          `Ref ${ref} not found. The page has changed.`,
-          'Take a new snapshot to get fresh refs.',
-        );
-      }
-
-      return createError('browser_error', `Scroll failed: ${msg}`);
+      return handleBrowserError(error, 'Scroll');
     }
   },
 });

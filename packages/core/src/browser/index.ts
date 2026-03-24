@@ -21,106 +21,101 @@ export { createError } from './errors';
 export type { ErrorCode, BrowserToolError } from './errors';
 
 // ============================================================================
-// Tool Factory & Helpers
+// Tool Configuration & Constants
 // ============================================================================
 
 export {
-  createBrowserTools,
-  resolveBrowserToolConfig,
   BROWSER_TOOLS,
-  requireBrowser,
-  BrowserNotAvailableError,
-  browserTools,
+  resolveBrowserToolConfig,
+  ALL_BROWSER_TOOLS,
+  createBrowserTools,
+  getBrowserToolNames,
 } from './tools';
 
-export type { BrowserToolName, BrowserToolConfig, BrowserToolsConfig, BrowserToolExecutionContext } from './tools';
+export type { BrowserToolName, BrowserToolConfig, BrowserToolsConfig } from './tools';
 
-// Individual tool exports
+// ============================================================================
+// Tool Helpers
+// ============================================================================
+
+export { requireBrowser, BrowserNotAvailableError } from './tools/helpers';
+export type { BrowserToolExecutionContext } from './tools/helpers';
+
+// ============================================================================
+// Individual tool exports (17 flat tools)
+// ============================================================================
+
 export {
-  browserNavigateTool,
-  browserInteractTool,
-  browserInputTool,
-  browserKeyboardTool,
-  browserFormTool,
+  // Core (9)
+  browserGotoTool,
+  browserSnapshotTool,
+  browserClickTool,
+  browserTypeTool,
+  browserPressTool,
+  browserSelectTool,
   browserScrollTool,
-  browserExtractTool,
-  browserElementStateTool,
-  browserStateTool,
-  browserStorageTool,
-  browserEmulationTool,
-  browserFramesTool,
-  browserDialogsTool,
-  browserTabsTool,
-  browserRecordingTool,
-  browserMonitoringTool,
-  browserClipboardTool,
-  browserDebugTool,
+  browserScreenshotTool,
+  browserCloseTool,
+  // Extended (7)
+  browserHoverTool,
+  browserBackTool,
+  browserUploadTool,
+  browserDialogTool,
   browserWaitTool,
+  browserTabsTool,
+  browserDragTool,
+  // Escape hatch (1)
+  browserEvaluateTool,
 } from './tools';
 
 // ============================================================================
-// Schemas (19 grouped tools)
+// Schemas (17 flat tools)
 // ============================================================================
 
 export {
-  // 1. Navigate (5 actions: goto, back, forward, reload, close)
-  navigateInputSchema,
-  // 2. Interact (6 actions: click, double_click, hover, focus, drag, tap)
-  interactInputSchema,
-  // 3. Input (5 actions: fill, type, press, clear, select_all)
-  inputInputSchema,
-  // 4. Keyboard (4 actions: type, insert_text, key_down, key_up)
-  keyboardInputSchema,
-  // 5. Form (4 actions: select, check, uncheck, upload)
-  formInputSchema,
-  // 6. Scroll (2 actions: scroll, into_view)
+  // Core (9)
+  gotoInputSchema,
+  snapshotInputSchema,
+  clickInputSchema,
+  typeInputSchema,
+  pressInputSchema,
+  selectInputSchema,
   scrollInputSchema,
-  // 7. Extract (12 actions: snapshot, screenshot, text, html, value, attribute, title, url, count, bounding_box, styles, evaluate)
-  extractInputSchema,
-  // 8. Element State (3 actions: is_visible, is_enabled, is_checked)
-  elementStateInputSchema,
-  // 9. Browser State (5 actions: set_viewport, set_credentials, get_cookies, set_cookie, clear_cookies)
-  browserStateInputSchema,
-  // 10. Storage (6 actions via type + action)
-  storageInputSchema,
-  // 11. Emulation (5 actions: device, media, geolocation, offline, headers)
-  emulationInputSchema,
-  // 12. Frames (2 actions: switch, main)
-  framesInputSchema,
-  // 13. Dialogs (2 actions: handle, clear)
-  dialogsInputSchema,
-  // 14. Tabs (4 actions: list, new, switch, close)
-  tabsInputSchema,
-  // 15. Recording (4 actions: record_start, record_stop, trace_start, trace_stop)
-  recordingInputSchema,
-  // 16. Monitoring (9 actions via type + action)
-  monitoringInputSchema,
-  // 17. Clipboard (4 actions: copy, paste, read, write)
-  clipboardInputSchema,
-  // 18. Debug (2 actions: inspect, highlight)
-  debugInputSchema,
-  // 19. Wait
+  screenshotInputSchema,
+  closeInputSchema,
+  // Extended (7)
+  hoverInputSchema,
+  backInputSchema,
+  uploadInputSchema,
+  dialogInputSchema,
   waitInputSchema,
+  tabsInputSchema,
+  dragInputSchema,
+  // Escape hatch (1)
+  evaluateInputSchema,
+  // All schemas
+  browserSchemas,
 } from './schemas';
 
 export type {
-  NavigateInput,
-  InteractInput,
-  InputInput,
-  KeyboardInput,
-  FormInput,
+  // Core (9)
+  GotoInput,
+  SnapshotInput,
+  ClickInput,
+  TypeInput,
+  PressInput,
+  SelectInput,
   ScrollInput,
-  ExtractInput,
-  ElementStateInput,
-  BrowserStateInput,
-  StorageInput,
-  EmulationInput,
-  FramesInput,
-  DialogsInput,
-  TabsInput,
-  RecordingInput,
-  MonitoringInput,
-  ClipboardInput,
-  DebugInput,
+  ScreenshotInput,
+  CloseInput,
+  // Extended (7)
+  HoverInput,
+  BackInput,
+  UploadInput,
+  DialogInput,
   WaitInput,
+  TabsInput,
+  DragInput,
+  // Escape hatch (1)
+  EvaluateInput,
 } from './schemas';

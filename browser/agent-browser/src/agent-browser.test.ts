@@ -14,6 +14,7 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
     evaluate: vi.fn(),
     viewportSize: () => ({ width: 1280, height: 720 }),
     content: vi.fn().mockResolvedValue('<html></html>'),
+    waitForTimeout: vi.fn(),
     keyboard: {
       press: vi.fn(),
       type: vi.fn(),
@@ -51,7 +52,10 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
     click: vi.fn(),
     dblclick: vi.fn(),
     fill: vi.fn(),
-    selectOption: vi.fn(),
+    focus: vi.fn(),
+    hover: vi.fn(),
+    press: vi.fn(),
+    selectOption: vi.fn().mockResolvedValue(['value1']),
     check: vi.fn(),
     uncheck: vi.fn(),
     isVisible: vi.fn().mockResolvedValue(true),
@@ -59,15 +63,26 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
     textContent: vi.fn().mockResolvedValue('text'),
     inputValue: vi.fn().mockResolvedValue('value'),
     scrollIntoViewIfNeeded: vi.fn(),
+    setInputFiles: vi.fn(),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-png')),
+    dragTo: vi.fn(),
+    waitFor: vi.fn(),
   };
 
   const mockManager = {
     launch: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
+    isLaunched: vi.fn().mockReturnValue(true),
     getPage: vi.fn().mockReturnValue(mockPage),
     getLocatorFromRef: vi.fn().mockReturnValue(mockLocator),
+    getRefMap: vi.fn().mockResolvedValue(
+      new Map([
+        ['@e1', mockLocator],
+        ['@e2', mockLocator],
+      ]),
+    ),
     getCDPSession: vi.fn().mockResolvedValue({ send: vi.fn() }),
-    getSnapshot: vi.fn().mockResolvedValue({ tree: '- @e1 button "Click"' }),
+    getSnapshot: vi.fn().mockResolvedValue({ snapshot: '- @e1 button "Click"', tree: '- @e1 button "Click"' }),
     startScreencast: vi.fn().mockResolvedValue(undefined),
     stopScreencast: vi.fn().mockResolvedValue(undefined),
     injectMouseEvent: vi.fn().mockResolvedValue(undefined),
@@ -81,8 +96,10 @@ vi.mock('agent-browser/dist/browser.js', () => ({
   BrowserManager: class {
     launch = mockManager.launch;
     close = mockManager.close;
+    isLaunched = mockManager.isLaunched;
     getPage = mockManager.getPage;
     getLocatorFromRef = mockManager.getLocatorFromRef;
+    getRefMap = mockManager.getRefMap;
     getCDPSession = mockManager.getCDPSession;
     getSnapshot = mockManager.getSnapshot;
     startScreencast = mockManager.startScreencast;
@@ -109,12 +126,12 @@ describe('AgentBrowser', () => {
   });
 
   describe('constructor', () => {
-    it('sets id to agent-browser', () => {
-      expect(browser.id).toBe('agent-browser');
+    it('sets id starting with agent-browser', () => {
+      expect(browser.id).toMatch(/^agent-browser-/);
     });
 
-    it('sets name to Agent Browser', () => {
-      expect(browser.name).toBe('Agent Browser');
+    it('sets name to AgentBrowser', () => {
+      expect(browser.name).toBe('AgentBrowser');
     });
 
     it('sets provider to vercel-labs/agent-browser', () => {
@@ -198,123 +215,276 @@ describe('AgentBrowser', () => {
     });
   });
 
-  describe('navigate', () => {
+  // =============================================================================
+  // Core Tools (9)
+  // =============================================================================
+
+  describe('goto', () => {
     beforeEach(async () => {
       await browser.ensureReady();
     });
 
     it('navigates to a URL', async () => {
-      const result = (await browser.navigate({
-        action: 'goto',
-        url: 'https://example.com',
-      })) as { success: boolean; url: string };
+      const result = await browser.goto({ url: 'https://example.com' });
 
       expect(result.success).toBe(true);
       expect(result.url).toBe('https://example.com');
       expect(mockPage.goto).toHaveBeenCalled();
     });
 
-    it('supports back navigation', async () => {
-      const result = (await browser.navigate({ action: 'back' })) as { success: boolean };
-      expect(result.success).toBe(true);
-      expect(mockPage.goBack).toHaveBeenCalled();
-    });
+    it('supports waitUntil option', async () => {
+      await browser.goto({ url: 'https://example.com', waitUntil: 'networkidle' });
 
-    it('supports forward navigation', async () => {
-      const result = (await browser.navigate({ action: 'forward' })) as { success: boolean };
-      expect(result.success).toBe(true);
-      expect(mockPage.goForward).toHaveBeenCalled();
-    });
-
-    it('supports reload', async () => {
-      const result = (await browser.navigate({ action: 'reload' })) as { success: boolean };
-      expect(result.success).toBe(true);
-      expect(mockPage.reload).toHaveBeenCalled();
+      expect(mockPage.goto).toHaveBeenCalledWith(
+        'https://example.com',
+        expect.objectContaining({ waitUntil: 'networkidle' }),
+      );
     });
   });
 
-  describe('interact', () => {
+  describe('snapshot', () => {
     beforeEach(async () => {
       await browser.ensureReady();
     });
 
+    it('returns accessibility tree snapshot', async () => {
+      const result = await browser.snapshot({});
+
+      expect(result.success).toBe(true);
+      expect(result.snapshot).toContain('@e1');
+      expect(result.title).toBe('Example');
+      expect(result.url).toBe('https://example.com');
+    });
+  });
+
+  describe('click', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      // Populate refMap by calling snapshot first
+      await browser.snapshot({});
+    });
+
     it('clicks an element by ref', async () => {
-      const result = (await browser.interact({
-        action: 'click',
-        ref: '@e1',
-      })) as { success: boolean };
+      const result = await browser.click({ ref: '@e1' });
 
       expect(result.success).toBe(true);
       expect(mockLocator.click).toHaveBeenCalled();
     });
 
-    it('double clicks an element', async () => {
-      const result = (await browser.interact({
-        action: 'double_click',
-        ref: '@e1',
-      })) as { success: boolean };
+    it('supports double-click via clickCount', async () => {
+      await browser.click({ ref: '@e1', clickCount: 2 });
 
-      expect(result.success).toBe(true);
-      expect(mockLocator.dblclick).toHaveBeenCalled();
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ clickCount: 2 }));
+    });
+
+    it('supports button option', async () => {
+      await browser.click({ ref: '@e1', button: 'right' });
+
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ button: 'right' }));
     });
   });
 
-  describe('input', () => {
+  describe('type', () => {
     beforeEach(async () => {
       await browser.ensureReady();
+      await browser.snapshot({});
     });
 
-    it('fills text into an element', async () => {
-      const result = (await browser.input({
-        action: 'fill',
-        ref: '@e1',
-        value: 'Hello World',
-      })) as { success: boolean };
+    it('types text into an element', async () => {
+      const result = await browser.type({ ref: '@e1', text: 'Hello World' });
 
       expect(result.success).toBe(true);
       expect(mockLocator.fill).toHaveBeenCalledWith('Hello World', expect.any(Object));
     });
+
+    it('clears before typing when clear option is set', async () => {
+      await browser.type({ ref: '@e1', text: 'New text', clear: true });
+
+      // Should fill with empty string first to clear
+      expect(mockLocator.fill).toHaveBeenCalledWith('', expect.any(Object));
+      expect(mockLocator.fill).toHaveBeenCalledWith('New text', expect.any(Object));
+    });
   });
 
-  describe('extract', () => {
+  describe('press', () => {
     beforeEach(async () => {
       await browser.ensureReady();
     });
 
-    it('takes a snapshot', async () => {
-      const result = (await browser.extract({
-        action: 'snapshot',
-      })) as { success: boolean; snapshot: string };
+    it('presses a keyboard key', async () => {
+      const result = await browser.press({ key: 'Enter' });
 
       expect(result.success).toBe(true);
-      expect(result.snapshot).toContain('@e1');
+      expect(mockPage.keyboard.press).toHaveBeenCalledWith('Enter');
     });
 
-    it('takes a screenshot', async () => {
-      const result = (await browser.extract({
-        action: 'screenshot',
-      })) as { success: boolean; base64: string };
+    it('supports key combinations', async () => {
+      await browser.press({ key: 'Control+a' });
+
+      expect(mockPage.keyboard.press).toHaveBeenCalledWith('Control+a');
+    });
+  });
+
+  describe('select', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('selects a dropdown option by value', async () => {
+      const result = await browser.select({ ref: '@e1', value: 'option1' });
 
       expect(result.success).toBe(true);
-      expect(result.base64).toBeDefined();
+      expect(result.selected).toEqual(['value1']);
+      expect(mockLocator.selectOption).toHaveBeenCalled();
     });
   });
 
   describe('scroll', () => {
     beforeEach(async () => {
       await browser.ensureReady();
+      await browser.snapshot({});
     });
 
     it('scrolls down', async () => {
-      const result = (await browser.scroll({
-        action: 'scroll',
-        direction: 'down',
-        amount: 300,
-      })) as { success: boolean };
+      const result = await browser.scroll({ direction: 'down' });
 
       expect(result.success).toBe(true);
+      expect(mockPage.evaluate).toHaveBeenCalled();
+    });
+
+    it('scrolls element into view by ref', async () => {
+      const result = await browser.scroll({ direction: 'down', ref: '@e1' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.scrollIntoViewIfNeeded).toHaveBeenCalled();
     });
   });
+
+  describe('screenshot', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('takes a screenshot', async () => {
+      const result = await browser.screenshot({});
+
+      expect(result.success).toBe(true);
+      expect(result.base64).toBeDefined();
+    });
+
+    it('supports fullPage option', async () => {
+      await browser.screenshot({ fullPage: true });
+
+      expect(mockPage.screenshot).toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }));
+    });
+
+    it('takes element screenshot by ref', async () => {
+      await browser.screenshot({ ref: '@e1' });
+
+      expect(mockLocator.screenshot).toHaveBeenCalled();
+    });
+  });
+
+  // =============================================================================
+  // Extended Tools (7)
+  // =============================================================================
+
+  describe('hover', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('hovers over an element', async () => {
+      const result = await browser.hover({ ref: '@e1' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.hover).toHaveBeenCalled();
+    });
+  });
+
+  describe('back', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('navigates back', async () => {
+      const result = await browser.back();
+
+      expect(result.success).toBe(true);
+      expect(mockPage.goBack).toHaveBeenCalled();
+    });
+  });
+
+  describe('upload', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('uploads files', async () => {
+      const result = await browser.upload({ ref: '@e1', files: ['/path/to/file.txt'] });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.setInputFiles).toHaveBeenCalledWith(['/path/to/file.txt'], expect.any(Object));
+    });
+  });
+
+  describe('wait', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('waits for element to be visible', async () => {
+      const result = await browser.wait({ ref: '@e1', state: 'visible' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.waitFor).toHaveBeenCalledWith(expect.objectContaining({ state: 'visible' }));
+    });
+
+    it('waits for timeout when no ref specified', async () => {
+      const result = await browser.wait({ timeout: 1000 });
+
+      expect(result.success).toBe(true);
+      expect(mockPage.waitForTimeout).toHaveBeenCalledWith(1000);
+    });
+  });
+
+  describe('drag', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('drags element to target', async () => {
+      const result = await browser.drag({ sourceRef: '@e1', targetRef: '@e2' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.dragTo).toHaveBeenCalled();
+    });
+  });
+
+  describe('evaluate', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('evaluates JavaScript', async () => {
+      mockPage.evaluate.mockResolvedValueOnce('result');
+
+      const result = await browser.evaluate({ script: 'return document.title' });
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('result');
+    });
+  });
+
+  // =============================================================================
+  // Screencast
+  // =============================================================================
 
   describe('screencast', () => {
     it('starts screencast when browser is ready', async () => {
@@ -330,9 +500,9 @@ describe('AgentBrowser', () => {
     });
   });
 
-  // Note: Event injection methods (injectMouseEvent, injectKeyboardEvent) are not yet
-  // implemented in AgentBrowser. The base class throws "not supported" by default.
-  // These tests should be enabled once AgentBrowser implements event injection.
+  // =============================================================================
+  // Lazy Initialization
+  // =============================================================================
 
   describe('lazy initialization', () => {
     it('does not launch browser at construction time', () => {

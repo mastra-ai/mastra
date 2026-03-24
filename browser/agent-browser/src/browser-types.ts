@@ -21,20 +21,21 @@ export interface ScreencastFrame {
 }
 
 export interface BrowserLocator {
-  click(options?: { button?: string; timeout?: number; clickCount?: number }): Promise<void>;
+  click(options?: { button?: string; timeout?: number; clickCount?: number; modifiers?: string[] }): Promise<void>;
   dblclick(options?: { button?: string; timeout?: number }): Promise<void>;
   fill(value: string, options?: { timeout?: number }): Promise<void>;
   focus(options?: { timeout?: number }): Promise<void>;
   hover(options?: { timeout?: number }): Promise<void>;
+  press(key: string, options?: { timeout?: number }): Promise<void>;
   check(options?: { timeout?: number }): Promise<void>;
   uncheck(options?: { timeout?: number }): Promise<void>;
   isChecked(options?: { timeout?: number }): Promise<boolean>;
   inputValue(options?: { timeout?: number }): Promise<string>;
   textContent(options?: { timeout?: number }): Promise<string | null>;
   innerText(options?: { timeout?: number }): Promise<string>;
-  screenshot(options?: { type?: string; quality?: number; timeout?: number }): Promise<Buffer>;
+  screenshot(options?: { type?: string; quality?: number; timeout?: number; path?: string }): Promise<Buffer>;
   selectOption(
-    values: { value?: string; label?: string; index?: number },
+    values: string | string[] | { value?: string; label?: string; index?: number },
     options?: { timeout?: number },
   ): Promise<string[]>;
   boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
@@ -43,7 +44,7 @@ export interface BrowserLocator {
   dragTo(target: BrowserLocator, options?: { timeout?: number }): Promise<void>;
   waitFor(options?: { state?: 'visible' | 'hidden' | 'attached' | 'detached'; timeout?: number }): Promise<void>;
   getAttribute(name: string): Promise<string | null>;
-  setInputFiles(files: string | string[]): Promise<void>;
+  setInputFiles(files: string | string[], options?: { timeout?: number }): Promise<void>;
   clear(options?: { timeout?: number }): Promise<void>;
   selectText(options?: { timeout?: number }): Promise<void>;
   tap(options?: { timeout?: number }): Promise<void>;
@@ -87,7 +88,13 @@ export interface BrowserPage {
   url(): string;
   title(): Promise<string>;
   content(): Promise<string>;
-  screenshot(options?: { fullPage?: boolean; type?: string; quality?: number; timeout?: number }): Promise<Buffer>;
+  screenshot(options?: {
+    fullPage?: boolean;
+    type?: string;
+    quality?: number;
+    timeout?: number;
+    path?: string;
+  }): Promise<Buffer>;
   evaluate<T>(expression: string | ((...args: any[]) => T), ...args: any[]): Promise<T>;
   viewportSize(): { width: number; height: number } | null;
   setViewportSize(size: { width: number; height: number }): Promise<void>;
@@ -95,10 +102,15 @@ export interface BrowserPage {
   context(): BrowserContext;
   waitForTimeout(timeout: number): Promise<void>;
   waitForLoadState(state: 'load' | 'domcontentloaded' | 'networkidle', options?: { timeout?: number }): Promise<void>;
+  waitForSelector(selector: string, options?: { timeout?: number; state?: string }): Promise<unknown>;
+  waitForURL(url: string | RegExp, options?: { timeout?: number }): Promise<void>;
 }
 
 export interface EnhancedSnapshot {
-  tree: string;
+  tree?: string;
+  snapshot?: string;
+  title?: string;
+  url?: string;
   elementCount?: number;
   truncated?: boolean;
 }
@@ -112,9 +124,8 @@ export interface ScreencastOptions {
 }
 
 export interface LaunchOptions {
-  id: string;
-  action: 'launch';
   headless?: boolean;
+  cdpEndpoint?: string;
 }
 
 export interface MouseEventParams {
@@ -164,8 +175,10 @@ export interface ProfilerResult {
 export interface BrowserManagerLike {
   launch(options: LaunchOptions): Promise<void>;
   close(): Promise<void>;
+  isLaunched(): boolean;
   getPage(): BrowserPage;
   getLocatorFromRef(refArg: string): BrowserLocator | null;
+  getRefMap(): Promise<Map<string, BrowserLocator>>;
   getCDPSession(): Promise<BrowserCDPSession>;
   getSnapshot(options?: {
     interactive?: boolean;
@@ -265,10 +278,11 @@ export interface PageError {
  * The agent-browser package doesn't export BrowserManager from its main entry point
  * (it's a CLI-first tool), so we need to import from the dist/browser.js subpath.
  * This helper centralizes that import and provides proper typing.
+ *
+ * Note: We use `as unknown as` because the actual agent-browser types differ slightly
+ * from our interface. At runtime, the methods we need are present.
  */
 export async function loadBrowserManager(): Promise<new (config?: Record<string, unknown>) => BrowserManagerLike> {
-  const module = (await import('agent-browser/dist/browser.js')) as {
-    BrowserManager: new (config?: Record<string, unknown>) => BrowserManagerLike;
-  };
-  return module.BrowserManager;
+  const module = await import('agent-browser/dist/browser.js');
+  return module.BrowserManager as unknown as new (config?: Record<string, unknown>) => BrowserManagerLike;
 }

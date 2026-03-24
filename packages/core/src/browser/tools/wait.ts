@@ -1,24 +1,23 @@
 /**
- * Browser Wait Tool
- *
- * Wait for conditions:
- * - wait: Wait for element, URL, timeout, or network idle
+ * browser_wait - Wait for an element or condition
  */
 
 import { createTool } from '../../tools';
 import { waitInputSchema } from '../schemas';
+import { BROWSER_TOOLS } from './constants';
+import { handleBrowserError } from './error-handler';
 import { requireBrowser } from './helpers';
 
 export const browserWaitTool = createTool({
-  id: 'browser_wait',
-  description: `Wait for various conditions:
-- Wait for element to appear/disappear
-- Wait for URL to change
-- Wait for fixed timeout
-- Wait for network to become idle`,
+  id: BROWSER_TOOLS.WAIT,
+  description: 'Wait for an element to reach a specific state (visible, hidden, attached, detached).',
   inputSchema: waitInputSchema,
   execute: async (input, context) => {
     const browser = requireBrowser(context);
-    return browser.wait(input as Parameters<typeof browser.wait>[0]);
+    try {
+      return await browser.wait(input);
+    } catch (error) {
+      return handleBrowserError(error, 'Wait');
+    }
   },
 });

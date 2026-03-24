@@ -5,12 +5,13 @@
  *
  * ## Architecture
  *
- * Each browser capability is exposed as a single method that handles multiple actions.
+ * Each browser capability is exposed as a single method with a flat input schema.
  * Providers implement these methods using whatever low-level approach they need.
  *
- * For example, `navigate()` handles goto, back, forward, reload, and close actions.
- * An AgentBrowser provider uses Playwright internally, while a StagehandBrowser
- * might use AI-powered navigation.
+ * There are 17 flat tools:
+ * - Core (9): goto, snapshot, click, type, press, select, scroll, screenshot, close
+ * - Extended (7): hover, back, upload, dialog, wait, tabs, drag
+ * - Escape Hatch (1): evaluate
  *
  * ## Two Paradigms
  *
@@ -20,48 +21,27 @@
  * 2. **AI-powered** (Stagehand) - Uses natural language instructions
  *
  * Both can extend this base class - they just implement the methods differently.
- *
- * @example
- * ```typescript
- * class AgentBrowser extends MastraBrowser {
- *   async navigate(input) {
- *     switch (input.action) {
- *       case 'goto':
- *         await this.page.goto(input.url);
- *         return { success: true, url: this.page.url(), title: await this.page.title() };
- *       case 'back':
- *         await this.page.goBack();
- *         return { success: true, url: this.page.url() };
- *       // ... etc
- *     }
- *   }
- * }
- * ```
  */
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 
 import type {
-  NavigateInput,
-  InteractInput,
-  InputInput,
-  KeyboardInput,
-  FormInput,
+  GotoInput,
+  SnapshotInput,
+  ClickInput,
+  TypeInput,
+  PressInput,
+  SelectInput,
   ScrollInput,
-  ExtractInput,
-  ElementStateInput,
-  BrowserStateInput,
-  StorageInput,
-  EmulationInput,
-  FramesInput,
-  DialogsInput,
-  TabsInput,
-  RecordingInput,
-  MonitoringInput,
-  ClipboardInput,
-  DebugInput,
+  ScreenshotInput,
+  HoverInput,
+  UploadInput,
+  DialogInput,
   WaitInput,
+  TabsInput,
+  DragInput,
+  EvaluateInput,
 } from './schemas';
 
 // =============================================================================
@@ -177,7 +157,7 @@ export interface KeyboardEventParams {
  * Abstract base class for browser providers.
  *
  * Providers extend this class and implement the abstract methods.
- * Each method corresponds to a grouped tool and handles multiple actions.
+ * Each method corresponds to one of the 17 flat tools.
  */
 export abstract class MastraBrowser extends MastraBase {
   // ---------------------------------------------------------------------------
@@ -386,101 +366,96 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Abstract Browser Methods (one per grouped tool)
+  // Abstract Browser Methods — Core (9)
   // ---------------------------------------------------------------------------
 
   /**
-   * Navigation actions: goto, back, forward, reload, close
+   * Navigate to a URL.
    */
-  abstract navigate(input: NavigateInput): Promise<unknown>;
+  abstract goto(input: GotoInput): Promise<unknown>;
 
   /**
-   * Interaction actions: click, double_click, hover, focus, drag, tap
+   * Get accessibility tree snapshot.
    */
-  abstract interact(input: InteractInput): Promise<unknown>;
+  abstract snapshot(input: SnapshotInput): Promise<unknown>;
 
   /**
-   * Text input actions: fill, type, press, clear, select_all
+   * Click an element.
    */
-  abstract input(input: InputInput): Promise<unknown>;
+  abstract click(input: ClickInput): Promise<unknown>;
 
   /**
-   * Keyboard actions: type, insert_text, key_down, key_up
+   * Type text into an element.
    */
-  abstract keyboard(input: KeyboardInput): Promise<unknown>;
+  abstract type(input: TypeInput): Promise<unknown>;
 
   /**
-   * Form actions: select, check, uncheck, upload
+   * Press a keyboard key.
    */
-  abstract form(input: FormInput): Promise<unknown>;
+  abstract press(input: PressInput): Promise<unknown>;
 
   /**
-   * Scroll actions: scroll, scroll_into_view
+   * Select an option from a dropdown.
+   */
+  abstract select(input: SelectInput): Promise<unknown>;
+
+  /**
+   * Scroll the page or element.
    */
   abstract scroll(input: ScrollInput): Promise<unknown>;
 
   /**
-   * Data extraction: snapshot, screenshot, text, html, value, attribute, title, url, count, bounding_box, styles, evaluate
+   * Take a screenshot.
    */
-  abstract extract(input: ExtractInput): Promise<unknown>;
+  abstract screenshot(input: ScreenshotInput): Promise<unknown>;
+
+  // Note: close() is already defined as a lifecycle method above
+
+  // ---------------------------------------------------------------------------
+  // Abstract Browser Methods — Extended (7)
+  // ---------------------------------------------------------------------------
 
   /**
-   * Element state checks: is_visible, is_enabled, is_checked
+   * Hover over an element.
    */
-  abstract elementState(input: ElementStateInput): Promise<unknown>;
+  abstract hover(input: HoverInput): Promise<unknown>;
 
   /**
-   * Browser state: set_viewport, set_credentials, get_cookies, set_cookie, clear_cookies
+   * Go back in browser history.
    */
-  abstract browserState(input: BrowserStateInput): Promise<unknown>;
+  abstract back(): Promise<unknown>;
 
   /**
-   * Storage operations: get, set, clear (localStorage and sessionStorage)
+   * Upload file(s) to a file input.
    */
-  abstract storage(input: StorageInput): Promise<unknown>;
+  abstract upload(input: UploadInput): Promise<unknown>;
 
   /**
-   * Device emulation: set_device, set_media, set_geolocation, set_offline, set_headers
+   * Handle browser dialogs.
    */
-  abstract emulation(input: EmulationInput): Promise<unknown>;
+  abstract dialog(input: DialogInput): Promise<unknown>;
 
   /**
-   * Frame management: switch, main
+   * Wait for an element or condition.
    */
-  abstract frames(input: FramesInput): Promise<unknown>;
+  abstract wait(input: WaitInput): Promise<unknown>;
 
   /**
-   * Dialog handling: handle, clear
-   */
-  abstract dialogs(input: DialogsInput): Promise<unknown>;
-
-  /**
-   * Tab management: list, new, switch, close
+   * Manage browser tabs.
    */
   abstract tabs(input: TabsInput): Promise<unknown>;
 
   /**
-   * Recording and tracing: start_recording, stop_recording, start_tracing, stop_tracing
+   * Drag an element to another element.
    */
-  abstract recording(input: RecordingInput): Promise<unknown>;
+  abstract drag(input: DragInput): Promise<unknown>;
+
+  // ---------------------------------------------------------------------------
+  // Abstract Browser Methods — Escape Hatch (1)
+  // ---------------------------------------------------------------------------
 
   /**
-   * Monitoring: network_start/get/clear, console_start/get/clear, errors_start/get/clear
+   * Execute JavaScript in the browser.
    */
-  abstract monitoring(input: MonitoringInput): Promise<unknown>;
-
-  /**
-   * Clipboard operations: copy, paste, read, write
-   */
-  abstract clipboard(input: ClipboardInput): Promise<unknown>;
-
-  /**
-   * Debugging: inspect, highlight
-   */
-  abstract debug(input: DebugInput): Promise<unknown>;
-
-  /**
-   * Wait for conditions: selector, timeout, function
-   */
-  abstract wait(input: WaitInput): Promise<unknown>;
+  abstract evaluate(input: EvaluateInput): Promise<unknown>;
 }
