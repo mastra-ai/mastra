@@ -572,23 +572,6 @@ function createStreamingResponse(
 /** Minimum similarity score to accept a fuzzy match */
 const SIMILARITY_THRESHOLD = 0.6;
 
-/** When candidates score within this band of the top score, prefer the earliest one */
-const SIMILARITY_TIE_BAND = 0.05;
-
-/**
- * From a list of candidates, pick the earliest one whose score is within
- * SIMILARITY_TIE_BAND of the best score.  Returns the recording index or
- * undefined if the list is empty.
- */
-function pickBestCandidate(candidates: { index: number; rating: number }[]): number | undefined {
-  if (candidates.length === 0) return undefined;
-  const best = Math.max(...candidates.map(c => c.rating));
-  const tied = candidates.filter(c => best - c.rating < SIMILARITY_TIE_BAND);
-  // Earliest index wins among tied candidates
-  tied.sort((a, b) => a.index - b.index);
-  return tied[0]!.index;
-}
-
 /**
  * Find a matching recording — first by exact hash, then by string similarity.
  *
@@ -643,6 +626,13 @@ function findRecording(
 
       const recSize = recBody.size as number;
       const diff = Math.abs(incomingSize - recSize);
+
+      // Reject candidates whose size diverges too much — the same TTS output
+      // varies by only a few bytes across runs, so a 10% relative tolerance
+      // is generous while still preventing clearly-wrong matches.
+      const maxSize = Math.max(incomingSize, recSize) || 1;
+      if (diff / maxSize > 0.1) continue;
+
       if (diff < bestSizeDiff) {
         bestSizeDiff = diff;
         bestIndex = i;
@@ -657,35 +647,37 @@ function findRecording(
   }
 
   // For non-binary requests, use string similarity on serialized request content.
-  // Prefer recordings that match the request URL to avoid cross-API mismatches.
-  // When multiple candidates score within a narrow band, prefer the earliest
-  // unused one to preserve recording order.
+  // Prefer recordings that match the request URL to avoid cross-API mismatches
+  // (e.g. /v1/chat/completions vs /v1/responses).
   //
   // NOTE: usedHashes is NOT applied here.  Non-binary recordings are intentionally
   // reusable across tests — e.g. v1 and v2 model variants share the same recording.
   const incoming = serializeRequestContent(url, body);
-
-  type Candidate = { index: number; rating: number; urlMatch: boolean };
-  const candidates: Candidate[] = [];
+  let bestRating = -1;
+  let bestIndex = -1;
+  let bestUrlMatchRating = -1;
+  let bestUrlMatchIndex = -1;
 
   for (let i = 0; i < recordings.length; i++) {
     const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
     const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
-    if (rating >= SIMILARITY_THRESHOLD) {
-      candidates.push({ index: i, rating, urlMatch: recordings[i]!.request.url === url });
+    if (rating > bestRating) {
+      bestRating = rating;
+      bestIndex = i;
+    }
+    if (recordings[i]!.request.url === url && rating > bestUrlMatchRating) {
+      bestUrlMatchRating = rating;
+      bestUrlMatchIndex = i;
     }
   }
 
-  if (candidates.length === 0) {
-    return undefined;
+  // Prefer URL-matching recording when available and above threshold
+  if (bestUrlMatchRating >= SIMILARITY_THRESHOLD && bestUrlMatchIndex >= 0) {
+    return recordings[bestUrlMatchIndex]!;
   }
 
-  // Among URL-matching candidates, pick the earliest one within 0.05 of the top score
-  const urlCandidates = candidates.filter(c => c.urlMatch);
-  const pick = pickBestCandidate(urlCandidates) ?? pickBestCandidate(candidates);
-
-  if (pick != null) {
-    return recordings[pick]!;
+  if (bestRating >= SIMILARITY_THRESHOLD && bestIndex >= 0) {
+    return recordings[bestIndex]!;
   }
 
   return undefined;
