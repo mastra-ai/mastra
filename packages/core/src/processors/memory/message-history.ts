@@ -72,10 +72,13 @@ export class MessageHistory implements Processor {
   private async reconcileClientToolResults(messageList: MessageList, dbMessages: MastraDBMessage[]): Promise<void> {
     const inputMessages = messageList.get.all.db();
 
-    // Collect completed tool results from input assistant messages
+    // Collect completed tool results from input assistant messages and count
+    // total result parts per message (for completeness tracking on removal).
     const toolResultsByCallId = new Map<string, { inputMsgId: string; part: MastraMessagePart }>();
+    const totalToolPartsPerMsg = new Map<string, number>();
     for (const msg of inputMessages) {
       if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+      let resultCount = 0;
       for (const part of msg.content.parts) {
         if (
           part.type === 'tool-invocation' &&
@@ -83,24 +86,15 @@ export class MessageHistory implements Processor {
           part.toolInvocation?.toolCallId
         ) {
           toolResultsByCallId.set(part.toolInvocation.toolCallId, { inputMsgId: msg.id, part });
+          resultCount++;
         }
+      }
+      if (resultCount > 0) {
+        totalToolPartsPerMsg.set(msg.id, resultCount);
       }
     }
 
     if (toolResultsByCallId.size === 0) return;
-
-    // Count total tool-invocation result parts per input message for completeness tracking.
-    // An input message is only removed if ALL its tool results were matched to DB calls.
-    const totalToolPartsPerMsg = new Map<string, number>();
-    for (const msg of inputMessages) {
-      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
-      const count = msg.content.parts.filter(
-        p => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result',
-      ).length;
-      if (count > 0) {
-        totalToolPartsPerMsg.set(msg.id, count);
-      }
-    }
 
     // Match DB messages with pending 'call' state to input results by toolCallId
     const updatedDbMessages: MastraDBMessage[] = [];
