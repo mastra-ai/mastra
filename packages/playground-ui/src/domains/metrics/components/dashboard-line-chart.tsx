@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from './chart-card';
-import { LABEL_COLOR } from './metrics-utils';
+const LABEL_COLOR = '#a1a1aa';
 
 type Series = {
   dataKey: string;
