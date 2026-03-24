@@ -236,7 +236,53 @@ export const weatherTool = createTool({
                     name: 'agent',
                     type: 'AgentToolExecutionContext',
                     isOptional: true,
-                    description: 'Agent-specific context (messages, suspend, resumeData, etc.)',
+                    description: 'Agent-specific context, available when the tool is executed by an agent.',
+                    properties: [
+                      {
+                        name: 'agentId',
+                        type: 'string',
+                        description: 'The ID of the agent executing this tool.',
+                      },
+                      {
+                        name: 'toolCallId',
+                        type: 'string',
+                        description: 'Unique identifier for this tool call.',
+                      },
+                      {
+                        name: 'messages',
+                        type: 'CoreMessage[]',
+                        description: 'All messages in the current conversation.',
+                      },
+                      {
+                        name: 'suspend',
+                        type: '(payload, options?) => Promise<void>',
+                        description: 'Suspends tool execution, returning a payload to the caller.',
+                      },
+                      {
+                        name: 'resumeData',
+                        type: 'TResume',
+                        isOptional: true,
+                        description: 'Data provided when resuming a previously suspended tool.',
+                      },
+                      {
+                        name: 'threadId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Thread ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'resourceId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Resource ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'writableStream',
+                        type: 'WritableStream<any>',
+                        isOptional: true,
+                        description: 'Original WritableStream from the AI SDK for streaming tool outputs.',
+                      },
+                    ],
                   },
                   {
                     name: 'workflow',
