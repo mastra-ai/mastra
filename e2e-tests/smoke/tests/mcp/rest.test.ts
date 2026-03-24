@@ -109,12 +109,13 @@ describe('MCP REST API', () => {
         body: JSON.stringify({ data: {} }),
       });
 
+      // Error messages differ between zod 3 ("Required") and zod 4 ("expected number")
       expect(status).toBe(200);
       expect(data.result.error).toBe(true);
       expect(data.result.message).toContain('Tool input validation failed');
-      expect(data.result.validationErrors.fields.a.errors[0]).toContain('expected number');
-      expect(data.result.validationErrors.fields.b.errors[0]).toContain('expected number');
-      expect(data.result.validationErrors.fields.operation.errors[0]).toContain('Invalid option');
+      expect(data.result.validationErrors.fields.a.errors).toHaveLength(1);
+      expect(data.result.validationErrors.fields.b.errors).toHaveLength(1);
+      expect(data.result.validationErrors.fields.operation.errors).toHaveLength(1);
     });
   });
 });

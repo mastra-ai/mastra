@@ -179,13 +179,14 @@ describe('tools', () => {
       });
 
       // Tool input validation returns 200 with error: true and structured validation errors
+      // Error messages differ between zod 3 ("Required") and zod 4 ("Invalid input: expected number, received undefined")
       expect(status).toBe(200);
       expect(data.error).toBe(true);
       expect(data.message).toContain('Tool input validation failed for calculator');
-      expect(data.message).toContain('a: Invalid input: expected number, received undefined');
-      expect(data.message).toContain('b: Invalid input: expected number, received undefined');
-      expect(data.validationErrors.fields.a.errors[0]).toBe('Invalid input: expected number, received undefined');
-      expect(data.validationErrors.fields.b.errors[0]).toBe('Invalid input: expected number, received undefined');
+      expect(data.message).toMatch(/a: (?:Required|Invalid input: expected number, received undefined)/);
+      expect(data.message).toMatch(/b: (?:Required|Invalid input: expected number, received undefined)/);
+      expect(data.validationErrors.fields.a.errors).toHaveLength(1);
+      expect(data.validationErrors.fields.b.errors).toHaveLength(1);
     });
 
     it('should return 404 when executing non-existent tool', async () => {

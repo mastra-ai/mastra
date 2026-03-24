@@ -28,9 +28,9 @@ describe('basic workflows', () => {
         inputData: { value: 200 },
       });
 
+      // zod 4: "Too big" / "<=100", zod 3: "Number must be less than or equal to 100"
       expect(status).toBe(500);
-      expect(data.error).toContain('Too big');
-      expect(data.error).toContain('<=100');
+      expect(data.error).toMatch(/Too big|less than or equal to 100/i);
     });
 
     it('should reject invalid input (wrong type)', async () => {
@@ -38,8 +38,9 @@ describe('basic workflows', () => {
         inputData: { value: 'not-a-number' },
       });
 
+      // zod 4: "expected number, received string", zod 3: "Expected number, received string"
       expect(status).toBe(500);
-      expect(data.error).toContain('expected number, received string');
+      expect(data.error).toMatch(/expected number, received string/i);
     });
 
     it('should accept boundary value 0 (minimum)', async () => {
@@ -65,8 +66,9 @@ describe('basic workflows', () => {
         inputData: { value: -1 },
       });
 
+      // zod 4: "Too small", zod 3: "Number must be greater than or equal to 0"
       expect(status).toBe(500);
-      expect(data.error).toContain('Too small');
+      expect(data.error).toMatch(/Too small|greater than or equal to 0/i);
     });
   });
 
