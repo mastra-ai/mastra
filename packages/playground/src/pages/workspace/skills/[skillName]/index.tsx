@@ -25,6 +25,10 @@ export default function WorkspaceSkillDetailPage() {
   const [searchParams] = useSearchParams();
   const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
 
+  // Optional path query param for disambiguation when multiple skills share the same name
+  const skillPath = searchParams.get('path');
+  const decodedSkillPath = skillPath ? decodeURIComponent(skillPath) : undefined;
+
   // Check if we came from an agent page (for breadcrumb context)
   const agentId = searchParams.get('agentId');
   const decodedAgentId = agentId ? decodeURIComponent(agentId) : null;
@@ -39,7 +43,11 @@ export default function WorkspaceSkillDetailPage() {
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
   // Fetch skill details - pass workspaceId to fetch from correct workspace
-  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillName, { workspaceId });
+  const {
+    data: skill,
+    isLoading,
+    error,
+  } = useWorkspaceSkill(decodedSkillName, { workspaceId, path: decodedSkillPath });
 
   // Fetch raw SKILL.md file for "Source" view
   const { data: rawSkillMdData } = useWorkspaceFile(skill?.path ? `${skill.path}/SKILL.md` : '', {
@@ -54,6 +62,7 @@ export default function WorkspaceSkillDetailPage() {
     {
       enabled: !!viewingReference,
       workspaceId,
+      path: decodedSkillPath,
     },
   );
 
@@ -136,7 +145,7 @@ export default function WorkspaceSkillDetailPage() {
   return (
     <MainContentLayout>
       <Header>
-        {renderBreadcrumb(decodedSkillName)}
+        {renderBreadcrumb(skill.name)}
 
         <HeaderAction>
           <Button as={Link} to="https://mastra.ai/en/docs/workspace/skills" target="_blank">
@@ -157,7 +166,7 @@ export default function WorkspaceSkillDetailPage() {
       <ReferenceViewerDialog
         open={!!viewingReference}
         onOpenChange={open => !open && setViewingReference(null)}
-        skillName={decodedSkillName}
+        skillName={skill.name}
         referencePath={viewingReference ?? ''}
         content={referenceData?.content}
         isLoading={isLoadingReference}
