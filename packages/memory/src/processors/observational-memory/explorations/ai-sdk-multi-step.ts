@@ -189,10 +189,10 @@ async function main() {
   const userPrompt =
     'Check the weather in both Helsinki and Tokyo, then tell me which city is better for outdoor sightseeing today.';
 
-  // Save the user message
-  await memory.saveMessages({
-    messages: [createMessage(userPrompt, 'user', threadId, 'turn-u1')],
-  });
+  // Save the user message and add it to the in-memory list
+  const userMessage = createMessage(userPrompt, 'user', threadId, 'turn-u1');
+  await memory.saveMessages({ messages: [userMessage] });
+  messageList.add(userMessage, 'user');
 
   // ── Run multi-step streamText with OM hooks ────────────────────────────
 

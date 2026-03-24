@@ -39,7 +39,7 @@ Ensure the AI SDK demo is thorough enough to be a real reference implementation.
 
 ### Lifecycle Comparison
 
-```
+```text
                     PROCESSOR                          AI SDK DEMO
                     ─────────                          ───────────
 

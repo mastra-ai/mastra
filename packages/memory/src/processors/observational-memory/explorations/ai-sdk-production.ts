@@ -255,16 +255,24 @@ async function main() {
             }
           }
 
+          // Re-read status after activation — pending tokens may have changed
+          const statusAfterActivation = await om.getStatus({ threadId, messages: messageList.get.all.db() });
+
           // blockAfter gate — defer to async if below blockAfter
           const config = om.getObservationConfig();
           const shouldDefer =
-            config.bufferTokens && (!config.blockAfter || freshStatus.pendingTokens < config.blockAfter);
+            config.bufferTokens &&
+            (!config.blockAfter || statusAfterActivation.pendingTokens < config.blockAfter);
 
           if (shouldDefer) {
-            stepLog.push(`step ${stepNum}: defer (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+            stepLog.push(
+              `step ${stepNum}: defer (pending ${statusAfterActivation.pendingTokens}/${statusAfterActivation.threshold})`,
+            );
           } else {
             await om.observe({ threadId, messages: messageList.get.all.db() });
-            stepLog.push(`step ${stepNum}: observe (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+            stepLog.push(
+              `step ${stepNum}: observe (pending ${statusAfterActivation.pendingTokens}/${statusAfterActivation.threshold})`,
+            );
           }
         }
       } else {
