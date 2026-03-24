@@ -1,6 +1,6 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 

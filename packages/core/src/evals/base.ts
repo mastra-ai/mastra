@@ -68,7 +68,7 @@ interface PromptObject<
   description: string;
   /**
    * Schema defining the expected output structure.
-   * Accepts any schema type supported by Mastra (Zod v3, Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
+   * Accepts any schema type supported by Mastra (Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
    * Will be converted to StandardSchemaWithJSON at runtime via toStandardSchema().
    *
    * The TOutput generic is inferred from this schema's output type.

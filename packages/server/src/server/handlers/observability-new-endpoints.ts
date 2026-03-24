@@ -41,7 +41,7 @@ import {
   paginationArgsSchema,
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
