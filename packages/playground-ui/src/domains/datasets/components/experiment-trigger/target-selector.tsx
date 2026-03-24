@@ -1,6 +1,6 @@
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { Combobox } from '@/ds/components/Combobox';
 import { Label } from '@/ds/components/Label';
 

@@ -1,11 +1,11 @@
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { EntryList } from '@/ds/components/EntryList';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { useLinkComponent } from '@/lib/framework';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
+import { Button } from '@/ds/components/Button';
+import { EntryList } from '@/ds/components/EntryList';
+import { Icon } from '@/ds/icons/Icon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];

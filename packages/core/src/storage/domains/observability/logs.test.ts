@@ -35,6 +35,7 @@ describe('Log Schemas', () => {
         data: { key: 'value' },
         traceId: 'trace-1',
         spanId: 'span-1',
+        scope: { pkg: 'core', version: '1.0.0' },
         tags: ['tag1'],
         metadata: { env: 'production' },
         createdAt: now,
@@ -43,6 +44,7 @@ describe('Log Schemas', () => {
       expect(record.level).toBe('info');
       expect(record.message).toBe('Hello world');
       expect(record.traceId).toBe('trace-1');
+      expect(record.scope).toEqual({ pkg: 'core', version: '1.0.0' });
     });
 
     it('accepts a minimal log record', () => {
@@ -120,12 +122,10 @@ describe('Log Schemas', () => {
         level: ['info', 'error'],
         traceId: 'trace-1',
         spanId: 'span-1',
-        search: 'error',
         tags: ['production'],
-        dataKeys: ['userId'],
       });
       expect(filter.level).toEqual(['info', 'error']);
-      expect(filter.search).toBe('error');
+      expect(filter.tags).toEqual(['production']);
     });
 
     it('accepts single level as string', () => {

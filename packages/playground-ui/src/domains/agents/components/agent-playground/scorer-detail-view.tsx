@@ -1,10 +1,10 @@
-import { Button } from '@/ds/components/Button';
-import { Badge } from '@/ds/components/Badge';
-import { Icon } from '@/ds/icons/Icon';
-import { Txt } from '@/ds/components/Txt';
-import { Switch } from '@/ds/components/Switch';
-import { Pencil } from 'lucide-react';
 import type { GetScorerResponse } from '@mastra/client-js';
+import { Pencil } from 'lucide-react';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Switch } from '@/ds/components/Switch';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface LinkedDataset {
   id: string;

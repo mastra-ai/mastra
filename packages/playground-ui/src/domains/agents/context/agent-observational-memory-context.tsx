@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 /** Progress data streamed from OM in real-time (maps to DataOmStatusPart) */
 export interface OmProgressData {

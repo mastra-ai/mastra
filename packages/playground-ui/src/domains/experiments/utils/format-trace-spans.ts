@@ -1,5 +1,5 @@
-import { SpanRecord } from '@mastra/core/storage';
-import { ExperimentUISpan } from '../types';
+import type { SpanRecord } from '@mastra/core/storage';
+import type { ExperimentUISpan } from '../types';
 
 export const formatTraceSpans = (spans: SpanRecord[]): ExperimentUISpan[] => {
   if (!spans || spans.length === 0) {

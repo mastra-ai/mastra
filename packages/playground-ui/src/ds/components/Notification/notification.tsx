@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { XIcon, InfoIcon, AlertTriangleIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { XIcon, InfoIcon, AlertTriangleIcon } from 'lucide-react';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type NotificationProps = {
   children: React.ReactNode;
