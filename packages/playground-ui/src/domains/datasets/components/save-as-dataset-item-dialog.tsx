@@ -38,10 +38,8 @@ export function SaveAsDatasetItemDialog({
   const [groundTruth, setGroundTruth] = useState('');
   // source is passed through — not editable in the UI
 
-  const { data, isLoading: isDatasetsLoading } = useDatasets();
+  const { data: datasets = [], isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-
-  const datasets = data?.datasets ?? [];
 
   useEffect(() => {
     if (isOpen) {

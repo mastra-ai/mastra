@@ -57,9 +57,8 @@ function DatasetSaveDialog({
     }
   }, [open, initialGroundTruth]);
 
-  const { data, isLoading: isDatasetsLoading } = useDatasets();
+  const { data: datasets = [], isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-  const datasets = data?.datasets ?? [];
 
   const handleSubmit = useCallback(async () => {
     if (!selectedDatasetId) {

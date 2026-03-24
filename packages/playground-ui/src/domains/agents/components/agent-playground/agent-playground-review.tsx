@@ -59,7 +59,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   const { data: completedItems, refetch: refetchCompleted } = useCompletedItems(agentId);
   const client = useMastraClient();
   const { provider, model } = usePlaygroundModel();
-  const { data: allDatasets } = useDatasets();
+  const { data: allDatasets = [] } = useDatasets();
   const { updateDataset } = useDatasetMutations();
 
   // Load persisted review items on mount / when data changes
@@ -91,7 +91,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   const [analysisModelId, setAnalysisModelId] = useState<string | null>(null);
 
   // Collect tag vocabulary from datasets that items belong to
-  const datasets = allDatasets?.datasets;
+  const datasets = allDatasets;
   const datasetTagVocabulary = useMemo(() => {
     if (!datasets) return [] as string[];
     const datasetIds = new Set(items.map(i => i.datasetId).filter(Boolean));

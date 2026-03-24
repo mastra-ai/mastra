@@ -19,9 +19,8 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
 
-  const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
+  const { data: datasets = [], isLoading: isDatasetsLoading } = useDatasets();
   const { data: experiments } = useAgentExperiments(agentId);
-  const datasets = datasetsData?.datasets ?? [];
 
   // Build a map of dataset ID → latest experiment for this agent
   const latestExperimentByDataset = useMemo(() => {

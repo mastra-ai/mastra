@@ -29,11 +29,8 @@ export function AddItemsToDatasetDialog({
   const [isAdding, setIsAdding] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const { data, isLoading: isDatasetsLoading } = useDatasets();
+  const { data: datasets = [], isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-
-  // Extract datasets array from response
-  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
 
   // Filter out the current dataset from the list
   const availableDatasets = datasets.filter((d: DatasetRecord) => d.id !== currentDatasetId);

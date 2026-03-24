@@ -6,6 +6,7 @@ import React, { useMemo, useState } from 'react';
 import { EmptyDatasetsTable } from '../empty-datasets-table';
 import type { DatasetTableColumn } from './columns';
 import { columns } from './columns';
+import { ItemListNextPageLoading } from '@/ds/components/ItemList/item-list-next-page-loading';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
@@ -19,9 +20,20 @@ export interface DatasetsTableProps {
   isLoading: boolean;
   error?: Error | null;
   onCreateClick?: () => void;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
-export function DatasetsTable({ datasets, isLoading, error, onCreateClick }: DatasetsTableProps) {
+export function DatasetsTable({
+  datasets,
+  isLoading,
+  error,
+  onCreateClick,
+  hasNextPage,
+  isFetchingNextPage,
+  setEndOfListElement,
+}: DatasetsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const tableData: DatasetTableColumn[] = useMemo(() => datasets, [datasets]);
@@ -84,6 +96,14 @@ export function DatasetsTable({ datasets, isLoading, error, onCreateClick }: Dat
           </Table>
         </ScrollableContainer>
       )}
+
+      <ItemListNextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        loadingText="Loading more datasets..."
+        noMoreDataText="No more datasets to load"
+      />
     </div>
   );
 }

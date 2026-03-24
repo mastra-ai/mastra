@@ -219,8 +219,7 @@ function BulkAddToDatasetBar({
   isPending: boolean;
 }) {
   const [datasetId, setDatasetId] = useState('');
-  const { data, isLoading: isDatasetsLoading } = useDatasets();
-  const datasets = data?.datasets ?? [];
+  const { data: datasets = [], isLoading: isDatasetsLoading } = useDatasets();
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-border1 bg-surface2 shrink-0">

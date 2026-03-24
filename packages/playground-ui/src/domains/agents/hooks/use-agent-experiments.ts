@@ -24,8 +24,7 @@ interface AgentExperiment {
  */
 export const useAgentExperiments = (agentId: string, attachedScorerIds: string[] = []) => {
   const client = useMastraClient();
-  const { data: datasetsData } = useDatasets();
-  const datasets = datasetsData?.datasets ?? [];
+  const { data: datasets = [] } = useDatasets();
 
   return useQuery({
     queryKey: ['agent-experiments', agentId, attachedScorerIds, datasets.map(d => d.id)],

@@ -92,7 +92,7 @@ export function AgentPlaygroundEvaluate({
     }
   }, [pendingScorerItems, onPendingScorerItemsConsumed]);
 
-  const { data: datasetsData, isLoading: datasetsLoading } = useDatasets();
+  const { data: allDatasets = [], isLoading: datasetsLoading } = useDatasets();
   const { data: scorers } = useScorers();
   const { form } = useAgentEditFormContext();
   const agentScorers = useWatch({ control: form.control, name: 'scorers' }) || {};
@@ -113,7 +113,7 @@ export function AgentPlaygroundEvaluate({
     [agentDescription, agentInstructions, agentTools],
   );
 
-  const allDatasets = datasetsData?.datasets || [];
+  // allDatasets is already set from useDatasets() above
   // targetIds may come as a JSON string from some storage backends — normalize
   const parseTargetIds = (ids: unknown): string[] => {
     if (Array.isArray(ids)) return ids;

@@ -17,18 +17,17 @@ import {
   MainHeader,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, Database, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 
 function Datasets() {
   const { Link: FrameworkLink } = useLinkComponent();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { data, isLoading, error } = useDatasets();
+  const { data: datasets = [], isLoading, error, hasNextPage, isFetchingNextPage, setEndOfListElement } = useDatasets();
   const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
-  const datasets = data?.datasets ?? [];
 
   const handleDatasetCreated = (datasetId: string) => {
     setIsCreateDialogOpen(false);
@@ -67,7 +66,15 @@ function Datasets() {
             </div>
           </EntityListPageLayout.Top>
 
-          <DatasetsList datasets={datasets} isLoading={isLoading} error={error} search={search} />
+          <DatasetsList
+            datasets={datasets}
+            isLoading={isLoading}
+            error={error}
+            search={search}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            setEndOfListElement={setEndOfListElement}
+          />
         </EntityListPageLayout>
 
         <CreateDatasetDialog
@@ -114,6 +121,9 @@ function Datasets() {
           isLoading={isLoading}
           error={error}
           onCreateClick={() => setIsCreateDialogOpen(true)}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          setEndOfListElement={setEndOfListElement}
         />
       </MainContentContent>
 

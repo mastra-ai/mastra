@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { useMemo } from 'react';
 import { NoDatasetsInfo } from './no-datasets-info';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
+import { ItemListNextPageLoading } from '@/ds/components/ItemList/item-list-next-page-loading';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { useLinkComponent } from '@/lib/framework';
@@ -14,9 +15,20 @@ export interface DatasetsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
-export function DatasetsList({ datasets, isLoading, error, search = '' }: DatasetsListProps) {
+export function DatasetsList({
+  datasets,
+  isLoading,
+  error,
+  search = '',
+  hasNextPage,
+  isFetchingNextPage,
+  setEndOfListElement,
+}: DatasetsListProps) {
   const { paths } = useLinkComponent();
 
   const filteredData = useMemo(() => {
@@ -65,6 +77,14 @@ export function DatasetsList({ datasets, isLoading, error, search = '' }: Datase
           </EntityList.RowLink>
         );
       })}
+
+      <ItemListNextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        loadingText="Loading more datasets..."
+        noMoreDataText="No more datasets to load"
+      />
     </EntityList>
   );
 }

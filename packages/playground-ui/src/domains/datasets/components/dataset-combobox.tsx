@@ -28,7 +28,7 @@ export function DatasetCombobox({
   disabled = false,
   variant = 'inputLike',
 }: DatasetComboboxProps) {
-  const { data, isLoading, isError, error } = useDatasets();
+  const { data: datasets = [], isLoading, isError, error } = useDatasets();
   const { navigate, paths } = useLinkComponent();
 
   useEffect(() => {
@@ -37,8 +37,6 @@ export function DatasetCombobox({
       toast.error(`Error loading datasets: ${errorMessage}`);
     }
   }, [isError, error]);
-
-  const datasets = data?.datasets ?? [];
   const datasetOptions = datasets.map(d => ({
     label: d.name,
     value: d.id,
