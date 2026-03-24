@@ -314,15 +314,19 @@ export class DatadogExporter extends BaseExporter {
       }
     }
 
-    // Add error info as consolidated tags
+    // Add error info as flattened tags (dd-trace requires primitive tag values)
     if (span.errorInfo) {
       tags.error = true;
-      tags.errorInfo = {
-        message: span.errorInfo.message,
-        ...(span.errorInfo.id ? { id: span.errorInfo.id } : {}),
-        ...(span.errorInfo.domain ? { domain: span.errorInfo.domain } : {}),
-        ...(span.errorInfo.category ? { category: span.errorInfo.category } : {}),
-      };
+      tags['error.message'] = span.errorInfo.message;
+      if (span.errorInfo.id) {
+        tags['error.id'] = span.errorInfo.id;
+      }
+      if (span.errorInfo.domain) {
+        tags['error.domain'] = span.errorInfo.domain;
+      }
+      if (span.errorInfo.category) {
+        tags['error.category'] = span.errorInfo.category;
+      }
     }
 
     if (Object.keys(tags).length > 0) {

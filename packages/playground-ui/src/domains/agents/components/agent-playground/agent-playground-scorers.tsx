@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react';
 import { Calculator, CheckCircle2, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { useWatch } from 'react-hook-form';
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Badge } from '@/ds/components/Badge';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { Switch } from '@/ds/components/Switch';
-import { Label } from '@/ds/components/Label';
-
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useWatch } from 'react-hook-form';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface AgentPlaygroundScorersProps {
   agentId: string;

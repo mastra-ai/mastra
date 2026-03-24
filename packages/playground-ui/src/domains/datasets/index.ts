@@ -25,6 +25,7 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';

@@ -1,13 +1,12 @@
-import type { ReactNode } from 'react';
-import { useCallback, useRef, useState } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
-
-import { Tree } from '@/ds/components/Tree/tree';
-import { IconButton } from '@/ds/components/IconButton';
-import { TooltipProvider } from '@/ds/components/Tooltip';
+import type { ReactNode } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
+import { IconButton } from '@/ds/components/IconButton';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Tree } from '@/ds/components/Tree/tree';
 
 export interface SkillFileTreeProps {
   files: InMemoryFileNode[];

@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type TabListProps = {
   children: React.ReactNode;

@@ -1,5 +1,31 @@
 # @mastra/fastify
 
+## 1.3.0-alpha.1
+
+### Minor Changes
+
+- Added adapter auth middleware helpers for raw framework routes. ([#14458](https://github.com/mastra-ai/mastra/pull/14458))
+
+  Use `createAuthMiddleware({ mastra })` when you mount routes directly on a Hono, Express, Fastify, or Koa app and still want Mastra auth to run. Set `requiresAuth: false` when you need to reuse the same helper chain on a public route.
+
+  ```ts
+  app.get('/custom/protected', createAuthMiddleware({ mastra }), handler);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`8a738d8`](https://github.com/mastra-ai/mastra/commit/8a738d844772e14be381d54b22fd5d548ee4af42), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/server@1.16.0-alpha.1
+
+## 1.2.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+  - @mastra/server@1.16.0-alpha.0
+
 ## 1.2.6
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import Papa from 'papaparse';
+import { useCallback, useState } from 'react';
 import { parseRow } from '../utils/json-cell-parser';
 
 /** Result of parsing a CSV file */
