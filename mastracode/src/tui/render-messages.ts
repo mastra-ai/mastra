@@ -126,7 +126,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   // Check for system reminder tags
-  const systemReminderMatch = displayText.match(/<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>/);
+  const systemReminderMatch = displayText.match(
+    /<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>/,
+  );
   if (systemReminderMatch?.groups?.body) {
     const reminderText = systemReminderMatch.groups.body.trim();
     const attrs = systemReminderMatch.groups.attrs ?? '';

@@ -9,9 +9,7 @@ import type {
 } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
-import {
-  AgentsMDInjector,
-} from '@mastra/core/processors';
+import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -167,7 +165,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           const harnessContext = requestContext.get('harness') as
             | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
             | undefined;
-          const projectPath = harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
+          const projectPath =
+            harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),

@@ -2,9 +2,9 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
+import type { TUIState } from '../../state.js';
 import { handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
-import type { TUIState } from '../../state.js';
 
 function createAssistantMessage(content: HarnessMessage['content']): HarnessMessage {
   return {
@@ -62,9 +62,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(component).toBeInstanceOf(SystemReminderComponent);
     expect(state.allSystemReminderComponents[0]).toBe(component);
 
-    const rendered = (component as SystemReminderComponent)
-      .render(80)
-      .join('\n');
+    const rendered = (component as SystemReminderComponent).render(80).join('\n');
 
     expect(rendered).toContain('Loaded AGENTS.md');
     expect(rendered).toContain('Loading instruction file contents');

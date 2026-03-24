@@ -69,11 +69,14 @@ export class SystemReminderComponent extends Container {
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    const metadataLines = [this.path ? formatReminderPath(this.path) : undefined].filter((line): line is string => Boolean(line));
+    const metadataLines = [this.path ? formatReminderPath(this.path) : undefined].filter((line): line is string =>
+      Boolean(line),
+    );
 
     const wrappedMessageLines = wrapLines(this.messageLines, innerWidth);
     const shouldCollapse = wrappedMessageLines.length > MAX_COLLAPSED_LINES;
-    const visibleMessageLines = shouldCollapse && !this.expanded ? wrappedMessageLines.slice(0, MAX_COLLAPSED_LINES) : wrappedMessageLines;
+    const visibleMessageLines =
+      shouldCollapse && !this.expanded ? wrappedMessageLines.slice(0, MAX_COLLAPSED_LINES) : wrappedMessageLines;
 
     this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(renderRow(title, innerWidth, border), BOX_INDENT, 0));
@@ -154,7 +157,11 @@ function formatReminderPath(path: string): string {
 }
 
 function hasWideGlyph(text: string): boolean {
-  return [...text].some(char => /[\p{Extended_Pictographic}\u1100-\u115F\u2329\u232A\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/u.test(char));
+  return [...text].some(char =>
+    /[\p{Extended_Pictographic}\u1100-\u115F\u2329\u232A\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/u.test(
+      char,
+    ),
+  );
 }
 
 function wrapLines(lines: string[], maxLineWidth: number): string[] {

@@ -45,7 +45,9 @@ type StreamedSystemReminderPart = {
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
-  return part.type === 'tool_call' || part.type === 'tool_result' || (part as { type?: string }).type === 'system_reminder';
+  return (
+    part.type === 'tool_call' || part.type === 'tool_result' || (part as { type?: string }).type === 'system_reminder'
+  );
 }
 
 function isSystemReminderPart(part: HarnessMessageContent): boolean {

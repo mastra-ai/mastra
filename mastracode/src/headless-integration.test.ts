@@ -1,15 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
-import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
-
-import { createTool } from '@mastra/core/tools';
 import { AgentsMDInjector } from '@mastra/core/processors';
+import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
+import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import z from 'zod';
 
 vi.setConfig({ testTimeout: 30_000 });

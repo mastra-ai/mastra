@@ -20,12 +20,12 @@ import type { AssistantMessageComponent } from './components/assistant-message.j
 import { CustomEditor } from './components/custom-editor.js';
 
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
+import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
