@@ -7,6 +7,8 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ObservabilityContext, TracingContext } from '@mastra/core/observability';
+import { SpanType, createObservabilityContext, getOrCreateSpan } from '@mastra/core/observability';
 import type {
   Processor,
   ProcessInputArgs,
@@ -72,6 +74,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from './markers';
+import { ModelByInputTokens } from './model-by-input-tokens';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
@@ -113,6 +116,7 @@ import type {
   ProviderOptions,
   DataOmStatusPart,
   ObservationMarkerConfig,
+  ObservationalMemoryModel,
 } from './types';
 
 /**
@@ -218,7 +222,7 @@ export interface ObservationalMemoryConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Observation step configuration.
@@ -265,7 +269,7 @@ export interface ObservationalMemoryConfig {
  * even when user provides a simple number (converted based on shareTokenBudget).
  */
 interface ResolvedObservationConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -289,7 +293,7 @@ interface ResolvedObservationConfig {
 }
 
 interface ResolvedReflectionConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -482,9 +486,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
+  private observerAgentModel?: AgentConfig['model'];
 
   /** Internal Reflector agent - created lazily */
   private reflectorAgent?: Agent;
+  private reflectorAgentModel?: AgentConfig['model'];
 
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
@@ -881,9 +887,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.scope = config.scope ?? 'thread';
     this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
-    // Resolve "default" to the default model
-    const resolveModel = (m: typeof config.model) =>
-      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+    // Resolve "default" to the default model and unwrap OM-local model selectors.
+    const resolveModel = (m: typeof config.model) => {
+      if (m === 'default') {
+        return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+      }
+
+      if (m instanceof ModelByInputTokens) {
+        return m;
+      }
+
+      return m;
+    };
 
     // Require an explicit model — no silent default.
     // Resolution order: top-level model → sub-config model → the other sub-config model → error
@@ -908,8 +923,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
-      model === undefined || model === 'default';
+    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) => {
+      return model === undefined || model === 'default';
+    };
 
     const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
     const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
@@ -1089,7 +1105,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
-  private getModelToResolve(model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] {
+  private getConcreteModel(
+    model: ObservationalMemoryModel,
+    inputTokens?: number,
+  ): Exclude<ObservationalMemoryModel, ModelByInputTokens> {
+    if (model instanceof ModelByInputTokens) {
+      if (inputTokens === undefined) {
+        throw new Error('ModelByInputTokens requires inputTokens for resolution');
+      }
+      return model.resolve(inputTokens);
+    }
+
+    return model;
+  }
+
+  private getModelToResolve(
+    model: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
+  ): Parameters<typeof resolveModelConfig>[0] {
     if (Array.isArray(model)) {
       return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
     }
@@ -1115,7 +1147,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   private async resolveModelContext(
-    modelConfig: AgentConfig['model'],
+    modelConfig: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
     requestContext?: RequestContext,
   ): Promise<TokenCounterModelContext | undefined> {
     const modelToResolve = this.getModelToResolve(modelConfig);
@@ -1136,7 +1168,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
-      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
+      const modelConfig = this.getConcreteModel(
+        this.reflectionConfig.model,
+        this.reflectionConfig.model instanceof ModelByInputTokens ? 1 : undefined,
+      );
+      const resolved = await this.resolveModelContext(modelConfig, requestContext);
       const modelId = resolved?.modelId ?? '';
 
       // gemini-2.5-flash is conservative about compression - start at level 2
@@ -1172,47 +1208,142 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return this.tokenCounter.runWithModelContext(modelContext, fn);
   }
 
+  private async formatRoutingModel(
+    model: AgentConfig['model'] | undefined,
+    requestContext?: RequestContext,
+  ): Promise<string | undefined> {
+    if (!model) {
+      return undefined;
+    }
+
+    if (typeof model === 'string') {
+      return model;
+    }
+
+    const resolvedModel = await this.resolveModelContext(model, requestContext);
+    if (resolvedModel) {
+      return this.formatModelName(resolvedModel);
+    }
+
+    const runtimeModel = this.getRuntimeModelContext(model as { provider: string; modelId: string } | undefined);
+    return runtimeModel ? this.formatModelName(runtimeModel) : undefined;
+  }
+
+  private async withOmTracingSpan<T>(options: {
+    phase: 'observer' | 'reflector';
+    inputTokens: number;
+    resolvedModel: AgentConfig['model'];
+    selectedThreshold?: number;
+    routingModel?: ModelByInputTokens;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    fn: (observabilityContext?: Partial<ObservabilityContext>) => Promise<T>;
+  }): Promise<T> {
+    const { phase, inputTokens, resolvedModel, selectedThreshold, routingModel, requestContext, tracingContext, fn } =
+      options;
+
+    const selectedModel = (await this.formatRoutingModel(resolvedModel, requestContext)) ?? '(unknown)';
+
+    if (!tracingContext) {
+      return fn();
+    }
+
+    const span = getOrCreateSpan({
+      type: SpanType.GENERIC,
+      name: `om.${phase}`,
+      attributes: {
+        omPhase: phase,
+        omInputTokens: inputTokens,
+        omSelectedModel: selectedModel,
+        ...(selectedThreshold !== undefined ? { omSelectedThreshold: selectedThreshold } : {}),
+        ...(routingModel
+          ? {
+              omRoutingStrategy: 'model-by-input-tokens',
+              omRoutingThresholds: routingModel.getThresholds().join(','),
+            }
+          : {}),
+      } as any,
+      tracingContext,
+      requestContext,
+    });
+
+    if (!span) {
+      return fn();
+    }
+
+    const observabilityContext = createObservabilityContext({ currentSpan: span });
+    return span.executeInContext(() => fn(observabilityContext));
+  }
+
   /**
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
    */
   async getResolvedConfig(requestContext?: RequestContext): Promise<{
     scope: 'resource' | 'thread';
+    shareTokenBudget: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       model: string;
       previousObserverTokens: number | false | undefined;
+      routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
       model: string;
+      routing?: Array<{ upTo: number; model: string }>;
     };
   }> {
-    const safeResolveModel = async (modelConfig: AgentConfig['model']): Promise<string> => {
+    const resolveRouting = async (
+      modelConfig: ObservationalMemoryModel,
+    ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> => {
       try {
+        if (modelConfig instanceof ModelByInputTokens) {
+          const routing = await Promise.all(
+            modelConfig.getThresholds().map(async upTo => {
+              const resolvedModel = modelConfig.resolve(upTo);
+              const resolved = await this.resolveModelContext(resolvedModel, requestContext);
+              return {
+                upTo,
+                model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+              };
+            }),
+          );
+
+          return {
+            model: routing[0]?.model ?? '(unknown)',
+            routing,
+          };
+        }
+
         const resolved = await this.resolveModelContext(modelConfig, requestContext);
-        return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';
+        return {
+          model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+        };
       } catch (error) {
         omError('[OM] Failed to resolve model config', error);
-        return '(unknown)';
+        return { model: '(unknown)' };
       }
     };
 
-    const [observationModelName, reflectionModelName] = await Promise.all([
-      safeResolveModel(this.observationConfig.model),
-      safeResolveModel(this.reflectionConfig.model),
+    const [observationResolved, reflectionResolved] = await Promise.all([
+      resolveRouting(this.observationConfig.model),
+      resolveRouting(this.reflectionConfig.model),
     ]);
 
     return {
       scope: this.scope,
+      shareTokenBudget: this.observationConfig.shareTokenBudget,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
-        model: observationModelName,
+        model: observationResolved.model,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        routing: observationResolved.routing,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
-        model: reflectionModelName,
+        model: reflectionResolved.model,
+        routing: reflectionResolved.routing,
       },
     };
   }
@@ -1348,8 +1479,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Observer agent
    */
-  private getObserverAgent(): Agent {
-    if (!this.observerAgent) {
+  private getObserverAgent(model: AgentConfig['model']): Agent {
+    if (this.observerAgent && this.observerAgentModel === undefined) {
+      return this.observerAgent;
+    }
+
+    if (!this.observerAgent || this.observerAgentModel !== model) {
       const systemPrompt = buildObserverSystemPrompt(
         false,
         this.observationConfig.instruction,
@@ -1360,8 +1495,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         id: 'observational-memory-observer',
         name: 'Observer',
         instructions: systemPrompt,
-        model: this.observationConfig.model,
+        model,
       });
+      this.observerAgentModel = model;
     }
     return this.observerAgent;
   }
@@ -1369,16 +1505,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Reflector agent
    */
-  private getReflectorAgent(): Agent {
-    if (!this.reflectorAgent) {
+  private getReflectorAgent(model: AgentConfig['model']): Agent {
+    if (this.reflectorAgent && this.reflectorAgentModel === undefined) {
+      return this.reflectorAgent;
+    }
+
+    if (!this.reflectorAgent || this.reflectorAgentModel !== model) {
       const systemPrompt = buildReflectorSystemPrompt(this.reflectionConfig.instruction);
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
         name: 'Reflector',
         instructions: systemPrompt,
-        model: this.reflectionConfig.model,
+        model,
       });
+      this.reflectorAgentModel = model;
     }
     return this.reflectorAgent;
   }
@@ -2017,6 +2158,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     options?: {
       skipContinuationHints?: boolean;
       requestContext?: RequestContext;
+      tracingContext?: TracingContext;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
       priorThreadTitle?: string;
@@ -2029,7 +2171,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getObserverAgent();
     const observerMessages = [
       {
         role: 'user' as const,
@@ -2045,19 +2186,39 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       buildObserverHistoryMessage(messagesToObserve),
     ];
 
-    const doGenerate = async () => {
-      const result = await this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-        });
+    const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
+    const requestContext = options?.requestContext;
+    const tracingContext = options?.tracingContext;
+    const routingModel =
+      this.observationConfig.model instanceof ModelByInputTokens ? this.observationConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => inputTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.observationConfig.model, inputTokens);
+    const agent = this.getObserverAgent(resolvedModel);
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+    const doGenerate = async () => {
+      const result = await this.withOmTracingSpan({
+        phase: 'observer',
+        inputTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.observationConfig.modelSettings,
+              },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+            });
+
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
 
       return result;
     };
@@ -2108,6 +2269,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
     wasTruncated?: boolean,
+    tracingContext?: TracingContext,
   ): Promise<{
     results: Map<
       string,
@@ -2126,12 +2288,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
     );
-    const agent = new Agent({
-      id: 'multi-thread-observer',
-      name: 'multi-thread-observer',
-      model: this.observationConfig.model,
-      instructions: systemPrompt,
-    });
 
     const observerMessages = [
       {
@@ -2158,19 +2314,43 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
-    const doGenerate = async () => {
-      const result = await this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-        });
+    const inputTokens = this.tokenCounter.countMessages(allMessages);
+    const routingModel =
+      this.observationConfig.model instanceof ModelByInputTokens ? this.observationConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => inputTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.observationConfig.model, inputTokens);
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+    const agent = new Agent({
+      id: 'multi-thread-observer',
+      name: 'multi-thread-observer',
+      model: resolvedModel,
+      instructions: systemPrompt,
+    });
+
+    const doGenerate = async () => {
+      const result = await this.withOmTracingSpan({
+        phase: 'observer',
+        inputTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.observationConfig.modelSettings,
+              },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+            });
+
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
 
       return result;
     };
@@ -2251,14 +2431,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     skipContinuationHints?: boolean,
     compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getReflectorAgent();
-
     const originalTokens = this.tokenCounter.countObservations(observations);
+    const routingModel =
+      this.reflectionConfig.model instanceof ModelByInputTokens ? this.reflectionConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => originalTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.reflectionConfig.model, originalTokens);
+    const agent = this.getReflectorAgent(resolvedModel);
 
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -2286,45 +2470,56 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       let chunkCount = 0;
-      const result = await this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(prompt, {
-          modelSettings: {
-            ...this.reflectionConfig.modelSettings,
-          },
-          providerOptions: this.reflectionConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-          ...(attemptNumber === 1
-            ? {
-                onChunk(chunk: any) {
-                  chunkCount++;
-                  if (chunkCount === 1 || chunkCount % 50 === 0) {
-                    const preview =
-                      chunk.type === 'text-delta'
-                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                        : chunk.type === 'tool-call'
-                          ? ` tool=${chunk.toolName}`
-                          : '';
-                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+      const result = await this.withOmTracingSpan({
+        phase: 'reflector',
+        inputTokens: originalTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(prompt, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.reflectionConfig.modelSettings,
+              },
+              providerOptions: this.reflectionConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+              ...(attemptNumber === 1
+                ? {
+                    onChunk(chunk: any) {
+                      chunkCount++;
+                      if (chunkCount === 1 || chunkCount % 50 === 0) {
+                        const preview =
+                          chunk.type === 'text-delta'
+                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                            : chunk.type === 'tool-call'
+                              ? ` tool=${chunk.toolName}`
+                              : '';
+                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                      }
+                    },
+                    onFinish(event: any) {
+                      omDebug(
+                        `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                      );
+                    },
+                    onAbort(event: any) {
+                      omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                    },
+                    onError({ error }: { error: unknown }) {
+                      omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                    },
                   }
-                },
-                onFinish(event: any) {
-                  omDebug(
-                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                  );
-                },
-                onAbort(event: any) {
-                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                },
-                onError({ error }: { error: unknown }) {
-                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                },
-              }
-            : {}),
-        });
+                : {}),
+            });
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -2755,6 +2950,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     abortSignal: ProcessInputStepArgs['abortSignal'],
     abort: ProcessInputStepArgs['abort'],
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<{
     observationSucceeded: boolean;
     updatedRecord: ObservationalMemoryRecord;
@@ -2902,6 +3098,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           } else {
             await this.doSynchronousObservation({
@@ -2911,6 +3108,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           }
           // Check if observation actually updated lastObservedAt
@@ -3295,7 +3493,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort, model } = args;
+    const {
+      messageList,
+      requestContext,
+      tracingContext,
+      stepNumber,
+      state: _state,
+      writer,
+      abortSignal,
+      abort,
+      model,
+    } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -3482,6 +3690,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 writer,
                 messageList,
                 requestContext,
+                tracingContext,
               });
               // Re-fetch record — reflection may have created a new generation with lower obsTokens
               record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3510,6 +3719,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             writer,
             messageList,
             requestContext,
+            tracingContext,
           });
           // Re-fetch record after reflection may have created a new generation
           record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3590,6 +3800,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               unbufferedPendingTokens,
               requestContext,
+              tracingContext,
             );
           }
         } else if (this.isAsyncObservationEnabled()) {
@@ -3609,6 +3820,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               unbufferedPendingTokens,
               requestContext,
+              tracingContext,
             );
           }
         }
@@ -3639,6 +3851,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             abortSignal,
             abort,
             requestContext,
+            tracingContext,
           );
 
           if (observationSucceeded) {
@@ -4217,8 +4430,18 @@ ${formattedMessages}
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      threadId,
+      unobservedMessages,
+      writer,
+      abortSignal,
+      reflectionHooks,
+      requestContext,
+      tracingContext,
+    } = opts;
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -4305,6 +4528,7 @@ ${formattedMessages}
       const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
       const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, {
         requestContext,
+        tracingContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
         priorThreadTitle: thread?.title,
@@ -4463,6 +4687,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED marker on error
@@ -4480,18 +4705,15 @@ ${formattedMessages}
         // Stream the failed marker to the UI first - this adds the part via stream handler
         if (writer) {
           await writer.custom(failedMarker).catch(() => {
-            // Ignore errors from streaming - observation should continue
+            // Ignore errors from streaming
           });
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -4520,6 +4742,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     const bufferKey = this.getObservationBufferKey(lockKey);
 
@@ -4545,6 +4768,7 @@ ${formattedMessages}
       bufferKey,
       writer,
       requestContext,
+      tracingContext,
     ).finally(() => {
       // Clean up the operation tracking
       ObservationalMemory.asyncBufferingOps.delete(bufferKey);
@@ -4569,6 +4793,7 @@ ${formattedMessages}
     bufferKey: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     // Wait for any existing buffering operation to complete first (mutex behavior)
     const existingOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
@@ -4688,6 +4913,7 @@ ${formattedMessages}
         startedAt,
         writer,
         requestContext,
+        tracingContext,
       );
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
@@ -4729,6 +4955,7 @@ ${formattedMessages}
     startedAt: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     // Build combined context for the observer: active + buffered chunk observations
     const bufferedChunks = this.getBufferedChunks(record);
@@ -4752,6 +4979,7 @@ ${formattedMessages}
       {
         skipContinuationHints: true,
         requestContext,
+        tracingContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
         priorThreadTitle: thread?.title,
@@ -5339,6 +5567,7 @@ ${formattedMessages}
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
     const {
       record,
@@ -5349,6 +5578,7 @@ ${formattedMessages}
       abortSignal,
       reflectionHooks,
       requestContext,
+      tracingContext,
     } = opts;
     // Clear debug entries at start of observation cycle
 
@@ -5641,6 +5871,7 @@ ${formattedMessages}
           abortSignal,
           requestContext,
           wasTruncated,
+          tracingContext,
         );
         return batchResult;
       });
@@ -5843,6 +6074,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
@@ -5863,19 +6095,16 @@ ${formattedMessages}
           // Stream the failed marker to the UI first - this adds the part via stream handler
           if (writer) {
             await writer.custom(failedMarker).catch(() => {
-              // Ignore errors from streaming - observation should continue
+              // Ignore errors from streaming
             });
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
         }
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Resource-scoped observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -5950,12 +6179,22 @@ ${formattedMessages}
     messageList?: MessageList;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      observationTokens,
+      writer,
+      abortSignal,
+      messageList,
+      reflectionHooks,
+      requestContext,
+      tracingContext,
+    } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════��═════════════════��═��═════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // This runs in the background and stores results to bufferedReflection.
     // ════════════════════════════════════════════════════════════════════════
@@ -6070,6 +6309,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        tracingContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
@@ -6119,12 +6359,9 @@ ${formattedMessages}
         });
         await writer.custom(failedMarker).catch(() => {});
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - reflection failure should not crash the agent
-      omError('[OM] Reflection failed', error);
+      // Re-throw the error - reflection failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
       reflectionHooks?.onReflectionEnd?.();

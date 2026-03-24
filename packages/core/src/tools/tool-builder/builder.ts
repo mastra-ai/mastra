@@ -457,6 +457,7 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               agent: {
+                agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
