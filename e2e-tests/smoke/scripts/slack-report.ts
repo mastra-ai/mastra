@@ -82,6 +82,7 @@ interface VitestAssertionResult {
 interface VitestTestResult {
   name: string;
   status: 'passed' | 'failed';
+  endTime: number;
   assertionResults: VitestAssertionResult[];
 }
 
@@ -112,6 +113,14 @@ const API_REPORT_PATH = process.env.API_REPORT_PATH || 'reports/api-results.json
 const VIDEO_DIR = process.env.VIDEO_DIR || 'test-results';
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+function formatDuration(ms: number): string {
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const remSecs = secs % 60;
+  return remSecs > 0 ? `${mins}m ${remSecs}s` : `${mins}m`;
+}
 
 function env(name: string): string {
   const val = process.env[name];
@@ -279,6 +288,7 @@ async function main() {
   let apiStats = { passed: 0, failed: 0, skipped: 0, total: 0 };
   let apiFailures: FailedTest[] = [];
   let apiStartTime: number | null = null;
+  let apiDurationMs: number | null = null;
 
   if (existsSync(API_REPORT_PATH)) {
     const apiReport: VitestReport = JSON.parse(readFileSync(API_REPORT_PATH, 'utf-8'));
@@ -289,6 +299,10 @@ async function main() {
       total: apiReport.numTotalTests,
     };
     apiStartTime = apiReport.startTime;
+    if (apiReport.testResults.length > 0) {
+      const maxEndTime = Math.max(...apiReport.testResults.map(t => t.endTime));
+      apiDurationMs = maxEndTime - apiReport.startTime;
+    }
     apiFailures = collectVitestFailures(apiReport);
     console.log(`API report: ${apiStats.passed}/${apiStats.total} passed, ${apiStats.failed} failed`);
   } else {
@@ -299,6 +313,7 @@ async function main() {
   let uiStats = { passed: 0, failed: 0, skipped: 0, flaky: 0, total: 0 };
   let uiFailures: FailedTest[] = [];
   let uiStartTime: string | null = null;
+  let uiDurationMs: number | null = null;
 
   if (existsSync(REPORT_PATH)) {
     const uiReport: PlaywrightReport = JSON.parse(readFileSync(REPORT_PATH, 'utf-8'));
@@ -310,6 +325,7 @@ async function main() {
       total: uiReport.stats.expected + uiReport.stats.unexpected + uiReport.stats.flaky + uiReport.stats.skipped,
     };
     uiStartTime = uiReport.stats.startTime;
+    uiDurationMs = uiReport.stats.duration;
     uiFailures = collectPlaywrightFailures(uiReport.suites);
     console.log(`UI report: ${uiStats.passed}/${uiStats.total} passed, ${uiStats.failed} failed`);
   } else {
@@ -337,15 +353,17 @@ async function main() {
   const timeStr = `<!date^${runTs}^{date_short_pretty} at {time}|${new Date(startMs).toISOString()}>`;
 
   // Per-suite status lines
+  const apiDuration = apiDurationMs != null ? ` in ${formatDuration(apiDurationMs)}` : '';
   const apiLine = apiStats.total > 0
     ? (apiStats.failed > 0
-      ? `API: ${apiStats.failed} failed, ${apiStats.passed} passed`
-      : `API: ${apiStats.passed}/${apiStats.total} passed`)
+      ? `API: ${apiStats.failed} failed, ${apiStats.passed} passed${apiDuration}`
+      : `API: ${apiStats.passed}/${apiStats.total} passed${apiDuration}`)
     : null;
+  const uiDuration = uiDurationMs != null ? ` in ${formatDuration(uiDurationMs)}` : '';
   const uiLine = uiStats.total > 0
     ? (uiStats.failed > 0
-      ? `UI: ${uiStats.failed} failed, ${uiStats.passed} passed`
-      : `UI: ${uiStats.passed}/${uiStats.total} passed`)
+      ? `UI: ${uiStats.failed} failed, ${uiStats.passed} passed${uiDuration}`
+      : `UI: ${uiStats.passed}/${uiStats.total} passed${uiDuration}`)
     : null;
 
   const zodVersion = process.env.ZOD_VERSION;
