@@ -88,9 +88,11 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
+  MAX_COMPRESSION_LEVEL,
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import type { CompressionLevel } from './reflector-agent';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
@@ -1126,6 +1128,28 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       provider: resolved.provider,
       modelId: resolved.modelId,
     };
+  }
+
+  /**
+   * Get the default compression start level based on model behavior.
+   * gemini-2.5-flash is a faithful transcriber that needs explicit pressure to compress effectively.
+   */
+  private async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
+    try {
+      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
+      const modelId = resolved?.modelId ?? '';
+
+      // gemini-2.5-flash is conservative about compression - start at level 2
+      if (modelId.includes('gemini-2.5-flash')) {
+        return 2;
+      }
+
+      // Default for all other models
+      return 1;
+    } catch {
+      // Silently fallback to level 1 on error - not worth disrupting the operation
+      return 1; // safe default
+    }
   }
 
   private getRuntimeModelContext(
@@ -2225,7 +2249,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2 | 3,
+    compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
   ): Promise<{
     observations: string;
@@ -2243,9 +2267,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Attempt reflection with escalating compression levels.
-    // Start at the provided level and retry up to level 3 if compression fails.
-    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
-    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    // Start at the provided level and retry upward, but cap retries relative to the start level
+    // and never go past the highest defined compression level.
+    const startLevel: CompressionLevel = compressionStartLevel ?? 0;
+    let currentLevel: CompressionLevel = startLevel;
+    const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
@@ -2338,6 +2364,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         break;
       }
 
+      if (currentLevel >= maxLevel) {
+        break;
+      }
+
+      const nextLevel = (currentLevel + 1) as CompressionLevel;
+
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = createObservationFailedMarker({
@@ -2345,7 +2377,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${nextLevel}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -2368,7 +2400,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Escalate to next compression level
-      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
+      currentLevel = nextLevel;
     }
 
     return {
@@ -5091,15 +5123,11 @@ ${formattedMessages}
     // Store cycleId so tryActivateBufferedReflection can use it for UI markers
     ObservationalMemory.reflectionBufferCycleIds.set(_bufferKey, cycleId);
 
-    // Slice activeObservations to only the first N lines that fit within the
-    // activation-point token budget. This keeps the reflector prompt small
-    // (avoiding LLM hangs on huge prompts) and matches the portion that will
-    // be replaced at activation time.
     const fullObservations = currentRecord.activeObservations ?? '';
     const allLines = fullObservations.split('\n');
     const totalLines = allLines.length;
 
-    // Calculate how many lines fit within the activation point budget
+    // Approximate tokens per line to pick a slice matching bufferActivation * threshold
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
     const linesToReflect =
@@ -5108,20 +5136,13 @@ ${formattedMessages}
     const activeObservations = allLines.slice(0, linesToReflect).join('\n');
     const reflectedObservationLineCount = linesToReflect;
     const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
-    // Compression target: ask for 75% of the slice size. This is a modest reduction
-    // that LLMs can reliably achieve on dense observation text, unlike the more
-    // aggressive bufferActivation ratio which often fails on already-compressed content.
+    // Compression target: 75% of slice size. This gives breathing room while still making progress.
     const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
     );
 
-    omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
-    );
-
-    // Emit buffering start marker (after slice so we report the actual token count)
     if (writer) {
       const startMarker = createBufferingStartMarker({
         cycleId,
@@ -5135,8 +5156,11 @@ ${formattedMessages}
       void writer.custom(startMarker).catch(() => {});
     }
 
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
+
     // Call reflector with compression target.
-    // Start at compression level 1 (standard guidance), retry at level 2 (aggressive).
     const reflectResult = await this.callReflector(
       activeObservations,
       undefined, // No manual prompt
@@ -5144,7 +5168,7 @@ ${formattedMessages}
       compressionTarget,
       undefined, // No abort signal for background ops
       true, // Skip continuation hints for async buffering
-      1, // Start at compression level 1 for buffered reflection
+      await this.getCompressionStartLevel(requestContext),
       requestContext,
     );
 
