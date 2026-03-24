@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 19.0.0-alpha.2
+
+### Patch Changes
+
+- Redesigned the agent instruction blocks editor with a Notion-like document feel. Blocks no longer show line numbers or block numbers, have tighter spacing, and display a subtle hover highlight. Reference blocks now show a sync-block header with a popover for block details, "Open original", "De-reference block", and "Used by" agents. Inline blocks can be converted to saved prompt blocks via a new "Save as prompt block" action in the hover toolbar. The prompt block edit sidebar now shows a "Used by" section listing which agents reference the block. Added a `lineNumbers` prop to `CodeEditor` to optionally hide line numbers. ([#14563](https://github.com/mastra-ai/mastra/pull/14563))
+
+  ```tsx
+  <CodeEditor language="markdown" lineNumbers={false} />
+  ```
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+  - @mastra/client-js@1.10.0-alpha.2
+  - @mastra/ai-sdk@1.2.1-alpha.0
+  - @mastra/react@0.2.17-alpha.2
+  - @mastra/schema-compat@1.2.7-alpha.0
+
 ## 19.0.0-alpha.1
 
 ### Minor Changes

@@ -3,7 +3,6 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -100,6 +99,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -5242,11 +5242,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
