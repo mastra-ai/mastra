@@ -699,25 +699,30 @@ export class MessageList {
    * source so the updated content is re-saved.
    */
   public stepStart(): boolean {
-    for (let m = this.messages.length - 1; m >= 0; m--) {
-      const msg = this.messages[m]!;
-      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
-
-      if (MessageMerger.isSealed(msg)) {
-        return false;
-      }
-
-      msg.content.parts.push({ type: 'step-start' as const });
-
-      // Ensure the mutated message is persisted
-      if (!this.stateManager.isResponseMessage(msg)) {
-        this.stateManager.removeMessage(msg);
-        this.stateManager.addToSource(msg, 'response');
-      }
-
-      return true;
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
     }
-    return false;
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    // Don't add a duplicate step-start
+    const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
+    if (lastPart?.type === 'step-start') {
+      return false;
+    }
+
+    lastMsg.content.parts.push({ type: 'step-start' as const });
+
+    // Ensure the mutated message is persisted
+    if (!this.stateManager.isResponseMessage(lastMsg)) {
+      this.stateManager.removeMessage(lastMsg);
+      this.stateManager.addToSource(lastMsg, 'response');
+    }
+
+    return true;
   }
 
   public getSystemMessages(tag?: string): CoreMessageV4[] {
