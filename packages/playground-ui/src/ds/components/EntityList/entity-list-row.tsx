@@ -17,6 +17,7 @@ export function EntityListRow({ children, className, onClick, selected }: Entity
       onKeyDown={
         onClick
           ? e => {
+              if (e.currentTarget !== e.target) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 onClick();
