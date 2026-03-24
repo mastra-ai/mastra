@@ -18,7 +18,7 @@ export function createBackTool(browser: AgentBrowser) {
       try {
         return await browser.back();
       } catch (error) {
-        return handleBrowserError(error, 'Back');
+        return handleBrowserError(error, 'Back', browser);
       }
     },
   });

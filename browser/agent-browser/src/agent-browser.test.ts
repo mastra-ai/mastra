@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
 const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
   const mockPage = {
-    url: () => 'https://example.com',
-    title: async () => 'Example',
+    url: vi.fn().mockReturnValue('https://example.com'),
+    title: vi.fn().mockResolvedValue('Example'),
     goto: vi.fn(),
     goBack: vi.fn(),
     goForward: vi.fn(),
@@ -181,6 +181,35 @@ describe('AgentBrowser', () => {
       await browser.ensureReady();
       await browser.ensureReady();
       expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+
+    it('detects externally closed browser and re-launches', async () => {
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockManager.launch).toHaveBeenCalledOnce();
+
+      // Simulate browser being externally closed
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target page, context or browser has been closed');
+      });
+
+      // ensureReady should detect disconnection and re-launch
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockManager.launch).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles "Target closed" error during status check', async () => {
+      await browser.ensureReady();
+
+      // Simulate disconnect error
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target closed');
+      });
+
+      await browser.ensureReady();
+      // Should have re-launched
+      expect(mockManager.launch).toHaveBeenCalledTimes(2);
     });
   });
 

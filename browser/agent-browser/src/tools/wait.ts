@@ -18,7 +18,7 @@ export function createWaitTool(browser: AgentBrowser) {
       try {
         return await browser.wait(input);
       } catch (error) {
-        return handleBrowserError(error, 'Wait');
+        return handleBrowserError(error, 'Wait', browser);
       }
     },
   });

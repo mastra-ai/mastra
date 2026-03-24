@@ -145,6 +145,35 @@ describe('StagehandBrowser', () => {
       await browser.close();
       expect(browser.isBrowserRunning()).toBe(false);
     });
+
+    it('should detect externally closed browser and re-launch', async () => {
+      await browser.launch();
+      expect(browser.status).toBe('ready');
+      expect(mockStagehand.init).toHaveBeenCalledTimes(1);
+
+      // Simulate browser being externally closed
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target page, context or browser has been closed');
+      });
+
+      // ensureReady should detect disconnection and re-launch
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockStagehand.init).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle "Target closed" error during status check', async () => {
+      await browser.launch();
+
+      // Simulate disconnect error
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target closed');
+      });
+
+      await browser.ensureReady();
+      // Should have re-launched
+      expect(mockStagehand.init).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('getTools', () => {
@@ -221,13 +250,23 @@ describe('StagehandBrowser', () => {
       expect(result.message).toBe('Element not found');
     });
 
+    it('should detect browser disconnection during act and set status to closed', async () => {
+      mockStagehand.act.mockRejectedValueOnce(new Error('Target page, context or browser has been closed'));
+
+      const result = await browser.act({
+        instruction: 'Click button',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('browser_closed');
+      expect(browser.status).toBe('closed');
+    });
+
     it('should throw if browser not launched', async () => {
       await browser.close();
       const newBrowser = new StagehandBrowser();
 
-      await expect(
-        newBrowser.act({ instruction: 'Click button' }),
-      ).rejects.toThrow('Browser not launched');
+      await expect(newBrowser.act({ instruction: 'Click button' })).rejects.toThrow('Browser not launched');
     });
   });
 
@@ -269,6 +308,18 @@ describe('StagehandBrowser', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Extraction failed');
+    });
+
+    it('should detect browser disconnection during extract and set status to closed', async () => {
+      mockStagehand.extract.mockRejectedValueOnce(new Error('Target closed'));
+
+      const result = await browser.extract({
+        instruction: 'Get data',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('browser_closed');
+      expect(browser.status).toBe('closed');
     });
   });
 
@@ -323,6 +374,18 @@ describe('StagehandBrowser', () => {
       expect(result.error).toBe('Observe failed');
       expect(result.actions).toHaveLength(0);
     });
+
+    it('should detect browser disconnection during observe and set status to closed', async () => {
+      mockStagehand.observe.mockRejectedValueOnce(new Error('Browser has been closed'));
+
+      const result = await browser.observe({
+        instruction: 'Find buttons',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('browser_closed');
+      expect(browser.status).toBe('closed');
+    });
   });
 
   describe('navigate', () => {
@@ -366,6 +429,18 @@ describe('StagehandBrowser', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Navigation timeout');
+    });
+
+    it('should detect browser disconnection during navigate and set status to closed', async () => {
+      mockPage.goto.mockRejectedValueOnce(new Error('Target page, context or browser has been closed'));
+
+      const result = await browser.navigate({
+        url: 'https://example.com',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('browser_closed');
+      expect(browser.status).toBe('closed');
     });
 
     it('should handle no page available', async () => {
@@ -445,10 +520,7 @@ describe('StagehandBrowser', () => {
       const stream = await browser.startScreencast();
 
       expect(stream).toBeDefined();
-      expect(mockCdpSession.send).toHaveBeenCalledWith(
-        'Page.startScreencast',
-        expect.any(Object),
-      );
+      expect(mockCdpSession.send).toHaveBeenCalledWith('Page.startScreencast', expect.any(Object));
     });
 
     it('should start screencast with options', async () => {
@@ -472,9 +544,7 @@ describe('StagehandBrowser', () => {
     it('should throw if no CDP session available', async () => {
       mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
-      await expect(browser.startScreencast()).rejects.toThrow(
-        'No CDP session available for screencast',
-      );
+      await expect(browser.startScreencast()).rejects.toThrow('No CDP session available for screencast');
     });
   });
 
@@ -550,9 +620,9 @@ describe('StagehandBrowser', () => {
       it('should throw if no CDP session', async () => {
         mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
-        await expect(
-          browser.injectMouseEvent({ type: 'mousePressed', x: 0, y: 0 }),
-        ).rejects.toThrow('No CDP session available');
+        await expect(browser.injectMouseEvent({ type: 'mousePressed', x: 0, y: 0 })).rejects.toThrow(
+          'No CDP session available',
+        );
       });
     });
 
@@ -610,9 +680,9 @@ describe('StagehandBrowser', () => {
       it('should throw if no CDP session', async () => {
         mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
-        await expect(
-          browser.injectKeyboardEvent({ type: 'keyDown', key: 'a', code: 'KeyA' }),
-        ).rejects.toThrow('No CDP session available');
+        await expect(browser.injectKeyboardEvent({ type: 'keyDown', key: 'a', code: 'KeyA' })).rejects.toThrow(
+          'No CDP session available',
+        );
       });
     });
   });

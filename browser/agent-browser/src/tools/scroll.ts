@@ -18,7 +18,7 @@ export function createScrollTool(browser: AgentBrowser) {
       try {
         return await browser.scroll(input);
       } catch (error) {
-        return handleBrowserError(error, 'Scroll');
+        return handleBrowserError(error, 'Scroll', browser);
       }
     },
   });

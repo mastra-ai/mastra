@@ -18,7 +18,7 @@ export function createHoverTool(browser: AgentBrowser) {
       try {
         return await browser.hover(input);
       } catch (error) {
-        return handleBrowserError(error, 'Hover');
+        return handleBrowserError(error, 'Hover', browser);
       }
     },
   });

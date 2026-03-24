@@ -3,9 +3,20 @@
  */
 
 import { createError } from '@mastra/core/browser';
+import type { AgentBrowser } from '../agent-browser';
 
-export function handleBrowserError(error: unknown, context: string) {
+export function handleBrowserError(error: unknown, context: string, browser?: AgentBrowser) {
   const msg = error instanceof Error ? error.message : String(error);
+
+  // Check for browser disconnection errors first
+  if (browser?.isDisconnectionError(msg)) {
+    browser.handleBrowserDisconnected();
+    return createError(
+      'browser_closed',
+      'Browser was closed externally.',
+      'The browser window was closed. Please retry to re-launch.',
+    );
+  }
 
   if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
     return createError('timeout', `${context} timed out.`, 'Try again or increase timeout.');

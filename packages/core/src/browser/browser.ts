@@ -124,6 +124,8 @@ export interface KeyboardEventParams {
   code?: string;
   text?: string;
   modifiers?: number;
+  /** Windows virtual key code (required for non-printable keys like Enter, Tab, Arrow keys) */
+  windowsVirtualKeyCode?: number;
 }
 
 // =============================================================================
@@ -286,7 +288,13 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async ensureReady(): Promise<void> {
     if (this.status === 'ready') {
-      return;
+      // Check if browser is still alive (handles external closure)
+      const stillAlive = await this.checkBrowserAlive();
+      if (stillAlive) {
+        return;
+      }
+      // Browser was externally closed, mark as closed for re-launch
+      this.status = 'closed';
     }
     if (this.status === 'pending' || this.status === 'error' || this.status === 'closed') {
       // Reset to pending to allow re-launch after close
@@ -308,6 +316,16 @@ export abstract class MastraBrowser extends MastraBase {
       return;
     }
     throw new Error(`Browser is ${this.status} and cannot be used`);
+  }
+
+  /**
+   * Check if the browser is still alive.
+   * Override in subclass to detect externally closed browsers.
+   * @returns true if browser is alive, false if it was externally closed
+   */
+  protected async checkBrowserAlive(): Promise<boolean> {
+    // Default implementation assumes browser is alive if status is ready
+    return true;
   }
 
   /**

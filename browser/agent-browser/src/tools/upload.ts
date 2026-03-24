@@ -18,7 +18,7 @@ export function createUploadTool(browser: AgentBrowser) {
       try {
         return await browser.upload(input);
       } catch (error) {
-        return handleBrowserError(error, 'Upload');
+        return handleBrowserError(error, 'Upload', browser);
       }
     },
   });

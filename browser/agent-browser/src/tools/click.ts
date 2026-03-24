@@ -18,7 +18,7 @@ export function createClickTool(browser: AgentBrowser) {
       try {
         return await browser.click(input);
       } catch (error) {
-        return handleBrowserError(error, 'Click');
+        return handleBrowserError(error, 'Click', browser);
       }
     },
   });

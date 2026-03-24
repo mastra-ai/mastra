@@ -18,6 +18,7 @@ export type ErrorCode =
   | 'element_not_visible' // Element hidden
   | 'not_focusable' // Can't type into element
   | 'timeout' // Operation timed out
+  | 'browser_closed' // Browser was externally closed
   | 'browser_error'; // Generic browser error
 
 /**

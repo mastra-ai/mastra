@@ -73,6 +73,28 @@ export class AgentBrowser extends MastraBrowser {
     }
   }
 
+  /**
+   * Check if the browser is still alive by verifying the page is connected.
+   * Called by base class ensureReady() to detect externally closed browsers.
+   */
+  protected async checkBrowserAlive(): Promise<boolean> {
+    if (!this.browserManager) {
+      return false;
+    }
+    try {
+      const page = this.browserManager.getPage();
+      // Will throw if browser is disconnected
+      page.url();
+      return true;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (this.isDisconnectionError(msg)) {
+        this.logger.debug?.('Browser was externally closed');
+      }
+      return false;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Tools
   // ---------------------------------------------------------------------------
@@ -92,6 +114,35 @@ export class AgentBrowser extends MastraBrowser {
   private getPage(): BrowserPage {
     if (!this.browserManager) throw new Error('Browser not launched');
     return this.browserManager.getPage();
+  }
+
+  /**
+   * Check if an error message indicates browser disconnection.
+   */
+  isDisconnectionError(message: string): boolean {
+    const disconnectPatterns = [
+      'Target closed',
+      'Target page, context or browser has been closed',
+      'Browser has been closed',
+      'Connection closed',
+      'Protocol error',
+      'Session closed',
+      'browser has disconnected',
+      'closed externally',
+    ];
+    return disconnectPatterns.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()));
+  }
+
+  /**
+   * Handle browser disconnection by updating status.
+   * This allows ensureReady() to re-launch on next use.
+   */
+  handleBrowserDisconnected(): void {
+    if (this.status !== 'closed') {
+      this.status = 'closed';
+      this.browserManager = null;
+      this.logger.debug?.('Browser was externally closed, status set to closed');
+    }
   }
 
   private requireLocator(ref: string): BrowserLocator | null {

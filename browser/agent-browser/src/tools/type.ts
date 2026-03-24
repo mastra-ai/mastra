@@ -18,7 +18,7 @@ export function createTypeTool(browser: AgentBrowser) {
       try {
         return await browser.type(input);
       } catch (error) {
-        return handleBrowserError(error, 'Type');
+        return handleBrowserError(error, 'Type', browser);
       }
     },
   });

@@ -18,7 +18,7 @@ export function createDragTool(browser: AgentBrowser) {
       try {
         return await browser.drag(input);
       } catch (error) {
-        return handleBrowserError(error, 'Drag');
+        return handleBrowserError(error, 'Drag', browser);
       }
     },
   });

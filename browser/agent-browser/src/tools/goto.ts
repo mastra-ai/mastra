@@ -18,7 +18,7 @@ export function createGotoTool(browser: AgentBrowser) {
       try {
         return await browser.goto(input);
       } catch (error) {
-        return handleBrowserError(error, 'Navigation');
+        return handleBrowserError(error, 'Navigation', browser);
       }
     },
   });

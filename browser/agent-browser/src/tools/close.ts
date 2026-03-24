@@ -18,7 +18,7 @@ export function createCloseTool(browser: AgentBrowser) {
         await browser.close();
         return { success: true, hint: 'Browser closed. It will be re-launched automatically on next use.' };
       } catch (error) {
-        return handleBrowserError(error, 'Close');
+        return handleBrowserError(error, 'Close', browser);
       }
     },
   });

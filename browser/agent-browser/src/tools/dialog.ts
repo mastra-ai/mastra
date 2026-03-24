@@ -18,7 +18,7 @@ export function createDialogTool(browser: AgentBrowser) {
       try {
         return await browser.dialog(input);
       } catch (error) {
-        return handleBrowserError(error, 'Dialog');
+        return handleBrowserError(error, 'Dialog', browser);
       }
     },
   });

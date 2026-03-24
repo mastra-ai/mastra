@@ -19,7 +19,7 @@ export function createEvaluateTool(browser: AgentBrowser) {
       try {
         return await browser.evaluate(input);
       } catch (error) {
-        return handleBrowserError(error, 'Evaluate');
+        return handleBrowserError(error, 'Evaluate', browser);
       }
     },
   });

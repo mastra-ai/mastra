@@ -18,7 +18,7 @@ export function createTabsTool(browser: AgentBrowser) {
       try {
         return await browser.tabs(input);
       } catch (error) {
-        return handleBrowserError(error, 'Tabs');
+        return handleBrowserError(error, 'Tabs', browser);
       }
     },
   });

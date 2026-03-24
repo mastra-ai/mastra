@@ -18,7 +18,7 @@ export function createPressTool(browser: AgentBrowser) {
       try {
         return await browser.press(input);
       } catch (error) {
-        return handleBrowserError(error, 'Press');
+        return handleBrowserError(error, 'Press', browser);
       }
     },
   });

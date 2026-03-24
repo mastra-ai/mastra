@@ -7,7 +7,7 @@
  * Stagehand v3 is CDP-native and provides direct CDP access for screencast/input injection.
  */
 
-import { Stagehand } from '@browserbasehq/stagehand';
+import type { Stagehand } from '@browserbasehq/stagehand';
 import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type { ScreencastOptions, ScreencastStream, MouseEventParams, KeyboardEventParams } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
@@ -97,6 +97,77 @@ export class StagehandBrowser extends MastraBrowser {
       await this.stagehand.close();
       this.stagehand = null;
     }
+  }
+
+  /**
+   * Check if the browser is still alive by verifying the context and pages exist.
+   * Called by base class ensureReady() to detect externally closed browsers.
+   */
+  protected async checkBrowserAlive(): Promise<boolean> {
+    if (!this.stagehand) {
+      return false;
+    }
+    try {
+      const context = this.stagehand.context;
+      if (!context) {
+        return false;
+      }
+      const pages = context.pages();
+      if (!pages || pages.length === 0) {
+        return false;
+      }
+      // Will throw if browser is disconnected
+      pages[0]?.url();
+      return true;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (this.isDisconnectionError(msg)) {
+        this.logger.debug?.('Browser was externally closed');
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Check if an error message indicates browser disconnection.
+   */
+  private isDisconnectionError(message: string): boolean {
+    const disconnectPatterns = [
+      'Target closed',
+      'Target page, context or browser has been closed',
+      'Browser has been closed',
+      'Connection closed',
+      'Protocol error',
+      'Session closed',
+      'browser has disconnected',
+      'closed externally',
+    ];
+    return disconnectPatterns.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()));
+  }
+
+  /**
+   * Handle browser disconnection by updating status.
+   * This allows ensureReady() to re-launch on next use.
+   */
+  handleBrowserDisconnected(): void {
+    if (this.status !== 'closed') {
+      this.status = 'closed';
+      this.stagehand = null;
+      this.logger.debug?.('Browser was externally closed, status set to closed');
+    }
+  }
+
+  /**
+   * Handle errors from browser operations, detecting disconnection.
+   * Returns true if the error was a disconnection error.
+   */
+  private handleOperationError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (this.isDisconnectionError(msg)) {
+      this.handleBrowserDisconnected();
+      return true;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -195,13 +266,16 @@ export class StagehandBrowser extends MastraBrowser {
         hint: 'Use observe() to discover available actions or extract() to get page data.',
       };
     } catch (error) {
+      this.handleOperationError(error);
       const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
         message: msg,
-        error: 'act_failed',
+        error: this.isDisconnectionError(msg) ? 'browser_closed' : 'act_failed',
         url,
-        hint: 'Try rephrasing the instruction or use observe() to see available actions.',
+        hint: this.isDisconnectionError(msg)
+          ? 'Browser was closed. It will be relaunched on the next operation.'
+          : 'Try rephrasing the instruction or use observe() to see available actions.',
       };
     }
   }
@@ -231,12 +305,15 @@ export class StagehandBrowser extends MastraBrowser {
         hint: 'Data extracted successfully. Use act() to perform actions based on this data.',
       };
     } catch (error) {
+      this.handleOperationError(error);
       const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: msg,
+        error: this.isDisconnectionError(msg) ? 'browser_closed' : msg,
         url,
-        hint: 'Try simplifying the extraction instruction or use observe() to understand the page structure.',
+        hint: this.isDisconnectionError(msg)
+          ? 'Browser was closed. It will be relaunched on the next operation.'
+          : 'Try simplifying the extraction instruction or use observe() to understand the page structure.',
       };
     }
   }
@@ -257,9 +334,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.observe() or stagehand.observe(instruction, options?)
-      const actions = input.instruction
-        ? await stagehand.observe(input.instruction)
-        : await stagehand.observe();
+      const actions = input.instruction ? await stagehand.observe(input.instruction) : await stagehand.observe();
 
       return {
         success: true,
@@ -276,13 +351,16 @@ export class StagehandBrowser extends MastraBrowser {
             : 'No actions found. Try a different instruction or navigate to a different page.',
       };
     } catch (error) {
+      this.handleOperationError(error);
       const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
         actions: [],
-        error: msg,
+        error: this.isDisconnectionError(msg) ? 'browser_closed' : msg,
         url,
-        hint: 'Try a different instruction or ensure the page has loaded completely.',
+        hint: this.isDisconnectionError(msg)
+          ? 'Browser was closed. It will be relaunched on the next operation.'
+          : 'Try a different instruction or ensure the page has loaded completely.',
       };
     }
   }
@@ -328,13 +406,16 @@ export class StagehandBrowser extends MastraBrowser {
         hint: 'Page loaded. Use observe() to discover actions or extract() to get data.',
       };
     } catch (error) {
+      this.handleOperationError(error);
       const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
         url: input.url,
         title: '',
-        error: msg,
-        hint: 'Navigation failed. Check the URL and try again.',
+        error: this.isDisconnectionError(msg) ? 'browser_closed' : msg,
+        hint: this.isDisconnectionError(msg)
+          ? 'Browser was closed. It will be relaunched on the next operation.'
+          : 'Navigation failed. Check the URL and try again.',
       };
     }
   }
@@ -367,11 +448,12 @@ export class StagehandBrowser extends MastraBrowser {
         base64: buffer.toString('base64'),
       };
     } catch (error) {
+      this.handleOperationError(error);
       const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
         base64: '',
-        error: msg,
+        error: this.isDisconnectionError(msg) ? 'browser_closed' : msg,
       };
     }
   }
@@ -455,6 +537,7 @@ export class StagehandBrowser extends MastraBrowser {
       code: event.code,
       text: event.text,
       modifiers: event.modifiers ?? 0,
+      windowsVirtualKeyCode: event.windowsVirtualKeyCode,
     });
   }
 }

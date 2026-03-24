@@ -18,7 +18,7 @@ export function createSelectTool(browser: AgentBrowser) {
       try {
         return await browser.select(input);
       } catch (error) {
-        return handleBrowserError(error, 'Select');
+        return handleBrowserError(error, 'Select', browser);
       }
     },
   });

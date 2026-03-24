@@ -18,7 +18,7 @@ export function createScreenshotTool(browser: AgentBrowser) {
       try {
         return await browser.screenshot(input);
       } catch (error) {
-        return handleBrowserError(error, 'Screenshot');
+        return handleBrowserError(error, 'Screenshot', browser);
       }
     },
   });

@@ -19,7 +19,7 @@ export function createSnapshotTool(browser: AgentBrowser) {
       try {
         return await browser.snapshot(input);
       } catch (error) {
-        return handleBrowserError(error, 'Snapshot');
+        return handleBrowserError(error, 'Snapshot', browser);
       }
     },
   });
