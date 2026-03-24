@@ -323,6 +323,28 @@ function stripNullishValuesAtPaths(input: unknown, paths: Set<string>, currentPa
 }
 
 /**
+ * Gets the value at a path in a nested object, using the same path segment format
+ * as Standard Schema validation issues.
+ *
+ * @param obj The object to traverse
+ * @param pathSegments Array of path segments from a validation issue
+ * @returns The value at the path, or a sentinel symbol if the path doesn't exist
+ */
+const PATH_NOT_FOUND = Symbol('PATH_NOT_FOUND');
+function getValueAtPath(obj: unknown, pathSegments: ReadonlyArray<PropertyKey | { key: PropertyKey }>): unknown {
+  let current: unknown = obj;
+  for (const segment of pathSegments) {
+    if (current === null || current === undefined || typeof current !== 'object') {
+      return PATH_NOT_FOUND;
+    }
+    const key =
+      typeof segment === 'object' && segment !== null && 'key' in segment ? String(segment.key) : String(segment);
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+/**
  * Coerces stringified JSON values in object properties when the schema expects
  * an array or object but the LLM returned a JSON string.
  *
@@ -468,9 +490,18 @@ export function validateToolInput<T = unknown>(
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
   // accepts undefined, not null. We only strip nulls for fields that caused
   // validation errors, preserving null for .nullable() schemas that need it.
+  //
+  // We detect null-related failures by checking the actual value at the failing
+  // path rather than relying on error message string matching (GitHub #14476).
+  // This ensures we catch null values regardless of the validator's error message
+  // format (e.g., "must be string", "must be object", etc.).
   const failingNullPaths = new Set(
     validation.issues
-      .filter(issue => issue.message?.includes('null'))
+      .filter(issue => {
+        if (!issue.path || issue.path.length === 0) return false;
+        const value = getValueAtPath(normalizedInput, issue.path);
+        return value === null || value === undefined;
+      })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
