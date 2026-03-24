@@ -65,6 +65,17 @@ function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolU
   return part.type === 'dynamic-tool' ? sanitizeToolName(part.toolName) : getToolNameFromType(part.type);
 }
 
+function normalizeV6PartForV5Bridge(part: AIV6Type.UIMessage['parts'][number]): AIV5Type.UIMessage['parts'][number] {
+  if (part.type === 'dynamic-tool' && !isV6OnlyToolState(part.state)) {
+    return {
+      ...part,
+      type: `tool-${sanitizeToolName(part.toolName)}`,
+    } as unknown as AIV5Type.UIMessage['parts'][number];
+  }
+
+  return part as unknown as AIV5Type.UIMessage['parts'][number];
+}
+
 function createToolInvocationPart({
   toolCallId,
   toolName,
@@ -171,14 +182,30 @@ export class AIV6Adapter {
 
     if (!hasToolInvocationParts || !hasReasoningParts || !hasFileParts || !hasTextParts) {
       for (const part of v5Message.parts) {
-        if (hasToolInvocationParts && AIV5.isToolUIPart(part)) {
+        if (AIV5.isToolUIPart(part)) {
+          if (!hasToolInvocationParts) {
+            parts.push(AIV6Adapter.toUIPartFromV5(part));
+          }
           continue;
         }
-        if (hasReasoningParts && part.type === 'reasoning') continue;
-        if (hasFileParts && part.type === 'file') continue;
-        if (hasTextParts && part.type === 'text') continue;
 
-        parts.push(AIV6Adapter.toUIPartFromV5(part));
+        if (part.type === 'reasoning') {
+          if (!hasReasoningParts) {
+            parts.push(AIV6Adapter.toUIPartFromV5(part));
+          }
+          continue;
+        }
+
+        if (part.type === 'file') {
+          if (!hasFileParts) {
+            parts.push(AIV6Adapter.toUIPartFromV5(part));
+          }
+          continue;
+        }
+
+        if (part.type === 'text' && !hasTextParts) {
+          parts.push(AIV6Adapter.toUIPartFromV5(part));
+        }
       }
     }
 
@@ -199,10 +226,12 @@ export class AIV6Adapter {
 
     const baseDb = AIV5Adapter.fromUIMessage({
       ...uiMsg,
-      parts: compatibleParts as unknown as AIV5Type.UIMessage['parts'],
+      parts: compatibleParts.map(part => normalizeV6PartForV5Bridge(part)) as AIV5Type.UIMessage['parts'],
     } as AIV5Type.UIMessage);
 
-    const parts = [...baseDb.content.parts];
+    const baseParts = baseDb.content.parts || [];
+    const parts: MastraMessagePart[] = [];
+    let basePartIndex = 0;
 
     for (const part of uiMsg.parts) {
       if (part.type === 'source-document') {
@@ -224,6 +253,10 @@ export class AIV6Adapter {
       }
 
       if (!AIV6.isToolUIPart(part) || !isV6OnlyToolState(part.state)) {
+        const basePart = baseParts[basePartIndex++];
+        if (basePart) {
+          parts.push(basePart);
+        }
         continue;
       }
 

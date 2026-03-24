@@ -74,6 +74,84 @@ describe('MessageList AI SDK v6 support', () => {
     ]);
   });
 
+  it('preserves v6 UI part order when source-document and approval parts are present', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-ordered',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'Before' },
+            {
+              type: 'source-document',
+              sourceId: 'doc-1',
+              mediaType: 'application/pdf',
+              title: 'Doc 1',
+            },
+            {
+              type: 'tool-search',
+              toolCallId: 'call-1',
+              state: 'approval-requested',
+              input: { query: 'weather' },
+              approval: { id: 'approval-1' },
+            },
+            { type: 'text', text: 'After' },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.aiV6.ui()[0]?.parts.map(part => part.type)).toEqual([
+      'text',
+      'source-document',
+      'tool-search',
+      'text',
+    ]);
+  });
+
+  it('preserves dynamic-tool parts when the message is otherwise v6-only', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'source-document',
+              sourceId: 'doc-1',
+              mediaType: 'application/pdf',
+              title: 'Doc 1',
+            },
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.aiV6.ui()[0]?.parts).toMatchObject([
+      {
+        type: 'source-document',
+        sourceId: 'doc-1',
+        mediaType: 'application/pdf',
+        title: 'Doc 1',
+      },
+      {
+        type: 'tool-search',
+        toolCallId: 'call-1',
+        state: 'input-available',
+        input: { query: 'weather' },
+      },
+    ]);
+  });
+
   it('supports AIV6.UI in convertMessages()', () => {
     const messages: UIMessageV6[] = [
       {
@@ -178,5 +256,39 @@ describe('MessageList AI SDK v6 support', () => {
       input: { query: 'weather' },
       approval: { id: 'approval-1', approved: false, reason: 'needs human review' },
     });
+  });
+
+  it('does not duplicate source or data parts when v5 fallback adds missing text', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-source-data',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [
+            {
+              type: 'source',
+              source: {
+                type: 'source',
+                sourceType: 'url',
+                id: 'source-1',
+                url: 'https://example.com/reference',
+                title: 'Reference',
+              },
+            } as any,
+            { type: 'data-custom', data: { foo: 'bar' } } as any,
+          ],
+        },
+      },
+    ];
+
+    expect(
+      new MessageList()
+        .add(messages, 'memory')
+        .get.all.aiV6.ui()[0]
+        ?.parts.map(part => part.type),
+    ).toEqual(['source-url', 'data-custom']);
   });
 });
