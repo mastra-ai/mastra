@@ -42,6 +42,10 @@ interface GatewayOMRecord {
   isBufferingObservation: boolean;
   isBufferingReflection: boolean;
   config?: Record<string, unknown>;
+  bufferedObservationChunks?: unknown[];
+  bufferedReflection?: string | null;
+  bufferedReflectionTokens?: number | null;
+  bufferedReflectionInputTokens?: number | null;
 }
 
 export class GatewayMemoryClient {
@@ -230,7 +234,13 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
     pendingMessageTokens: gr.pendingMessageTokens,
     isReflecting: gr.isReflecting,
     isObserving: gr.isObserving,
+    isBufferingObservation: gr.isBufferingObservation,
+    isBufferingReflection: gr.isBufferingReflection,
     config: gr.config ?? {},
+    bufferedObservationChunks: gr.bufferedObservationChunks ?? [],
+    bufferedReflection: gr.bufferedReflection ?? undefined,
+    bufferedReflectionTokens: gr.bufferedReflectionTokens ?? undefined,
+    bufferedReflectionInputTokens: gr.bufferedReflectionInputTokens ?? undefined,
   };
 }
 
