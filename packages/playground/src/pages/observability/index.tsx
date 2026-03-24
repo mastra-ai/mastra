@@ -1,5 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions, DatePreset } from '@mastra/playground-ui';
+import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
 import {
   EntityListPageLayout,
   MainHeader,
@@ -49,7 +49,7 @@ export default function Observability() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [errorOnly, setErrorOnly] = useState<boolean>(false);
   const [selectedMetadata, setSelectedMetadata] = useState<Record<string, string>>({});
-  const [datePreset, setDatePreset] = useState<DatePreset>('last-24h');
+  const [datePreset, setDatePreset] = useState<TraceDatePreset>('last-24h');
   const [contextFilters, setContextFilters] = useState<Record<string, string>>({});
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();

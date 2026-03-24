@@ -1,8 +1,9 @@
 import type { EntityType } from '@mastra/core/observability';
 import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
-import { format, isValid, parse } from 'date-fns';
+import { isValid, parse } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
-import { type ComponentPropsWithoutRef, useState, useMemo, useCallback } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
 import { Button } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
@@ -21,7 +22,7 @@ export type EntityOptions =
 
 export type MetadataFilter = { key: string; value: string };
 
-export type DatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
+export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
 /** Canonical list of context field IDs used for trace filtering and value extraction */
 export const CONTEXT_FIELD_IDS = [
@@ -77,7 +78,7 @@ const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] 
   ...CONTEXT_FIELD_META[id],
 }));
 
-const DATE_PRESETS: { value: DatePreset; label: string; ms?: number }[] = [
+const DATE_PRESETS: { value: TraceDatePreset; label: string; ms?: number }[] = [
   { value: 'all', label: 'All' },
   { value: 'last-24h', label: 'Last 24 hours', ms: 24 * 60 * 60 * 1000 },
   { value: 'last-3d', label: 'Last 3 days', ms: 3 * 24 * 60 * 60 * 1000 },
@@ -163,8 +164,8 @@ type TracesToolsProps = {
   onGroupByThreadChange?: (value: boolean) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
-  datePreset?: DatePreset;
-  onDatePresetChange?: (preset: DatePreset) => void;
+  datePreset?: TraceDatePreset;
+  onDatePresetChange?: (preset: TraceDatePreset) => void;
   selectedTags?: string[];
   availableTags?: string[];
   onTagsChange?: (tags: string[]) => void;
@@ -227,7 +228,7 @@ export function TracesTools({
 
   const datePresetLabel = DATE_PRESETS.find(p => p.value === datePreset)?.label ?? 'All';
 
-  const handleDatePresetSelect = (preset: DatePreset) => {
+  const handleDatePresetSelect = (preset: TraceDatePreset) => {
     onDatePresetChange?.(preset);
     if (preset === 'custom') {
       setDraftDateFrom(selectedDateFrom);
