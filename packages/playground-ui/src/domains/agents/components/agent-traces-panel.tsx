@@ -405,19 +405,6 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Prune checked IDs when traces change
-  useEffect(() => {
-    if (checkedTraceIds.size === 0) return;
-    const traceIdSet = new Set(filteredTraces.map(t => t.traceId));
-    setCheckedTraceIds(prev => {
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (traceIdSet.has(id)) next.add(id);
-      }
-      return next.size === prev.size ? prev : next;
-    });
-  }, [filteredTraces, checkedTraceIds.size]);
-
   // Selected trace detail query
   const { data: selectedTrace, isLoading: isSelectedTraceLoading } = useQuery({
     queryKey: ['agent-trace', selectedTraceId],
@@ -484,6 +471,19 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     });
     return sorted;
   }, [scoreFilteredTraces, sort, scoresByTraceId]);
+
+  // Prune checked IDs when the displayed set changes
+  useEffect(() => {
+    if (checkedTraceIds.size === 0) return;
+    const visibleIds = new Set(displayTraces.map(t => t.traceId));
+    setCheckedTraceIds(prev => {
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (visibleIds.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [displayTraces, checkedTraceIds.size]);
 
   // Datasets
   const { batchInsertItems } = useDatasetMutations();
