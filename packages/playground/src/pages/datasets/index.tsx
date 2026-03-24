@@ -17,9 +17,9 @@ import {
   MainHeader,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, Database, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 
 function Datasets() {
   const { Link: FrameworkLink } = useLinkComponent();
@@ -67,14 +67,7 @@ function Datasets() {
             </div>
           </EntityListPageLayout.Top>
 
-          <DatasetsList
-            datasets={datasets}
-            isLoading={isLoading}
-            error={error}
-            onCreateClick={() => setIsCreateDialogOpen(true)}
-            search={search}
-            onSearch={setSearch}
-          />
+          <DatasetsList datasets={datasets} isLoading={isLoading} error={error} search={search} />
         </EntityListPageLayout>
 
         <CreateDatasetDialog

@@ -32,6 +32,7 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 // Agent tool execution context - properties specific when tools are executed by agents
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
+  agentId: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
