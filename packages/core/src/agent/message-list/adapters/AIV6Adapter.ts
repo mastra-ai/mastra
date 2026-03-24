@@ -504,6 +504,9 @@ export class AIV6Adapter {
                   : undefined,
             },
           ) as AIV6Type.UIMessage['parts'][number];
+
+        default:
+          throw new Error(`Unhandled toolInvocation.state: ${String(part.toolInvocation.state)}`);
       }
     }
 

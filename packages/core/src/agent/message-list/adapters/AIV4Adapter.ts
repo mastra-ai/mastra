@@ -324,7 +324,7 @@ export class AIV4Adapter {
           }
 
           case 'tool-call': {
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'tool-invocation' as const,
               toolInvocation: {
                 state: 'call',

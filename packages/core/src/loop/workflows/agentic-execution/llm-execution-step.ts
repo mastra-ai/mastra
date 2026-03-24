@@ -390,7 +390,6 @@ async function processOutputStream<OUTPUT = undefined>({
               parts: [
                 {
                   type: 'file' as const,
-                  // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
                 },
@@ -487,7 +486,6 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: chunk.payload.providerMetadata,
-            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -508,7 +506,6 @@ async function processOutputStream<OUTPUT = undefined>({
             args: chunk.payload.args,
           },
           providerMetadata: chunk.payload.providerMetadata,
-          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
           providerExecuted: inferredProviderExecuted,
         };
 
