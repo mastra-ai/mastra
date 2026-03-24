@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This analysis identified **4 critical**, **8 high**, and **12 medium-priority** improvement opportunities across security, code quality, testing, and dependency management. The most impactful findings are a critical RCE vulnerability in a transitive dependency, production error handlers that silently swallow errors, and zero test coverage on key infrastructure modules.
+This analysis identified **4 critical**, **8 high**, and **15 medium-priority** improvement opportunities across security, code quality, testing, build performance, and dependency management. The most impactful findings are a critical RCE vulnerability in a transitive dependency, production error handlers that silently swallow errors, a hardcoded 1-second build delay, and zero test coverage on key infrastructure modules.
 
 ---
 
@@ -122,13 +122,46 @@ Notable items:
 
 ---
 
-## 5. Potential Memory Leaks
+## 5. Build Performance
 
-### 5.1 Anonymous Event Listener
+### 5.1 Hardcoded 1-Second Delay in Core Build
+- **File**: `packages/core/tsup.config.ts:79`
+- **Issue**: A `setTimeout` of 1 second in `onSuccess` before type generation. Likely a race condition workaround that adds up on every build.
+- **Fix**: Investigate if still needed; replace with proper async sequencing.
+
+### 5.2 Missing `inputs` on Root Turbo Build Task
+- **File**: `turbo.json`
+- **Issue**: No `inputs` filter on the root `build` task. 7 packages under `packages/` have no `turbo.json` at all, so any file change (docs, tests, configs) invalidates cache.
+- **Affected**: `_changeset-cli/`, `_config/`, `_llm-recorder/`, `_test-utils/`, `_types-builder/`, `editor/`, `playground-ui/`
+- **Fix**: Add `inputs` to root `build` task or create per-package `turbo.json` files.
+
+### 5.3 Unnecessary CJS Output
+- **Issue**: 91 of 99 packages produce dual ESM+CJS output, but the root `package.json` sets `"type": "module"`. If downstream consumers are all ESM, dropping CJS could roughly halve build time for those packages.
+
+### 5.4 Incomplete pnpm Catalog Adoption
+- 19 packages use hardcoded TypeScript versions instead of `catalog:`
+- 12 packages use hardcoded vitest versions instead of `catalog:`
+- **Fix**: Migrate remaining packages to use `catalog:` for version consistency.
+
+### 5.5 Core Package is Critical Path Bottleneck
+- 20 entry points in `tsup.config.ts` with dual-format output
+- Custom Babel plugin for decorator treeshaking on every chunk
+- Custom type generation via `@internal/types-builder` after every build
+- **Impact**: Everything depends on core; any speedup here cascades to all downstream packages.
+
+### 5.6 Overly Broad `files` Glob in Core
+- **Issue**: `./**/*.d.ts` in core's `package.json` `files` field includes declaration files from entire package tree, potentially publishing unnecessary files.
+- **Fix**: Narrow to `dist/**/*.d.ts`.
+
+---
+
+## 6. Potential Memory Leaks
+
+### 6.1 Anonymous Event Listener
 - **File**: `workflows/workflow.ts:2271`
 - `abortSignal.addEventListener('abort', async () => {...})` — anonymous arrow function cannot be removed.
 
-### 5.2 Subprocess Listeners Without Cleanup
+### 6.2 Subprocess Listeners Without Cleanup
 - **File**: `workspace/sandbox/local-process-manager.ts:54,74,88,92`
 - `subprocess.on('close')`, `.on('error')`, `.stdout?.on('data')`, `.stderr?.on('data')` with no explicit cleanup. Relies on subprocess termination.
 
@@ -146,12 +179,18 @@ Notable items:
 5. Remove past-due `runCount` deprecation (was due November 2025)
 6. Fix silent error swallowing in `step-executor.ts`
 
+### Short-term (Build Performance)
+7. Remove 1-second `setTimeout` delay in `packages/core/tsup.config.ts`
+8. Add `inputs` to root turbo.json `build` task for better cache hits
+9. Evaluate dropping CJS output for internal-only ESM packages
+
 ### Medium-term (Testing)
-7. Add vitest coverage thresholds and CI enforcement
-8. Write tests for `vector/`, `logger/`, `utils/`, `events/` modules
-9. Triage and re-enable the 62 skipped tests
+10. Add vitest coverage thresholds and CI enforcement
+11. Write tests for `vector/`, `logger/`, `utils/`, `events/` modules
+12. Triage and re-enable the 62 skipped tests
 
 ### Long-term (Technical Debt)
-10. Reduce `any` type usage, starting with `workflows/workflow.ts` (62) and `agent-legacy.ts` (45)
-11. Address the 55 TODO comments, starting with unclear type errors
-12. Standardize dependency versions via pnpm catalog
+13. Reduce `any` type usage, starting with `workflows/workflow.ts` (62) and `agent-legacy.ts` (45)
+14. Address the 55 TODO comments, starting with unclear type errors
+15. Complete pnpm catalog migration (19 TS packages, 12 vitest packages)
+16. Narrow core's `files` glob from `./**/*.d.ts` to `dist/**/*.d.ts`
