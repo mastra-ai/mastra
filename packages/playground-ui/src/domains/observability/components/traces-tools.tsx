@@ -102,11 +102,7 @@ const subContentClass = cn(
   'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
 );
 
-function PortalSubContent({
-  className,
-  children,
-  ...props
-}: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
+function PortalSubContent({ className, children, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
   return (
     <DropdownMenuPortal>
       <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
@@ -367,9 +363,7 @@ export function TracesTools({
                   <TimePicker className="mx-4 mb-3 w-auto" defaultValue={draftTimeTo} onValueChange={setDraftTimeTo} />
                 </div>
               </div>
-              {customRangeError && (
-                <p className={cn('text-ui-sm text-red-500 px-4 pb-1')}>{customRangeError}</p>
-              )}
+              {customRangeError && <p className={cn('text-ui-sm text-red-500 px-4 pb-1')}>{customRangeError}</p>}
               <div className={cn('flex justify-between items-center px-4 pb-3')}>
                 <button
                   type="button"
@@ -479,7 +473,9 @@ export function TracesTools({
               <DropdownMenu.Sub onOpenChange={resetSubSearch(setEntitySearch)}>
                 <DropdownMenu.SubTrigger>
                   Entity Type
-                  {selectedEntity && selectedEntity.value !== 'all' && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
+                  {selectedEntity && selectedEntity.value !== 'all' && (
+                    <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>
+                  )}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent>
                   {entityOptions.length >= SUBMENU_SEARCH_THRESHOLD && (
@@ -550,7 +546,11 @@ export function TracesTools({
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent className={cn('max-h-[20rem]')}>
                   {metadataKeys.length >= SUBMENU_SEARCH_THRESHOLD && (
-                    <SubMenuSearch value={metadataKeySearch} onChange={setMetadataKeySearch} label="Search metadata keys" />
+                    <SubMenuSearch
+                      value={metadataKeySearch}
+                      onChange={setMetadataKeySearch}
+                      label="Search metadata keys"
+                    />
                   )}
                   {metadataKeys
                     .filter(key => !metadataKeySearch || key.toLowerCase().includes(metadataKeySearch.toLowerCase()))
@@ -565,7 +565,11 @@ export function TracesTools({
                           </DropdownMenu.SubTrigger>
                           <PortalSubContent className={cn('max-h-[20rem]')}>
                             {values.length >= SUBMENU_SEARCH_THRESHOLD && (
-                              <SubMenuSearch value={subValueSearch} onChange={setSubValueSearch} label="Search metadata values" />
+                              <SubMenuSearch
+                                value={subValueSearch}
+                                onChange={setSubValueSearch}
+                                label="Search metadata values"
+                              />
                             )}
                             {/* "Any" option to clear the selection for this key */}
                             <DropdownMenu.CheckboxItem
@@ -632,7 +636,11 @@ export function TracesTools({
                     </DropdownMenu.SubTrigger>
                     <PortalSubContent className={cn('max-h-[20rem]')}>
                       {fieldsWithValues.length >= SUBMENU_SEARCH_THRESHOLD && (
-                        <SubMenuSearch value={contextFieldSearch} onChange={setContextFieldSearch} label="Search context fields" />
+                        <SubMenuSearch
+                          value={contextFieldSearch}
+                          onChange={setContextFieldSearch}
+                          label="Search context fields"
+                        />
                       )}
                       {fieldsWithValues
                         .filter(
@@ -650,7 +658,11 @@ export function TracesTools({
                               </DropdownMenu.SubTrigger>
                               <PortalSubContent className={cn('max-h-[20rem]')}>
                                 {values.length >= SUBMENU_SEARCH_THRESHOLD && (
-                                  <SubMenuSearch value={subValueSearch} onChange={setSubValueSearch} label="Search context values" />
+                                  <SubMenuSearch
+                                    value={subValueSearch}
+                                    onChange={setSubValueSearch}
+                                    label="Search context values"
+                                  />
                                 )}
                                 {/* "Any" option to clear the selection for this field */}
                                 <DropdownMenu.CheckboxItem
