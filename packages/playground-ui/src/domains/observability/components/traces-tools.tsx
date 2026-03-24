@@ -709,6 +709,14 @@ export function TracesTools({
           </DropdownMenu.Content>
         </DropdownMenu>
 
+        {/* Reset */}
+        {onReset && (
+          <Button variant="outline" size="md" disabled={isLoading} onClick={() => onReset()}>
+            <XIcon />
+            Reset
+          </Button>
+        )}
+
         {/* Group by thread (view toggle, not a data filter) */}
         {onGroupByThreadChange && (
           <label className={cn('flex gap-2 items-center shrink-0 cursor-pointer')}>
