@@ -122,23 +122,25 @@ export function ExperimentResultPanel({
           </ItemList>
         )}
 
-        {result.status && (
+        {(result.status || (Array.isArray(result.tags) && result.tags.length > 0)) && (
           <div className="grid gap-2">
             <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">
               <TagIcon className="w-4 h-4" /> Review Status
             </h4>
             <div className="flex flex-wrap gap-2 items-center">
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  result.status === 'needs-review'
-                    ? 'bg-warning/10 text-warning'
-                    : result.status === 'complete'
-                      ? 'bg-accent1/10 text-accent1'
-                      : 'bg-neutral3/10 text-neutral4'
-                }`}
-              >
-                {result.status}
-              </span>
+              {result.status && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    result.status === 'needs-review'
+                      ? 'bg-warning/10 text-warning'
+                      : result.status === 'complete'
+                        ? 'bg-accent1/10 text-accent1'
+                        : 'bg-neutral3/10 text-neutral4'
+                  }`}
+                >
+                  {result.status}
+                </span>
+              )}
               {Array.isArray(result.tags) &&
                 result.tags.length > 0 &&
                 result.tags.map(tag => (
