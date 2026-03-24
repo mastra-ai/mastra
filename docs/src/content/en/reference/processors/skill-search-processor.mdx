@@ -39,8 +39,7 @@ const skillSearch = new SkillSearchProcessor({
           {
             name: 'workspace',
             type: 'Workspace',
-            description:
-              'Workspace instance containing skills. Skills are accessed via workspace.skills.',
+            description: 'Workspace instance containing skills. Skills are accessed via workspace.skills.',
             isOptional: false,
           },
           {
@@ -98,7 +97,7 @@ const skillSearch = new SkillSearchProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
     description:
-      "Processes each step to inject search/load meta-tools and any previously loaded skill instructions as system messages.",
+      'Processes each step to inject search/load meta-tools and any previously loaded skill instructions as system messages.',
     isOptional: false,
   },
 ]}
@@ -146,11 +145,11 @@ The agent workflow is:
 ## Compared to SkillsProcessor
 
 | | SkillsProcessor | SkillSearchProcessor |
-|---|---|---|
+| - | - | - |
 | Scaling | Injects all skills upfront | On-demand discovery |
 | Context usage | Grows with skill count | Constant (only loaded skills) |
 | Agent workflow | Skills always visible | Agent searches and loads as needed |
-| Best for | Few skills (< 10) | Many skills (10+) |
+| Best for | Few skills (\< 10) | Many skills (10+) |
 
 ## Related
 
