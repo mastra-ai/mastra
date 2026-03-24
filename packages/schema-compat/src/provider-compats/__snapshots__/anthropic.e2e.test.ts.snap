@@ -6,34 +6,34 @@ exports[`Anthropic e2e test > should pass 1`] = `
   "additionalProperties": false,
   "properties": {
     "arrayMax": {
-      "description": "any valid sample array of strings with a maximum of 5 strings",
+      "description": "any valid sample array of strings with a maximum of 5 strings
+constraints: maximum length 5",
       "items": {
         "type": "string",
       },
-      "maxItems": 5,
       "type": "array",
     },
     "arrayMin": {
-      "description": "any valid sample array of strings with a minimum of 1 string",
+      "description": "any valid sample array of strings with a minimum of 1 string
+constraints: minimum length 1",
       "items": {
         "type": "string",
       },
-      "minItems": 1,
       "type": "array",
     },
     "date": {
-      "description": "a valid sample date",
-      "format": "date-time",
+      "description": "a valid sample date
+constraints: a valid date-time",
       "type": "string",
     },
     "dateAfter": {
-      "description": "a valid sample date after 2024-01-01",
-      "format": "date-time",
+      "description": "a valid sample date after 2024-01-01
+constraints: a valid date-time",
       "type": "string",
     },
     "dateBefore": {
-      "description": "a valid sample date before today",
-      "format": "date-time",
+      "description": "a valid sample date before today
+constraints: a valid date-time",
       "type": "string",
     },
     "default": {
@@ -133,6 +133,7 @@ exports[`Anthropic e2e test > should pass 1`] = `
       "additionalProperties": true,
       "description": "any sample object with example keys and data",
       "properties": {},
+      "required": [],
       "type": "object",
     },
     "objectNested": {
@@ -147,7 +148,7 @@ exports[`Anthropic e2e test > should pass 1`] = `
               "type": "number",
             },
             "name": {
-              "minLength": 2,
+              "description": "constraints: minimum length 2",
               "type": "string",
             },
           },
@@ -167,6 +168,7 @@ exports[`Anthropic e2e test > should pass 1`] = `
       "additionalProperties": true,
       "description": "any sample object with example keys and data",
       "properties": {},
+      "required": [],
       "type": "object",
     },
     "optional": {
@@ -178,47 +180,44 @@ exports[`Anthropic e2e test > should pass 1`] = `
       "type": "string",
     },
     "stringCuid": {
-      "description": "a valid sample cuid",
+      "description": "a valid sample cuid
+constraints: input must match this regex ^[cC][^\\s-]{8,}$",
       "format": "cuid",
-      "pattern": "^[cC][^\\s-]{8,}$",
       "type": "string",
     },
     "stringEmail": {
-      "description": "a sample email address",
-      "format": "email",
-      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+      "description": "a sample email address
+constraints: a valid email",
       "type": "string",
     },
     "stringEmoji": {
-      "description": "a valid sample emoji",
-      "format": "emoji",
-      "pattern": "^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$",
+      "description": "a valid sample emoji
+constraints: a valid emoji",
       "type": "string",
     },
     "stringMax": {
-      "description": "sample text with a maximum of 10 characters",
-      "maxLength": 10,
+      "description": "sample text with a maximum of 10 characters
+constraints: maximum length 10",
       "type": "string",
     },
     "stringMin": {
-      "description": "sample text with a minimum of 5 characters",
-      "minLength": 5,
+      "description": "sample text with a minimum of 5 characters
+constraints: minimum length 5",
       "type": "string",
     },
     "stringRegex": {
-      "description": "a valid sample string that satisfies the regex",
-      "pattern": "^test-",
+      "description": "a valid sample string that satisfies the regex
+constraints: input must match this regex ^test-",
       "type": "string",
     },
     "stringUrl": {
-      "description": "a valid sample url",
-      "format": "uri",
+      "description": "a valid sample url
+constraints: a valid uri",
       "type": "string",
     },
     "stringUuid": {
-      "description": "a valid sample uuid",
-      "format": "uuid",
-      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+      "description": "a valid sample uuid
+constraints: a valid uuid",
       "type": "string",
     },
     "unionObjects": {
@@ -314,16 +313,16 @@ exports[`Anthropic e2e test > should pass 2`] = `
 {
   "value": {
     "arrayMax": [
-      "item1",
-      "item2",
-      "item3",
+      "one",
+      "two",
+      "three",
     ],
     "arrayMin": [
-      "required item",
+      "item1",
     ],
     "date": 2024-03-15T10:30:00.000Z,
-    "dateAfter": 2024-06-01T14:20:00.000Z,
-    "dateBefore": 2024-01-01T09:00:00.000Z,
+    "dateAfter": 2024-06-20T14:45:00.000Z,
+    "dateBefore": 2024-01-10T09:00:00.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
@@ -335,19 +334,19 @@ exports[`Anthropic e2e test > should pass 2`] = `
     "nullable": null,
     "number": 42.5,
     "numberGt": 5.7,
-    "numberGte": 3,
-    "numberInt": 123,
-    "numberLt": 4.2,
+    "numberGte": 1,
+    "numberInt": 25,
+    "numberLt": 3.2,
     "numberLte": 0.5,
     "numberMultipleOf": 8,
     "object": {
       "bar": 123,
-      "foo": "example string",
+      "foo": "example",
     },
     "objectLoose": {
       "active": true,
       "count": 10,
-      "example": "data",
+      "name": "Test",
     },
     "objectNested": {
       "user": {
@@ -356,23 +355,24 @@ exports[`Anthropic e2e test > should pass 2`] = `
       },
     },
     "objectPassthrough": {
-      "anotherKey": 456,
-      "sampleKey": "sampleValue",
+      "key1": "value1",
+      "key2": 42,
+      "key3": true,
     },
-    "string": "Sample text content",
-    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+    "string": "Sample text",
+    "stringCuid": "cld1p2345abcdef",
     "stringEmail": "test@example.com",
-    "stringEmoji": "🎉",
+    "stringEmoji": "😊",
     "stringMax": "Short text",
     "stringMin": "Hello world",
-    "stringRegex": "test-sample",
-    "stringUrl": "https://example.com",
-    "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+    "stringRegex": "test-example",
+    "stringUrl": "https://www.example.com",
+    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 150,
-      "inventoryItemName": "Widget A",
+      "amount": 15.99,
+      "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "Hello world",
+    "unionPrimitives": "Hello",
   },
 }
 `;

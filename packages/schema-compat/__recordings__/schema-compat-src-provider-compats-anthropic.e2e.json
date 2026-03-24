@@ -4,11 +4,11 @@
     "testFile": "packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts",
     "testName": "Anthropic e2e test",
     "model": "claude-sonnet-4-0",
-    "createdAt": "2026-03-24T09:52:48.839Z"
+    "createdAt": "2026-03-24T12:44:02.085Z"
   },
   "recordings": [
     {
-      "hash": "7327662a54ee28b4",
+      "hash": "7c30f0ce50acf89c",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -40,47 +40,36 @@
                   },
                   "stringMin": {
                     "type": "string",
-                    "minLength": 5,
-                    "description": "sample text with a minimum of 5 characters"
+                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
                   },
                   "stringMax": {
                     "type": "string",
-                    "maxLength": 10,
-                    "description": "sample text with a maximum of 10 characters"
+                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
                   },
                   "stringEmail": {
                     "type": "string",
-                    "format": "email",
-                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-                    "description": "a sample email address"
+                    "description": "a sample email address\nconstraints: a valid email"
                   },
                   "stringEmoji": {
                     "type": "string",
-                    "format": "emoji",
-                    "pattern": "^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$",
-                    "description": "a valid sample emoji"
+                    "description": "a valid sample emoji\nconstraints: a valid emoji"
                   },
                   "stringUrl": {
                     "type": "string",
-                    "format": "uri",
-                    "description": "a valid sample url"
+                    "description": "a valid sample url\nconstraints: a valid uri"
                   },
                   "stringUuid": {
                     "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                    "description": "a valid sample uuid"
+                    "description": "a valid sample uuid\nconstraints: a valid uuid"
                   },
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "pattern": "^[cC][^\\s-]{8,}$",
-                    "description": "a valid sample cuid"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
                   },
                   "stringRegex": {
                     "type": "string",
-                    "pattern": "^test-",
-                    "description": "a valid sample string that satisfies the regex"
+                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
                   },
                   "number": {
                     "type": "number",
@@ -125,35 +114,30 @@
                     "description": "any valid array of example strings"
                   },
                   "arrayMin": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string"
                     },
-                    "description": "any valid sample array of strings with a minimum of 1 string"
+                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
                   },
                   "arrayMax": {
-                    "maxItems": 5,
                     "type": "array",
                     "items": {
                       "type": "string"
                     },
-                    "description": "any valid sample array of strings with a maximum of 5 strings"
+                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
                   },
                   "date": {
-                    "description": "a valid sample date",
-                    "type": "string",
-                    "format": "date-time"
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string"
                   },
                   "dateAfter": {
-                    "description": "a valid sample date after 2024-01-01",
-                    "type": "string",
-                    "format": "date-time"
+                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                    "type": "string"
                   },
                   "dateBefore": {
-                    "description": "a valid sample date before today",
-                    "type": "string",
-                    "format": "date-time"
+                    "description": "a valid sample date before today\nconstraints: a valid date-time",
+                    "type": "string"
                   },
                   "object": {
                     "type": "object",
@@ -177,7 +161,7 @@
                         "properties": {
                           "name": {
                             "type": "string",
-                            "minLength": 2
+                            "description": "constraints: minimum length 2"
                           },
                           "age": {
                             "type": "number",
@@ -196,13 +180,15 @@
                     "type": "object",
                     "properties": {},
                     "additionalProperties": true,
-                    "description": "any sample object with example keys and data"
+                    "description": "any sample object with example keys and data",
+                    "required": []
                   },
                   "objectLoose": {
                     "type": "object",
                     "properties": {},
                     "additionalProperties": true,
-                    "description": "any sample object with example keys and data"
+                    "description": "any sample object with example keys and data",
+                    "required": []
                   },
                   "optional": {
                     "description": "leave this field empty as an example of an optional field",
@@ -322,7 +308,7 @@
             "disable_parallel_tool_use": true
           }
         },
-        "timestamp": 1774345959189
+        "timestamp": 1774356232151
       },
       "response": {
         "status": 200,
@@ -331,65 +317,65 @@
           "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "2000000",
           "anthropic-ratelimit-input-tokens-remaining": "1999000",
-          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T09:52:40Z",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T12:43:53Z",
           "anthropic-ratelimit-output-tokens-limit": "400000",
           "anthropic-ratelimit-output-tokens-remaining": "399000",
-          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T09:52:48Z",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T12:44:01Z",
           "anthropic-ratelimit-requests-limit": "20000",
           "anthropic-ratelimit-requests-remaining": "19999",
-          "anthropic-ratelimit-requests-reset": "2026-03-24T09:52:39Z",
+          "anthropic-ratelimit-requests-reset": "2026-03-24T12:43:52Z",
           "anthropic-ratelimit-tokens-limit": "2400000",
           "anthropic-ratelimit-tokens-remaining": "2398000",
-          "anthropic-ratelimit-tokens-reset": "2026-03-24T09:52:40Z",
+          "anthropic-ratelimit-tokens-reset": "2026-03-24T12:43:53Z",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e14c8c5ceab5e0e-BRU",
+          "cf-ray": "9e15c393597e3036-BRU",
           "connection": "keep-alive",
           "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 09:52:48 GMT",
-          "request-id": "req_011CZMhaTygCn9ordgLjxXF8",
+          "date": "Tue, 24 Mar 2026 12:44:02 GMT",
+          "request-id": "req_011CZMvdjBZtNX4CaiRSkPvR",
           "server": "cloudflare",
-          "server-timing": "x-originResponse;dur=9438",
+          "server-timing": "x-originResponse;dur=9716",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "vary": "Accept-Encoding",
-          "x-envoy-upstream-service-time": "9436",
+          "x-envoy-upstream-service-time": "9714",
           "x-robots-tag": "none"
         },
         "body": {
           "model": "claude-sonnet-4-20250514",
-          "id": "msg_01VSEAak5PWyT6VedkhdCPL7",
+          "id": "msg_01SRUekXbrPjg5tagKS21aQ7",
           "type": "message",
           "role": "assistant",
           "content": [
             {
               "type": "tool_use",
-              "id": "toolu_011fH69326wgEyL34imyejek",
+              "id": "toolu_01Ldt6cKaMzKnjRUPyyA8BF4",
               "name": "json",
               "input": {
-                "string": "Sample text content",
+                "string": "Sample text",
                 "stringMin": "Hello world",
                 "stringMax": "Short text",
                 "stringEmail": "test@example.com",
-                "stringEmoji": "🎉",
-                "stringUrl": "https://example.com",
-                "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
-                "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
-                "stringRegex": "test-sample",
+                "stringEmoji": "😊",
+                "stringUrl": "https://www.example.com",
+                "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+                "stringCuid": "cld1p2345abcdef",
+                "stringRegex": "test-example",
                 "number": 42.5,
                 "numberGt": 5.7,
-                "numberLt": 4.2,
-                "numberGte": 3,
+                "numberLt": 3.2,
+                "numberGte": 1,
                 "numberLte": 0.5,
                 "numberMultipleOf": 8,
-                "numberInt": 123,
+                "numberInt": 25,
                 "exampleArray": ["apple", "banana", "cherry"],
-                "arrayMin": ["required item"],
-                "arrayMax": ["item1", "item2", "item3"],
+                "arrayMin": ["item1"],
+                "arrayMax": ["one", "two", "three"],
                 "date": "2024-03-15T10:30:00Z",
-                "dateAfter": "2024-06-01T14:20:00Z",
-                "dateBefore": "2024-01-01T09:00:00Z",
+                "dateAfter": "2024-06-20T14:45:00Z",
+                "dateBefore": "2024-01-10T09:00:00Z",
                 "object": {
-                  "foo": "example string",
+                  "foo": "example",
                   "bar": 123
                 },
                 "objectNested": {
@@ -399,21 +385,22 @@
                   }
                 },
                 "objectPassthrough": {
-                  "sampleKey": "sampleValue",
-                  "anotherKey": 456
+                  "key1": "value1",
+                  "key2": 42,
+                  "key3": true
                 },
                 "objectLoose": {
-                  "example": "data",
+                  "name": "Test",
                   "count": 10,
                   "active": true
                 },
                 "nullable": null,
                 "enum": "A",
                 "nativeEnum": "B",
-                "unionPrimitives": "Hello world",
+                "unionPrimitives": "Hello",
                 "unionObjects": {
-                  "amount": 150,
-                  "inventoryItemName": "Widget A"
+                  "amount": 15.99,
+                  "inventoryItemName": "Widget"
                 }
               },
               "caller": {
@@ -424,14 +411,14 @@
           "stop_reason": "tool_use",
           "stop_sequence": null,
           "usage": {
-            "input_tokens": 2027,
+            "input_tokens": 1859,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
             "cache_creation": {
               "ephemeral_5m_input_tokens": 0,
               "ephemeral_1h_input_tokens": 0
             },
-            "output_tokens": 777,
+            "output_tokens": 765,
             "service_tier": "standard",
             "inference_geo": "not_available"
           }

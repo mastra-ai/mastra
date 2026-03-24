@@ -76,32 +76,34 @@ constraints: a valid date-time",
       "type": "number",
     },
     "numberGt": {
-      "description": "any valid sample number greater than 3
-constraints: greater than 3",
+      "description": "any valid sample number greater than 3",
+      "exclusiveMinimum": 3,
       "type": "number",
     },
     "numberGte": {
-      "description": "any valid sample number greater than or equal to 1
-constraints: greater than or equal to 1",
+      "description": "any valid sample number greater than or equal to 1",
+      "minimum": 1,
       "type": "number",
     },
     "numberInt": {
       "description": "any valid sample number that is an integer",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
     "numberLt": {
-      "description": "any valid sample number less than 6
-constraints: lower than 6",
+      "description": "any valid sample number less than 6",
+      "exclusiveMaximum": 6,
       "type": "number",
     },
     "numberLte": {
-      "description": "any valid sample number less than or equal to 1
-constraints: lower than or equal to 1",
+      "description": "any valid sample number less than or equal to 1",
+      "maximum": 1,
       "type": "number",
     },
     "numberMultipleOf": {
-      "description": "any valid sample number that is a multiple of 2
-constraints: multiple of 2",
+      "description": "any valid sample number that is a multiple of 2",
+      "multipleOf": 2,
       "type": "number",
     },
     "object": {
@@ -136,7 +138,7 @@ constraints: multiple of 2",
           "additionalProperties": false,
           "properties": {
             "age": {
-              "description": "constraints: greater than or equal to 18",
+              "minimum": 18,
               "type": "number",
             },
             "name": {
@@ -305,56 +307,54 @@ exports[`Google e2e test > should pass 2`] = `
 {
   "value": {
     "arrayMax": [
-      "item1",
-      "item2",
+      "test",
     ],
     "arrayMin": [
-      "item1",
+      "test",
     ],
-    "date": 2024-05-01T12:00:00.000Z,
-    "dateAfter": 2025-01-01T12:00:00.000Z,
-    "dateBefore": 2023-01-01T12:00:00.000Z,
+    "date": 2023-01-01T00:00:00.000Z,
+    "dateAfter": 2025-01-01T00:00:00.000Z,
+    "dateBefore": 2020-01-01T00:00:00.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
-      "item1",
-      "item2",
+      "test",
     ],
     "nativeEnum": "B",
     "nullable": "",
     "number": 10,
-    "numberGt": 4,
+    "numberGt": 5,
     "numberGte": 1,
     "numberInt": 42,
-    "numberLt": 5,
+    "numberLt": 4,
     "numberLte": 1,
     "numberMultipleOf": 4,
     "object": {
-      "bar": 42,
-      "foo": "hello",
+      "bar": 10,
+      "foo": "test",
     },
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 25,
-        "name": "Alice",
+        "age": 30,
+        "name": "John",
       },
     },
     "objectPassthrough": {},
-    "string": "sample",
+    "string": "Sample",
     "stringCuid": "c123456789",
     "stringEmail": "test@example.com",
     "stringEmoji": "😀",
-    "stringMax": "sample",
-    "stringMin": "sample text",
-    "stringRegex": "test-regex",
+    "stringMax": "123456789",
+    "stringMin": "12345",
+    "stringRegex": "test-123",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 10,
-      "inventoryItemName": "apple",
+      "amount": 5,
+      "inventoryItemName": "widget",
     },
-    "unionPrimitives": "text",
+    "unionPrimitives": 42,
   },
 }
 `;

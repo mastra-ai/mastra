@@ -4,15 +4,7 @@ import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
-import {
-  isAllOfSchema,
-  isArraySchema,
-  isNumberSchema,
-  isObjectSchema,
-  isStringSchema,
-  isUnionSchema,
-  isEnumSchema,
-} from '../json-schema/utils';
+import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { PublicSchema } from '../schema.types';
 import type { ModelInformation } from '../types';
@@ -162,7 +154,7 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     return { ...result, jsonSchema: fixedJsonSchema };
   }
 
-  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  preProcessJSONNode(schema: JSONSchema7): void {
     if (isAllOfSchema(schema)) {
       this.defaultAllOfHandler(schema);
     }
@@ -173,32 +165,13 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       this.defaultArrayHandler(schema);
     } else if (isStringSchema(schema)) {
       this.defaultStringHandler(schema);
-    } else if (isNumberSchema(schema)) {
-      this.defaultNumberHandler(schema);
-    } else if (isEnumSchema(schema)) {
-      schema.type = 'string';
     }
   }
 
-  postProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
-    }
-
-    // Fix v4-specific issues
-    if (isObjectSchema(schema)) {
-      if (
-        schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties === 'object' &&
-        schema.additionalProperties !== null &&
-        Object.keys(schema.additionalProperties).length === 0
-      ) {
-        schema.additionalProperties = true;
-      }
-
-      if ('propertyNames' in schema) {
-        delete (schema as Record<string, unknown>).propertyNames;
-      }
     }
   }
 }

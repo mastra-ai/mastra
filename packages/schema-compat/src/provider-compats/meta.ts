@@ -3,14 +3,7 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import {
-  isAllOfSchema,
-  isArraySchema,
-  isNumberSchema,
-  isObjectSchema,
-  isStringSchema,
-  isUnionSchema,
-} from '../json-schema/utils';
+import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
 import { isOptional, isObj, isArr, isUnion, isNumber, isString, isIntersection } from '../zodTypes';
@@ -50,7 +43,7 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
     return value;
   }
 
-  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  preProcessJSONNode(schema: JSONSchema7): void {
     if (isAllOfSchema(schema)) {
       this.defaultAllOfHandler(schema);
     }
@@ -61,30 +54,13 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
       this.defaultArrayHandler(schema);
     } else if (isStringSchema(schema)) {
       this.defaultStringHandler(schema);
-    } else if (isNumberSchema(schema)) {
-      this.defaultNumberHandler(schema);
     }
   }
 
-  postProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
-    }
-
-    // Fix v4-specific issues
-    if (isObjectSchema(schema)) {
-      if (
-        schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties === 'object' &&
-        schema.additionalProperties !== null &&
-        Object.keys(schema.additionalProperties).length === 0
-      ) {
-        schema.additionalProperties = true;
-      }
-
-      if ('propertyNames' in schema) {
-        delete (schema as Record<string, unknown>).propertyNames;
-      }
     }
   }
 }

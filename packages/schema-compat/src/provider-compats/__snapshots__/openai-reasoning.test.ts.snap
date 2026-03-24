@@ -6,44 +6,24 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle chai
   "additionalProperties": false,
   "properties": {
     "person": {
-      "allOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "name",
-          ],
-          "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "age": {
+          "type": "number",
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "age": {
-              "type": "number",
-            },
-          },
-          "required": [
-            "age",
-          ],
-          "type": "object",
+        "email": {
+          "type": "string",
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "email": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "email",
-          ],
-          "type": "object",
+        "name": {
+          "type": "string",
         },
+      },
+      "required": [
+        "name",
+        "age",
+        "email",
       ],
+      "type": "object",
     },
   },
   "required": [
@@ -62,32 +42,20 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle inte
       "type": "string",
     },
     "metadata": {
-      "allOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "key": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "key",
-          ],
-          "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "value": {
-              "type": "number",
-            },
-          },
-          "required": [
-            "value",
-          ],
-          "type": "object",
+        "value": {
+          "type": "number",
         },
+      },
+      "required": [
+        "key",
+        "value",
       ],
+      "type": "object",
     },
   },
   "required": [
@@ -112,52 +80,40 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle inte
               "type": "string",
             },
             {
-              "allOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "prompt": {
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "prompt",
-                  ],
-                  "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "convertHttpImage2Base64": {
+                  "type": "boolean",
                 },
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "convertHttpImage2Base64": {
-                      "type": "boolean",
-                    },
-                    "images": {
-                      "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                          },
-                          "url": {
-                            "type": "string",
-                          },
-                        },
-                        "required": [
-                          "name",
-                          "url",
-                        ],
-                        "type": "object",
+                "images": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
                       },
-                      "type": "array",
+                      "url": {
+                        "type": "string",
+                      },
                     },
+                    "required": [
+                      "name",
+                      "url",
+                    ],
+                    "type": "object",
                   },
-                  "required": [
-                    "images",
-                    "convertHttpImage2Base64",
-                  ],
-                  "type": "object",
+                  "type": "array",
                 },
+                "prompt": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "prompt",
+                "images",
+                "convertHttpImage2Base64",
               ],
+              "type": "object",
             },
           ],
         },
@@ -181,32 +137,20 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle opti
   "additionalProperties": false,
   "properties": {
     "data": {
-      "allOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "a": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "a",
-          ],
-          "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "type": "string",
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "b": {
-              "type": "number",
-            },
-          },
-          "required": [
-            "b",
-          ],
-          "type": "object",
+        "b": {
+          "type": "number",
         },
+      },
+      "required": [
+        "a",
+        "b",
       ],
+      "type": "object",
     },
   },
   "type": "object",

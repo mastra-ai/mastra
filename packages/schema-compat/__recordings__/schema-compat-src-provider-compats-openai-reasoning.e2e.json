@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "schema-compat-src-provider-compats-openai-reasoning.e2e",
-    "testFile": "src/provider-compats/openai-reasoning.e2e.test.ts",
+    "testFile": "packages/schema-compat/src/provider-compats/openai-reasoning.e2e.test.ts",
     "testName": "OpenAI reasoning e2e test",
     "model": "gpt-4o",
-    "createdAt": "2026-03-24T00:42:58.008Z"
+    "createdAt": "2026-03-24T12:43:56.922Z"
   },
   "recordings": [
     {
@@ -306,7 +306,7 @@
             }
           }
         },
-        "timestamp": 1774312971347
+        "timestamp": 1774356232149
       },
       "response": {
         "status": 200,
@@ -314,12 +314,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e11a368ad8bb741-BRU",
+          "cf-ray": "9e15c3938cfcb9a5-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 00:42:58 GMT",
+          "date": "Tue, 24 Mar 2026 12:43:56 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "5865",
+          "openai-processing-ms": "4076",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -331,18 +331,18 @@
           "x-ratelimit-remaining-tokens": "29102",
           "x-ratelimit-reset-requests": "120ms",
           "x-ratelimit-reset-tokens": "1.796s",
-          "x-request-id": "req_c645aae91f6246f9a9f6c0cc5cb55912"
+          "x-request-id": "req_4653336495fe4e5b954c2774afed4b56"
         },
         "body": {
-          "id": "resp_0a1b5247e29ff3f40069c1de0c26ec819485ed42c139ba556e",
+          "id": "resp_0620b637e17b004a0069c28708c4b08197b238043a1ac1eb17",
           "object": "response",
-          "created_at": 1774312972,
+          "created_at": 1774356232,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774312977,
+          "completed_at": 1774356236,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -352,7 +352,7 @@
           "model": "gpt-4o-2024-08-06",
           "output": [
             {
-              "id": "msg_0a1b5247e29ff3f40069c1de0d704881948657162330b0466b",
+              "id": "msg_0620b637e17b004a0069c287095ef08197be50cc5a7e36fe5a",
               "type": "message",
               "status": "completed",
               "content": [
@@ -360,7 +360,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"Short\",\"stringEmail\":\"example@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckv2f8lb70000x7h0k410wrmd\",\"stringRegex\":\"test-example\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":10,\"exampleArray\":[\"example1\",\"example2\"],\"arrayMin\":[\"single\"],\"arrayMax\":[\"element1\",\"element2\"],\"date\":\"2023-10-15T12:00:00Z\",\"dateAfter\":\"2025-01-02T12:00:00Z\",\"dateBefore\":\"2022-12-31T12:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"mixed\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget \"},\"default\":\"default value\"}"
+                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"Sample\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ck1xy8e7s0001tvm78d6sohm9\",\"stringRegex\":\"test-sample\",\"number\":2.5,\"numberGt\":4,\"numberLt\":5.5,\"numberGte\":1,\"numberLte\":0.5,\"numberMultipleOf\":4,\"numberInt\":3,\"exampleArray\":[\"first\",\"second\",\"third\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"first\",\"second\"],\"date\":\"2023-10-10T00:00:00Z\",\"dateAfter\":\"2025-01-02T00:00:00Z\",\"dateBefore\":\"2023-01-01T00:00:00Z\",\"object\":{\"foo\":\"text\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Alex\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"text or number\",\"unionObjects\":{\"amount\":50,\"inventoryItemName\":\"itemName\"},\"default\":null}"
                 }
               ],
               "role": "assistant"
@@ -670,11 +670,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 277,
+            "output_tokens": 285,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1156
+            "total_tokens": 1164
           },
           "user": null,
           "metadata": {}

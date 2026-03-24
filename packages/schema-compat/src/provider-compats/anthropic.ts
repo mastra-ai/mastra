@@ -2,6 +2,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 
+import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
@@ -52,43 +53,24 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
     return this.defaultUnsupportedZodTypeHandler(value);
   }
 
-  preProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
-    // if (isAllOfSchema(schema)) {
-    //   this.defaultAllOfHandler(schema);
-    // }
-    // // Process based on schema type
-    // if (isObjectSchema(schema)) {
-    //   this.defaultObjectHandler(schema);
-    // } else if (isArraySchema(schema)) {
-    //   this.defaultArrayHandler(schema);
-    // } else if (isStringSchema(schema)) {
-    //   // claude-3.5-haiku doesn't respect string constraints, so convert them to description
-    //   if (this.getModel().modelId.includes('claude-3.5-haiku')) {
-    //     this.defaultStringHandler(schema);
-    //   }
-    // }
+  preProcessJSONNode(schema: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
+    if (isObjectSchema(schema)) {
+      this.defaultObjectHandler(schema);
+    } else if (isArraySchema(schema)) {
+      this.defaultArrayHandler(schema);
+    } else if (isStringSchema(schema)) {
+      this.defaultStringHandler(schema);
+    }
   }
 
-  postProcessJSONNode(_schema: JSONSchema7): void {
-    // // Handle union schemas in post-processing (after children are processed)
-    // if (isUnionSchema(schema)) {
-    //   this.defaultUnionHandler(schema);
-    // }
-    // // Fix v4-specific issues in post-processing
-    // if (isObjectSchema(schema)) {
-    //   // Fix passthrough objects: convert additionalProperties: {} to additionalProperties: true
-    //   if (
-    //     schema.additionalProperties !== undefined &&
-    //     typeof schema.additionalProperties === 'object' &&
-    //     schema.additionalProperties !== null &&
-    //     Object.keys(schema.additionalProperties).length === 0
-    //   ) {
-    //     schema.additionalProperties = true;
-    //   }
-    //   // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
-    //   if ('propertyNames' in schema) {
-    //     delete (schema as Record<string, unknown>).propertyNames;
-    //   }
-    // }
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
+    if (isUnionSchema(schema)) {
+      this.defaultUnionHandler(schema);
+    }
   }
 }

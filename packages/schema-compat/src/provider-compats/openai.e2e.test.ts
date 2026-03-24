@@ -149,7 +149,7 @@ describe('OpenAI e2e test', () => {
       enum: expect.stringMatching(/^[ABC]$/),
       nativeEnum: expect.stringMatching(/^[ABC]$/),
       optional: null,
-      default: '',
+      default: null,
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });

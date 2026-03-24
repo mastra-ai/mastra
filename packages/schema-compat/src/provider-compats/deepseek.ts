@@ -42,7 +42,7 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
     return value;
   }
 
-  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  preProcessJSONNode(schema: JSONSchema7): void {
     if (isAllOfSchema(schema)) {
       this.defaultAllOfHandler(schema);
     }
@@ -56,24 +56,10 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
     }
   }
 
-  postProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
-    }
-
-    if (isObjectSchema(schema)) {
-      if (
-        schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties === 'object' &&
-        schema.additionalProperties !== null &&
-        Object.keys(schema.additionalProperties).length === 0
-      ) {
-        schema.additionalProperties = true;
-      }
-
-      if ('propertyNames' in schema) {
-        delete (schema as Record<string, unknown>).propertyNames;
-      }
     }
   }
 }

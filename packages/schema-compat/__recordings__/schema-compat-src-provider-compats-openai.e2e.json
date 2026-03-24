@@ -2,14 +2,13 @@
   "meta": {
     "name": "schema-compat-src-provider-compats-openai.e2e",
     "testFile": "packages/schema-compat/src/provider-compats/openai.e2e.test.ts",
-    "testName": "dummy e2e test",
+    "testName": "OpenAI e2e test",
     "model": "gpt-4.1",
-    "createdAt": "2026-03-23T23:09:53.136Z",
-    "updatedAt": "2026-03-23T23:24:54.988Z"
+    "createdAt": "2026-03-24T12:43:56.906Z"
   },
   "recordings": [
     {
-      "hash": "546e8b2f2a2947f9",
+      "hash": "07ca68f4f0ce3203",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -307,7 +306,7 @@
             }
           }
         },
-        "timestamp": 1774308289800
+        "timestamp": 1774356232149
       },
       "response": {
         "status": 200,
@@ -315,12 +314,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e11311d0f08b74d-BRU",
+          "cf-ray": "9e15c3938ef0b5e9-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 23 Mar 2026 23:24:54 GMT",
+          "date": "Tue, 24 Mar 2026 12:43:56 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "4770",
+          "openai-processing-ms": "4037",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -329,21 +328,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "30000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "29588",
+          "x-ratelimit-remaining-tokens": "29728",
           "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "824ms",
-          "x-request-id": "req_35d5bdf96db645e48d9558a43f1bc891"
+          "x-ratelimit-reset-tokens": "544ms",
+          "x-request-id": "req_a6c6c43dff0e4cf58d3aae3a4822a9da"
         },
         "body": {
-          "id": "resp_0b48e1c6f37361450069c1cbc22de881939b2adf08844c8254",
+          "id": "resp_0b9337c9bc3f1dd50069c28708c58081908d52ae2400f96791",
           "object": "response",
-          "created_at": 1774308290,
+          "created_at": 1774356232,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774308294,
+          "completed_at": 1774356236,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -353,7 +352,7 @@
           "model": "gpt-4.1-2025-04-14",
           "output": [
             {
-              "id": "msg_0b48e1c6f37361450069c1cbc2ad208193b982d24f2a3bfeea",
+              "id": "msg_0b9337c9bc3f1dd50069c28709651881909fe8a24096171f87",
               "type": "message",
               "status": "completed",
               "content": [
@@ -361,7 +360,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\n  \"string\": \"Sample text\",\n  \"stringMin\": \"Hello\",\n  \"stringMax\": \"shortText\",\n  \"stringEmail\": \"sample@example.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"cjo8b6bqv0001jql96l0f8n4w\",\n  \"stringRegex\": \"test-value\",\n  \"number\": 42,\n  \"numberGt\": 4,\n  \"numberLt\": 5,\n  \"numberGte\": 1,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 8,\n  \"numberInt\": 3,\n  \"exampleArray\": [\n    \"alpha\",\n    \"beta\",\n    \"gamma\"\n  ],\n  \"arrayMin\": [\n    \"item1\"\n  ],\n  \"arrayMax\": [\n    \"one\",\n    \"two\",\n    \"three\",\n    \"four\",\n    \"five\"\n  ],\n  \"date\": \"2022-09-15T12:34:56Z\",\n  \"dateAfter\": \"2024-06-05T10:00:00Z\",\n  \"dateBefore\": \"2024-06-09T00:00:00Z\",\n  \"object\": {\n    \"foo\": \"bar\",\n    \"bar\": 123\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Tim\",\n      \"age\": 30\n    }\n  },\n  \"objectPassthrough\": {\n    },\n  \"objectLoose\": {\n    },\n  \"optional\": null,\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"C\",\n  \"unionPrimitives\": \"foo\",\n  \"unionObjects\": {\n    \"amount\": 10,\n    \"inventoryItemName\": \"Widget\"\n  }\n  ,\"default\":\"\"\n}"
+                  "text": "{\"string\":\"Example text\",\"stringMin\":\"Hello\",\"stringMax\":\"short str\",\"stringEmail\":\"sample@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckd6c7oz10001g0l5e26k4o3q\",\"stringRegex\":\"test-pattern\",\"number\":5.67,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":42,\"exampleArray\":[\"apple\",\"banana\",\"cherry\"],\"arrayMin\":[\"at least one string\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2023-12-31T13:45:00Z\",\"dateAfter\":\"2024-03-01T12:00:00Z\",\"dateBefore\":\"2024-06-01T09:00:00Z\",\"object\":{\"foo\":\"text\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Sam\",\"age\":28}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union text\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"default\":null}"
                 }
               ],
               "role": "assistant"
@@ -671,11 +670,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 431,
+            "output_tokens": 291,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1310
+            "total_tokens": 1170
           },
           "user": null,
           "metadata": {}
