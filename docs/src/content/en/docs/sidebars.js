@@ -27,11 +27,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/project-structure',
           label: 'Project Structure',
         },
@@ -55,6 +50,21 @@ const sidebars = {
           type: 'doc',
           id: 'studio/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'studio/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'studio/auth',
+          label: 'Auth',
+        },
+        {
+          type: 'doc',
+          id: 'studio/cloud',
+          label: 'Mastra Cloud',
         },
       ],
     },

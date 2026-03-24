@@ -422,7 +422,7 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/studio",
+      "destination": "/docs/studio/cloud",
       "permanent": true
     },
     {
@@ -663,6 +663,11 @@
     {
       "source": "/docs/agents/agent-memory",
       "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/studio",
+      "destination": "/docs/studio/overview",
       "permanent": true
     }
   ]

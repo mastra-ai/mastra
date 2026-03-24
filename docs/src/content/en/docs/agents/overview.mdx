@@ -54,7 +54,7 @@ Once registered, it can be called from workflows, tools, or other agents, and ha
 
 :::tip
 
-Use [Studio](/docs/getting-started/studio) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/studio/overview) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
 
 :::
 
@@ -71,7 +71,7 @@ After registration, retrieve your agent with [`mastra.getAgentById()`](/referenc
 When referencing an agent from your Mastra instance, use `mastra.getAgentById()` to ensure it has access to shared services such as instance-level storage, logging, and agent registry. A directly imported agent can still work with its own local configuration, but it won't have access to those shared services.
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     Returns the full response after all tool calls and steps complete. The result includes `text`, `toolCalls`, `toolResults`, `steps`, and token `usage` statistics.
 
     ```ts
@@ -81,7 +81,7 @@ When referencing an agent from your Mastra instance, use `mastra.getAgentById()`
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     Returns a stream you can consume as tokens arrive. The result exposes `textStream` for incremental output and promises for `toolCalls`, `toolResults`, `steps`, and token `usage` that resolve when the stream finishes.
 
     ```ts
