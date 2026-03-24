@@ -1,6 +1,7 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -51,18 +52,21 @@ export interface ProviderOptions {
 /**
  * Configuration for the observation step (Observer agent).
  */
+export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
+   * a `ModelByInputTokens` selector (for token-tiered routing),
    * or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -180,13 +184,14 @@ export interface ReflectionConfig {
    * Model for the Reflector agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
+   * a `ModelByInputTokens` selector (for token-tiered routing),
    * or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of observations that triggers reflection.
@@ -765,7 +770,7 @@ export interface ObservationalMemoryConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Observation step configuration.
@@ -812,7 +817,7 @@ export interface ObservationalMemoryConfig {
  * even when user provides a simple number (converted based on shareTokenBudget).
  */
 export interface ResolvedObservationConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -836,7 +841,7 @@ export interface ResolvedObservationConfig {
 }
 
 export interface ResolvedReflectionConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */

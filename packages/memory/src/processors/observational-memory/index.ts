@@ -30,6 +30,8 @@ export type { MemoryContextProvider } from './processor';
 export { getObservationsAsOf } from './observation-utils';
 
 // Types
+export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+
 export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,

@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -14,33 +15,37 @@ import {
 } from './observer-agent';
 import type { ResolvedObservationConfig } from './types';
 
+type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
+
 /**
  * Runs the Observer agent for extracting observations from messages.
  * Handles single-thread and multi-thread modes, degenerate detection, and retry logic.
  */
 export class ObserverRunner {
-  private observerAgent?: Agent;
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
+  private observerAgent?: Agent;
 
   constructor(opts: { observationConfig: ResolvedObservationConfig; observedMessageIds: Set<string> }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
   }
 
-  private getAgent(): Agent {
-    if (!this.observerAgent) {
-      this.observerAgent = new Agent({
-        id: 'observational-memory-observer',
-        name: 'Observer',
-        instructions: buildObserverSystemPrompt(
-          false,
-          this.observationConfig.instruction,
-          this.observationConfig.threadTitle,
-        ),
-        model: this.observationConfig.model,
-      });
-    }
+  private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
+    return new Agent({
+      id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
+      name: isMultiThread ? 'multi-thread-observer' : 'Observer',
+      instructions: buildObserverSystemPrompt(
+        isMultiThread,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      ),
+      model,
+    });
+  }
+
+  private getAgent(model: ConcreteObservationModel): Agent {
+    this.observerAgent ??= this.createAgent(model);
     return this.observerAgent;
   }
 
@@ -69,6 +74,7 @@ export class ObserverRunner {
       priorSuggestedResponse?: string;
       priorThreadTitle?: string;
       wasTruncated?: boolean;
+      model?: ConcreteObservationModel;
     },
   ): Promise<{
     observations: string;
@@ -77,7 +83,9 @@ export class ObserverRunner {
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getAgent();
+    const agent = options?.model
+      ? this.createAgent(options.model)
+      : this.getAgent(this.observationConfig.model as ConcreteObservationModel);
 
     const observerMessages = [
       {
@@ -138,6 +146,7 @@ export class ObserverRunner {
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
     priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+    model?: ConcreteObservationModel,
   ): Promise<{
     results: Map<
       string,
@@ -145,16 +154,7 @@ export class ObserverRunner {
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = new Agent({
-      id: 'multi-thread-observer',
-      name: 'multi-thread-observer',
-      model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(
-        true,
-        this.observationConfig.instruction,
-        this.observationConfig.threadTitle,
-      ),
-    });
+    const agent = this.createAgent(model ?? (this.observationConfig.model as ConcreteObservationModel), true);
 
     const observerMessages = [
       {

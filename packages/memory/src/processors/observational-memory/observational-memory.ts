@@ -1,4 +1,4 @@
-import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -66,6 +66,7 @@ import {
   getBufferedChunks,
   stripThreadTags,
 } from './message-utils';
+import { ModelByInputTokens } from './model-by-input-tokens';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
@@ -88,6 +89,7 @@ import type {
   DataOmStatusPart,
   ObservationDebugEvent,
   ObservationalMemoryConfig,
+  ObservationalMemoryModel,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -262,8 +264,8 @@ export class ObservationalMemory {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
-      model === undefined || model === 'default';
+    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) =>
+      model === undefined || model === 'default' || model instanceof ModelByInputTokens;
 
     const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
     const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
@@ -467,21 +469,40 @@ export class ObservationalMemory {
     return BufferingCoordinator.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
-  private getModelToResolve(model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] {
-    if (Array.isArray(model)) {
-      return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+  private getConcreteModel(
+    model: ObservationalMemoryModel,
+    inputTokens?: number,
+  ): Exclude<ObservationalMemoryModel, ModelByInputTokens> {
+    if (model instanceof ModelByInputTokens) {
+      if (inputTokens === undefined) {
+        throw new Error('ModelByInputTokens requires inputTokens for resolution');
+      }
+      return model.resolve(inputTokens) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
     }
-    if (typeof model === 'function') {
+
+    return model as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
+  }
+
+  private getModelToResolve(
+    model: ObservationalMemoryModel,
+    inputTokens?: number,
+  ): Parameters<typeof resolveModelConfig>[0] {
+    const concreteModel = this.getConcreteModel(model, inputTokens);
+
+    if (Array.isArray(concreteModel)) {
+      return (concreteModel[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+    }
+    if (typeof concreteModel === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
       return async (ctx: any) => {
-        const result = await model(ctx);
+        const result = await concreteModel(ctx);
         if (Array.isArray(result)) {
           return (result[0]?.model ?? 'unknown') as MastraModelConfig;
         }
         return result as MastraModelConfig;
       };
     }
-    return model;
+    return concreteModel;
   }
 
   private formatModelName(model: TokenCounterModelContext) {
@@ -493,10 +514,11 @@ export class ObservationalMemory {
   }
 
   private async resolveModelContext(
-    modelConfig: AgentConfig['model'],
+    modelConfig: ObservationalMemoryModel,
     requestContext?: RequestContext,
+    inputTokens?: number,
   ): Promise<TokenCounterModelContext | undefined> {
-    const modelToResolve = this.getModelToResolve(modelConfig);
+    const modelToResolve = this.getModelToResolve(modelConfig, inputTokens);
     if (!modelToResolve) {
       return undefined;
     }
@@ -546,7 +568,7 @@ export class ObservationalMemory {
       model: string;
     };
   }> {
-    const safeResolveModel = async (modelConfig: AgentConfig['model']): Promise<string> => {
+    const safeResolveModel = async (modelConfig: ObservationalMemoryModel): Promise<string> => {
       try {
         const resolved = await this.resolveModelContext(modelConfig, requestContext);
         return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';

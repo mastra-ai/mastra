@@ -15,6 +15,7 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -34,6 +35,8 @@ import type {
   ResolvedReflectionConfig,
 } from './types';
 
+type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
+
 async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
   if (abortSignal?.aborted) throw new Error('The operation was aborted.');
   const result = await fn();
@@ -46,7 +49,6 @@ async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal
  * Handles synchronous reflection, async buffered reflection, and activation.
  */
 export class ReflectorRunner {
-  private reflectorAgent?: Agent;
   private readonly reflectionConfig: ResolvedReflectionConfig;
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly tokenCounter: TokenCounter;
@@ -100,16 +102,13 @@ export class ReflectorRunner {
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
   }
 
-  private getAgent(): Agent {
-    if (!this.reflectorAgent) {
-      this.reflectorAgent = new Agent({
-        id: 'observational-memory-reflector',
-        name: 'Reflector',
-        instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
-        model: this.reflectionConfig.model,
-      });
-    }
-    return this.reflectorAgent;
+  private createAgent(model: ConcreteReflectionModel): Agent {
+    return new Agent({
+      id: 'observational-memory-reflector',
+      name: 'Reflector',
+      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
+      model,
+    });
   }
 
   private getObservationMarkerConfig(): ObservationMarkerConfig {
@@ -138,12 +137,13 @@ export class ReflectorRunner {
     skipContinuationHints?: boolean,
     compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
+    model?: ConcreteReflectionModel,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getAgent();
+    const agent = this.createAgent(model ?? (this.reflectionConfig.model as ConcreteReflectionModel));
 
     const originalTokens = this.tokenCounter.countObservations(observations);
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);

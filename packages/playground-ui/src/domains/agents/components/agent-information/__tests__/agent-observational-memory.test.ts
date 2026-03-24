@@ -21,4 +21,13 @@ describe('AgentObservationalMemory token display', () => {
     expect(source).toContain('const tokenCount = observationTokenCount;');
     expect(source).not.toContain('const tokenCount = statusData?.observationalMemory?.observationTokenCount;');
   });
+
+  it('shows ModelByInputTokens routing in the OM tooltip when available', () => {
+    expect(source).toContain('modelRouting?: Array<{ upTo: number; model: string }>;');
+    expect(source).toContain('const observationModelRouting =');
+    expect(source).toContain('const reflectionModelRouting =');
+    expect(source).toContain('≤{formatTokens(route.upTo)} → {route.model}');
+    expect(source).toContain('modelRouting={observationModelRouting}');
+    expect(source).toContain('modelRouting={reflectionModelRouting}');
+  });
 });
