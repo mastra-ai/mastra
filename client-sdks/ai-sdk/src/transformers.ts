@@ -1079,9 +1079,20 @@ export function transformNetwork(
         } as const;
       }
 
-      // return the chunk as is if it's not a known type
-      if (isDataChunkType(payload)) {
+      // ONLY drop heavy workflow/agent data chunks
+      if (isAgentExecutionDataChunkType(payload)) {
         return null;
+      }
+      if (isWorkflowExecutionDataChunkType(payload)) {
+        return null;
+      }
+
+      // keep normal data chunks (tests need this)
+      if (isDataChunkType(payload)) {
+        if (!('data' in payload)) return null;
+
+        const { type, data, id } = payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }
