@@ -268,6 +268,7 @@ export async function deployAction(
         `Project:       ${projectName}`,
         `Directory:     ${targetDir}`,
         ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
+        ...(mastraVersion ? [`Mastra:        ${mastraVersion}`] : []),
       ].join('\n'),
       'Deploy settings',
     );
@@ -299,6 +300,7 @@ export async function deployAction(
     p.log.info(`Organization: ${orgName} (${orgId})`);
     p.log.info(`Project: ${projectName} (${projectId})`);
     if (gitBranch) p.log.info(`Git branch: ${gitBranch}`);
+    if (mastraVersion) p.log.info(`Mastra: ${mastraVersion}`);
   }
 
   // Step 6: Build + Zip + Upload + Poll
