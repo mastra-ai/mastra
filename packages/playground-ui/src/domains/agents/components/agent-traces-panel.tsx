@@ -631,11 +631,21 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
           <Spinner />
         </div>
       ) : displayTraces.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Txt variant="ui-md" className="text-icon3">
-            {filters.filtersApplied ? 'No traces match the current filters.' : 'No traces yet.'}
-          </Txt>
-        </div>
+        <>
+          <div className="flex items-center justify-center py-20">
+            <Txt variant="ui-md" className="text-icon3">
+              {filters.filtersApplied ? 'No traces match the current filters.' : 'No traces yet.'}
+            </Txt>
+          </div>
+          {/* Keep the sentinel mounted so pagination can advance when client-side filters hide all current results */}
+          <div ref={setEndOfListElement} className="h-1">
+            {isFetchingNextPage && (
+              <div className="flex justify-center py-4">
+                <Spinner />
+              </div>
+            )}
+          </div>
+        </>
       ) : (
         <EntityList columns={gridColumns}>
           <EntityList.Top className="pl-6">
