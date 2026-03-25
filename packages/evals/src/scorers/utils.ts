@@ -1112,10 +1112,8 @@ export function checkTrajectoryEfficiency(
         prev.stepType === curr.stepType &&
         (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
       ) {
-        // Compare args
-        const prevArgs = prev.stepType === 'tool_call' ? prev.toolArgs : prev.toolArgs;
-        const currArgs =
-          curr.stepType === 'tool_call' ? (curr as typeof prev).toolArgs : (curr as typeof prev).toolArgs;
+        const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
+        const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         try {
           if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
             redundantCalls.push({ name: curr.name, index: i });
@@ -1287,15 +1285,11 @@ export function analyzeToolFailures(
     let j = i + 1;
 
     // Count consecutive calls to the same tool
+    // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
     while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
-      // Check if previous call failed (success === false)
-      if (currentTool.stepType === 'tool_call' || currentTool.stepType === 'mcp_tool_call') {
-        const prevStep = toolCallSteps[j - 1]!;
-        if (prevStep.stepType === 'tool_call' || prevStep.stepType === 'mcp_tool_call') {
-          if (prevStep.success === false) {
-            retryCount++;
-          }
-        }
+      const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+      if (prevStep.success === false) {
+        retryCount++;
       }
       j++;
     }
@@ -1303,9 +1297,8 @@ export function analyzeToolFailures(
     if (retryCount > 0) {
       // Check if agent fell back to a different tool after retries
       const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
-      const lastRetry = toolCallSteps[j - 1]!;
-      const lastSuccess =
-        (lastRetry.stepType === 'tool_call' || lastRetry.stepType === 'mcp_tool_call') && lastRetry.success !== false;
+      const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+      const lastSuccess = lastRetry.success !== false;
 
       patterns.push({
         toolName: currentTool.name,
