@@ -407,7 +407,8 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     return traces.filter(t => {
       const inp = extractInputPreview(t.input).toLowerCase();
       const out = extractOutputPreview(t.output).toLowerCase();
-      return inp.includes(q) || out.includes(q);
+      const err = extractErrorText(t.error).toLowerCase();
+      return inp.includes(q) || out.includes(q) || err.includes(q);
     });
   }, [traces, filters.search]);
 
