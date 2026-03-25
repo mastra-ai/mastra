@@ -99,7 +99,7 @@ export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from '
 export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
 
 // Shared types
-export type { InstructionsOption } from './types';
+export type { InstructionsOption, BrowserCapabilities } from './types';
 
 // Glob Utilities
 export {

@@ -6,13 +6,14 @@
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
-    "@mastra/core": "latest",
     "@mastra/agent-browser": "latest",
-    "@mastra/stagehand": "latest",
+    "@mastra/core": "latest",
     "@mastra/memory": "latest",
-    "zod": "^4.3.6",
+    "@mastra/stagehand": "latest",
+    "agent-browser": "^0.22.2",
     "mastra": "latest",
-    "ws": "^8.17.0"
+    "ws": "^8.17.0",
+    "zod": "^4.3.6"
   },
   "pnpm": {
     "overrides": {
@@ -20,7 +21,8 @@
       "@mastra/agent-browser": "link:../../browser/agent-browser",
       "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/memory": "link:../../packages/memory",
-      "mastra": "link:../../packages/cli"
+      "mastra": "link:../../packages/cli",
+      "agent-browser": "0.22.2"
     }
   },
   "scripts": {
