@@ -779,7 +779,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   : currentStep.tools
                     ? Object.keys(currentStep.tools)
                     : undefined;
-                if (toolNames && toolNames.length > 0) {
+                if (toolNames !== undefined) {
                   agentSpan.update({
                     attributes: {
                       availableTools: toolNames,

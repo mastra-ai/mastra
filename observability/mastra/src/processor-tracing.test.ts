@@ -2141,5 +2141,49 @@ describe('Processor Tracing Tests', () => {
 
       testExporter.finalExpectations();
     });
+
+    /**
+     * When a processInputStep explicitly returns an empty activeTools array,
+     * the AGENT_RUN span availableTools should be cleared to [].
+     */
+    it('should clear AGENT_RUN span availableTools when processInputStep returns activeTools: []', async () => {
+      const model = createMockModel();
+
+      class ActiveToolsClearProcessor implements Processor {
+        readonly id = 'tool-clear';
+        readonly name = 'Tool Clear';
+
+        async processInputStep(): Promise<{ activeTools: string[] }> {
+          return {
+            activeTools: [],
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ActiveToolsClearProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      expect(agentSpans.length).toBe(1);
+
+      const agentSpan = agentSpans[0];
+      // AGENT_RUN span availableTools should be cleared to an empty array
+      expect(agentSpan?.attributes?.availableTools).toEqual([]);
+
+      testExporter.finalExpectations();
+    });
   });
 });
