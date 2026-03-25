@@ -1,6 +1,7 @@
 # Elasticsearch Chat Template
 
 A Mastra template for building conversational AI agents that interact with Elasticsearch clusters using natural language.
+This template uses Elasticsearch/Elastic for querying data, agent memory (with Elastic Inference Service for embeddings), observability (Elastic APM), and enhanced tooling (Kibana MCP).
 
 ## Getting Started
 
