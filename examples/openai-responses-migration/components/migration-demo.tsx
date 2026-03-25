@@ -1,6 +1,10 @@
 'use client';
 
-import { MastraClient, type CreateResponseParams, type ResponsesResponse, type ResponsesStreamEvent } from '@mastra/client-js';
+import {
+  MastraClient,
+  type CreateResponseParams,
+  type ResponsesStreamEvent,
+} from '@mastra/client-js';
 import { startTransition, type ReactNode, useEffect, useState } from 'react';
 
 type TurnState = {
@@ -26,18 +30,48 @@ type ToolState = {
   output?: unknown;
 };
 
-type ExampleId = 'agent-memory' | 'agent-tools' | 'provider-backed';
+type ExampleId = 'agent-memory' | 'agent-tools' | 'conversations' | 'provider-backed';
 
 type ExampleConfig = {
   id: ExampleId;
+  agentId: string;
   label: string;
   description: string;
   detail: string;
   instructions: string;
   model: string;
   store: boolean;
+  supportsConversations: boolean;
   usesProviderContinuation: boolean;
   prompts: readonly string[];
+};
+
+type ConversationSummary = {
+  id: string;
+  title: string;
+  subtitle: string;
+  updatedAt: string | null;
+};
+
+type DemoThread = {
+  id: string;
+  title?: string | null;
+  updatedAt?: string | Date | null;
+};
+
+type DemoConversationTextPart = {
+  text: string;
+};
+
+type DemoConversationItem = {
+  id: string;
+  type: 'message' | 'function_call' | 'function_call_output';
+  role?: 'system' | 'user' | 'assistant';
+  content?: DemoConversationTextPart[];
+  call_id?: string;
+  name?: string;
+  arguments?: string;
+  output?: string;
 };
 
 type StreamState = {
@@ -54,7 +88,6 @@ type TurnPatch = Pick<TurnState, 'responseId' | 'providerResponseId' | 'tools' |
 const DEFAULT_MODEL = `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`;
 const DEFAULT_AGENT_ID = process.env.NEXT_PUBLIC_MASTRA_AGENT_ID ?? 'support-agent';
 const TOOL_AGENT_ID = process.env.NEXT_PUBLIC_MASTRA_TOOL_AGENT_ID ?? 'tool-agent';
-const AGENT_TOOLS_EXAMPLE = 'agent-tools';
 const mastraClient = new MastraClient({
   baseUrl: process.env.NEXT_PUBLIC_MASTRA_BASE_URL ?? 'http://localhost:4111',
 });
@@ -62,13 +95,15 @@ const mastraClient = new MastraClient({
 const EXAMPLES: readonly ExampleConfig[] = [
   {
     id: 'agent-memory',
-    label: 'Mastra Agent',
+    agentId: DEFAULT_AGENT_ID,
+    label: 'Mastra Agent Responses',
     description: 'Uses `agent_id`, `store: true`, and a Mastra agent with memory for follow-up turns.',
     detail: 'Each reply returns a stored response ID, and the next turn sends it as `previous_response_id` to continue the chain.',
     instructions:
       'You are a memory-backed Mastra agent. Use prior stored turns when the user asks follow-up questions.',
     model: DEFAULT_MODEL,
     store: true,
+    supportsConversations: false,
     usesProviderContinuation: false,
     prompts: [
       'Plan a three-step launch checklist for a new AI feature.',
@@ -78,7 +113,8 @@ const EXAMPLES: readonly ExampleConfig[] = [
   },
   {
     id: 'agent-tools',
-    label: 'Mastra Agent + Tool',
+    agentId: TOOL_AGENT_ID,
+    label: 'Mastra Agent + Tool Responses',
     description: 'Uses `agent_id`, `store: true`, and a Mastra agent that can call a real tool.',
     detail:
       'This agent can call `release-status` during the turn, then the stored response stays anchored on the final assistant message.',
@@ -86,6 +122,7 @@ const EXAMPLES: readonly ExampleConfig[] = [
       'You are a Mastra agent with tools. Use tools when the user asks about launch readiness or release status.',
     model: DEFAULT_MODEL,
     store: true,
+    supportsConversations: false,
     usesProviderContinuation: false,
     prompts: [
       'Check release readiness for the Responses API migration.',
@@ -94,8 +131,27 @@ const EXAMPLES: readonly ExampleConfig[] = [
     ],
   },
   {
+    id: 'conversations',
+    agentId: DEFAULT_AGENT_ID,
+    label: 'Conversations',
+    description: 'Creates and loads stored conversations backed by Mastra threads and conversation items.',
+    detail: 'Create a conversation, load its items from the right rail, and continue the same stored thread across turns.',
+    instructions:
+      'You are a memory-backed Mastra agent. Keep the conversation coherent across stored turns and loaded history.',
+    model: DEFAULT_MODEL,
+    store: true,
+    supportsConversations: true,
+    usesProviderContinuation: false,
+    prompts: [
+      'Start a new planning conversation for an API launch.',
+      'Summarize what we have decided so far.',
+      'Turn the plan into a short checklist.',
+    ],
+  },
+  {
     id: 'provider-backed',
-    label: 'Provider-backed Agent',
+    agentId: DEFAULT_AGENT_ID,
+    label: 'Provider-backed Agent Responses',
     description:
       'Uses `agent_id` with provider-managed continuation via `providerOptions.openai.previousResponseId`.',
     detail:
@@ -104,6 +160,7 @@ const EXAMPLES: readonly ExampleConfig[] = [
       'You are an OpenAI provider-backed Responses API example. Continue the conversation using provider-native continuation state.',
     model: DEFAULT_MODEL,
     store: false,
+    supportsConversations: false,
     usesProviderContinuation: true,
     prompts: [
       'Tell me three facts about Saturn.',
@@ -273,15 +330,124 @@ function extractErrorMessage(raw: string) {
   return raw;
 }
 
-function buildRequestBody<T extends CreateResponseParams & { example?: ExampleId }>(params: T): Omit<T, 'example'> {
-  const request = { ...params };
-  delete request.example;
-
-  if (request.agent_id == null) {
-    request.agent_id = params.example === AGENT_TOOLS_EXAMPLE ? TOOL_AGENT_ID : DEFAULT_AGENT_ID;
+function formatConversationTimestamp(value: string | null) {
+  if (!value) {
+    return 'No activity yet';
   }
 
-  return request;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'No activity yet';
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function deriveConversationTitle(prompt: string) {
+  const trimmed = prompt.trim();
+  if (!trimmed) {
+    return 'New conversation';
+  }
+
+  return trimmed.length > 52 ? `${trimmed.slice(0, 49)}...` : trimmed;
+}
+
+function summarizeConversationThread(thread: DemoThread, index: number): ConversationSummary {
+  return {
+    id: thread.id,
+    title: thread.title?.trim() || `Conversation ${index + 1}`,
+    subtitle: formatConversationTimestamp(thread.updatedAt ? new Date(thread.updatedAt).toISOString() : null),
+    updatedAt: thread.updatedAt ? new Date(thread.updatedAt).toISOString() : null,
+  };
+}
+
+function extractConversationMessageText(item: DemoConversationItem) {
+  if (item.type !== 'message') {
+    return '';
+  }
+
+  return item.content?.map((part: DemoConversationTextPart) => part.text).join('') ?? '';
+}
+
+async function buildTurnsFromConversationItems(
+  items: DemoConversationItem[],
+  fallbackModel: string | null,
+): Promise<TurnState[]> {
+  const turns: TurnState[] = [];
+  let pendingPrompt: string | null = null;
+  let previousResponseId: string | null = null;
+  const pendingTools = new Map<string, ToolState>();
+
+  for (const item of items) {
+    if (item.type === 'function_call' && item.call_id && item.name) {
+      pendingTools.set(item.call_id, {
+        callId: item.call_id,
+        toolName: item.name,
+        arguments: item.arguments ? parseToolPayload(item.arguments) : undefined,
+      });
+      continue;
+    }
+
+    if (item.type === 'function_call_output' && item.call_id) {
+      const existingTool = pendingTools.get(item.call_id);
+      pendingTools.set(item.call_id, {
+        callId: item.call_id,
+        toolName: existingTool?.toolName ?? 'Tool',
+        arguments: existingTool?.arguments,
+        output: item.output ? parseToolPayload(item.output) : undefined,
+      });
+      continue;
+    }
+
+    if (item.type !== 'message') {
+      continue;
+    }
+
+    if (item.role === 'user') {
+      pendingPrompt = extractConversationMessageText(item);
+      continue;
+    }
+
+    if (item.role !== 'assistant') {
+      continue;
+    }
+
+    const text = extractConversationMessageText(item);
+
+    turns.push({
+      turnId: item.id,
+      prompt: pendingPrompt ?? '',
+      responseId: item.id,
+      previousResponseId,
+      providerResponseId: null,
+      tools: [...pendingTools.values()],
+      text,
+      raw: JSON.stringify(
+        {
+          message: item,
+          tools: [...pendingTools.values()],
+        },
+        null,
+        2,
+      ),
+      model: fallbackModel,
+      latencyMs: null,
+      tokenCount: estimateTokenCount(text),
+      mode: 'json',
+      status: 'done',
+    });
+
+    previousResponseId = item.id;
+    pendingPrompt = null;
+    pendingTools.clear();
+  }
+
+  return turns;
 }
 
 function updateTurn(turns: TurnState[], turnId: string, updater: (turn: TurnState) => TurnState) {
@@ -341,15 +507,22 @@ function createPendingTurn(
 function buildExampleRequest(
   example: ExampleConfig,
   input: string,
+  conversationId: string | null,
   previousResponseId: string | null,
   previousProviderResponseId: string | null,
 ) {
-  return buildRequestBody({
+  return {
     model: example.model,
+    agent_id: example.agentId,
     input,
     instructions: example.instructions,
-    example: example.id,
-    ...(example.store ? { store: true, previous_response_id: previousResponseId ?? undefined } : {}),
+    ...(example.store
+      ? {
+          store: true,
+          conversation_id: conversationId ?? undefined,
+          previous_response_id: previousResponseId ?? undefined,
+        }
+      : {}),
     ...(example.usesProviderContinuation && previousProviderResponseId
       ? {
           providerOptions: {
@@ -359,7 +532,7 @@ function buildExampleRequest(
           },
         }
       : {}),
-  });
+  } satisfies CreateResponseParams;
 }
 
 function createTurnPatch(payload: unknown, fallbackModel: string | null): TurnPatch {
@@ -533,7 +706,12 @@ function formatToolValue(value: unknown) {
 
 export function MigrationDemo() {
   const [activeExampleId, setActiveExampleId] = useState<ExampleId>('agent-memory');
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [input, setInput] = useState('');
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const [isLoadingConversationItems, setIsLoadingConversationItems] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [mode, setMode] = useState<'idle' | 'json' | 'stream'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -580,6 +758,97 @@ export function MigrationDemo() {
     return () => window.clearInterval(interval);
   }, [activeRequest]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!activeExample.supportsConversations) {
+      setConversations([]);
+      setActiveConversationId(null);
+      return;
+    }
+
+    const loadConversations = async () => {
+      setIsLoadingConversations(true);
+
+      try {
+        const response = await mastraClient.listMemoryThreads({
+          agentId: activeExample.agentId,
+          page: 0,
+          perPage: 50,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        const nextConversations = response.threads.map(summarizeConversationThread);
+        setConversations(nextConversations);
+        setActiveConversationId(current =>
+          current && nextConversations.some(conversation => conversation.id === current)
+            ? current
+            : (nextConversations[0]?.id ?? null),
+        );
+      } catch (loadError) {
+        if (!isCancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load conversations.');
+          setConversations([]);
+          setActiveConversationId(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingConversations(false);
+        }
+      }
+    };
+
+    void loadConversations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeExample]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!activeExample.supportsConversations || !activeConversationId) {
+      setTurns([]);
+      return;
+    }
+
+    const loadConversationItems = async () => {
+      setIsLoadingConversationItems(true);
+      setError(null);
+
+      try {
+        const itemsPage = await mastraClient.conversations.items.list(activeConversationId);
+        const hydratedTurns = await buildTurnsFromConversationItems(itemsPage.data, activeExample.model);
+
+        if (!isCancelled) {
+          setTurns(hydratedTurns);
+          setOpenRawTurnId(null);
+        }
+      } catch (loadError) {
+        if (!isCancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load conversation messages.');
+          setTurns([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingConversationItems(false);
+        }
+      }
+    };
+
+    void loadConversationItems();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeConversationId, activeExample]);
+
   const handleCopy = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
@@ -601,6 +870,34 @@ export function MigrationDemo() {
     setOpenRawTurnId(null);
     setTurns([]);
     setActiveRequest(null);
+    setActiveConversationId(null);
+    setConversations([]);
+  };
+
+  const handleCreateConversation = async () => {
+    if (isPending || isCreatingConversation || !activeExample.supportsConversations) {
+      return;
+    }
+
+    setIsCreatingConversation(true);
+    setError(null);
+
+    try {
+      const conversation = await mastraClient.conversations.create({
+        agent_id: activeExample.agentId,
+        title: 'New conversation',
+      });
+
+      const summary = summarizeConversationThread(conversation.thread, 0);
+      setConversations(current => [summary, ...current.filter(existing => existing.id !== summary.id)]);
+      setActiveConversationId(conversation.id);
+      setTurns([]);
+      setOpenRawTurnId(null);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create conversation.');
+    } finally {
+      setIsCreatingConversation(false);
+    }
   };
 
   const submit = async (nextMode: 'json' | 'stream') => {
@@ -621,9 +918,24 @@ export function MigrationDemo() {
     setInput('');
 
     try {
+      let conversationId = activeConversationId;
+
+      if (activeExample.store && !conversationId) {
+        const conversation = await mastraClient.conversations.create({
+          agent_id: activeExample.agentId,
+          title: deriveConversationTitle(trimmedInput),
+        });
+
+        const summary = summarizeConversationThread(conversation.thread, 0);
+        setConversations(current => [summary, ...current.filter(existing => existing.id !== summary.id)]);
+        setActiveConversationId(conversation.id);
+        conversationId = conversation.id;
+      }
+
       const requestBody = buildExampleRequest(
         activeExample,
         trimmedInput,
+        conversationId,
         previousResponseId,
         previousProviderResponseId,
       );
@@ -643,6 +955,20 @@ export function MigrationDemo() {
             status: 'done',
           })),
         );
+
+        if (conversationId) {
+          setConversations(current =>
+            current.map(conversation =>
+              conversation.id === conversationId
+                ? {
+                    ...conversation,
+                    title: conversation.title === 'New conversation' ? deriveConversationTitle(trimmedInput) : conversation.title,
+                    subtitle: 'Updated just now',
+                  }
+                : conversation,
+            ),
+          );
+        }
         return;
       }
 
@@ -686,11 +1012,11 @@ export function MigrationDemo() {
   };
 
   return (
-    <main className="demo-shell demo-shell--with-sidebar">
+    <main className={`demo-shell demo-shell--with-sidebar${activeExample.supportsConversations ? ' demo-shell--with-conversations' : ''}`}>
       <aside className="demo-sidebar">
         <div className="demo-sidebar__header">
           <span className="demo-sidebar__eyebrow">Modes</span>
-          <p className="demo-sidebar__intro">Switch between memory-backed, agent-with-tools, and provider-backed flows.</p>
+          <p className="demo-sidebar__intro">Switch between response chaining, tools, conversations, and provider-backed continuation.</p>
         </div>
 
         <nav className="demo-sidebar__nav" aria-label="Example modes">
@@ -748,9 +1074,17 @@ export function MigrationDemo() {
 
         <section className="demo-chat">
           <div className="demo-messages">
-            {turns.length === 0 ? (
+            {isLoadingConversationItems ? (
               <div className="demo-empty-state">
-                <p>{activeExample.detail}</p>
+                <p>Loading conversation messages...</p>
+              </div>
+            ) : turns.length === 0 ? (
+              <div className="demo-empty-state">
+                <p>
+                  {activeExample.supportsConversations && !activeConversationId
+                    ? 'Create a conversation or select one from the right to start chatting.'
+                    : activeExample.detail}
+                </p>
                 <div className="demo-chip-list">
                   {activeExample.prompts.map(prompt => (
                     <button key={prompt} className="demo-chip" onClick={() => setInput(prompt)} type="button">
@@ -928,6 +1262,47 @@ export function MigrationDemo() {
           </div>
         </section>
       </section>
+
+      {activeExample.supportsConversations ? (
+        <aside className="demo-conversations">
+          <div className="demo-conversations__header">
+            <span className="demo-sidebar__eyebrow">Conversations</span>
+
+            <button
+              className="demo-conversations__create"
+              disabled={isPending || isCreatingConversation}
+              onClick={() => void handleCreateConversation()}
+              type="button"
+              aria-label="Create conversation"
+              title="Create conversation"
+            >
+              {isCreatingConversation ? '…' : '+'}
+            </button>
+          </div>
+
+          <div className="demo-conversations__list" aria-label="Conversations">
+            {isLoadingConversations ? (
+              <div className="demo-conversations__empty">Loading conversations...</div>
+            ) : conversations.length === 0 ? (
+              <div className="demo-conversations__empty">No conversations yet.</div>
+            ) : (
+              conversations.map(conversation => (
+                <button
+                  key={conversation.id}
+                  className={`demo-conversation-item${conversation.id === activeConversationId ? ' is-active' : ''}`}
+                  disabled={isPending}
+                  onClick={() => setActiveConversationId(conversation.id)}
+                  type="button"
+                >
+                  <span className="demo-conversation-item__title">{conversation.title}</span>
+                  <span className="demo-conversation-item__subtitle">{conversation.subtitle}</span>
+                  <span className="demo-conversation-item__id">{truncateResponseId(conversation.id)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+      ) : null}
 
       <div className={`demo-toast${toastMessage ? ' is-visible' : ''}`} aria-live="polite" role="status">
         {toastMessage}
