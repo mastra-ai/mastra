@@ -423,4 +423,60 @@ describe('workspace_lsp_inspect', () => {
     });
     expect(result).not.toHaveProperty('implementation');
   });
+
+  it('should still return secondary results when hover query fails', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1\nconst bar = foo\nfoo()');
+
+    const fileUri = `file://${path.join(tempDir, 'test.ts')}`;
+    const mockClient = {
+      queryHover: vi.fn().mockRejectedValue(new Error('hover failed')),
+      queryDefinition: vi.fn().mockResolvedValue([
+        {
+          uri: fileUri,
+          range: { start: { line: 1, character: 0 }, end: { line: 1, character: 3 } },
+        },
+      ]),
+      queryImplementation: vi.fn().mockResolvedValue([
+        {
+          uri: fileUri,
+          range: { start: { line: 2, character: 0 }, end: { line: 2, character: 3 } },
+        },
+      ]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([
+        {
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+          severity: 1,
+          message: 'Boom',
+          source: 'ts',
+        },
+      ]),
+      notifyClose: vi.fn(),
+      serverName: 'typescript',
+    };
+
+    const mockLsp = {
+      root: tempDir,
+      prepareQuery: vi.fn().mockResolvedValue({
+        client: mockClient,
+        uri: fileUri,
+        languageId: 'typescript',
+        serverName: 'typescript',
+      }),
+    };
+
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+
+    const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: 'test.ts', line: 1, match: 'const <<<foo = 1' },
+      { workspace },
+    );
+
+    expect(result).toMatchObject({
+      diagnostics: [{ severity: 'error', message: 'Boom', source: 'ts' }],
+      definition: [{ location: expect.stringContaining('test.ts:L2:C1') }],
+    });
+    expect(result).toHaveProperty('implementation');
+    expect(result).not.toHaveProperty('hover');
+  });
 });

@@ -173,7 +173,7 @@ export const lspInspectTool = createTool({
 
     try {
       // Primary query: hover
-      const hoverResult = await client.queryHover(uri, position);
+      const hoverResult = await client.queryHover(uri, position).catch(() => null);
       if (hoverResult) {
         const contents = hoverResult.contents;
         if (contents) {
