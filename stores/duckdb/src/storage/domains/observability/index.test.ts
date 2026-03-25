@@ -455,6 +455,46 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(error?.estimatedCost).toBeCloseTo(0.5);
     });
 
+    it('getMetricBreakdown accepts discovered label keys with non-identifier characters', async () => {
+      await storage.batchCreateMetrics({
+        metrics: [
+          {
+            timestamp: new Date('2026-01-01T00:00:20Z'),
+            name: 'mastra_agent_duration_ms',
+            value: 300,
+            labels: { 'foo-bar': 'alpha' },
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:25Z'),
+            name: 'mastra_agent_duration_ms',
+            value: 400,
+            labels: { 'foo-bar': 'beta' },
+            entityType: EntityType.AGENT,
+            entityName: 'codeAgent',
+          },
+        ],
+      });
+
+      const keys = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
+      expect(keys.keys).toContain('foo-bar');
+
+      const result = await storage.getMetricBreakdown({
+        name: ['mastra_agent_duration_ms'],
+        groupBy: ['foo-bar'],
+        aggregation: 'count',
+      });
+
+      const alpha = result.groups.find(group => group.dimensions['foo-bar'] === 'alpha');
+      const beta = result.groups.find(group => group.dimensions['foo-bar'] === 'beta');
+      const missing = result.groups.find(group => group.dimensions['foo-bar'] === null);
+
+      expect(alpha?.value).toBe(1);
+      expect(beta?.value).toBe(1);
+      expect(missing?.value).toBe(3);
+    });
+
     it('getMetricTimeSeries returns bucketed data', async () => {
       const result = await storage.getMetricTimeSeries({
         name: ['mastra_agent_duration_ms'],
@@ -466,6 +506,43 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(mainSeries.points.length).toBeGreaterThanOrEqual(1);
       expect(mainSeries.costUnit).toBe('usd');
       expect(mainSeries.points[0]!.estimatedCost).toBeCloseTo(0.8);
+    });
+
+    it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
+      await storage.batchCreateMetrics({
+        metrics: [
+          {
+            timestamp: new Date('2026-01-01T02:00:00Z'),
+            name: 'mastra_collision_metric',
+            value: 10,
+            labels: { segmentA: 'a', segmentB: 'b|c' },
+            entityType: EntityType.TOOL,
+            entityName: 'search',
+          },
+          {
+            timestamp: new Date('2026-01-01T02:00:00Z'),
+            name: 'mastra_collision_metric',
+            value: 20,
+            labels: { segmentA: 'a|b', segmentB: 'c' },
+            entityType: EntityType.TOOL,
+            entityName: 'search',
+          },
+        ],
+      });
+
+      const result = await storage.getMetricTimeSeries({
+        name: ['mastra_collision_metric'],
+        interval: '1h',
+        aggregation: 'sum',
+        groupBy: ['segmentA', 'segmentB'],
+      });
+
+      expect(result.series).toHaveLength(2);
+      expect(result.series.every(series => series.name === 'a|b|c')).toBe(true);
+      expect(result.series.map(series => series.points.length)).toEqual([1, 1]);
+      expect(result.series.map(series => series.points[0]!.value).sort((left, right) => left - right)).toEqual([
+        10, 20,
+      ]);
     });
 
     it('filters metrics by canonical cost fields', async () => {
@@ -740,6 +817,87 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.feedback[0]!.value).toBe(1);
       expect(filtered.feedback[0]!.userId).toBe('user-1');
       expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+    });
+
+    it('batch creates and lists feedback', async () => {
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'batch-trace-1',
+            spanId: null,
+            source: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: 'Helpful',
+            experimentId: null,
+            userId: 'user-1',
+            sourceId: 'source-1',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'batch-trace-2',
+            spanId: 'span-2',
+            source: 'reviewer',
+            feedbackType: 'rating',
+            value: 4,
+            comment: null,
+            experimentId: 'exp-1',
+            userId: 'user-2',
+            sourceId: 'source-2',
+            metadata: { category: 'quality' },
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:02Z'),
+            traceId: 'batch-trace-3',
+            spanId: null,
+            source: 'system',
+            feedbackType: 'flag',
+            value: 'needs-review',
+            comment: 'Escalated',
+            experimentId: null,
+            userId: null,
+            sourceId: 'source-3',
+            metadata: { severity: 'high' },
+          },
+        ],
+      });
+
+      const result = await storage.listFeedback({
+        orderBy: { field: 'timestamp', direction: 'ASC' },
+      });
+
+      expect(result.feedback).toHaveLength(3);
+      expect(result.feedback).toEqual([
+        expect.objectContaining({
+          traceId: 'batch-trace-1',
+          spanId: null,
+          source: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'Helpful',
+          metadata: null,
+        }),
+        expect.objectContaining({
+          traceId: 'batch-trace-2',
+          spanId: 'span-2',
+          source: 'reviewer',
+          feedbackType: 'rating',
+          value: 4,
+          comment: null,
+          metadata: { category: 'quality' },
+        }),
+        expect.objectContaining({
+          traceId: 'batch-trace-3',
+          spanId: null,
+          source: 'system',
+          feedbackType: 'flag',
+          value: 'needs-review',
+          comment: 'Escalated',
+          metadata: { severity: 'high' },
+        }),
+      ]);
     });
   });
 });

@@ -124,6 +124,14 @@ type CostSummary = {
   costUnit: string | null;
 };
 
+function buildGroupByAlias(index: number): string {
+  return `group_by_${index}`;
+}
+
+function toSeriesDisplayValue(value: unknown): string {
+  return value === null || value === undefined ? '' : String(value);
+}
+
 function getCostSummarySelect(prefix = ''): string {
   const ref = (column: string) => `${prefix}${column}`;
   return [
@@ -162,10 +170,9 @@ function buildCombinedWhereClause(
 }
 
 function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
-  return groupBy.map(key => {
-    const parsed = parseFieldKey(key);
-
-    if (METRIC_COLUMN_SET.has(parsed)) {
+  return groupBy.map((key, index) => {
+    if (METRIC_COLUMN_SET.has(key)) {
+      const parsed = parseFieldKey(key);
       if (METRIC_LABEL_ONLY_GROUP_BY_EXCLUDED.has(parsed as MetricColumn)) {
         throw new Error(`Invalid groupBy column(s): ${key}`);
       }
@@ -181,12 +188,13 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
     const labelPath = buildJsonPath(key).replace(/'/g, "''");
     const labelExpr = `json_extract_string(labels, '${labelPath}')`;
+    const alias = buildGroupByAlias(index);
     return {
       kind: 'label',
       key,
-      selectSql: `${labelExpr} AS "${key}"`,
-      groupSql: labelExpr,
-      resultKey: key,
+      selectSql: `${labelExpr} AS ${alias}`,
+      groupSql: alias,
+      resultKey: alias,
     };
   });
 }
@@ -502,16 +510,13 @@ export async function getMetricTimeSeries(
     >();
 
     for (const row of rows) {
-      const name = resolvedGroupBy
-        .map(entry => {
-          const value = row[entry.resultKey];
-          return value === null || value === undefined ? '' : String(value);
-        })
-        .join('|');
+      const dimensionValues = resolvedGroupBy.map(entry => row[entry.resultKey]);
+      const seriesKey = JSON.stringify(dimensionValues);
+      const name = dimensionValues.map(toSeriesDisplayValue).join('|');
       const costSummary = normalizeCostSummaryRow(row);
 
-      if (!seriesMap.has(name)) {
-        seriesMap.set(name, {
+      if (!seriesMap.has(seriesKey)) {
+        seriesMap.set(seriesKey, {
           name,
           costUnits: new Set(),
           points: [],
@@ -519,10 +524,10 @@ export async function getMetricTimeSeries(
       }
 
       if (costSummary.costUnit) {
-        seriesMap.get(name)!.costUnits.add(costSummary.costUnit);
+        seriesMap.get(seriesKey)!.costUnits.add(costSummary.costUnit);
       }
 
-      seriesMap.get(name)!.points.push({
+      seriesMap.get(seriesKey)!.points.push({
         timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
         value: Number(row.value ?? 0),
         estimatedCost: costSummary.estimatedCost,

@@ -6,7 +6,7 @@ export function buildJsonPath(key: string): string {
     return `$.${parseFieldKey(key)}`;
   } catch {
     const escaped = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    return `$["${escaped}"]`;
+    return `$."${escaped}"`;
   }
 }
 

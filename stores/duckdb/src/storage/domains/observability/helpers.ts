@@ -14,8 +14,11 @@ export function toDate(val: unknown): Date {
   if (val === null || val === undefined) {
     throw new Error('Expected date value but received null/undefined');
   }
-  if (val instanceof Date) return val;
-  return new Date(String(val));
+  const date = val instanceof Date ? val : new Date(String(val));
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('Expected valid date but received invalid date');
+  }
+  return date;
 }
 
 /** Coerce a value to a Date, returning null for nullish values. */

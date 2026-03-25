@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
 import type {
@@ -38,13 +38,14 @@ type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
  * This avoids loading the concrete observability implementation until init or first use,
  * which lets DuckDBStore degrade cleanly when paired with an older @mastra/core runtime.
  */
-export class ObservabilityStorageDuckDB {
+export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   private db: DuckDBConnection;
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;
   private unavailableError: MastraError | null = null;
 
   constructor(config: ObservabilityDuckDBConfig) {
+    super();
     this.db = config.db;
   }
 
@@ -389,7 +390,7 @@ export class DuckDBStore extends MastraCompositeStore {
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });
 
     this.stores = {
-      observability: this.observabilityStore as unknown as StorageDomains['observability'],
+      observability: this.observabilityStore,
     };
   }
 
