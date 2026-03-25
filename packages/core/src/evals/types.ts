@@ -453,6 +453,47 @@ export type TrajectoryComparisonOptions = {
 };
 
 /**
+ * A lightweight step matcher for trajectory expectations.
+ * Simpler than `TrajectoryStep` — just specify `name` and optionally `stepType` and `data`.
+ *
+ * @example
+ * ```ts
+ * // Match any step named 'search'
+ * { name: 'search' }
+ *
+ * // Match a tool_call named 'search' with specific args
+ * { name: 'search', stepType: 'tool_call', data: { query: 'weather' } }
+ *
+ * // Match an agent run with nested expectations for its children
+ * {
+ *   name: 'researchAgent',
+ *   stepType: 'agent_run',
+ *   children: {
+ *     ordering: 'unordered',
+ *     steps: [
+ *       { name: 'search', stepType: 'tool_call' },
+ *       { name: 'summarize', stepType: 'tool_call' },
+ *     ],
+ *   },
+ * }
+ * ```
+ */
+export type ExpectedStep = {
+  /** Step name to match (tool name, agent ID, workflow step name, etc.) */
+  name: string;
+  /** Step type to match. If omitted, matches any step type with the given name */
+  stepType?: TrajectoryStepType;
+  /** Expected step-specific data (toolArgs for tool_call, output for workflow_step, etc.) */
+  data?: Record<string, unknown>;
+  /**
+   * Nested trajectory expectation for this step's children.
+   * Overrides the parent config for evaluating this step's children.
+   * e.g., require strict ordering for the parent agent but unordered for a sub-agent.
+   */
+  children?: TrajectoryExpectation;
+};
+
+/**
  * Full trajectory expectation config for the unified trajectory scorer.
  * Can be set as constructor defaults (agent-level) or per dataset item (prompt-specific).
  * Per-item values override constructor defaults.
@@ -461,7 +502,7 @@ export type TrajectoryExpectation = {
   // --- Accuracy ---
 
   /** Expected steps for accuracy checking */
-  steps?: TrajectoryStep[];
+  steps?: ExpectedStep[];
 
   /**
    * How to compare step ordering.

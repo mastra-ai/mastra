@@ -1,4 +1,4 @@
-import type { Trajectory, TrajectoryExpectation, TrajectoryStep } from '@mastra/core/evals';
+import type { ExpectedStep, Trajectory, TrajectoryExpectation, TrajectoryStep } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
@@ -9,15 +9,7 @@ export interface TrajectoryAccuracyLLMOptions {
   /** The LLM model to use as judge */
   model: MastraModelConfig;
   /** Optional expected trajectory to compare against */
-  expectedTrajectory?: Trajectory;
-}
-
-/**
- * Resolve a TrajectoryExpectation (from dataset item) into a Trajectory for formatting.
- */
-function expectationToTrajectory(expectation: TrajectoryExpectation): Trajectory | undefined {
-  if (!expectation.steps || expectation.steps.length === 0) return undefined;
-  return { steps: expectation.steps };
+  expectedTrajectory?: Trajectory | ExpectedStep[];
 }
 
 const analyzeOutputSchema = z.object({
@@ -56,6 +48,16 @@ function formatTrajectory(trajectory: Trajectory): string {
   return trajectory.steps
     .map((step: TrajectoryStep, i: number) => {
       return `${i + 1}. [${step.stepType}] ${step.name}${formatStepDetails(step)}`;
+    })
+    .join('\n');
+}
+
+function formatExpectedSteps(steps: ExpectedStep[]): string {
+  return steps
+    .map((step: ExpectedStep, i: number) => {
+      const typeStr = step.stepType ? `[${step.stepType}] ` : '';
+      const dataStr = step.data ? ` (data: ${JSON.stringify(step.data)})` : '';
+      return `${i + 1}. ${typeStr}${step.name}${dataStr}`;
     })
     .join('\n');
 }
@@ -113,18 +115,21 @@ export function createTrajectoryAccuracyScorerLLM({
       // run.output is a Trajectory (pre-extracted by runEvals pipeline)
       const actualTrajectory: Trajectory = run.output;
 
-      // Resolve expectedTrajectory: prefer constructor option, fallback to dataset item
-      let resolvedExpectedTrajectory: Trajectory | undefined = staticExpectedTrajectory;
-      if (!resolvedExpectedTrajectory && run.expectedTrajectory) {
-        resolvedExpectedTrajectory = expectationToTrajectory(run.expectedTrajectory as TrajectoryExpectation);
+      // Resolve expected steps: prefer constructor option, fallback to dataset item
+      let expectedSteps: ExpectedStep[] | undefined;
+      if (staticExpectedTrajectory) {
+        expectedSteps = Array.isArray(staticExpectedTrajectory)
+          ? staticExpectedTrajectory
+          : staticExpectedTrajectory.steps.map((s: TrajectoryStep) => ({ name: s.name, stepType: s.stepType }));
+      } else if (run.expectedTrajectory) {
+        const expectation = run.expectedTrajectory as TrajectoryExpectation;
+        expectedSteps = expectation.steps && expectation.steps.length > 0 ? expectation.steps : undefined;
       }
 
       return {
         actualTrajectory,
         actualTrajectoryFormatted: formatTrajectory(actualTrajectory),
-        expectedTrajectoryFormatted: resolvedExpectedTrajectory
-          ? formatTrajectory(resolvedExpectedTrajectory)
-          : undefined,
+        expectedTrajectoryFormatted: expectedSteps ? formatExpectedSteps(expectedSteps) : undefined,
         hasSteps: actualTrajectory.steps.length > 0,
       };
     })

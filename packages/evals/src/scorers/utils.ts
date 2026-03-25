@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type {
+  ExpectedStep,
   ScorerRunInputForAgent,
   ScorerRunOutputForAgent,
   ScoringInput,
@@ -744,7 +745,7 @@ export { extractTrajectory } from '@mastra/core/evals';
  */
 export function compareTrajectories(
   actual: Trajectory,
-  expected: Trajectory,
+  expected: Trajectory | { steps: ExpectedStep[] },
   options: {
     ordering?: 'strict' | 'relaxed' | 'unordered';
     /** @deprecated Use ordering: 'strict' instead */
@@ -755,6 +756,44 @@ export function compareTrajectories(
 ): TrajectoryComparisonResult {
   const { compareStepData = false, allowRepeatedSteps = true } = options;
 
+  // Normalize expected to ExpectedStep[]. We need to distinguish between
+  // Trajectory (containing TrajectoryStep[]) and { steps: ExpectedStep[] }.
+  // TrajectoryStep variants have fields like toolArgs, toolResult, agentId, modelId, etc.
+  // ExpectedStep has optional data, children (TrajectoryExpectation), and lacks those fields.
+  const trajectoryStepKeys = [
+    'toolArgs',
+    'toolResult',
+    'agentId',
+    'modelId',
+    'durationMs',
+    'success',
+    'promptTokens',
+    'completionTokens',
+  ];
+  const hasTrajectorySteps =
+    expected.steps.length > 0 && expected.steps.some((s: any) => trajectoryStepKeys.some(k => k in s));
+
+  let normalizedExpected: { steps: ExpectedStep[] };
+  if (hasTrajectorySteps) {
+    // Convert TrajectoryStep[] to ExpectedStep[] by extracting step-specific data
+    normalizedExpected = {
+      steps: (expected.steps as TrajectoryStep[]).map((s: TrajectoryStep) => {
+        const stepData = getStepData(s);
+        const data: Record<string, unknown> = {};
+        if (stepData.input !== undefined) data.input = stepData.input;
+        if (stepData.output !== undefined) data.output = stepData.output;
+        return {
+          name: s.name,
+          stepType: s.stepType,
+          ...(Object.keys(data).length > 0 ? { data } : {}),
+        } as ExpectedStep;
+      }),
+    };
+  } else {
+    // Already ExpectedStep[] — use as-is
+    normalizedExpected = expected as { steps: ExpectedStep[] };
+  }
+
   // Resolve ordering: new `ordering` option takes precedence over deprecated `strictOrder`
   let ordering: 'strict' | 'relaxed' | 'unordered' = 'relaxed';
   if (options.ordering) {
@@ -763,7 +802,7 @@ export function compareTrajectories(
     ordering = 'strict';
   }
 
-  if (expected.steps.length === 0) {
+  if (normalizedExpected.steps.length === 0) {
     return {
       score: actual.steps.length === 0 ? 1 : 0,
       matchedSteps: 0,
@@ -788,14 +827,18 @@ export function compareTrajectories(
     .map(([name]: [string, number]) => name);
 
   if (ordering === 'strict') {
-    return compareStrictOrder(actual, expected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+    return compareStrictOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
   }
 
   if (ordering === 'unordered') {
-    return compareUnorderedPresence(actual, expected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+    return compareUnorderedPresence(actual, normalizedExpected, {
+      compareStepData,
+      allowRepeatedSteps,
+      repeatedSteps,
+    });
   }
 
-  return compareRelaxedOrder(actual, expected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+  return compareRelaxedOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
 }
 
 /**
@@ -822,15 +865,16 @@ export type TrajectoryComparisonResult = {
 
 function compareStrictOrder(
   actual: Trajectory,
-  expected: Trajectory,
+  expected: { steps: ExpectedStep[] },
   opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
-  const expectedNames: string[] = expected.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
 
   // Strict: exact same sequence
   let matchedSteps = 0;
   const outOfOrderSteps: string[] = [];
+  const matchedExpectedIndices = new Set<number>();
   const maxLen = Math.max(actualNames.length, expectedNames.length);
 
   for (let i = 0; i < maxLen; i++) {
@@ -838,18 +882,26 @@ function compareStrictOrder(
     const expectedName = expectedNames[i];
     if (actualName === expectedName) {
       if (opts.compareStepData && actual.steps[i] && expected.steps[i]) {
-        if (stepsDataMatch(actual.steps[i]!, expected.steps[i]!)) {
+        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, true)) {
           matchedSteps++;
+          matchedExpectedIndices.add(i);
+        }
+      } else if (actual.steps[i] && expected.steps[i]) {
+        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, false)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
         }
       } else {
         matchedSteps++;
+        matchedExpectedIndices.add(i);
       }
     } else if (actualName && expectedNames.includes(actualName)) {
       outOfOrderSteps.push(actualName);
     }
   }
 
-  const missingSteps: string[] = expectedNames.filter((name: string) => !actualNames.includes(name));
+  // Missing steps = expected steps that were not matched (accounts for stepType/data mismatches)
+  const missingSteps: string[] = expectedNames.filter((_: string, i: number) => !matchedExpectedIndices.has(i));
   const extraSteps: string[] = actualNames.filter((name: string) => !expectedNames.includes(name));
 
   let score = matchedSteps / expected.steps.length;
@@ -879,16 +931,17 @@ function compareStrictOrder(
 
 function compareRelaxedOrder(
   actual: Trajectory,
-  expected: Trajectory,
+  expected: { steps: ExpectedStep[] },
   opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
-  const expectedNames: string[] = expected.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
 
   // Relaxed: expected steps must appear in order but extra steps are allowed
   let matchedSteps = 0;
   let lastMatchedIndex = -1;
   const outOfOrderSteps: string[] = [];
+  const matchedExpectedIndices = new Set<number>();
 
   for (let i = 0; i < expectedNames.length; i++) {
     const expectedName = expectedNames[i];
@@ -896,16 +949,18 @@ function compareRelaxedOrder(
 
     for (let j = lastMatchedIndex + 1; j < actualNames.length; j++) {
       if (actualNames[j] === expectedName) {
-        if (opts.compareStepData && actual.steps[j] && expected.steps[i]) {
-          if (stepsDataMatch(actual.steps[j]!, expected.steps[i]!)) {
+        if (actual.steps[j] && expected.steps[i]) {
+          if (expectedStepMatches(actual.steps[j]!, expected.steps[i]!, opts.compareStepData)) {
             matchedSteps++;
             lastMatchedIndex = j;
+            matchedExpectedIndices.add(i);
             found = true;
             break;
           }
         } else {
           matchedSteps++;
           lastMatchedIndex = j;
+          matchedExpectedIndices.add(i);
           found = true;
           break;
         }
@@ -920,7 +975,8 @@ function compareRelaxedOrder(
     }
   }
 
-  const missingSteps = expectedNames.filter(name => !actualNames.includes(name));
+  // Missing steps = expected steps that were not matched (by name + stepType + data, not just name)
+  const missingSteps = expectedNames.filter((_, i) => !matchedExpectedIndices.has(i));
   const expectedSet = new Set(expectedNames);
   const extraSteps = actualNames.filter(name => !expectedSet.has(name));
 
@@ -959,30 +1015,24 @@ function getStepData(step: TrajectoryStep): { input?: unknown; output?: unknown 
   }
 }
 
-function stepsDataMatch(actual: TrajectoryStep, expected: TrajectoryStep): boolean {
+/**
+ * Check if an actual TrajectoryStep matches an ExpectedStep.
+ * Matches by name, optionally by stepType, and optionally by data fields.
+ */
+function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep, compareData: boolean): boolean {
   if (actual.name !== expected.name) return false;
-  if (actual.stepType !== expected.stepType) return false;
+  if (expected.stepType && actual.stepType !== expected.stepType) return false;
 
-  const expectedData = getStepData(expected);
-  const actualData = getStepData(actual);
-
-  if (expectedData.input !== undefined) {
-    try {
-      if (JSON.stringify(actualData.input) !== JSON.stringify(expectedData.input)) {
+  if (compareData && expected.data) {
+    const actualData = getStepData(actual);
+    for (const [key, value] of Object.entries(expected.data)) {
+      const actualField = key === 'input' ? actualData.input : key === 'output' ? actualData.output : undefined;
+      if (actualField === undefined) return false;
+      try {
+        if (JSON.stringify(actualField) !== JSON.stringify(value)) return false;
+      } catch {
         return false;
       }
-    } catch {
-      return false;
-    }
-  }
-
-  if (expectedData.output !== undefined) {
-    try {
-      if (JSON.stringify(actualData.output) !== JSON.stringify(expectedData.output)) {
-        return false;
-      }
-    } catch {
-      return false;
     }
   }
 
@@ -991,42 +1041,47 @@ function stepsDataMatch(actual: TrajectoryStep, expected: TrajectoryStep): boole
 
 function compareUnorderedPresence(
   actual: Trajectory,
-  expected: Trajectory,
+  expected: { steps: ExpectedStep[] },
   opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
-  const expectedNames: string[] = expected.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
 
   let matchedSteps = 0;
+  const matchedExpectedIndices = new Set<number>();
 
   if (opts.compareStepData) {
     // For data comparison, try to match each expected step to an unused actual step
     const usedIndices = new Set<number>();
-    for (const expectedStep of expected.steps) {
+    for (let i = 0; i < expected.steps.length; i++) {
+      const expectedStep = expected.steps[i]!;
       for (let j = 0; j < actual.steps.length; j++) {
-        if (!usedIndices.has(j) && stepsDataMatch(actual.steps[j]!, expectedStep)) {
+        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, true)) {
           matchedSteps++;
+          matchedExpectedIndices.add(i);
           usedIndices.add(j);
           break;
         }
       }
     }
   } else {
-    // Simple name-based presence check
-    const actualNameCounts = new Map<string, number>();
-    for (const name of actualNames) {
-      actualNameCounts.set(name, (actualNameCounts.get(name) || 0) + 1);
-    }
-    for (const name of expectedNames) {
-      const count = actualNameCounts.get(name) || 0;
-      if (count > 0) {
-        matchedSteps++;
-        actualNameCounts.set(name, count - 1);
+    // Name + stepType based presence check using expectedStepMatches
+    const usedIndices = new Set<number>();
+    for (let i = 0; i < expected.steps.length; i++) {
+      const expectedStep = expected.steps[i]!;
+      for (let j = 0; j < actual.steps.length; j++) {
+        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, false)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
+          usedIndices.add(j);
+          break;
+        }
       }
     }
   }
 
-  const missingSteps = expectedNames.filter(name => !actualNames.includes(name));
+  // Missing steps = expected steps that were not matched (accounts for stepType/data mismatches)
+  const missingSteps = expectedNames.filter((_, i) => !matchedExpectedIndices.has(i));
   const expectedSet = new Set(expectedNames);
   const extraSteps = actualNames.filter(name => !expectedSet.has(name));
 

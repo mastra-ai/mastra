@@ -241,7 +241,12 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       const pp = result.preprocessStepResult;
       expect(pp).toBeDefined();
       expect(pp?.actualTrajectory.steps).toHaveLength(2);
-      expect(pp?.expectedTrajectory).toBe(expectedTrajectory);
+      expect(pp?.expectedTrajectory).toStrictEqual({
+        steps: [
+          { name: 'search', stepType: 'tool_call' },
+          { name: 'summarize', stepType: 'tool_call' },
+        ],
+      });
       expect(pp?.actualStepNames).toEqual(['search', 'summarize']);
       expect(pp?.expectedStepNames).toEqual(['search', 'summarize']);
       expect(pp?.comparison).toHaveProperty('score');
@@ -459,5 +464,254 @@ describe('createTrajectoryScorerCode', () => {
 
     const result = await scorer.run(makeRun(actual, itemExpectation));
     expect(result.score).toBe(0);
+  });
+
+  describe('ExpectedStep support', () => {
+    test('should match ExpectedStep by name only', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+        },
+      });
+
+      const actual = makeTrajectory([{ name: 'search' }, { name: 'summarize' }]);
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBeGreaterThan(0);
+      expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(2);
+    });
+
+    test('should match ExpectedStep by name + stepType', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search', stepType: 'tool_call' }],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [{ stepType: 'model_generation', name: 'search' }],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      // stepType mismatch — should not match
+      expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(0);
+    });
+
+    test('should match ExpectedStep with data comparison', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          compareStepData: true,
+        },
+      });
+
+      const actual = makeTrajectory([{ name: 'search', toolArgs: { query: 'hello' } }]);
+      const result = await scorer.run(makeRun(actual));
+      expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(1);
+    });
+
+    test('should fail ExpectedStep data mismatch', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          compareStepData: true,
+        },
+      });
+
+      const actual = makeTrajectory([{ name: 'search', toolArgs: { query: 'wrong' } }]);
+      const result = await scorer.run(makeRun(actual));
+      expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(0);
+    });
+  });
+
+  describe('nested expectation evaluation', () => {
+    test('should recursively evaluate children with nested config', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent-run',
+              stepType: 'agent_run',
+              children: {
+                ordering: 'strict',
+                steps: [{ name: 'tool-a' }, { name: 'tool-b' }],
+              },
+            },
+          ],
+        },
+      });
+
+      // Actual trajectory with matching children in correct order
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent-run',
+            agentId: 'agent-1',
+            children: [
+              { stepType: 'tool_call', name: 'tool-a' },
+              { stepType: 'tool_call', name: 'tool-b' },
+            ],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBeGreaterThan(0);
+      expect(result.preprocessStepResult?.nested).toBeDefined();
+      expect(result.preprocessStepResult?.nested).toHaveLength(1);
+      expect(result.preprocessStepResult?.nested?.[0]?.stepName).toBe('agent-run');
+      expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.matchedSteps).toBe(2);
+    });
+
+    test('should score nested children with different ordering than parent', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          ordering: 'strict',
+          steps: [
+            {
+              name: 'orchestrator',
+              stepType: 'agent_run',
+              children: {
+                ordering: 'unordered',
+                steps: [{ name: 'fetch' }, { name: 'validate' }],
+              },
+            },
+          ],
+        },
+      });
+
+      // Parent step matches, children are out of order but allowed (unordered)
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'orchestrator',
+            children: [
+              { stepType: 'tool_call', name: 'validate' },
+              { stepType: 'tool_call', name: 'fetch' },
+            ],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBeGreaterThan(0);
+      const nested = result.preprocessStepResult?.nested?.[0];
+      expect(nested?.accuracy?.matchedSteps).toBe(2);
+    });
+
+    test('should report missing children in nested evaluation', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent-run',
+              children: {
+                steps: [{ name: 'tool-a' }, { name: 'tool-b' }, { name: 'tool-c' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent-run',
+            children: [{ stepType: 'tool_call', name: 'tool-a' }],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      const nested = result.preprocessStepResult?.nested?.[0];
+      expect(nested?.accuracy?.missingSteps).toContain('tool-b');
+      expect(nested?.accuracy?.missingSteps).toContain('tool-c');
+    });
+
+    test('should evaluate nested blacklist independently', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent-run',
+              children: {
+                blacklistedTools: ['dangerous-tool'],
+                steps: [{ name: 'safe-tool' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent-run',
+            children: [
+              { stepType: 'tool_call', name: 'safe-tool' },
+              { stepType: 'tool_call', name: 'dangerous-tool' },
+            ],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      const nested = result.preprocessStepResult?.nested?.[0];
+      expect(nested?.blacklist?.score).toBe(0);
+    });
+
+    test('should handle 3 levels of nesting', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'workflow',
+              stepType: 'workflow_run',
+              children: {
+                steps: [
+                  {
+                    name: 'sub-agent',
+                    stepType: 'agent_run',
+                    children: {
+                      steps: [{ name: 'deep-tool' }],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'workflow_run',
+            name: 'workflow',
+            children: [
+              {
+                stepType: 'agent_run',
+                name: 'sub-agent',
+                children: [{ stepType: 'tool_call', name: 'deep-tool' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBeGreaterThan(0);
+      // First level nested result
+      const level1 = result.preprocessStepResult?.nested?.[0];
+      expect(level1?.stepName).toBe('workflow');
+      // Second level nested result (nested within the first level)
+      expect(level1?.nested).toBeDefined();
+      expect(level1?.nested).toHaveLength(1);
+      expect(level1?.nested?.[0]?.stepName).toBe('sub-agent');
+      expect(level1?.nested?.[0]?.accuracy?.matchedSteps).toBe(1);
+    });
   });
 });

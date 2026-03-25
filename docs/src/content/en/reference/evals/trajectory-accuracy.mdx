@@ -118,6 +118,86 @@ The discriminated union includes these additional step types:
 
 All step types share the base properties `name`, `durationMs`, `metadata`, and `children`.
 
+## Expected steps
+
+When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a simpler type designed for expectations:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Step name to match (tool name, agent ID, workflow step name, etc.).',
+    required: true,
+  },
+  {
+    name: 'stepType',
+    type: 'TrajectoryStepType',
+    description: 'Step type to match. If omitted, matches any step type with the given name.',
+    isOptional: true,
+  },
+  {
+    name: 'data',
+    type: 'Record<string, unknown>',
+    description:
+      "Expected step data. Compared against the actual step's type-specific data (toolArgs for tool_call, output for workflow_step, etc.).",
+    isOptional: true,
+  },
+  {
+    name: 'children',
+    type: 'TrajectoryExpectation',
+    description:
+      "Nested expectation config for this step's children. Overrides the parent config for evaluating children of this step.",
+    isOptional: true,
+  },
+]}
+/>
+
+### Simple expected steps
+
+```typescript
+const steps: ExpectedStep[] = [
+  // Match by name only (any step type)
+  { name: 'search' },
+
+  // Match by name and step type
+  { name: 'search', stepType: 'tool_call' },
+
+  // Match with expected data
+  { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } },
+]
+```
+
+### Nested expectations
+
+Each expected step can include a `children` config with its own evaluation rules. This lets you set different ordering or comparison rules at each level of the hierarchy.
+
+```typescript
+const scorer = createTrajectoryScorerCode({
+  defaults: {
+    ordering: 'strict',
+    steps: [
+      { name: 'validate-input', stepType: 'workflow_step' },
+      {
+        name: 'research-agent',
+        stepType: 'agent_run',
+        children: {
+          // Sub-agent can call tools in any order
+          ordering: 'unordered',
+          steps: [
+            { name: 'search', stepType: 'tool_call' },
+            { name: 'summarize', stepType: 'tool_call' },
+          ],
+        },
+      },
+      { name: 'save-result', stepType: 'workflow_step' },
+    ],
+  },
+})
+```
+
+In this example, the parent workflow requires strict ordering of its steps, but the nested `research-agent` allows its tool calls in any order.
+
 ## Choosing between scorers
 
 ### Use the code-based scorer when:
@@ -153,9 +233,8 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
     properties: [
       {
         name: 'steps',
-        type: 'TrajectoryStep[]',
-        description:
-          'Ordered list of expected steps. Each step uses the discriminated union — properties depend on stepType.',
+        type: 'ExpectedStep[]',
+        description: 'Ordered list of expected steps. See [Expected steps](#expected-steps) for the type definition.',
         isOptional: true,
       },
     ],
@@ -492,8 +571,8 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
     properties: [
       {
         name: 'steps',
-        type: 'TrajectoryStep[]',
-        description: 'Expected steps for accuracy scoring.',
+        type: 'ExpectedStep[]',
+        description: 'Expected steps for accuracy scoring. See [Expected steps](#expected-steps).',
         isOptional: true,
       },
       {

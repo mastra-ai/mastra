@@ -396,14 +396,17 @@ Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITION
 
 Compares an actual trajectory against an expected trajectory and returns a detailed comparison result. Used internally by `createTrajectoryAccuracyScorerCode`.
 
+The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only, name + stepType, or include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
+
 ```typescript
 import { compareTrajectories } from '@mastra/evals/scorers/utils'
 
-const result = compareTrajectories(actualTrajectory, expectedTrajectory, {
-  strictOrder: false,
-  compareStepData: false,
-  allowRepeatedSteps: true,
-})
+// Using ExpectedStep[] (recommended for expectations)
+const result = compareTrajectories(
+  actualTrajectory,
+  { steps: [{ name: 'search' }, { name: 'summarize', stepType: 'tool_call' }] },
+  { compareStepData: false, allowRepeatedSteps: true },
+)
 // result.score — 0.0 to 1.0
 // result.missingSteps — step names not found
 // result.extraSteps — unexpected step names

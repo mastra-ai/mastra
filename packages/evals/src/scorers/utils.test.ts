@@ -6,6 +6,7 @@ import type {
   ScorerRunInputForAgent,
   TrajectoryStepType,
   ToolCallStep,
+  ExpectedStep,
 } from '@mastra/core/evals';
 import { describe, it, expect } from 'vitest';
 import {
@@ -1022,6 +1023,138 @@ describe('Scorer Utils', () => {
         const r1 = compareTrajectories(a, b, { strictOrder: true });
         const r2 = compareTrajectories(a, b, { ordering: 'strict' });
         expect(r1.score).toBe(r2.score);
+      });
+    });
+
+    describe('ExpectedStep matching', () => {
+      it('should match ExpectedStep by name only (no stepType)', () => {
+        const actual: Trajectory = {
+          steps: [
+            { stepType: 'tool_call', name: 'search' },
+            { stepType: 'model_generation', name: 'generate' },
+          ],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search' }, { name: 'generate' }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(2);
+      });
+
+      it('should match ExpectedStep by name + stepType', () => {
+        const actual: Trajectory = {
+          steps: [
+            { stepType: 'tool_call', name: 'search' },
+            { stepType: 'mcp_tool_call', name: 'search' },
+          ],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search', stepType: 'mcp_tool_call' }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(1);
+        expect(result.missingSteps).toEqual([]);
+      });
+
+      it('should fail to match when stepType does not match', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search' }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search', stepType: 'mcp_tool_call' }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['search']);
+      });
+
+      it('should match ExpectedStep with data comparison', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'hello' } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+        };
+
+        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(1);
+      });
+
+      it('should fail data comparison when toolArgs differ', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+        };
+
+        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        expect(result.score).toBe(0);
+        expect(result.matchedSteps).toBe(0);
+      });
+
+      it('should match without data comparison even when data differs', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+        };
+
+        // compareStepData defaults to false
+        const result = compareTrajectories(actual, expected);
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(1);
+      });
+
+      it('should work with unordered mode and ExpectedStep', () => {
+        const actual: Trajectory = {
+          steps: [
+            { stepType: 'tool_call', name: 'summarize' },
+            { stepType: 'tool_call', name: 'search' },
+          ],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+        };
+
+        const result = compareTrajectories(actual, expected, { ordering: 'unordered' });
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(2);
+      });
+
+      it('should work with strict mode and ExpectedStep', () => {
+        const actual: Trajectory = {
+          steps: [
+            { stepType: 'tool_call', name: 'search' },
+            { stepType: 'tool_call', name: 'summarize' },
+          ],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+        };
+
+        const result = compareTrajectories(actual, expected, { ordering: 'strict' });
+        expect(result.score).toBe(1);
+      });
+
+      it('should handle mixed Trajectory (auto-normalized) and ExpectedStep inputs', () => {
+        // When a Trajectory is passed as expected, it should be auto-normalized
+        const actual: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } }],
+        };
+        const expectedAsTrajectory: Trajectory = {
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } }],
+        };
+
+        const result = compareTrajectories(actual, expectedAsTrajectory, { compareStepData: true });
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(1);
       });
     });
   });
