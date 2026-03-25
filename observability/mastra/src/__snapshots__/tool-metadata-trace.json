@@ -62,7 +62,13 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 35
+                "outputTokens": 35,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 35
+                }
               }
             },
             "metadata": {
@@ -113,7 +119,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
@@ -246,7 +258,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"

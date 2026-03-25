@@ -29,9 +29,11 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
-      traceId: 'trace-abc',
-      spanId: 'span-123',
-      tags: ['tag-a'],
+      correlationContext: {
+        traceId: 'trace-abc',
+        spanId: 'span-123',
+        tags: ['tag-a'],
+      },
       metadata: { runId: 'run-1', environment: 'test' },
       observabilityBus: bus,
     });
@@ -43,9 +45,11 @@ describe('LoggerContextImpl', () => {
     expect(log.level).toBe('info');
     expect(log.message).toBe('test message');
     expect(log.data).toEqual({ key: 'value' });
-    expect(log.traceId).toBe('trace-abc');
-    expect(log.spanId).toBe('span-123');
-    expect(log.tags).toEqual(['tag-a']);
+    expect(log.correlationContext).toEqual({
+      traceId: 'trace-abc',
+      spanId: 'span-123',
+      tags: ['tag-a'],
+    });
     expect(log.metadata).toEqual({ runId: 'run-1', environment: 'test' });
   });
 
@@ -54,8 +58,10 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
-      traceId: 'trace-1',
-      spanId: 'span-1',
+      correlationContext: {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      },
       observabilityBus: bus,
     });
 
@@ -100,9 +106,7 @@ describe('LoggerContextImpl', () => {
 
     expect(emittedEvents).toHaveLength(1);
     const log = emittedEvents[0]!.log;
-    expect(log.traceId).toBeUndefined();
-    expect(log.spanId).toBeUndefined();
-    expect(log.tags).toBeUndefined();
+    expect(log.correlationContext).toBeUndefined();
     expect(log.metadata).toBeUndefined();
   });
 
@@ -131,8 +135,10 @@ describe('LoggerContextImpl', () => {
     });
 
     const logger = new LoggerContextImpl({
-      traceId: 'trace-1',
-      spanId: 'span-1',
+      correlationContext: {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      },
       observabilityBus: bus,
     });
 
@@ -147,8 +153,10 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
-      traceId: 'trace-1',
-      spanId: 'span-1',
+      correlationContext: {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      },
       observabilityBus: bus,
       metadata: {
         entity_type: 'agent',
@@ -177,12 +185,16 @@ describe('LoggerContextImpl', () => {
 
     const logger = new LoggerContextImpl({
       observabilityBus: bus,
-      tags: ['root-tag-1', 'root-tag-2'],
+      correlationContext: {
+        tags: ['root-tag-1', 'root-tag-2'],
+      },
     });
 
     logger.info('with tags');
 
     const log = emittedEvents[0]!.log;
-    expect(log.tags).toEqual(['root-tag-1', 'root-tag-2']);
+    expect(log.correlationContext).toEqual({
+      tags: ['root-tag-1', 'root-tag-2'],
+    });
   });
 });
