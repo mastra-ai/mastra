@@ -22,6 +22,8 @@ import type { BatchCreateFeedbackArgs, CreateFeedbackArgs, ListFeedbackArgs, Lis
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
   BatchCreateMetricsArgs,
+  ListMetricsArgs,
+  ListMetricsResponse,
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -242,6 +244,15 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch creating metrics',
+    });
+  }
+
+  async listMetrics(_args: ListMetricsArgs): Promise<ListMetricsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_METRICS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing metrics',
     });
   }
 

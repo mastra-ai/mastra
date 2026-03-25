@@ -4,13 +4,15 @@
  * https://github.com/mastra-ai/mastra/issues/10161
  */
 
+import { createRequire } from 'node:module';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
 vi.mock('ws', () => {
-  const EventEmitter = require('node:events');
+  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+  const EventEmitter = __require('node:events');
   class MockWebSocket extends EventEmitter {
     static CONNECTING = 0;
     static OPEN = 1;

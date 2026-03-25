@@ -1,16 +1,16 @@
 'use client';
 
+import type { DatasetExperiment } from '@mastra/client-js';
 import { format } from 'date-fns';
-import { DatasetExperiment } from '@mastra/client-js';
 import { PlayCircle, Calendar1Icon, CrosshairIcon } from 'lucide-react';
-import { MainHeader } from '@/ds/components/MainHeader';
+import { useAgents } from '../../agents/hooks/use-agents';
+import { useScorers } from '../../scores/hooks/use-scorers';
+import { useWorkflows } from '../../workflows/hooks/use-workflows';
+import { ExperimentStats } from './experiment-stats';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { MainHeader } from '@/ds/components/MainHeader';
 import { TextAndIcon } from '@/ds/components/Text/text-and-icon';
 import { useLinkComponent } from '@/lib/framework';
-import { useAgents } from '../../agents/hooks/use-agents';
-import { useWorkflows } from '../../workflows/hooks/use-workflows';
-import { useScorers } from '../../scores/hooks/use-scorers';
-import { ExperimentStats } from './experiment-stats';
 
 export type ExperimentPageHeaderProps = {
   experimentId: string;

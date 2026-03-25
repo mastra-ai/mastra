@@ -25,6 +25,6 @@ export default defineConfig({
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   external: ['typescript'],
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/core']));
   },
 });

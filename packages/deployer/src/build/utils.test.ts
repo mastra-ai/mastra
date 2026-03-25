@@ -7,6 +7,7 @@ import {
   findNativePackageModule,
   normalizeStudioBase,
   detectRuntime,
+  injectStudioHtmlConfig,
 } from './utils';
 
 describe('getPackageName', () => {
@@ -524,5 +525,29 @@ describe('detectRuntime', () => {
   it('should return "bun" when process.versions.bun is present', () => {
     (process.versions as Record<string, string | undefined>).bun = '1.0.0';
     expect(detectRuntime()).toBe('bun');
+  });
+});
+
+describe('injectStudioHtmlConfig', () => {
+  it('should inject MASTRA_THEME_TOGGLE placeholder', () => {
+    const html = "window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      themeToggle: "'true'",
+      experimentalUI: "'false'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_THEME_TOGGLE = 'true';");
   });
 });

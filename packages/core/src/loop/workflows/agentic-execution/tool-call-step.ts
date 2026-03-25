@@ -1,8 +1,9 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
@@ -52,6 +53,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const tool =
         stepTools?.[inputData.toolName] ||
+        findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       const addToolMetadata = ({
@@ -214,12 +216,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
-        return {
-          ...inputData,
-          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
-        };
+        return inputData;
       }
 
       // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)

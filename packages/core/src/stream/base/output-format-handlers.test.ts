@@ -2,8 +2,8 @@ import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-s
 import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
-import z3 from 'zod/v3';
+import { z } from 'zod/v4';
+import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
 import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
@@ -419,93 +419,6 @@ describe('output-format-handlers', () => {
     });
   });
 
-  describe('zod v3 compatibility', () => {
-    it('should validate zod v3 schema with detailed errors', async () => {
-      const schema = z3.object({
-        name: z3.string().min(3),
-        age: z3.number().positive(),
-      });
-
-      const transformer = createObjectStreamTransformer({
-        structuredOutput: { schema },
-      });
-
-      const streamParts: ChunkType<typeof schema>[] = [
-        {
-          type: 'text-delta',
-          runId: 'test-run',
-          from: ChunkFrom.AGENT,
-          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
-        },
-        {
-          type: 'text-end',
-          runId: 'test-run',
-          from: ChunkFrom.AGENT,
-          payload: { id: 'text-1' },
-        },
-        {
-          type: 'finish',
-          runId: 'test-run',
-          from: ChunkFrom.AGENT,
-          payload: {
-            stepResult: { reason: 'stop' },
-            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-            metadata: {},
-            messages: { all: [], user: [], nonUser: [] },
-          },
-        },
-      ];
-
-      // @ts-expect-error - web/stream readable stream type error
-      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
-      const chunks = await convertAsyncIterableToArray(stream);
-
-      const errorChunk = chunks.find(c => c?.type === 'error');
-      expect(errorChunk).toBeDefined();
-      expect(errorChunk?.payload?.error).toBeInstanceOf(Error);
-      expect((errorChunk?.payload?.error as Error).message).toContain('Structured output validation failed');
-    });
-
-    it('should successfully validate zod v3 schema', async () => {
-      const schema = z3.object({
-        name: z3.string(),
-        count: z3.number(),
-      });
-
-      const transformer = createObjectStreamTransformer({
-        structuredOutput: { schema },
-      });
-
-      const streamParts: ChunkType<typeof schema>[] = [
-        {
-          type: 'text-delta',
-          runId: 'test-run',
-          from: ChunkFrom.AGENT,
-          payload: { id: 'text-1', text: '{"name":"Alice","count":5}' },
-        },
-        {
-          type: 'finish',
-          runId: 'test-run',
-          from: ChunkFrom.AGENT,
-          payload: {
-            stepResult: { reason: 'stop' },
-            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-            metadata: {},
-            messages: { all: [], user: [], nonUser: [] },
-          },
-        },
-      ];
-
-      // @ts-expect-error - web/stream readable stream type error
-      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
-      const chunks = await convertAsyncIterableToArray(stream);
-
-      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
-      expect(objectResultChunk).toBeDefined();
-      expect(objectResultChunk?.object).toEqual({ name: 'Alice', count: 5 });
-    });
-  });
-
   describe('zod v4 compatibility', () => {
     it('should validate zod v4 schema with detailed errors', async () => {
       const schema = z.object({
@@ -599,9 +512,9 @@ describe('output-format-handlers', () => {
         id: z.string(),
         value: z.number(),
       });
-      const aiSdkSchema = asSchema(zodSchema);
+      const aiSdkSchema = asSchema(zodSchema) as PublicSchema<z.infer<typeof zodSchema>>;
 
-      const transformer = createObjectStreamTransformer({
+      const transformer = createObjectStreamTransformer<z.infer<typeof zodSchema>>({
         structuredOutput: { schema: aiSdkSchema },
       });
 

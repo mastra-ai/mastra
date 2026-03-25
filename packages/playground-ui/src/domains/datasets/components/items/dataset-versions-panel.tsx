@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
 import { format } from 'date-fns';
 import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useDatasetVersions } from '../../hooks/use-dataset-versions';
+import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Column } from '@/ds/components/Columns';
+import { ItemList } from '@/ds/components/ItemList';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -174,7 +175,7 @@ function DatasetVersionsListSkeleton() {
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}>
-              <ItemList.TextCell>Loading...</ItemList.TextCell>
+              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

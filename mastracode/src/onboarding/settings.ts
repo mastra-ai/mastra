@@ -67,8 +67,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
-    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -130,7 +128,6 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,
@@ -327,7 +324,7 @@ function migrateFromAuth(settingsPath: string): boolean {
 }
 
 const LEGACY_VARIED_MODELS: Record<string, string> = {
-  plan: 'openai/gpt-5.3-codex',
+  plan: 'openai/gpt-5.4',
   build: 'anthropic/claude-sonnet-4-5',
   fast: 'anthropic/claude-haiku-4-5',
 };

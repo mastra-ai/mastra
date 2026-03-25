@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { loggerName } from '~/utils/build-flags.js';
 import { weatherWorkflow } from './workflows/weather-workflow';
 import { weatherAgent } from './agents/weather-agent';
 import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
@@ -16,7 +17,7 @@ export const mastra = new Mastra({
     url: ':memory:',
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
+    name: loggerName,
     level: 'info',
   }),
   observability: new Observability({

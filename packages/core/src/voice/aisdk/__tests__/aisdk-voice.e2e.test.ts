@@ -2,12 +2,15 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { openai } from '@ai-sdk/openai-v5';
+import { useLLMRecording } from '@internal/llm-recorder';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { AISDKSpeech } from '../speech';
 import { AISDKTranscription } from '../transcription';
 
 describe('AI SDK Voice Integration Tests', () => {
+  useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e');
+
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
@@ -225,13 +228,11 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(transcribedText).toBeTruthy();
       expect(typeof transcribedText).toBe('string');
-      // Check for either "round trip" or "round-trip"
+      // Exact match not expected due to speech synthesis variations
+      // but key words should be present
       expect(transcribedText.toLowerCase()).toMatch(/round.?trip/);
       console.log('Original:', originalText);
       console.log('Transcribed:', transcribedText);
-
-      // Note: Exact match not expected due to speech synthesis variations
-      // but key words should be present
     }, 20000);
   });
 });

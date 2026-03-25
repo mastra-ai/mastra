@@ -1,7 +1,7 @@
+import { Plus, Database, BookOpen } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Database, BookOpen } from 'lucide-react';
 
 export interface EmptyDatasetsTableProps {
   onCreateClick?: () => void;

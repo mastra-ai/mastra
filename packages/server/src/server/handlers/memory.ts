@@ -220,6 +220,8 @@ async function getOMConfigFromAgent(
   observationTokens?: number | { min: number; max: number };
   observationModel?: string;
   reflectionModel?: string;
+  observationModelRouting?: Array<{ upTo: number; model: string }>;
+  reflectionModelRouting?: Array<{ upTo: number; model: string }>;
 } | null> {
   try {
     // Guard against older @mastra/core versions that don't have resolveProcessorById
@@ -245,6 +247,8 @@ async function getOMConfigFromAgent(
         observationTokens: resolvedConfig.reflection?.observationTokens,
         observationModel: resolvedConfig.observation?.model,
         reflectionModel: resolvedConfig.reflection?.model,
+        observationModelRouting: resolvedConfig.observation?.routing,
+        reflectionModelRouting: resolvedConfig.reflection?.routing,
       };
     }
 
@@ -258,6 +262,8 @@ async function getOMConfigFromAgent(
       observationTokens: processorConfig.reflection?.observationTokens,
       observationModel: undefined,
       reflectionModel: undefined,
+      observationModelRouting: undefined,
+      reflectionModelRouting: undefined,
     };
   } catch {
     return null;
@@ -397,7 +403,9 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        // Return null config when memory is not configured (Issue #11765)
+        // This allows the playground UI to gracefully handle agents without memory
+        return { config: null };
       }
 
       // Get the merged configuration (defaults + custom)
@@ -780,7 +788,9 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       validateBody({ threadId: effectiveThreadId });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        // Return null working memory when memory is not configured (Issue #11765)
+        // This allows the playground UI to gracefully handle agents without memory
+        return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: false };
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (thread) {

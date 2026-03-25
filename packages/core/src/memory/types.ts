@@ -7,7 +7,7 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
-import type { StandardSchemaWithJSON, PublicSchema } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
@@ -54,6 +54,8 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Observer-generated thread title */
+  threadTitle?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -190,11 +192,6 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: StandardSchemaWithJSON;
-  template?: never;
-};
-
-type PublicSchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
   template?: never;
 };
@@ -552,6 +549,14 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   instruction?: string;
+
+  /**
+   * When enabled, the Observer suggests a short thread title based on the conversation.
+   * The title is updated on the thread whenever the Observer runs.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -732,6 +737,17 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * to raw message history. When enabled, observation groups keep `_range`
+   * metadata visible in context and a `recall` tool is registered so the actor
+   * can inspect raw messages behind a stored observation summary.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean;
 }
 
 /**
@@ -955,7 +971,7 @@ export type MemoryConfig = BaseMemoryConfig & {
    * }
    * ```
    */
-  workingMemory?: TemplateWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+  workingMemory?: TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 };
 
 /**
@@ -1059,12 +1075,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1139,6 +1155,12 @@ export type SerializedObservationalMemoryConfig = {
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
 
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
+   * @experimental
+   */
+  retrieval?: boolean;
+
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;
 
@@ -1166,6 +1188,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   blockAfter?: number;
   /** Optional token budget for observer context (0 = full truncation, false = disabled) */
   previousObserverTokens?: number | false;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

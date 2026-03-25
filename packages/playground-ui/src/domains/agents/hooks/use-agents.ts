@@ -1,8 +1,8 @@
-import { usePlaygroundStore } from '@/store/playground-store';
-import { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
+import type { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAgents = () => {
   const client = useMastraClient();
@@ -11,11 +11,6 @@ export const useAgents = () => {
   return useQuery({
     queryKey: ['agents', requestContext],
     queryFn: () => client.listAgents(requestContext),
-    select: data => {
-      const entries = Object.entries(data);
-      entries.sort(([, a], [, b]) => a.name.localeCompare(b.name));
-      return Object.fromEntries(entries);
-    },
   });
 };
 
@@ -26,7 +21,7 @@ export const useUpdateAgentModel = (agentId: string) => {
   return useMutation({
     mutationFn: async (payload: UpdateModelParams) => client.getAgent(agentId).updateModel(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
     onError: err => {
       console.error('Error updating model', err);
@@ -41,7 +36,7 @@ export const useReorderModelList = (agentId: string) => {
   return useMutation({
     mutationFn: async (payload: ReorderModelListParams) => client.getAgent(agentId).reorderModelList(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
     onError: err => {
       console.error('Error reordering model list', err);
@@ -57,7 +52,7 @@ export const useUpdateModelInModelList = (agentId: string) => {
     mutationFn: async (payload: UpdateModelInModelListParams) =>
       client.getAgent(agentId).updateModelInModelList(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
     onError: err => {
       console.error('Error updating model in model list', err);
@@ -72,7 +67,7 @@ export const useResetAgentModel = (agentId: string) => {
   return useMutation({
     mutationFn: async () => client.getAgent(agentId).resetModel(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
     onError: err => {
       console.error('Error resetting model', err);

@@ -5,12 +5,14 @@
  * For top-level observability infrastructure (instances, exporters, bridges, config),
  * see observability.ts.
  */
+import { EntityType } from '@internal/core/storage';
+
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -56,27 +58,7 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
-/** Types of entities that can produce observability spans. */
-export enum EntityType {
-  /** Agent/Model execution */
-  AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
-  /** Input Processor */
-  INPUT_PROCESSOR = 'input_processor',
-  /** Input Step Processor */
-  INPUT_STEP_PROCESSOR = 'input_step_processor',
-  /** Output Processor */
-  OUTPUT_PROCESSOR = 'output_processor',
-  /** Output Step Processor */
-  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
-  /** Workflow Step */
-  WORKFLOW_STEP = 'workflow_step',
-  /** Tool */
-  TOOL = 'tool',
-  /** Workflow */
-  WORKFLOW_RUN = 'workflow_run',
-}
+export { EntityType };
 
 // ============================================================================
 // Type-Specific Attributes Interfaces
@@ -491,6 +473,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
+
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
@@ -981,6 +969,8 @@ export interface TracingContext {
 export type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced). */
   traceId?: string;
+  /** Root span ID used on the execution (if the execution was traced). */
+  spanId?: string;
 };
 
 // ============================================================================

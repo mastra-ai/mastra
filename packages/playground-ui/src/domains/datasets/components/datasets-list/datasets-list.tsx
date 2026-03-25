@@ -1,42 +1,28 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { ItemList } from '@/ds/components/ItemList';
-import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
-import { type ItemListColumn } from '@/ds/components/ItemList/types';
-import { useMemo, useState } from 'react';
-import { useLinkComponent } from '@/lib/framework';
-import { ListSearch } from '@/ds/components/ListSearch';
-import { Column } from '@/ds/components/Columns';
-import { NoDatasetInfo } from './no-datasets-info';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { PermissionDenied } from '@/index';
+import { format } from 'date-fns';
+import { useMemo } from 'react';
+import { NoDatasetsInfo } from './no-datasets-info';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
-
-const columns: ItemListColumn[] = [
-  { name: 'name', label: 'Name & Description', size: '1fr' },
-  { name: 'version', label: 'Version', size: '6rem' },
-];
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
+import { truncateString } from '@/lib/truncate-string';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   isLoading: boolean;
   error?: Error | null;
-  onCreateClick?: () => void;
+  search?: string;
 }
 
-export function DatasetsList({ datasets, isLoading, onCreateClick, error }: DatasetsListProps) {
-  const [search, setSearch] = useState('');
-  const { navigate, paths } = useLinkComponent();
+export function DatasetsList({ datasets, isLoading, error, search = '' }: DatasetsListProps) {
+  const { paths } = useLinkComponent();
 
-  const sortedData = useMemo(() => {
-    const sorted = [...datasets];
-    sorted.sort((a, b) => a.name.localeCompare(b.name));
-    return sorted;
-  }, [datasets]);
-
-  const filteredData = useMemo(
-    () => sortedData.filter(dataset => dataset.name.toLowerCase().includes(search.toLowerCase())),
-    [sortedData, search],
-  );
+  const filteredData = useMemo(() => {
+    const term = search.toLowerCase();
+    return datasets.filter(ds => ds.name.toLowerCase().includes(term) || ds.description?.toLowerCase().includes(term));
+  }, [datasets, search]);
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="datasets" />;
@@ -47,42 +33,38 @@ export function DatasetsList({ datasets, isLoading, onCreateClick, error }: Data
   }
 
   if (datasets.length === 0 && !isLoading) {
-    return <NoDatasetInfo onCreateClick={onCreateClick} />;
+    return <NoDatasetsInfo />;
+  }
+
+  if (isLoading) {
+    return <EntityListSkeleton columns="auto 1fr auto auto" />;
   }
 
   return (
-    <Column>
-      <Column.Toolbar>
-        <ListSearch onSearch={setSearch} label="Filter datasets by name" placeholder="Filter by name" />
-      </Column.Toolbar>
+    <EntityList columns="auto 1fr auto auto">
+      <EntityList.Top>
+        <EntityList.TopCell>Name</EntityList.TopCell>
+        <EntityList.TopCell>Description</EntityList.TopCell>
+        <EntityList.TopCell className="text-center">Version</EntityList.TopCell>
+        <EntityList.TopCell className="text-center">Created</EntityList.TopCell>
+      </EntityList.Top>
 
-      <Column.Content>
-        {isLoading ? (
-          <ItemListSkeleton columns={columns} />
-        ) : (
-          <ItemList>
-            <ItemList.Items>
-              {filteredData.map(dataset => (
-                <ItemList.Row key={dataset.id}>
-                  <ItemList.RowButton
-                    columns={columns}
-                    item={{ id: dataset.id }}
-                    onClick={() => navigate(paths.datasetLink(dataset.id))}
-                  >
-                    <ItemList.TextCell className="grid">
-                      <span className="text-neutral4 text-ui-md truncate">{dataset.name}</span>
-                      {dataset.description && (
-                        <span className="text-neutral2 text-ui-md truncate">{dataset.description}</span>
-                      )}
-                    </ItemList.TextCell>
-                    <ItemList.TextCell>v. {dataset.version}</ItemList.TextCell>
-                  </ItemList.RowButton>
-                </ItemList.Row>
-              ))}
-            </ItemList.Items>
-          </ItemList>
-        )}
-      </Column.Content>
-    </Column>
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Datasets match your search" /> : null}
+
+      {filteredData.map(ds => {
+        const name = truncateString(ds.name, 50);
+        const description = truncateString(ds.description ?? '', 200);
+        const createdAt = ds.createdAt instanceof Date ? ds.createdAt : new Date(ds.createdAt);
+
+        return (
+          <EntityList.RowLink key={ds.id} to={paths.datasetLink(ds.id)}>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.TextCell>v. {ds.version}</EntityList.TextCell>
+            <EntityList.TextCell>{format(createdAt, 'PP')}</EntityList.TextCell>
+          </EntityList.RowLink>
+        );
+      })}
+    </EntityList>
   );
 }
