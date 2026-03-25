@@ -239,12 +239,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
             const error =
               payload.error instanceof Error
                 ? payload.error
-                : new MastraError({
-                    id: 'AGENT_STREAM_ERROR',
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.SYSTEM,
-                    details: { error: payload.error, runId },
-                  });
+                : new MastraError(
+                    {
+                      id: 'AGENT_STREAM_ERROR',
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.SYSTEM,
+                      details: { runId },
+                    },
+                    payload.error,
+                  );
 
             agentSpan?.error({ error, endSpan: true });
             return;
@@ -287,12 +290,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
               const spanError =
                 e instanceof Error
                   ? e
-                  : new MastraError({
-                      id: 'AGENT_ON_FINISH_ERROR',
-                      domain: ErrorDomain.AGENT,
-                      category: ErrorCategory.SYSTEM,
-                      details: { error: String(e), runId },
-                    });
+                  : new MastraError(
+                      {
+                        id: 'AGENT_ON_FINISH_ERROR',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: { runId },
+                      },
+                      e,
+                    );
 
               agentSpan?.error({ error: spanError, endSpan: true });
             }
