@@ -664,7 +664,10 @@ export function transformWorkflow<OUTPUT>(
       }
 
       if (output && isDataChunkType(output)) {
-        return null;
+        if (!('data' in output)) return null;
+
+        const { type, data, id } = output as any;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }
