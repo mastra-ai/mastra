@@ -65,7 +65,6 @@ function createMetricEvent(): MetricEvent {
     metric: {
       timestamp: new Date(),
       name: 'mastra_test_counter',
-      metricType: 'counter',
       value: 1,
       labels: { env: 'test' },
     },
@@ -78,7 +77,7 @@ function createScoreEvent(): ScoreEvent {
     score: {
       timestamp: new Date(),
       traceId: 'trace-1',
-      scorerName: 'relevance',
+      scorerId: 'relevance',
       score: 0.85,
       reason: 'Relevant response',
     },

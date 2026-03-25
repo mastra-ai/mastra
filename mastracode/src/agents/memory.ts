@@ -24,7 +24,10 @@ function getHarnessState(requestContext: RequestContext) {
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**
@@ -33,7 +36,10 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**
@@ -44,31 +50,38 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
-    const omScope = getOmScope(state?.projectPath);
+    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`;
+    const observerPreviousObservationTokens = 1000;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
+
+    // Async buffering is not supported with resource scope — disable it
+    const isResourceScope = omScope === 'resource';
 
     cachedMemory = new Memory({
       storage,
       options: {
         observationalMemory: {
           enabled: true,
+          retrieval: omScope === 'thread',
           scope: omScope,
           observation: {
-            bufferTokens: 1 / 5,
-            bufferActivation: 2000,
+            bufferTokens: isResourceScope ? false : 1 / 5,
+            bufferActivation: isResourceScope ? undefined : 2000,
             model: getObserverModel,
             messageTokens: obsThreshold,
             blockAfter: 2,
+            previousObserverTokens: observerPreviousObservationTokens,
+            threadTitle: true,
           },
           reflection: {
-            bufferActivation: 1 / 2,
+            bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,

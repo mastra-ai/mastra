@@ -66,6 +66,40 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
       }
     });
 
+    it.skipIf(version !== 'v2')(
+      'should persist modelId in assistant message content.metadata using stream',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
+
+        const res = await agent.stream('hello', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-model-stream' },
+          },
+        });
+
+        await res.consumeStream();
+
+        const { messages } = await mockMemory.recall({
+          threadId: 'thread-model-stream',
+          perPage: false,
+        });
+        const assistantMessages = messages.filter(m => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        for (const msg of assistantMessages) {
+          expect(msg.content.metadata?.modelId).toBe('mock-model-id');
+        }
+      },
+    );
+
     it('should create a new thread with metadata using generate', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({

@@ -82,6 +82,21 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
   const threads = await state.harness.listThreads({ allResources: true });
   const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
   const currentResourceId = state.harness.getResourceId();
+  const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
+
+  for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {
+    const thread = threadById.get(threadId);
+    if (!thread || cachedPreview.updatedAt < thread.updatedAt.getTime()) {
+      state.threadPreviewCache.delete(threadId);
+      state.attemptedThreadPreviewIds.delete(threadId);
+    }
+  }
+
+  for (const threadId of [...state.attemptedThreadPreviewIds]) {
+    if (!threadById.has(threadId)) {
+      state.attemptedThreadPreviewIds.delete(threadId);
+    }
+  }
 
   if (threads.length === 0) {
     ctx.showInfo('No threads yet. Send a message to create one.');
@@ -95,13 +110,60 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       currentThreadId: currentId,
       currentResourceId,
       currentProjectPath: state.projectInfo.rootPath,
-      getMessagePreview: async (threadId: string) => {
-        const firstUserMessage = await state.harness.getFirstUserMessageForThread({ threadId });
-        if (firstUserMessage) {
-          const text = extractTextContent(firstUserMessage);
-          return truncatePreview(text);
+      initialMessagePreviews: new Map(
+        [...state.threadPreviewCache.entries()].map(
+          ([threadId, cachedPreview]) => [threadId, cachedPreview.preview] as const,
+        ),
+      ),
+      initialAttemptedPreviewThreadIds: state.attemptedThreadPreviewIds,
+      onMessagePreviewsLoaded: (previews, attemptedThreadIds) => {
+        state.threadPreviewCache = new Map(
+          [...previews.entries()].flatMap(([threadId, preview]) => {
+            const thread = threadById.get(threadId);
+            return thread ? [[threadId, { preview, updatedAt: thread.updatedAt.getTime() }] as const] : [];
+          }),
+        );
+        state.attemptedThreadPreviewIds = attemptedThreadIds;
+      },
+      getMessagePreviews: async (threadIds: string[]) => {
+        const uncachedThreadIds = threadIds.filter(
+          threadId => !state.threadPreviewCache.has(threadId) && !state.attemptedThreadPreviewIds.has(threadId),
+        );
+
+        if (uncachedThreadIds.length > 0) {
+          const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({
+            threadIds: uncachedThreadIds,
+          });
+
+          for (const threadId of uncachedThreadIds) {
+            state.attemptedThreadPreviewIds.add(threadId);
+          }
+
+          for (const [threadId, message] of firstUserMessages.entries()) {
+            const text = extractTextContent(message);
+            if (!text) {
+              continue;
+            }
+
+            const thread = threadById.get(threadId);
+            if (!thread) {
+              continue;
+            }
+
+            const preview = truncatePreview(text);
+            state.threadPreviewCache.set(threadId, {
+              preview,
+              updatedAt: thread.updatedAt.getTime(),
+            });
+          }
         }
-        return null;
+
+        return new Map(
+          threadIds.flatMap(threadId => {
+            const preview = state.threadPreviewCache.get(threadId)?.preview;
+            return preview ? [[threadId, preview] as const] : [];
+          }),
+        );
       },
       onSelect: async thread => {
         state.ui.hideOverlay();

@@ -3,6 +3,7 @@ dist/
 test-outputs/
 .vitest-reports/
 .DS_Store
+.mastra-om-repro/
 
 # IDE
 .vscode/
@@ -58,3 +59,4 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+/packages/core/__recordings__

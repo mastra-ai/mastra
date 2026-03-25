@@ -2,11 +2,11 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { GaugeIcon, FileCodeIcon, FileOutputIcon, ReceiptText, XIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 import { Column } from '@/ds/components/Columns/column';
+import { MainHeader } from '@/ds/components/MainHeader';
 import { PrevNextNav } from '@/ds/components/PrevNextNav';
 import { SideDialog } from '@/ds/components/SideDialog';
-import { Button } from '@/ds/components/Button';
-import { MainHeader } from '@/ds/components/MainHeader';
 import { Sections } from '@/index';
 
 export type ExperimentScorePanelProps = {
@@ -36,7 +36,7 @@ export function ExperimentScorePanel({ score, onNext, onPrevious, onClose }: Exp
           previousAriaLabel="View previous score details"
           nextAriaLabel="View next score details"
         />
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close score details">
+        <Button onClick={onClose} aria-label="Close score details">
           <XIcon />
         </Button>
       </Column.Toolbar>

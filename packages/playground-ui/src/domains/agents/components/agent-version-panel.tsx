@@ -1,8 +1,8 @@
-import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
 import { useAgentVersions } from '../hooks/use-agent-versions';
+import { Badge } from '@/ds/components/Badge';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);

@@ -13,8 +13,7 @@ export interface PageConfig {
 
 export const pages: PageConfig[] = [
   // --- Docs ---
-  { path: '/docs', name: 'Docs – Introduction' },
-  { path: '/docs/getting-started/start', name: 'Docs – Getting Started' },
+  { path: '/docs', name: 'Docs – Get Started' },
   { path: '/docs/agents/overview', name: 'Docs – Agents' },
   { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
   { path: '/docs/memory/overview', name: 'Docs – Memory' },

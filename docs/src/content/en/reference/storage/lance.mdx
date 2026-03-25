@@ -1,17 +1,17 @@
 ---
-title: "Reference: LanceDB Storage | Storage"
+title: "Reference: LanceDB storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 packages:
   - "@mastra/core"
   - "@mastra/lance"
 ---
 
-# LanceDB Storage
+# LanceDB storage
 
 The LanceDB storage implementation provides a high-performance storage solution using the LanceDB database system, which excels at handling both traditional data storage and vector operations.
 
 :::warning[Observability Not Supported]
-LanceDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to LanceDB, and Mastra Studio's observability features won't work with LanceDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+LanceDB storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to LanceDB, and Mastra Studio's observability features won't work with LanceDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 ## Installation
@@ -41,34 +41,32 @@ const storage = await LanceStorage.create('my-storage', 's3://bucket/db', {
 
 ## Parameters
 
-### LanceStorage.create()
+### `LanceStorage.create()`
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-description: "Name identifier for the storage instance",
-isOptional: false,
-},
-{
-name: "uri",
-type: "string",
-description:
-"URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL",
-isOptional: false,
-},
-{
-name: "options",
-type: "ConnectionOptions",
-description:
-"Connection options for LanceDB, such as timeout settings, authentication, etc.",
-isOptional: true,
-},
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name identifier for the storage instance',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'ConnectionOptions',
+    description: 'Connection options for LanceDB, such as timeout settings, authentication, etc.',
+    isOptional: true,
+  },
 ]}
 />
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -111,7 +109,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Deployment Options

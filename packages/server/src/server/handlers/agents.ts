@@ -11,9 +11,11 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 
@@ -21,6 +23,7 @@ import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
   agentSkillPathParams,
+  agentVersionQuerySchema,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
@@ -42,8 +45,7 @@ import {
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
-import { getAgentSkillResponseSchema } from '../schemas/workspace';
-import type { ServerRoute } from '../server-adapter/routes';
+import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -119,6 +121,7 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
+  path: string;
 }
 
 export interface SerializedTool {
@@ -136,6 +139,21 @@ interface SerializedToolInput {
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
   requestContextSchema?: { jsonSchema?: unknown } | unknown;
+}
+
+function resolveLazySchema(schema: unknown): unknown {
+  if (typeof schema === 'function') {
+    return resolveLazySchema(schema());
+  }
+  return schema;
+}
+
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
 }
 
 export interface SerializedWorkflow {
@@ -198,53 +216,25 @@ export async function getSerializedAgentTools(
     // Only process schemas if not in partial mode
     if (!partial) {
       try {
-        if (tool.inputSchema) {
-          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
-          } else if (typeof tool.inputSchema === 'function') {
-            const inputSchema = tool.inputSchema();
-            if (inputSchema && inputSchema.jsonSchema) {
-              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
-            }
-          } else if (tool.inputSchema) {
-            inputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const inputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.inputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (inputSchema !== undefined) {
+          inputSchemaForReturn = stringify(inputSchema);
         }
 
-        if (tool.outputSchema) {
-          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
-          } else if (typeof tool.outputSchema === 'function') {
-            const outputSchema = tool.outputSchema();
-            if (outputSchema && outputSchema.jsonSchema) {
-              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
-            }
-          } else if (tool.outputSchema) {
-            outputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const outputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.outputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (outputSchema !== undefined) {
+          outputSchemaForReturn = stringify(outputSchema);
         }
 
-        if (tool.requestContextSchema) {
-          if (
-            tool.requestContextSchema &&
-            typeof tool.requestContextSchema === 'object' &&
-            'jsonSchema' in tool.requestContextSchema
-          ) {
-            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
-          } else if (typeof tool.requestContextSchema === 'function') {
-            const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
-            if (requestContextSchema && requestContextSchema.jsonSchema) {
-              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
-            }
-          } else if (tool.requestContextSchema) {
-            requestContextSchemaForReturn = stringify(
-              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const requestContextSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.requestContextSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (requestContextSchema !== undefined) {
+          requestContextSchemaForReturn = stringify(requestContextSchema);
         }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
@@ -297,6 +287,7 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
+      path: skill.path,
     }));
   } catch {
     return [];
@@ -559,7 +550,15 @@ async function formatAgentList({
   };
 }
 
-export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context['mastra']; agentId: string }) {
+export async function getAgentFromSystem({
+  mastra,
+  agentId,
+  versionOptions,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+}) {
   const logger = mastra.getLogger();
 
   if (!agentId) {
@@ -598,7 +597,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent);
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -878,15 +877,18 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   path: '/agents/:agentId',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
-  description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+  description:
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ agentId, mastra, requestContext }) => {
+  handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions });
       const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
@@ -946,10 +948,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate',
   responseType: 'json',
@@ -1009,12 +1008,18 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
         };
       }
 
-      const result = await agent.generate<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const result = structuredOutput
+        ? await agent.generate(messages, { ...options, structuredOutput })
+        : await agent.generate(messages, options);
 
       return result;
     } catch (error) {
@@ -1129,20 +1134,16 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         threadId: effectiveThreadId ?? '',
       });
 
+      // Note: Do NOT set Transfer-Encoding header explicitly in the headers option.
+      // Runtimes automatically add this header for streaming responses,
+      // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
-        ? streamResult.toTextStreamResponse({
-            headers: {
-              'Transfer-Encoding': 'chunked',
-            },
-          })
+        ? streamResult.toTextStreamResponse()
         : streamResult.toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
               return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-            },
-            headers: {
-              'Transfer-Encoding': 'chunked',
             },
           });
 
@@ -1205,10 +1206,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate/vnext',
   responseType: 'json',
@@ -1282,12 +1280,18 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const streamResult = await agent.stream<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -1892,11 +1896,12 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   path: '/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -1909,10 +1914,13 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent does not have skills configured' });
       }
 
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
+
       // Get the skill from the workspace
-      const skill = await workspace.skills.get(skillName);
+      const skill = await workspace.skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       return {

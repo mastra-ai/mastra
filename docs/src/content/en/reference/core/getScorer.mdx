@@ -7,9 +7,9 @@ packages:
 
 # getScorer()
 
-The `getScorer()` method retrieves a specific scorer that was registered with the Mastra instance using its registration key. This method provides type-safe access to scorers and throws an error if the requested scorer is not found.
+The `getScorer()` method retrieves a specific scorer that was registered with the Mastra instance using its registration key. This method provides type-safe access to scorers and throws an error if the requested scorer isn't found.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { mastra } from './mastra'
@@ -33,13 +33,13 @@ await weatherAgent.generate('What is the weather in Rome', {
 
 <PropertiesTable
   content={[
-{
-name: "key",
-type: "string",
-description:
-"The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.",
-isOptional: false,
-},
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -47,20 +47,19 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "scorer",
-type: "MastraScorer",
-description:
-"The MastraScorer instance associated with the provided key.",
-},
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The MastraScorer instance associated with the provided key.',
+  },
 ]}
 />
 
-## Error Handling
+## Error handling
 
 This method throws a `MastraError` if:
 
-- The scorer with the specified key is not found
+- The scorer with the specified key isn't found
 - No scorers are registered with the Mastra instance
 
 ```typescript

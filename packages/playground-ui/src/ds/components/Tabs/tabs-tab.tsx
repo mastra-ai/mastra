@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { X } from 'lucide-react';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type TabProps = {
   children: React.ReactNode;
@@ -21,7 +20,7 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
         transitions.all,
         focusRing.visible,
         'hover:text-neutral4',
-        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-accent1',
+        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-white/50',
         className,
       )}
       onClick={onClick}

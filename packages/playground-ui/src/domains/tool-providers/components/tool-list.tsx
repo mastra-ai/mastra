@@ -1,14 +1,13 @@
 import { useState } from 'react';
 
+import { useProviderTools } from '../hooks/use-provider-tools';
+import { Badge } from '@/ds/components/Badge';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { Badge } from '@/ds/components/Badge';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
-
-import { useProviderTools } from '../hooks/use-provider-tools';
 
 interface ToolListProps {
   providerId: string;

@@ -1,6 +1,7 @@
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
+import type { HonoRequest } from 'hono';
 
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
@@ -239,6 +240,30 @@ export type AuthResult = { action: 'next' } | { action: 'error'; status: number;
 
 const pass: AuthResult = { action: 'next' };
 
+export interface GetAuthenticatedUserOptions {
+  mastra: Mastra;
+  token: string;
+  request: Request | HonoRequest;
+}
+
+export const getAuthenticatedUser = async <TUser = unknown>({
+  mastra,
+  token,
+  request,
+}: GetAuthenticatedUserOptions): Promise<TUser | null> => {
+  const normalizedToken = token.replace(/^Bearer\s+/i, '').trim();
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const authConfig = mastra.getServer()?.auth;
+  if (!authConfig || typeof authConfig.authenticateToken !== 'function') {
+    return null;
+  }
+
+  return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
+};
+
 /**
  * Single auth middleware: authenticate → authorize.
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
@@ -248,7 +273,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   // ── Skip checks (evaluated once) ──
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
+  // Only bypass auth for dev playground when no real auth provider is configured.
+  // When auth IS configured (has authenticateToken), we need the full auth flow
+  // so user/roles/permissions are set in requestContext.
+  const hasAuthProvider = typeof authConfig.authenticateToken === 'function';
+  if (!hasAuthProvider && isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     return pass;
   }
 

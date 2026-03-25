@@ -1,7 +1,5 @@
 'use client';
 
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button } from '@/ds/components/Button';
 import {
   Plus,
   Upload,
@@ -16,11 +14,13 @@ import {
   GitCompareIcon,
   AmpersandIcon,
 } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
-import { Column } from '@/ds/components/Columns/column';
-import { SearchField } from '@/ds/components/FormFields/search-field';
 import { Chip } from '@/ds/components/Chip';
+import { Column } from '@/ds/components/Columns/column';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 interface ActionsMenuProps {
@@ -43,7 +43,7 @@ function ActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button variant="standard" size="default" aria-label="Actions menu">
+        <Button aria-label="Actions menu">
           Select <AmpersandIcon />
         </Button>
       </DropdownMenu.Trigger>
@@ -137,13 +137,13 @@ export function DatasetItemsToolbar({
   if (isSelectionActive) {
     return (
       <Column.Toolbar className="">
-        <SearchField
+        <SearchFieldBlock
+          name="search-items"
           label="Search"
+          labelIsHidden
           placeholder="Search items..."
           value={searchQuery ?? ''}
           onChange={e => onSearchChange?.(e.target.value)}
-          variant="experimental"
-          size="default"
           onReset={() => onSearchChange?.('')}
           disabled={!hasItems && !searchQuery}
         />
@@ -178,8 +178,7 @@ export function DatasetItemsToolbar({
           </Tooltip>
           <ButtonsGroup>
             <Button
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
               onClick={onExecuteAction}
             >
@@ -190,9 +189,7 @@ export function DatasetItemsToolbar({
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
             </Button>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </Column.Toolbar>
@@ -201,13 +198,13 @@ export function DatasetItemsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      <SearchField
+      <SearchFieldBlock
+        name="search-items"
         label="Search"
+        labelIsHidden
         placeholder="Search items..."
         value={searchQuery ?? ''}
         onChange={e => onSearchChange?.(e.target.value)}
-        variant="experimental"
-        size="default"
         onReset={() => onSearchChange?.('')}
         disabled={!hasItems && !searchQuery}
       />
@@ -215,12 +212,12 @@ export function DatasetItemsToolbar({
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button variant="standard" size="default" onClick={onAddClick}>
+            <Button onClick={onAddClick}>
               <Plus /> Add Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="standard" size="default" aria-label="Dataset actions menu">
+                <Button aria-label="Dataset actions menu">
                   <ChevronDownIcon />
                 </Button>
               </DropdownMenu.Trigger>
@@ -248,7 +245,7 @@ export function DatasetItemsToolbar({
         )}
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button variant="standard" size="default" onClick={onVersionsClick} aria-label="View versions">
+          <Button onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>

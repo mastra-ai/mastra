@@ -1,10 +1,9 @@
-import { cn } from '@/lib/utils';
-import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { type ExperimentUISpan } from '../types';
 import { format } from 'date-fns/format';
-import { useLinkComponent } from '@/lib/framework';
+import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
+import type { ExperimentUISpan } from '../types';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { cn } from '@/lib/utils';
 
 type ExperimentTraceTimelineTimingColProps = {
   span: ExperimentUISpan;
@@ -24,7 +23,6 @@ export function ExperimentTraceTimelineTimingCol({
   overallStartTime,
   color,
 }: ExperimentTraceTimelineTimingColProps) {
-  const { Link } = useLinkComponent();
   const percentageSpanLatency = overallLatency ? Math.ceil((span.latency / overallLatency) * 100) : 0;
   const overallStartTimeDate = overallStartTime ? new Date(overallStartTime) : null;
   const spanStartTimeDate = span.startTime ? new Date(span.startTime) : null;
@@ -103,7 +101,6 @@ export function ExperimentTraceTimelineTimingCol({
                 icon: <ChevronsRightIcon />,
               },
             ]}
-            LinkComponent={Link}
           />
           <HoverCard.Arrow className="fill-surface5" />
         </HoverCard.Content>

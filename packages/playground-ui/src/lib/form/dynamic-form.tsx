@@ -1,13 +1,12 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { Button } from '@/ds/components/Button';
-import { AutoForm } from './auto-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
-import { Label } from '@/ds/components/Label';
-import { Icon } from '@/ds/icons';
+import { AutoForm } from './auto-form';
 import { CustomZodProvider } from './zod-provider';
 import { getShape, getIntersection } from './zod-provider/compat';
+import { Button } from '@/ds/components/Button';
+import { Label } from '@/ds/components/Label';
 
 interface DynamicFormProps {
   schema: any;
@@ -114,14 +113,8 @@ export function DynamicForm({
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <Button variant="light" className="w-full" size="md" disabled={isSubmitLoading}>
-            {isSubmitLoading ? (
-              <Icon>
-                <Loader2 className="animate-spin" />
-              </Icon>
-            ) : (
-              submitButtonLabel || buttonChildren
-            )}
+          <Button className="w-full" disabled={isSubmitLoading}>
+            {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
           </Button>
         ) : null,
     }),

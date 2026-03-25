@@ -15,6 +15,8 @@ Converts Mastra streams (agent, network, or workflow) to AI SDK-compatible strea
 
 This is useful when building custom streaming endpoints outside Mastra's provided route helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) or [`workflowRoute()`](/reference/ai-sdk/workflow-route).
 
+`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'` in the options object.
+
 ## Usage example
 
 Next.js App Router example:
@@ -62,66 +64,77 @@ The second parameter is an options object:
 
 <PropertiesTable
   content={[
-{
-name: "from",
-type: "'agent' | 'network' | 'workflow'",
-description: "The type of Mastra stream being converted.",
-isOptional: false,
-defaultValue: "'agent'",
-},
-{
-name: "lastMessageId",
-type: "string",
-description: "(Agent only) The ID of the last message in the conversation.",
-isOptional: true,
-},
-{
-name: "sendStart",
-type: "boolean",
-description: "(Agent only) Whether to send start events in the stream.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "sendFinish",
-type: "boolean",
-description: "(Agent only) Whether to send finish events in the stream.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "sendReasoning",
-type: "boolean",
-description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "sendSources",
-type: "boolean",
-description: "(Agent only) Whether to include source citations in the output.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "includeTextStreamParts",
-type: "boolean",
-description: "(Workflow only) Whether to include text stream parts in the output.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "messageMetadata",
-type: "(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined",
-description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
-isOptional: true,
-},
-{
-name: "onError",
-type: "(error: unknown) => string",
-description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
-isOptional: true,
-},
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
+    name: 'from',
+    type: "'agent' | 'network' | 'workflow'",
+    description: 'The type of Mastra stream being converted.',
+    isOptional: false,
+    defaultValue: "'agent'",
+  },
+  {
+    name: 'lastMessageId',
+    type: 'string',
+    description: '(Agent only) The ID of the last message in the conversation.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStart',
+    type: 'boolean',
+    description: '(Agent only) Whether to send start events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendFinish',
+    type: 'boolean',
+    description: '(Agent only) Whether to send finish events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendReasoning',
+    type: 'boolean',
+    description:
+      '(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'sendSources',
+    type: 'boolean',
+    description: '(Agent only) Whether to include source citations in the output.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'includeTextStreamParts',
+    type: 'boolean',
+    description: '(Workflow only) Whether to include text stream parts in the output.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    description:
+      '(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.',
+    isOptional: true,
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      '(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -214,7 +227,37 @@ export async function POST(req: Request) {
 }
 ```
 
-### Using messageMetadata
+### Converting an agent stream for AI SDK v6
+
+```typescript title="app/api/chat-v6/route.ts" {14-18}
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
+
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+  const myAgent = mastra.getAgent('weatherAgent')
+  const stream = await myAgent.stream(messages)
+
+  const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkStream(stream, {
+        from: 'agent',
+        version: 'v6',
+      })) {
+        await writer.write(part)
+      }
+    },
+  })
+
+  return createUIMessageStreamResponse({
+    stream: uiMessageStream,
+  })
+}
+```
+
+### Using `messageMetadata`
 
 ```typescript title="app/api/chat-with-metadata/route.ts" {13-19}
 import { mastra } from '../../mastra'

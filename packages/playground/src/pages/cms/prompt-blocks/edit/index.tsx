@@ -153,6 +153,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
           hasDraft={hasDraft}
           formResetKey={formResetKey}
           mode="edit"
+          blockId={blockId}
         />
       }
     >
@@ -256,7 +257,6 @@ function CmsPromptBlocksEditPage() {
             blockId={blockId}
             value={selectedVersionId ?? ''}
             onValueChange={handleVersionSelect}
-            variant="outline"
             activeVersionId={activeVersionId}
           />
         </HeaderAction>

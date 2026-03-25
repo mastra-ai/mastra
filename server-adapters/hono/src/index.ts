@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
+
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -15,6 +15,8 @@ import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -404,9 +406,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'query parameters'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'query');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {
@@ -425,9 +427,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'request body'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'body');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {
@@ -448,7 +450,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'path parameters'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'path');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {

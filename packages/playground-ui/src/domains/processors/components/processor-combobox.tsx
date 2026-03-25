@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
 import { useProcessors } from '../hooks/use-processors';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 export interface ProcessorComboboxProps {
   value?: string;
@@ -12,7 +13,7 @@ export interface ProcessorComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
 }
 
 export function ProcessorCombobox({
@@ -23,7 +24,7 @@ export function ProcessorCombobox({
   emptyText = 'No processors found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();

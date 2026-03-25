@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { GitCompareIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { useDatasetItemVersions, type DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Column } from '@/ds/components/Columns';
+import { ItemList } from '@/ds/components/ItemList';
 
 export interface DatasetItemVersionsPanelProps {
   datasetId: string;
@@ -78,12 +79,9 @@ export function DatasetItemVersionsPanel({
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancelSelection}>Cancel</Button>
             <ButtonWithTooltip
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
@@ -97,7 +95,7 @@ export function DatasetItemVersionsPanel({
         <>
           {(versions || []).length > 1 && (
             <Column.Toolbar>
-              <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
+              <Button onClick={handleCompareClick} className="w-full">
                 <GitCompareIcon /> Compare Ver.
               </Button>
             </Column.Toolbar>
@@ -115,7 +113,7 @@ export function DatasetItemVersionsPanel({
 
           <ItemList.Scroller>
             <ItemList.Items>
-              {versions?.map((item, index) => {
+              {versions?.map(item => {
                 const versionKey = String(item.datasetVersion);
                 const versionDate = typeof item.updatedAt === 'string' ? new Date(item.updatedAt) : item.updatedAt;
 

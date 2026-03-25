@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -28,7 +29,8 @@ const OM_TABLE = 'mastra_observational_memory' as const;
  */
 let _omTableSchema: Record<string, Record<string, any>> | undefined;
 try {
-  const storage = require('@mastra/core/storage');
+  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+  const storage = __require('@mastra/core/storage');
   _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 } catch {
   // OM not available in this version of core
@@ -639,54 +641,102 @@ export class MemoryPG extends MemoryStorage {
    * issues on large tables (see GitHub issue #11150). The old approach required
    * scanning and sorting ALL messages in a thread to assign row numbers.
    *
-   * The new approach uses the existing (thread_id, createdAt) index to efficiently
-   * fetch only the messages needed by using createdAt as a cursor.
+   * The current approach uses two phases for optimal performance:
+   * 1. Batch-fetch all target messages' metadata (thread_id, createdAt) in one query
+   * 2. Build cursor subqueries using "createdAt" directly (not COALESCE) so that
+   *    the existing (thread_id, createdAt DESC) index can be used for index scans
+   *    instead of sequential scans. This fixes GitHub issue #11702 where semantic
+   *    recall latency scaled linearly with message count (~30s for 7.4k messages).
    */
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+      if (aValue == null) return 1;
+      if (bValue == null) return -1;
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const selectColumns = `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
-    // Build a single efficient query that fetches context for all target messages
-    // For each target message, we fetch:
-    // 1. The target message itself plus any previous messages (createdAt <= target)
-    // 2. Any next messages after the target (createdAt > target)
-    // Each subquery is wrapped in parentheses to allow ORDER BY within UNION ALL
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This eliminates the correlated subselects that previously ran per-subquery.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
+    const targetRows = await this.#db.client.manyOrNone<{
+      id: string;
+      thread_id: string;
+      createdAt: Date | string;
+    }>(`SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})`, targetIds);
+
+    if (targetRows.length === 0) return null;
+
+    const targetMap = new Map(targetRows.map(r => [r.id, { threadId: r.thread_id, createdAt: r.createdAt }]));
+
+    // Phase 2: Build cursor subqueries using materialized constants from Phase 1.
+    // Uses "createdAt" directly instead of COALESCE("createdAtZ", "createdAt") so
+    // the (thread_id, createdAt DESC) composite index covers the query.
+    // createdAt and createdAtZ always store the same instant (createdAtZ is a TIMESTAMPTZ
+    // copy for timezone-correctness), so using createdAt for ordering is safe.
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      // Always fetch the target message, plus any requested previous messages
+      // Fetch the target message itself plus previous messages.
       // Uses createdAt <= target's createdAt, ordered DESC, limited to withPreviousMessages + 1
-      // The +1 ensures we always get the target message itself
+      const p1 = '$' + paramIdx;
+      const p2 = '$' + (paramIdx + 1);
+      const p3 = '$' + (paramIdx + 2);
       unionQueries.push(`(
         SELECT ${selectColumns}
         FROM ${tableName} m
-        WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-          AND COALESCE(m."createdAtZ", m."createdAt") <= (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
-        ORDER BY COALESCE(m."createdAtZ", m."createdAt") DESC
-        LIMIT $${paramIdx + 1}
+        WHERE m.thread_id = ${p1}
+          AND m."createdAt" <= ${p2}
+        ORDER BY m."createdAt" DESC, m.id DESC
+        LIMIT ${p3}
       )`);
-      params.push(id, withPreviousMessages + 1); // +1 to include the target message itself
-      paramIdx += 2;
+      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      paramIdx += 3;
 
-      // Query for messages after the target (only if requested)
-      // Uses createdAt > target's createdAt, ordered ASC, limited to withNextMessages
+      // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
+        const p4 = '$' + paramIdx;
+        const p5 = '$' + (paramIdx + 1);
+        const p6 = '$' + (paramIdx + 2);
         unionQueries.push(`(
           SELECT ${selectColumns}
           FROM ${tableName} m
-          WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-            AND COALESCE(m."createdAtZ", m."createdAt") > (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
-          ORDER BY COALESCE(m."createdAtZ", m."createdAt") ASC
-          LIMIT $${paramIdx + 1}
+          WHERE m.thread_id = ${p4}
+            AND m."createdAt" > ${p5}
+          ORDER BY m."createdAt" ASC, m.id ASC
+          LIMIT ${p6}
         )`);
-        params.push(id, withNextMessages);
-        paramIdx += 2;
+        params.push(target.threadId, target.createdAt, withNextMessages);
+        paramIdx += 3;
       }
     }
 
@@ -701,7 +751,7 @@ export class MemoryPG extends MemoryStorage {
       finalQuery = unionQueries[0]!.slice(1, -1); // Remove ( and )
     } else {
       // Multiple queries - UNION ALL and sort the result
-      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC`;
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC, id ASC`;
     }
     const includedRows = await this.#db.client.manyOrNone(finalQuery, params);
 
@@ -835,6 +885,29 @@ export class MemoryPG extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
+      // This is the semantic recall path where we only need the included messages.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
+        const list = new MessageList().add(messagesWithParsedContent, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
       const countResult = await this.#db.client.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
@@ -870,27 +943,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
@@ -999,6 +1052,39 @@ export class MemoryPG extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // Fast path: when perPage is 0 and include is provided, skip COUNT(*) and the
+      // main data query entirely. This is the semantic recall path where only included
+      // (vector-matched) messages are needed. Skipping the COUNT(*) avoids scanning
+      // the entire thread which was a major source of latency for large threads.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return {
+            messages: [],
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          };
+        }
+
+        const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
+        const list = new MessageList().add(messagesWithParsedContent, 'memory');
+
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
       const countResult = await this.#db.client.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
@@ -1034,27 +1120,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const hasMore = perPageInput !== false && offset + perPage < total;
 
@@ -1118,7 +1184,8 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        const messageInserts = messages.map(message => {
+        // Insert messages sequentially to avoid concurrent queries on the same pg client
+        for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -1129,7 +1196,7 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          return t.none(
+          await t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (id) DO UPDATE SET
@@ -1149,21 +1216,19 @@ export class MemoryPG extends MemoryStorage {
               message.resourceId,
             ],
           );
-        });
+        }
 
+        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const nowStr = new Date().toISOString();
-        const threadUpdate = t.none(
+        await t.none(
           `UPDATE ${threadTableName}
-                        SET
-                            "updatedAt" = $1,
-                            "updatedAtZ" = $2
-                        WHERE id = $3
-                    `,
+            SET
+              "updatedAt" = $1,
+              "updatedAtZ" = $2
+            WHERE id = $3`,
           [nowStr, nowStr, threadId],
         );
-
-        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const messagesWithParsedContent = messages.map(message => {
@@ -1340,10 +1405,10 @@ export class MemoryPG extends MemoryStorage {
         await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
 
         if (threadIds.length > 0) {
-          const updatePromises = threadIds.map(threadId =>
-            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          await t.none(
+            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
           );
-          await Promise.all(updatePromises);
         }
       });
     } catch (error) {
@@ -2484,12 +2549,16 @@ export class MemoryPG extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
-      // Atomic update
-      await this.#db.client.query(
+      // Atomic conditional update — the WHERE clause ensures chunks haven't already
+      // been swapped by a concurrent run. If another run cleared the chunks first,
+      // this UPDATE matches 0 rows and we return early with chunksActivated: 0.
+      // Include message boundary delimiter for cache stability.
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const updateResult = await this.#db.client.query(
         `UPDATE ${tableName} SET
-          "activeObservations" = CASE 
-            WHEN "activeObservations" IS NOT NULL AND "activeObservations" != '' 
-            THEN "activeObservations" || E'\\n\\n' || $1
+          "activeObservations" = CASE
+            WHEN "activeObservations" IS NOT NULL AND "activeObservations" != ''
+            THEN "activeObservations" || $10 || $1
             ELSE $1
           END,
           "observationTokenCount" = COALESCE("observationTokenCount", 0) + $2,
@@ -2499,7 +2568,9 @@ export class MemoryPG extends MemoryStorage {
           "lastObservedAtZ" = $6,
           "updatedAt" = $7,
           "updatedAtZ" = $8
-        WHERE id = $9`,
+        WHERE id = $9
+          AND "bufferedObservationChunks" IS NOT NULL
+          AND "bufferedObservationChunks"::text != '[]'`,
         [
           activatedContent,
           activatedTokens,
@@ -2510,8 +2581,20 @@ export class MemoryPG extends MemoryStorage {
           nowStr,
           nowStr,
           input.id,
+          boundary,
         ],
       );
+
+      if (updateResult.rowCount === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import {
   File,
   Folder,
   FolderOpen,
   ChevronRight,
-  ChevronDown,
   FileText,
   FileCode,
   FileJson,
@@ -19,16 +17,17 @@ import {
   Database,
   HardDrive,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { Button } from '@/ds/components/Button';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { AmazonIcon } from '@/ds/icons/AmazonIcon';
-import { GoogleIcon } from '@/ds/icons/GoogleIcon';
-import { AzureIcon } from '@/ds/icons/AzureIcon';
 import type { FileEntry } from '../types';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
+import { AmazonIcon } from '@/ds/icons/AmazonIcon';
+import { AzureIcon } from '@/ds/icons/AzureIcon';
+import { GoogleIcon } from '@/ds/icons/GoogleIcon';
 
 // =============================================================================
 // Type Definitions
@@ -184,24 +183,30 @@ function getErrorMessage(error: Error): string {
 // Breadcrumb Navigation
 // =============================================================================
 
+function isRootPath(p: string) {
+  return p === '.' || p === '';
+}
+
 interface BreadcrumbProps {
   path: string;
   onNavigate: (path: string) => void;
 }
 
 function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
-  const parts = path.split('/').filter(Boolean);
+  const isRoot = isRootPath(path);
+  const parts = isRoot ? [] : path.split('/').filter(Boolean);
 
   return (
     <div className="flex items-center gap-1 text-sm overflow-x-auto">
       <button
-        onClick={() => onNavigate('/')}
-        className="px-2 py-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors"
+        onClick={() => onNavigate('.')}
+        className="p-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors"
+        aria-label="Workspace root"
       >
-        /
+        <FolderOpen className="h-4 w-4" />
       </button>
       {parts.map((part, index) => {
-        const partPath = '/' + parts.slice(0, index + 1).join('/');
+        const partPath = parts.slice(0, index + 1).join('/');
         return (
           <div key={partPath} className="flex items-center">
             <ChevronRight className="h-4 w-4 text-neutral3" />
@@ -246,8 +251,10 @@ export function FileBrowser({
     return a.name.localeCompare(b.name);
   });
 
+  const isRoot = isRootPath(currentPath);
+
   const handleEntryClick = (entry: FileEntry) => {
-    const fullPath = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`;
+    const fullPath = isRoot ? entry.name : `${currentPath}/${entry.name}`;
     if (entry.type === 'directory') {
       onNavigate(fullPath);
     } else {
@@ -256,7 +263,7 @@ export function FileBrowser({
   };
 
   const handleDelete = (entry: FileEntry) => {
-    const fullPath = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`;
+    const fullPath = isRoot ? entry.name : `${currentPath}/${entry.name}`;
     setDeleteTarget(fullPath);
   };
 
@@ -280,8 +287,8 @@ export function FileBrowser({
               onClick={() => {
                 const name = prompt('Directory name:');
                 if (name) {
-                  const fullPath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
-                  onCreateDirectory(fullPath);
+                  const fullPath = isRoot ? name : `${currentPath}/${name}`;
+                  void onCreateDirectory(fullPath);
                 }
               }}
             >
@@ -312,17 +319,17 @@ export function FileBrowser({
           </div>
         ) : sortedEntries.length === 0 ? (
           <div className="py-12 text-center text-neutral4 text-sm">
-            {currentPath === '/' ? 'Workspace is empty' : 'Directory is empty'}
+            {isRoot ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
           <TooltipProvider>
             <ul>
               {/* Parent directory link */}
-              {currentPath !== '/' && (
+              {!isRoot && (
                 <li>
                   <button
                     onClick={() => {
-                      const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                      const parentPath = currentPath.split('/').slice(0, -1).join('/') || '.';
                       onNavigate(parentPath);
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"

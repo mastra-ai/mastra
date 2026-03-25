@@ -1,9 +1,9 @@
 ---
-title: "Custom Gateways | Models | Mastra"
+title: "Custom gateways | Models | Mastra"
 description: "Create custom model gateways for private or specialized LLM deployments"
 ---
 
-# Custom Model Gateways
+# Custom model gateways
 
 Custom model gateways allow you to implement private or specialized LLM provider integrations by extending the `MastraModelGateway` base class.
 
@@ -354,7 +354,7 @@ Models accessed through custom gateways follow this format:
 Examples:
 - `private/my-provider/model-1`
 
-## Advanced Example
+## Advanced example
 
 Token-based gateway with caching:
 
@@ -429,7 +429,7 @@ class TokenGateway extends MastraModelGateway {
 }
 ```
 
-## Error Handling
+## Error handling
 
 Provide descriptive errors for common failure scenarios:
 
@@ -510,7 +510,7 @@ describe('MyPrivateGateway', () => {
 });
 ```
 
-## Best Practices
+## Best practices
 
 1. **Use descriptive IDs for versioning**: Set explicit `id` values when you need to version your gateways
    ```typescript

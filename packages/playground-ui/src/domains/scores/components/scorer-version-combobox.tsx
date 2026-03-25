@@ -1,6 +1,7 @@
-import { Combobox } from '@/ds/components/Combobox';
-import { Badge } from '@/ds/components/Badge';
 import { useScorerVersions } from '../hooks/use-scorer-versions';
+import { Badge } from '@/ds/components/Badge';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -19,7 +20,7 @@ export interface ScorerVersionComboboxProps {
   onValueChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
   activeVersionId?: string;
 }
 
@@ -29,7 +30,7 @@ export function ScorerVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
   activeVersionId,
 }: ScorerVersionComboboxProps) {
   const { data, isLoading } = useScorerVersions({

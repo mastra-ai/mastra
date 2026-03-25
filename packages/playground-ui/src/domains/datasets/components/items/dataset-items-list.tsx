@@ -1,10 +1,10 @@
-import { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
+import { Plus, Upload, FileJson } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Plus, Upload, FileJson } from 'lucide-react';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -192,26 +192,24 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
-          <div className="flex flex-col gap-2">
-            <ButtonsGroup spacing="close">
-              <Button size="default" variant="standard" onClick={onAddClick}>
-                <Plus />
-                Add Single Item
+          <ButtonsGroup>
+            <Button onClick={onAddClick} size="md">
+              <Plus />
+              Add Single Item
+            </Button>
+            {onImportClick && (
+              <Button onClick={onImportClick} size="md">
+                <Upload />
+                Import CSV
               </Button>
-              {onImportClick && (
-                <Button size="default" variant="standard" onClick={onImportClick}>
-                  <Upload />
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button size="default" variant="standard" onClick={onImportJsonClick}>
-                  <FileJson />
-                  Import JSON
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} size="md">
+                <FileJson />
+                Import JSON
+              </Button>
+            )}
+          </ButtonsGroup>
         }
       />
     </div>

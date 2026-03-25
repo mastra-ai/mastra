@@ -172,6 +172,22 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
 
+      - name: Get CLI version
+        id: cli-version
+        run: echo "version=$(node -p \"require('./packages/cli/package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload studio assets to R2
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
         run: node .github/scripts/publish-alpha-tags.js alpha
@@ -182,8 +198,8 @@ jobs:
 
       - name: Add tags
         run: |
-          pnpm changeset-cli tag;
-          git push --follow-tags
+          pnpm changeset-cli tag
+          git push origin --tags
 
   enter_prerelease:
     needs: stable
@@ -237,7 +253,9 @@ jobs:
       - name: Push prerelease changes
         if: ${{ !inputs.dry_run }}
         run: |
-          git push --follow-tags
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 

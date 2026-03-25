@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import type { DatasetItem, DatasetRecord } from '@mastra/client-js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { useState } from 'react';
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { Label } from '@/ds/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { toast } from '@/lib/toast';
-import { useDatasets } from '../hooks/use-datasets';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 export interface AddItemsToDatasetDialogProps {
   open: boolean;
@@ -138,13 +138,12 @@ export function AddItemsToDatasetDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="standard" size="default" onClick={handleCancel} disabled={isAdding}>
+              <Button type="button" onClick={handleCancel} disabled={isAdding}>
                 Cancel
               </Button>
               <Button
                 type="submit"
-                variant="cta"
-                size="default"
+                variant="primary"
                 disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}
               >
                 {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}

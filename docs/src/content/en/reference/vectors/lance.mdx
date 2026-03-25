@@ -1,35 +1,35 @@
 ---
-title: "Reference: Lance Vector Store | Vectors"
+title: "Reference: Lance vector store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
 packages:
   - "@mastra/lance"
 ---
 
-# Lance Vector Store
+# Lance vector store
 
 The LanceVectorStore class provides vector search using [LanceDB](https://lancedb.github.io/lancedb/), an embedded vector database built on the Lance columnar format. It offers efficient storage and fast similarity search for both local development and production deployments.
 
-## Factory Method
+## Factory method
 
 The LanceVectorStore uses a factory pattern for creation. You should use the static `create()` method rather than the constructor directly.
 
 <PropertiesTable
   content={[
-{
-name: "uri",
-type: "string",
-description: "Path to LanceDB database or URI for cloud deployments",
-},
-{
-name: "options",
-type: "ConnectionOptions",
-description: "Additional connection options for LanceDB",
-isOptional: true,
-},
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'Path to LanceDB database or URI for cloud deployments',
+  },
+  {
+    name: 'options',
+    type: 'ConnectionOptions',
+    description: 'Additional connection options for LanceDB',
+    isOptional: true,
+  },
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can create a `LanceVectorStore` instance using the static create method:
 
@@ -50,218 +50,215 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to create index in",
-},
-{
-name: "indexName",
-type: "string",
-description: "Name of the index (column name) to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search",
-},
-{
-name: "indexConfig",
-type: "LanceIndexConfig",
-isOptional: true,
-defaultValue: "{ type: 'hnsw' }",
-description: "Index configuration",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to create index in',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index (column name) to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
+  {
+    name: 'indexConfig',
+    type: 'LanceIndexConfig',
+    isOptional: true,
+    defaultValue: "{ type: 'hnsw' }",
+    description: 'Index configuration',
+  },
 ]}
 />
 
-#### LanceIndexConfig
+#### `LanceIndexConfig`
 
 <PropertiesTable
   content={[
-{
-name: "type",
-type: "'ivfflat' | 'hnsw'",
-description: "Index type",
-defaultValue: "hnsw",
-properties: [
-{
-type: "string",
-parameters: [
-{
-name: "ivfflat",
-type: "ivfflat",
-description:
-"Clusters vectors into lists for approximate search.",
-},
-{
-name: "hnsw",
-type: "hnsw",
-description:
-"Graph-based index offering fast search times and high recall.",
-},
-],
-},
-],
-},
-{
-name: "numPartitions",
-type: "number",
-isOptional: true,
-defaultValue: "128",
-description: "Number of partitions for IVF indexes",
-},
-{
-name: "numSubVectors",
-type: "number",
-isOptional: true,
-defaultValue: "16",
-description: "Number of sub-vectors for product quantization",
-},
-{
-name: "hnsw",
-type: "HNSWConfig",
-isOptional: true,
-description: "HNSW configuration",
-properties: [
-{
-type: "object",
-parameters: [
-{
-name: "m",
-type: "number",
-description:
-"Maximum number of connections per node (default: 16)",
-isOptional: true,
-},
-{
-name: "efConstruction",
-type: "number",
-description: "Build-time complexity (default: 100)",
-isOptional: true,
-},
-],
-},
-],
-},
+  {
+    name: 'type',
+    type: "'ivfflat' | 'hnsw'",
+    description: 'Index type',
+    defaultValue: 'hnsw',
+    properties: [
+      {
+        type: 'string',
+        parameters: [
+          {
+            name: 'ivfflat',
+            type: 'ivfflat',
+            description: 'Clusters vectors into lists for approximate search.',
+          },
+          {
+            name: 'hnsw',
+            type: 'hnsw',
+            description: 'Graph-based index offering fast search times and high recall.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'numPartitions',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '128',
+    description: 'Number of partitions for IVF indexes',
+  },
+  {
+    name: 'numSubVectors',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '16',
+    description: 'Number of sub-vectors for product quantization',
+  },
+  {
+    name: 'hnsw',
+    type: 'HNSWConfig',
+    isOptional: true,
+    description: 'HNSW configuration',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'm',
+            type: 'number',
+            description: 'Maximum number of connections per node (default: 16)',
+            isOptional: true,
+          },
+          {
+            name: 'efConstruction',
+            type: 'number',
+            description: 'Build-time complexity (default: 100)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
-### createTable()
+### `createTable()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to create",
-},
-{
-name: "data",
-type: "Record<string, unknown>[] | TableLike",
-description: "Initial data for the table",
-},
-{
-name: "options",
-type: "Partial<CreateTableOptions>",
-isOptional: true,
-description: "Additional table creation options",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to create',
+  },
+  {
+    name: 'data',
+    type: 'Record<string, unknown>[] | TableLike',
+    description: 'Initial data for the table',
+  },
+  {
+    name: 'options',
+    type: 'Partial<CreateTableOptions>',
+    isOptional: true,
+    description: 'Additional table creation options',
+  },
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to upsert vectors into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to upsert vectors into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to query",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include the vector in the result",
-},
-{
-name: "columns",
-type: "string[]",
-isOptional: true,
-defaultValue: "[]",
-description: "Specific columns to include in the result",
-},
-{
-name: "includeAllColumns",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include all columns in the result",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include the vector in the result',
+  },
+  {
+    name: 'columns',
+    type: 'string[]',
+    isOptional: true,
+    defaultValue: '[]',
+    description: 'Specific columns to include in the result',
+  },
+  {
+    name: 'includeAllColumns',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include all columns in the result',
+  },
 ]}
 />
 
-### listTables()
+### `listTables()`
 
 Returns an array of table names as strings.
 
@@ -270,49 +267,49 @@ const tables = await vectorStore.listTables()
 // ['my_vectors', 'embeddings', 'documents']
 ```
 
-### getTableSchema()
+### `getTableSchema()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to describe",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to describe',
+  },
 ]}
 />
 
 Returns the schema of the specified table.
 
-### deleteTable()
+### `deleteTable()`
 
 <PropertiesTable
   content={[
-{
-name: "tableName",
-type: "string",
-description: "Name of the table to delete",
-},
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to delete',
+  },
 ]}
 />
 
-### deleteAllTables()
+### `deleteAllTables()`
 
 Deletes all tables in the database.
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -333,97 +330,97 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-isOptional: true,
-description: "ID of the vector to update (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-},
-{
-name: "update",
-type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-description: "Object containing the vector and/or metadata to update",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
+    description: 'Object containing the vector and/or metadata to update',
+  },
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vectors to delete",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Array of vector IDs to delete (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
 ]}
 />
 
-### close()
+### `close()`
 
 Closes the database connection.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -437,7 +434,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -454,7 +451,7 @@ try {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - Use the appropriate index type for your use case:
   - HNSW for better recall and performance when memory isn't constrained

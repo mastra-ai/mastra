@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
-import type { AgentFormValues } from './agent-edit-page/utils/form-validation';
 import { AgentEditFormProvider } from '../context/agent-edit-form-context';
 import { AgentsCmsLayout } from './agent-cms-layout/agent-cms-layout';
+import type { AgentFormValues } from './agent-edit-page/utils/form-validation';
 
 export interface AgentCmsFormShellProps {
   form: UseFormReturn<AgentFormValues>;
@@ -12,7 +12,7 @@ export interface AgentCmsFormShellProps {
   isSubmitting: boolean;
   isSavingDraft?: boolean;
   handlePublish: () => Promise<void>;
-  handleSaveDraft?: () => Promise<void>;
+  handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
   isCodeAgentOverride?: boolean;
   basePath: string;

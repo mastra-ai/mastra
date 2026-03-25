@@ -35,6 +35,7 @@ import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
+import { emitAutoExtractedMetrics } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { NoOpSpan } from '../spans';
 
@@ -75,11 +76,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
     };
 
-    // Initialize cardinality filter for metrics
-    this.cardinalityFilter = new CardinalityFilter();
+    // Initialize cardinality filter for metrics (uses user config or defaults)
+    this.cardinalityFilter = new CardinalityFilter(config.cardinality);
 
-    // Initialize the unified ObservabilityBus and register all exporters
+    // Initialize the unified ObservabilityBus
     this.observabilityBus = new ObservabilityBus();
+
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);
     }
@@ -88,9 +90,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (this.config.bridge) {
       this.observabilityBus.registerBridge(this.config.bridge);
     }
-
-    // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
-    this.observabilityBus.enableAutoExtractedMetrics(this.cardinalityFilter);
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {
@@ -204,6 +203,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       metadata: enrichedMetadata,
       traceState,
       tags,
+      requestContext,
     });
 
     if (span.isEvent) {
@@ -330,107 +330,35 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // ============================================================================
 
   /**
-   * Extract entity context labels from a span's entity hierarchy by
-   * walking the parent chain.
-   *
-   * Returns labels for: entity_type/name, parent_type/name, root_type/name.
-   * Internal spans are skipped when resolving parent and root entities.
-   */
-  private extractEntityLabels(span: AnySpan): Record<string, string> {
-    const labels: Record<string, string> = {};
-
-    if (span.entityType) labels.entity_type = span.entityType;
-    if (span.entityName) labels.entity_name = span.entityName;
-
-    // Find nearest non-internal parent (mirrors getParentSpan(false))
-    let parentSpan: AnySpan | undefined = span.parent;
-    while (parentSpan && parentSpan.isInternal) {
-      parentSpan = parentSpan.parent;
-    }
-
-    if (parentSpan?.entityType && parentSpan.entityName) {
-      labels.parent_type = parentSpan.entityType;
-      labels.parent_name = parentSpan.entityName;
-
-      // Keep walking to find the root (outermost) non-internal entity
-      let rootEntity = parentSpan;
-      let current: AnySpan | undefined = parentSpan.parent;
-      while (current) {
-        if (!current.isInternal && current.entityType && current.entityName) {
-          rootEntity = current;
-        }
-        current = current.parent;
-      }
-      if (rootEntity !== parentSpan) {
-        labels.root_type = rootEntity.entityType!;
-        labels.root_name = rootEntity.entityName!;
-      }
-    }
-
-    return labels;
-  }
-
-  /**
-   * Resolve tags for a span. Uses the span's own tags if present,
-   * otherwise walks to the root span to inherit its tags.
-   */
-  private resolveSpanTags(span: AnySpan): string[] | undefined {
-    if (span.tags) return span.tags;
-
-    let root: AnySpan = span;
-    while (root.parent) {
-      root = root.parent;
-    }
-    return root.tags;
-  }
-
-  /**
    * Get a LoggerContext correlated to a span.
    * Called by the context-factory in core (deriveLoggerContext) so that
    * `observabilityContext.loggerVNext` is a real logger instead of no-op.
    */
   getLoggerContext(span?: AnySpan): LoggerContext {
-    const entityLabels = span ? this.extractEntityLabels(span) : undefined;
-    const hasEntityLabels = entityLabels && Object.keys(entityLabels).length > 0;
-
-    // Merge entity labels + span metadata + serviceName into a single metadata object
-    const metadata: Record<string, unknown> | undefined =
-      hasEntityLabels || span?.metadata || this.config.serviceName
-        ? {
-            ...(hasEntityLabels ? entityLabels : undefined),
-            ...span?.metadata,
-            ...(this.config.serviceName ? { serviceName: this.config.serviceName } : undefined),
-          }
-        : undefined;
+    const correlationContext = span?.getCorrelationContext?.();
+    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new LoggerContextImpl({
-      traceId: span?.traceId,
-      spanId: span?.id,
-      tags: span ? this.resolveSpanTags(span) : undefined,
+      correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
     });
   }
 
   /**
-   * Get a MetricsContext, optionally tagged from a span's entity info.
+   * Get a MetricsContext correlated to a span.
    * Called by the context-factory in core (deriveMetricsContext) so that
    * `observabilityContext.metrics` is a real metrics context instead of no-op.
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
-    const labels: Record<string, string> = span ? this.extractEntityLabels(span) : {};
-
-    // Extract model/provider from span attributes (present on MODEL_GENERATION spans)
-    const attrs = span?.attributes as Record<string, unknown> | undefined;
-    if (attrs?.model && typeof attrs.model === 'string') labels.model = attrs.model;
-    if (attrs?.provider && typeof attrs.provider === 'string') labels.provider = attrs.provider;
-
-    if (this.config.serviceName) labels.service_name = this.config.serviceName;
+    const correlationContext = span?.getCorrelationContext?.();
+    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
-      labels: Object.keys(labels).length > 0 ? labels : undefined,
-      observabilityBus: this.observabilityBus,
+      correlationContext,
+      metadata,
       cardinalityFilter: this.cardinalityFilter,
+      observabilityBus: this.observabilityBus,
     });
   }
 
@@ -618,6 +546,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // Event-driven Export Methods
   // ============================================================================
 
+  /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
@@ -628,8 +557,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Emit a span started event.
-   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
-   * and auto-extracted metrics are generated.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanStarted(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
@@ -641,12 +569,27 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Emit a span ended event (called automatically when spans end).
-   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
-   * and auto-extracted metrics are generated.
+   * Emits any auto-extracted metrics while the live span tree is still available,
+   * then routes the exported tracing event through the ObservabilityBus.
    */
   protected emitSpanEnded(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
+
     if (exportedSpan) {
+      try {
+        // TODO: We intentionally export first so auto-extracted metrics are skipped
+        // when the span is filtered out by processors. Metrics still use the live
+        // span for correlation and parent traversal, but current span processors
+        // mutate spans in place during export, so those mutations can still affect
+        // the live span before metrics run. Future options to explore:
+        // 1. Make span processors pure/non-mutating.
+        // 2. Split trace processors from metric-specific processors/enrichers.
+        // 3. Revisit whether auto-extracted metrics should run before export.
+        emitAutoExtractedMetrics(span, this.getMetricsContext(span));
+      } catch (err) {
+        this.logger.error('[Observability] Auto-extraction error:', err);
+      }
+
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
     }
@@ -654,8 +597,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Emit a span updated event.
-   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
-   * and auto-extracted metrics are generated.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanUpdated(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
@@ -669,8 +611,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Emit a tracing event through the bus.
    *
    * The bus routes the event to each registered exporter's and bridge's
-   * onTracingEvent handler and triggers auto-extracted metrics (e.g.,
-   * mastra_agent_runs_started, mastra_model_duration_ms).
+   * onTracingEvent handler.
    */
   private emitTracingEvent(event: TracingEvent): void {
     this.observabilityBus.emit(event);

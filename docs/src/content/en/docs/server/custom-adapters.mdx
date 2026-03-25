@@ -1,5 +1,5 @@
 ---
-title: "Custom Adapters | Server"
+title: "Custom adapters | Server"
 description: "Create a custom server adapter for frameworks other than Hono or Express."
 packages:
   - "@mastra/core"
@@ -12,7 +12,7 @@ packages:
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Custom Adapters
+# Custom adapters
 
 Create a custom adapter when you need to run Mastra with a framework other than Hono or Express. This might be necessary if you have specific request/response handling requirements that `@mastra/hono` and `@mastra/express` don't support.
 
@@ -56,7 +56,7 @@ These type parameters ensure type safety throughout your adapter implementation 
 
 You must implement these six abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
 
-### registerContextMiddleware()
+### `registerContextMiddleware()`
 
 This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework — Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
 
@@ -83,7 +83,7 @@ Context to attach:
 | `abortSignal` | `AbortSignal` | Request cancellation signal |
 | `taskStore` | `InMemoryTaskStore` | A2A task storage (if configured) |
 
-### registerAuthMiddleware()
+### `registerAuthMiddleware()`
 
 Register authentication and authorization middleware. This method should check if authentication is configured on the Mastra instance and skip registration entirely if not. When auth is configured, you'll typically register two middleware functions: one for authentication (validating tokens and setting the user) and one for authorization (checking if the user can access the requested resource).
 
@@ -119,7 +119,7 @@ registerAuthMiddleware(): void {
 }
 ```
 
-### registerRoute()
+### `registerRoute()`
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
 
@@ -166,7 +166,7 @@ async registerRoute(
 }
 ```
 
-### getParams()
+### `getParams()`
 
 Extract URL parameters, query parameters, and request body from the incoming request. Different frameworks expose these values in different ways—Express uses `req.params`, `req.query`, and `req.body`, while other frameworks may use different property names or require method calls. This method normalizes the extraction for your framework.
 
@@ -190,7 +190,7 @@ async getParams(
 }
 ```
 
-### sendResponse()
+### `sendResponse()`
 
 Send the response back to the client based on the route's response type. Mastra routes can return different response types: JSON for most API responses, streams for agent generation, and special types for MCP transports. Your implementation should handle each type appropriately for your framework.
 
@@ -225,7 +225,7 @@ async sendResponse(
 }
 ```
 
-### stream()
+### `stream()`
 
 Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream, optionally applies redaction to hide sensitive data, and writes chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 

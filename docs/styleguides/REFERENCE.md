@@ -92,7 +92,11 @@ Advanced usage patterns that go beyond the basic parameters.
 3. **"Added in:" badge**: Only include when the API was introduced in a specific release and the reader needs to know the minimum version. Place it immediately after the H1: `**Added in:** \`@mastra/$PACKAGE@$VERSION\``. Omit for APIs that have existed since the early versions.
 4. **Link to alternatives**: When a similar API exists for a different context, link to it right after the description.
 5. **Usage example first**: Show a minimal working example immediately after the description. If the API supports multiple calling patterns (e.g. static vs dynamic routing), show each one in the same section.
-6. **`<PropertiesTable>` for all parameter/property tables**: Use the `<PropertiesTable>` component for constructor parameters, function parameters, and instance properties. Each entry needs `name`, `type`, `description`, and optionally `isOptional` and `defaultValue`.
+6. **`<PropertiesTable>` for all parameter/property tables**: Use the `<PropertiesTable>` component for constructor parameters, function parameters, and instance properties. Each entry needs `name`, `type`, `description`, and optionally `isOptional`, `properties`, and `defaultValue`.
+
+- If there are nested types, add `properties` with another array of parameter definitions to the parent type. This will render a nested table and visually indicate the relationship.
+- Check against existing reference pages to understand how `<PropertiesTable>` works and ensure consistency in how parameters are documented.
+
 7. **Group methods by category**: Use H3 headings for method categories (e.g. "Lifecycle", "Search operations") and H4 headings with backtick-wrapped names for individual methods: `` #### `methodName()` ``. Include parameter names in the heading to show the signature: `` #### `search(query, options?)` ``.
 8. **One code example per method**: Every method must have at least one code example showing a real invocation.
 9. **Return types**: Document non-obvious return types with `**Returns:** \`$Type\`` after the code example. Include an interface definition when the return type is a custom object.

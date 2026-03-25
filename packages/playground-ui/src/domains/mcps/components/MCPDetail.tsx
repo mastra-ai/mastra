@@ -1,15 +1,15 @@
-import { MainContentContent } from '@/ds/components/MainContent';
-import { CopyButton } from '@/ds/components/CopyButton';
+import type { McpToolInfo } from '@mastra/client-js';
+import type { ServerInfo } from '@mastra/core/mcp';
+import { useEffect, useRef, useState } from 'react';
+import { useMCPServerTools } from '../hooks/useMCPServerTools';
+import { ToolIconMap } from '@/domains/tools';
 import { Badge } from '@/ds/components/Badge';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { MainContentContent } from '@/ds/components/MainContent';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
-import { ServerInfo } from '@mastra/core/mcp';
 import { useLinkComponent } from '@/lib/framework';
-import { useMCPServerTools } from '../hooks/useMCPServerTools';
-import { useEffect, useRef, useState } from 'react';
-import { ToolIconMap } from '@/domains/tools';
-import { McpToolInfo } from '@mastra/client-js';
-import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 
 export interface MCPDetailProps {
   isLoading: boolean;
@@ -91,7 +91,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{httpStreamUrl}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
+                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} />
               </div>
             </div>
           </div>
@@ -107,7 +107,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{sseUrl}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
+                <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{commandLineConfig}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} iconSize="sm" />
+                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
               </div>
             </div>
           </div>

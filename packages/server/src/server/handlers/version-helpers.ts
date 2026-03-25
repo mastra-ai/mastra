@@ -262,6 +262,7 @@ export async function handleAutoVersioning<TEntity>(
   existingEntity: TEntity & { activeVersionId?: string },
   updatedEntity: TEntity,
   configFields?: Record<string, unknown>,
+  options?: { changeMessage?: string },
 ): Promise<{ entity: TEntity; versionCreated: boolean }> {
   if (!configFields || Object.keys(configFields).length === 0) {
     return { entity: updatedEntity, versionCreated: false };
@@ -288,7 +289,7 @@ export async function handleAutoVersioning<TEntity>(
   }
 
   const { versionId } = await createVersionWithRetry(store, parentId, parentIdField, fullConfig, changedFields, {
-    changeMessage: 'Auto-saved after edit',
+    changeMessage: options?.changeMessage ?? 'Auto-saved after edit',
   });
 
   // Do NOT update activeVersionId here — the new version stays as a draft.

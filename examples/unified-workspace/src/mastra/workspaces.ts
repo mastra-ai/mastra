@@ -1,9 +1,13 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { AgentFSFilesystem } from '@mastra/agentfs';
 
-// For examples, we use the current directory as the project root.
+// Resolve the example root from this module so `mastra dev` works even though
+// the CLI launches the server process from its generated output directory.
+const DEFAULT_PROJECT_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 // In production, set WORKSPACE_PATH environment variable to an absolute path.
-const PROJECT_ROOT = process.env.WORKSPACE_PATH || process.cwd();
+const PROJECT_ROOT = process.env.WORKSPACE_PATH || DEFAULT_PROJECT_ROOT;
 
 /**
  * Global Workspace with filesystem, skills, and search.
@@ -50,17 +54,17 @@ export const globalWorkspace = new Workspace({
   // Enable BM25 search for skills and files
   bm25: true,
   // Auto-index FAQ content for search
-  autoIndexPaths: ['/content'],
+  autoIndexPaths: ['content'],
   // Discover skills from these paths (global skills only)
-  skills: ['.agents/skills', '/skills'],
+  skills: ['.agents/skills', 'skills'],
 });
 
 /**
  * Docs agent workspace - inherits global skills AND has agent-specific skills.
  *
  * This demonstrates skill inheritance:
- * - Global skills (from /skills): code-review, api-design, customer-support
- * - Agent-specific skills (from /docs-skills): brand-guidelines
+ * - Global skills (from skills/): code-review, api-design, customer-support
+ * - Agent-specific skills (from docs-skills/): brand-guidelines
  *
  * The docs agent can use any of these skills, but brand-guidelines is
  * specifically designed for documentation writing.
@@ -84,7 +88,7 @@ export const docsAgentWorkspace = new Workspace({
   // Enable BM25 search
   bm25: true,
   // Inherit global skills + add agent-specific skills
-  skills: ['/skills', '/docs-skills'],
+  skills: ['skills', 'docs-skills'],
 });
 
 /**
@@ -102,7 +106,7 @@ export const readonlyWorkspace = new Workspace({
     readOnly: true,
   }),
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -133,7 +137,7 @@ export const safeWriteWorkspace = new Workspace({
     },
   },
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -158,7 +162,7 @@ export const supervisedSandboxWorkspace = new Workspace({
     requireApproval: true,
   },
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -172,7 +176,7 @@ export const testAgentWorkspace = new Workspace({
     basePath: join(PROJECT_ROOT, 'agent-files'),
   }),
   bm25: true,
-  autoIndexPaths: ['/'],
+  autoIndexPaths: ['.'],
 });
 
 /**
@@ -222,8 +226,37 @@ export const dynamicSkillsWorkspace = new Workspace({
   skills: context => {
     // Only include docs-skills (brand-guidelines) - excludes base skills
     // This demonstrates that the filter is working differently than static workspaces
-    return ['/docs-skills'];
+    return ['docs-skills'];
   },
+});
+
+/**
+ * AgentFS workspace — files are stored in a Turso/SQLite database.
+ *
+ * Unlike LocalFilesystem (files on disk) or S3Filesystem (files in a bucket),
+ * AgentFS stores everything in a SQLite database at `.agentfs/<agentId>.db`.
+ * Files persist across sessions and survive process restarts.
+ */
+export const agentfsWorkspace = new Workspace({
+  id: 'agentfs-workspace',
+  name: 'AgentFS Workspace',
+  filesystem: new AgentFSFilesystem({
+    agentId: 'example-agent',
+    displayName: 'Agent Storage',
+  }),
+});
+
+/**
+ * Read-only AgentFS workspace — blocks all write operations.
+ */
+export const readonlyAgentfsWorkspace = new Workspace({
+  id: 'readonly-agentfs-workspace',
+  name: 'Readonly AgentFS Workspace',
+  filesystem: new AgentFSFilesystem({
+    agentId: 'example-agent',
+    readOnly: true,
+    displayName: 'Agent Storage (readonly)',
+  }),
 });
 
 /**
@@ -238,6 +271,8 @@ export const allWorkspaces = [
   testAgentWorkspace,
   skillsOnlyWorkspace,
   dynamicSkillsWorkspace,
+  agentfsWorkspace,
+  readonlyAgentfsWorkspace,
 ];
 
 /**
