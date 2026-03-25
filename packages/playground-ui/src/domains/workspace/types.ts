@@ -181,7 +181,6 @@ export interface SkillMetadata {
 }
 
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -196,6 +195,7 @@ export interface ListSkillsResponse {
 
 export interface SkillSearchResult {
   skillName: string;
+  skillPath: string;
   source: string;
   content: string;
   score: number;

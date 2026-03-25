@@ -164,6 +164,42 @@ const memory = new Memory({
 
 See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
 
+### Token-tiered model selection
+
+You can use `ModelByInputTokens` to specify different Observer or Reflector models based on input token count. OM selects the matching model tier at runtime from the configured `upTo` thresholds.
+
+```typescript
+import { Memory, ModelByInputTokens } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        model: new ModelByInputTokens({
+          upTo: {
+            10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
+            40_000: 'openai/gpt-4o', // Stronger for medium inputs
+            1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
+          },
+        }),
+      },
+      reflection: {
+        model: new ModelByInputTokens({
+          upTo: {
+            20_000: 'google/gemini-2.5-flash',
+            80_000: 'openai/gpt-4o',
+          },
+        }),
+      },
+    },
+  },
+})
+```
+
+The `upTo` keys are inclusive upper bounds. OM computes the actual input token count for the Observer or Reflector call, resolves the matching tier directly, and uses that concrete model for the run.
+
+If the input exceeds the largest configured threshold, an error is thrown — ensure your thresholds cover the full range of possible input sizes, or use a model with a sufficiently large context window at the highest tier.
+
 ## Scopes
 
 ### Thread scope (default)
