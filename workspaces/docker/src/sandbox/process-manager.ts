@@ -150,8 +150,9 @@ class DockerProcessHandle extends ProcessHandle {
 
   /** @internal Force-close the exec stream to unblock wait(). */
   _destroyStream(): void {
-    if (this._execStream && typeof this._execStream.destroy === 'function') {
-      this._execStream.destroy();
+    const stream = this._execStream as unknown as { destroy?: () => void } | null;
+    if (stream && typeof stream.destroy === 'function') {
+      stream.destroy();
       this._execStream = null;
     }
   }
@@ -319,7 +320,7 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       }, timeoutMs);
       // Clear timer when process exits naturally
-      waitPromise.then(() => clearTimeout(timer));
+      void waitPromise.then(() => clearTimeout(timer));
     }
 
     handle._setWaitPromise(waitPromise);
