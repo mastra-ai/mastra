@@ -2,9 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { cn } from '@/lib/utils';
-
 import { formatDateCell } from './utils';
+import { cn } from '@/lib/utils';
 
 export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;

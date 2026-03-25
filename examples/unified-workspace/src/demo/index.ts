@@ -121,7 +121,8 @@ async function demoSkills() {
 
   // Get skill details
   section('Skill Details');
-  const skill = await globalWorkspace.skills?.get('code-review');
+  const codeReview = globalSkills?.find(s => s.name === 'code-review');
+  const skill = codeReview ? await globalWorkspace.skills?.get(codeReview.path) : null;
   if (skill) {
     console.log(`  Name: ${skill.name}`);
     console.log(`  Description: ${skill.description?.slice(0, 60)}...`);
@@ -134,7 +135,7 @@ async function demoSkills() {
   console.log('Searching for "code review":');
   const results = await globalWorkspace.skills?.search('code review', { topK: 3 });
   for (const r of results || []) {
-    console.log(`  - [${r.skillName}] score: ${r.score.toFixed(3)}`);
+    console.log(`  - [${r.skillPath}] score: ${r.score.toFixed(3)}`);
   }
   console.log();
 
@@ -267,7 +268,8 @@ async function demoSafety() {
   // Try to create skill in readonly source
   // Skills-only workspace has no filesystem or sandbox — only skills
   console.log('  Testing skill access:');
-  const skill = await skillsOnlyWorkspace.skills?.get('code-review');
+  const codeReview = skills?.find(s => s.name === 'code-review');
+  const skill = codeReview ? await skillsOnlyWorkspace.skills?.get(codeReview.path) : null;
   console.log(`  ✓ Can read skill: ${skill?.name || 'not found'}`);
 }
 

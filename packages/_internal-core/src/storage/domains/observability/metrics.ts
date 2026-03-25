@@ -2,14 +2,14 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   contextFields,
-  parentEntityNameField,
-  parentEntityTypeField,
-  rootEntityNameField,
-  rootEntityTypeField,
-  runIdField,
-  sessionIdField,
+  observabilitySignalFilterFields,
+  tagsField,
+  paginationArgsSchema,
+  paginationInfoSchema,
+  sortDirectionSchema,
   spanIdField,
   traceIdField,
+  metadataField,
 } from '../shared';
 
 // ============================================================================
@@ -25,6 +25,11 @@ export const metricTypeSchema = z.enum(['counter', 'gauge', 'histogram']);
 const metricNameField = z.string().describe('Metric name (e.g., mastra_agent_duration_ms)');
 const metricValueField = z.number().describe('Metric value');
 const labelsField = z.record(z.string(), z.string()).describe('Metric labels for dimensional filtering');
+const providerField = z.string().describe('Model provider');
+const modelField = z.string().describe('Model');
+const estimatedCostField = z.number().describe('Estimated cost');
+const costUnitField = z.string().describe('Unit for the estimated cost (e.g., usd)');
+const costMetadField = z.record(z.string(), z.unknown()).nullish().describe('Structured costing metadata');
 
 // ============================================================================
 // MetricRecord Schema (Storage Format)
@@ -38,8 +43,7 @@ export const metricRecordSchema = z
   .object({
     timestamp: z.date().describe('When the metric was recorded'),
     name: metricNameField,
-    value: metricValueField.describe('Single observation value'),
-    labels: labelsField.default({}),
+    value: metricValueField,
 
     // Correlation
     traceId: traceIdField.nullish(),
@@ -48,8 +52,23 @@ export const metricRecordSchema = z
     // Context (entity hierarchy, identity, correlation, deployment, experimentation)
     ...contextFields,
 
+    // Canonical costing fields
+    provider: providerField.nullish(),
+    model: modelField.nullish(),
+
+    // Estimated cost related fields
+    estimatedCost: estimatedCostField.nullish(),
+    costUnit: costUnitField.nullish(),
+    costMetadata: costMetadField.nullish(),
+
+    // Filtering
+    tags: tagsField.nullish(),
+
+    // User-defined labels used for filtering
+    labels: labelsField.default({}),
+
     // User-defined metadata
-    metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
+    metadata: metadataField.nullish(),
   })
   .describe('Metric record as stored in the database');
 
@@ -127,19 +146,15 @@ export type MetricsAggregation = z.infer<typeof metricsAggregationSchema>;
 export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
+    ...observabilitySignalFilterFields,
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),
 
-    // Parent/root entity filters
-    parentEntityType: parentEntityTypeField.optional(),
-    parentEntityName: parentEntityNameField.optional(),
-    rootEntityType: rootEntityTypeField.optional(),
-    rootEntityName: rootEntityNameField.optional(),
-
-    // Correlation ID filters
-    runId: runIdField.optional(),
-    sessionId: sessionIdField.optional(),
+    // Canonical costing filters
+    provider: providerField.optional(),
+    model: modelField.optional(),
+    costUnit: costUnitField.optional(),
 
     // Label filters (exact match on label values)
     labels: z.record(z.string(), z.string()).optional().describe('Exact match on label key-value pairs'),
@@ -148,6 +163,40 @@ export const metricsFilterSchema = z
 
 /** Filters for querying metrics */
 export type MetricsFilter = z.infer<typeof metricsFilterSchema>;
+
+/** Fields available for ordering metric list results */
+export const metricsOrderByFieldSchema = z.enum(['timestamp']).describe("Field to order by: 'timestamp'");
+
+/** Order by configuration for metric list queries */
+export const metricsOrderBySchema = z
+  .object({
+    field: metricsOrderByFieldSchema.default('timestamp').describe('Field to order by'),
+    direction: sortDirectionSchema.default('DESC').describe('Sort direction'),
+  })
+  .describe('Order by configuration');
+
+/** Schema for listMetrics operation arguments */
+export const listMetricsArgsSchema = z
+  .object({
+    filters: metricsFilterSchema.optional().describe('Optional filters to apply'),
+    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
+    orderBy: metricsOrderBySchema
+      .default({ field: 'timestamp', direction: 'DESC' })
+      .describe('Ordering configuration (defaults to timestamp desc)'),
+  })
+  .describe('Arguments for listing metrics');
+
+/** Arguments for listing metrics */
+export type ListMetricsArgs = z.input<typeof listMetricsArgsSchema>;
+
+/** Schema for listMetrics operation response */
+export const listMetricsResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  metrics: z.array(metricRecordSchema),
+});
+
+/** Response containing paginated metrics */
+export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
 
 // ============================================================================
 // OLAP Query Schemas
@@ -173,8 +222,24 @@ export type GetMetricAggregateArgs = z.infer<typeof getMetricAggregateArgsSchema
 
 export const getMetricAggregateResponseSchema = z.object({
   value: z.number().nullable().describe('Aggregated value'),
+  estimatedCost: z.number().nullable().optional().describe('Aggregated estimated cost from the same filtered row set'),
+  costUnit: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Shared cost unit for the aggregated rows, or null when mixed/unknown'),
   previousValue: z.number().nullable().optional().describe('Value from comparison period'),
+  previousEstimatedCost: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Aggregated estimated cost from the comparison period'),
   changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
+  costChangePercent: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Percentage change in estimated cost from comparison period'),
 });
 
 export type GetMetricAggregateResponse = z.infer<typeof getMetricAggregateResponseSchema>;
@@ -197,6 +262,12 @@ export const getMetricBreakdownResponseSchema = z.object({
     z.object({
       dimensions: z.record(z.string(), z.string().nullable()).describe('Dimension values for this group'),
       value: z.number().describe('Aggregated value for this group'),
+      estimatedCost: z.number().nullable().optional().describe('Summed estimated cost for this group'),
+      costUnit: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Shared cost unit for this group, or null when mixed/unknown'),
     }),
   ),
 });
@@ -221,10 +292,16 @@ export const getMetricTimeSeriesResponseSchema = z.object({
   series: z.array(
     z.object({
       name: z.string().describe('Series name (metric name or group key)'),
+      costUnit: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Shared cost unit for this series, or null when mixed/unknown'),
       points: z.array(
         z.object({
           timestamp: z.date().describe('Bucket timestamp'),
           value: z.number().describe('Aggregated value'),
+          estimatedCost: z.number().nullable().optional().describe('Summed estimated cost in this bucket'),
         }),
       ),
     }),
