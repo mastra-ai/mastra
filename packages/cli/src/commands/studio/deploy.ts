@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, readFileSync } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -43,7 +43,7 @@ function getGitBranch(projectDir: string): string | null {
 function getMastraVersion(projectDir: string): string | null {
   try {
     const pkgPath = join(projectDir, 'package.json');
-    const pkg = JSON.parse(require('node:fs').readFileSync(pkgPath, 'utf-8'));
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
     return deps['mastra'] ?? null;
   } catch {
