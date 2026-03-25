@@ -140,7 +140,7 @@ export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   readonly scope: 'resource' | 'thread';
-  /** Whether retrieval-mode observation groups are enabled (thread scope only). */
+  /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
@@ -235,7 +235,7 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.retrieval = !!config.retrieval;
+    this.retrieval = Boolean(config.retrieval);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>

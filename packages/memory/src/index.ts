@@ -1306,7 +1306,7 @@ ${workingMemory}`;
     return new OMClass({
       storage: memoryStore,
       scope: omConfig.scope,
-      retrieval: !!omConfig.retrieval,
+      retrieval: omConfig.retrieval,
       retrievalScope,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
