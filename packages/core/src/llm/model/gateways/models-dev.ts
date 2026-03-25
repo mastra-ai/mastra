@@ -43,6 +43,11 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   groq: {
     url: 'https://api.groq.com/openai/v1',
   },
+  'cloudflare-workers-ai': {
+    // models.dev lists CLOUDFLARE_ACCOUNT_ID first, but that belongs in the URL path.
+    // Cloudflare Workers AI auth should use the API token env var instead.
+    apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
+  },
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
     url: 'https://api.moonshot.ai/anthropic/v1',
@@ -115,7 +120,10 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Get the API key env var from the provider info
         // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        const apiKeyEnvVar =
+          PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
+          providerInfo.env?.[0] ||
+          `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
