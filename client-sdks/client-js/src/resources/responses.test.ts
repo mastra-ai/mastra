@@ -88,6 +88,7 @@ describe('Responses Resource', () => {
         output_tokens: 5,
         total_tokens: 15,
       },
+      conversation_id: 'conv_123',
       providerOptions: {
         openai: {
           responseId: 'resp_provider_123',
@@ -106,6 +107,7 @@ describe('Responses Resource', () => {
     });
 
     expect(response.output_text).toBe('Hello from Mastra');
+    expect(response.conversation_id).toBe('conv_123');
     expect(response.providerOptions).toEqual({
       openai: {
         responseId: 'resp_provider_123',

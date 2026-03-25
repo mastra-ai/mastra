@@ -20,6 +20,7 @@ export * from './agent-versions';
 export * from './agents';
 export * from './auth';
 export * from './common';
+export * from './conversations';
 export * from './datasets';
 export * from './default-options';
 export * from './logs';

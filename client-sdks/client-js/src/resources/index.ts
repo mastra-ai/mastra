@@ -4,6 +4,7 @@ export * from './vector';
 export * from './tool';
 export * from './processor';
 export * from './base';
+export * from './conversations';
 export * from './workflow';
 export * from './a2a';
 export * from './mcp-tool';

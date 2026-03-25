@@ -37,6 +37,7 @@ export const createResponseBodySchema = z
       ),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),
+    conversation_id: z.string().optional().describe('Optional conversation ID. In Mastra this is the raw threadId.'),
     providerOptions: providerOptionsSchema
       .optional()
       .describe('Optional provider-specific options passed through to the underlying model call'),
@@ -137,6 +138,7 @@ export const responseObjectSchema = z.object({
   incomplete_details: z.null().optional(),
   instructions: z.string().nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
+  conversation_id: z.string().nullable().optional(),
   providerOptions: providerOptionsSchema.optional(),
   tools: z.array(responseToolSchema).optional(),
   store: z.boolean().optional(),

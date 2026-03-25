@@ -13,6 +13,8 @@ These routes are a Mastra agent-backed adapter layer. They expose an OpenAI-like
 
 `model` is the target model string, such as `openai/gpt-5`, and `agent_id` selects the registered Mastra agent that executes the request. Initial requests must provide `agent_id`. Stored follow-up turns can omit it when continuing with `previous_response_id`.
 
+Stored responses also return `conversation_id`. In Mastra, this is the raw memory `threadId`. You can pass `conversation_id` on future requests to continue the same conversation thread directly.
+
 If you want to compare this with the official `openai` SDK migration path, see the [OpenAI Responses migration example](https://github.com/mastra-ai/mastra/tree/main/examples/openai-responses-migration).
 
 ## Usage example
@@ -100,6 +102,12 @@ for await (const event of stream) {
     isOptional: true,
   },
   {
+    name: 'conversation_id',
+    type: 'string',
+    description: 'Optional conversation identifier. In Mastra, this is the raw thread ID used by agent memory.',
+    isOptional: true,
+  },
+  {
     name: 'previous_response_id',
     type: 'string',
     description:
@@ -134,6 +142,25 @@ const response = await client.responses.create({
 **Returns:** `Promise<ResponsesResponse>` when `stream` is omitted or `false`.
 
 Configured tool definitions are exposed on `response.tools`. If the agent actually calls a tool, that activity appears in `response.output` as `function_call` and `function_call_output` items alongside the assistant `message`.
+
+Stored responses include `conversation_id` in addition to `response.id`. Use `conversation_id` when you want to target a known thread directly:
+
+```typescript
+const first = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Start a support thread',
+  store: true,
+})
+
+const second = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  conversation_id: first.conversation_id!,
+  input: 'Add a follow-up to the same thread',
+  store: true,
+})
+```
 
 When `stream: true`, `create()` returns an async iterable of SSE event payloads:
 
@@ -233,6 +260,8 @@ await client.responses.delete('msg_123')
 The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created`, `response.in_progress`, and `response.completed` stream events. The underlying response object also includes OpenAI-style fields such as `completed_at`, `error`, `incomplete_details`, `tools`, token detail objects, and provider-returned `providerOptions` when the Mastra server provides them.
 
 `tools` contains the configured tool definitions for the response. Executed tool activity is represented in `output`, where you can inspect `function_call`, `function_call_output`, and assistant `message` items in order.
+
+For stored responses, `conversation_id` contains the raw Mastra thread ID for that response turn.
 
 Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.
 

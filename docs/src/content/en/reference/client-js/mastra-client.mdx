@@ -134,6 +134,11 @@ export const mastraClient = new MastraClient({
       'Provides OpenAI-style Responses API helpers with `create()`, `retrieve()`, `stream()`, and `delete()`.',
   },
   {
+    name: 'conversations',
+    type: 'Conversations',
+    description: 'Provides conversation helpers with `create()` and `retrieve()` for thread-backed conversation state.',
+  },
+  {
     name: 'getVector(vectorName)',
     type: 'MastraVector',
     description: 'Returns a vector store instance by name.',

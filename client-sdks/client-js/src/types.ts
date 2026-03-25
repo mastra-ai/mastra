@@ -157,6 +157,7 @@ export type ResponsesResponse = {
   incomplete_details?: null;
   instructions?: string | null;
   previous_response_id?: string | null;
+  conversation_id?: string | null;
   /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   tools?: ResponseTool[];
@@ -179,6 +180,8 @@ export type CreateResponseParams = {
   input: string | ResponseInputMessage[];
   /** Request-scoped instructions for the current response. */
   instructions?: string;
+  /** Optional conversation ID. In Mastra this is the raw threadId. */
+  conversation_id?: string;
   /** Optional provider-specific options passed through to the underlying model call. */
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   /** When true, returns a streaming Responses API event stream. */
@@ -187,6 +190,22 @@ export type CreateResponseParams = {
   store?: boolean;
   /** Continues a previously stored response chain. */
   previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type Conversation = {
+  id: string;
+  object: 'conversation';
+  thread: StorageThreadType;
+  messages: MastraDBMessage[];
+};
+
+export type CreateConversationParams = {
+  agent_id: string;
+  conversation_id?: string;
+  resource_id?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
   requestContext?: RequestContext | Record<string, any>;
 };
 

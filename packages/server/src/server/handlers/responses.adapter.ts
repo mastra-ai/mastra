@@ -339,6 +339,7 @@ export function buildResponseObject({
   usage,
   instructions,
   previousResponseId,
+  conversationId,
   providerOptions,
   tools,
   store,
@@ -354,6 +355,7 @@ export function buildResponseObject({
   usage: UsageLike;
   instructions?: string;
   previousResponseId?: string;
+  conversationId?: string;
   providerOptions?: ProviderMetadataLike;
   tools: ResponseTool[];
   store: boolean;
@@ -377,6 +379,7 @@ export function buildResponseObject({
     incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
+    conversation_id: conversationId ?? null,
     providerOptions,
     tools,
     store,
@@ -392,6 +395,7 @@ export function buildCreatedResponseObject({
   createdAt,
   instructions,
   previousResponseId,
+  conversationId,
   tools,
   store,
 }: {
@@ -400,6 +404,7 @@ export function buildCreatedResponseObject({
   createdAt: number;
   instructions?: string;
   previousResponseId?: string;
+  conversationId?: string;
   store: boolean;
   tools?: ResponseTool[];
 }): ResponseObject {
@@ -416,6 +421,7 @@ export function buildCreatedResponseObject({
     incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
+    conversation_id: conversationId ?? null,
     tools: tools ?? [],
     store,
   };
@@ -443,6 +449,7 @@ export function buildStoredResponseObject(match: StoredResponseTurn): ResponseOb
     incomplete_details: null,
     instructions: match.metadata.instructions ?? null,
     previous_response_id: match.metadata.previousResponseId ?? null,
+    conversation_id: match.thread.id,
     providerOptions: match.metadata.providerOptions,
     tools: match.metadata.tools,
     store: match.metadata.store,

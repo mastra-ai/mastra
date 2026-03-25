@@ -233,6 +233,7 @@ describe('Responses Handlers', () => {
       model: 'openai/gpt-5',
       status: 'completed',
       store: true,
+      conversation_id: expect.any(String),
       completed_at: expect.any(Number),
       error: null,
       incomplete_details: null,
@@ -258,6 +259,7 @@ describe('Responses Handlers', () => {
       },
     });
     expect(created.id).toBe(created.output[0].id);
+    expect(created.conversation_id).toBeTruthy();
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -349,6 +351,68 @@ describe('Responses Handlers', () => {
 
     const secondInput = generateSpy.mock.calls[1]?.[0];
     expect(secondInput).toEqual([{ role: 'user', content: 'Second turn' }]);
+  });
+
+  it('uses an explicit conversation_id as the thread source of truth', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Hello from explicit conversation' }));
+
+    const memoryThread = await memory.createThread({
+      threadId: 'conv_explicit',
+      resourceId: 'conv_explicit',
+    });
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      conversation_id: memoryThread.id,
+      input: 'Hello',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    expect(created.conversation_id).toBe(memoryThread.id);
+
+    const generateCall = vi.mocked(agent.generate).mock.calls[0]?.[1] as {
+      memory?: { thread?: string; resource?: string };
+    };
+    expect(generateCall.memory).toEqual({
+      thread: memoryThread.id,
+      resource: memoryThread.resourceId,
+    });
+  });
+
+  it('rejects mismatched conversation_id and previous_response_id', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'First response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    await memory.createThread({
+      threadId: 'conv_other',
+      resourceId: 'conv_other',
+    });
+
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        agent_id: 'test-agent',
+        conversation_id: 'conv_other',
+        previous_response_id: firstCreated.id,
+        input: 'Second turn',
+        store: true,
+        stream: false,
+      }),
+    ).rejects.toThrow(HTTPException);
   });
 
   it('falls back to generateLegacy for AI SDK v4 agents', async () => {

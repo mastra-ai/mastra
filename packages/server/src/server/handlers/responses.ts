@@ -120,14 +120,23 @@ function getStreamedMessageOutputItem(response: ResponseObject, responseId: stri
 async function resolveThreadExecutionContext({
   agent,
   store,
+  conversationId,
   previousResponseTurn,
   requestContext,
 }: {
   agent: Agent<any, any, any, any>;
   store: boolean;
+  conversationId?: string;
   previousResponseTurn: StoredResponseTurn | null;
   requestContext: RequestContext;
 }): Promise<ThreadExecutionContext | null> {
+  if (conversationId && previousResponseTurn && previousResponseTurn.thread.id !== conversationId) {
+    throw new HTTPException(400, {
+      message:
+        'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
+    });
+  }
+
   if (previousResponseTurn) {
     return {
       threadId: previousResponseTurn.thread.id,
@@ -145,6 +154,19 @@ async function resolveThreadExecutionContext({
   const memory = await agent.getMemory({ requestContext });
   if (!memory) {
     return null;
+  }
+
+  if (conversationId) {
+    const existingThread = await memory.getThreadById({ threadId: conversationId });
+    if (!existingThread) {
+      throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+    }
+
+    await validateThreadOwnership(existingThread, effectiveResourceId);
+    return {
+      threadId: existingThread.id,
+      resourceId: effectiveResourceId ?? existingThread.resourceId,
+    };
   }
 
   const threadId = effectiveThreadId ?? randomUUID();
@@ -417,6 +439,7 @@ async function finalizeResponse({
   model,
   instructions,
   previousResponseId,
+  conversationId,
   configuredTools,
   responseMetadata,
   fallbackText,
@@ -430,6 +453,7 @@ async function finalizeResponse({
   model: string;
   instructions: string | undefined;
   previousResponseId?: string;
+  conversationId?: string;
   configuredTools: ReturnType<typeof serializeResponseTools>;
   responseMetadata: Omit<
     StoredResponseTurnMetadata,
@@ -455,6 +479,7 @@ async function finalizeResponse({
     usage: completedState.usage,
     instructions,
     previousResponseId,
+    conversationId,
     providerOptions: completedState.providerOptions,
     tools: configuredTools,
     messages: responseMessages,
@@ -512,6 +537,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       const threadContext = await resolveThreadExecutionContext({
         agent,
         store: shouldStore,
+        conversationId: body.conversation_id,
         previousResponseTurn,
         requestContext,
       });
@@ -555,6 +581,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           model: body.model,
           instructions: body.instructions,
           previousResponseId: previousResponseTurn?.message.id ?? body.previous_response_id,
+          conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
           fallbackText: '',
@@ -580,6 +607,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         createdAt,
         instructions: body.instructions,
         previousResponseId: body.previous_response_id,
+        conversationId: threadContext?.threadId ?? body.conversation_id,
         tools: configuredTools,
         store: didStore,
       });
@@ -657,6 +685,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               model: body.model,
               instructions: body.instructions,
               previousResponseId: previousResponseTurn?.message.id ?? body.previous_response_id,
+              conversationId: threadContext?.threadId ?? body.conversation_id,
               configuredTools,
               responseMetadata,
               fallbackText: text,
