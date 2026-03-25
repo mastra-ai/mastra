@@ -60,3 +60,4 @@ om-reflector-fixture.json
 .notion
 .dev/lima
 .mastracode/
+/packages/core/__recordings__
