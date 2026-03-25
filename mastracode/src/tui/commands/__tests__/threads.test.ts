@@ -133,18 +133,19 @@ describe('handleThreadsCommand thread listing', () => {
   it('fetches and caches uncached previews from the harness', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
-    state.harness.getFirstUserMessagesForThreads = vi.fn(async () =>
-      new Map([
-        [
-          'thread-1',
-          {
-            id: 'message-1',
-            role: 'user',
-            createdAt: new Date('2026-03-17T15:00:00.000Z'),
-            content: [{ type: 'text', text: 'This is a long preview message that should be truncated for display.' }],
-          },
-        ],
-      ]),
+    state.harness.getFirstUserMessagesForThreads = vi.fn(
+      async () =>
+        new Map([
+          [
+            'thread-1',
+            {
+              id: 'message-1',
+              role: 'user',
+              createdAt: new Date('2026-03-17T15:00:00.000Z'),
+              content: [{ type: 'text', text: 'This is a long preview message that should be truncated for display.' }],
+            },
+          ],
+        ]),
     );
 
     const commandPromise = handleThreadsCommand(ctx);

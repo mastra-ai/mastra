@@ -131,7 +131,9 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         );
 
         if (uncachedThreadIds.length > 0) {
-          const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({ threadIds: uncachedThreadIds });
+          const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({
+            threadIds: uncachedThreadIds,
+          });
 
           for (const threadId of uncachedThreadIds) {
             state.attemptedThreadPreviewIds.add(threadId);
