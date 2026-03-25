@@ -57,7 +57,7 @@ This file provides guidance to coding agents when working in this repository.
 ## Changelogs
 
 - After code changes, create a changeset.
-- Follow `@.claude/commands/changeset.md` for changeset guidance.
+- Follow `@.mastracode/commands/changeset.md` for changeset guidance.
 
 ## Architecture overview
 
