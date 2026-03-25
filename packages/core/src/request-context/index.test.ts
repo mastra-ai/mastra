@@ -168,4 +168,42 @@ describe('RequestContext', () => {
       });
     });
   });
+
+  describe('registerDispose / dispose', () => {
+    it('runs handlers in reverse registration order', async () => {
+      const order: string[] = [];
+      const ctx = new RequestContext();
+      ctx.registerDispose(() => {
+        order.push('a');
+      });
+      ctx.registerDispose(() => {
+        order.push('b');
+      });
+      await ctx.dispose();
+      expect(order).toEqual(['b', 'a']);
+    });
+
+    it('is safe to call dispose multiple times', async () => {
+      let count = 0;
+      const ctx = new RequestContext();
+      ctx.registerDispose(() => {
+        count++;
+      });
+      await ctx.dispose();
+      await ctx.dispose();
+      expect(count).toBe(1);
+    });
+
+    it('allows registering and disposing again after a completed dispose', async () => {
+      const ctx = new RequestContext();
+      let second = false;
+      ctx.registerDispose(() => {});
+      await ctx.dispose();
+      ctx.registerDispose(() => {
+        second = true;
+      });
+      await ctx.dispose();
+      expect(second).toBe(true);
+    });
+  });
 });

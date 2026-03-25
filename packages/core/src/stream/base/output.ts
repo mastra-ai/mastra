@@ -201,6 +201,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #tripwire: StepTripwireData | undefined = undefined;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
   #transportClosed = false;
+  /** Ensures {@link RequestContext.dispose} runs at most once for this output (outer agent run only). */
+  #requestDisposeRan = false;
 
   #delayedPromises: DelayedPromises<OUTPUT> = {
     suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
@@ -731,6 +733,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#closeTransportIfNeeded();
+              await self.#runRequestDisposersIfNeeded('early');
 
               // Emit the tripwire chunk for listeners
               self.#emitChunk(chunk);
@@ -995,12 +998,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#closeTransportIfNeeded();
+              await self.#runRequestDisposersIfNeeded('early');
               break;
           }
           self.#emitChunk(chunk);
           controller.enqueue(chunk);
         },
-        flush: () => {
+        flush: async () => {
           if (self.#delayedPromises.object.status.type === 'pending') {
             // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
             self.#delayedPromises.object.resolve(undefined as OUTPUT);
@@ -1049,6 +1053,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
           self.#closeTransportIfNeeded();
 
+          await self.#runRequestDisposersIfNeeded('normal');
+
           // Emit finish event for EventEmitter streams
           self.#streamFinished = true;
           self.#emitter.emit('finish');
@@ -1091,6 +1097,36 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       transport.close();
     } catch {
       // best-effort close
+    }
+  }
+
+  /**
+   * Runs {@link RequestContext.dispose} for resources registered on the request context (e.g. MCP
+   * clients). Skips inner LLM execution streams and, in the normal path, skips suspended runs so
+   * tool-approval / resume flows can keep connections open until a follow-up run.
+   */
+  async #runRequestDisposersIfNeeded(mode: 'normal' | 'early'): Promise<void> {
+    if (this.#options.isLLMExecutionStep) {
+      return;
+    }
+    if (this.#requestDisposeRan) {
+      return;
+    }
+    if (mode === 'normal' && this.#status === 'suspended') {
+      return;
+    }
+
+    this.#requestDisposeRan = true;
+
+    const ctx = this.#options.requestContext;
+    if (!ctx || typeof ctx.dispose !== 'function') {
+      return;
+    }
+
+    try {
+      await ctx.dispose();
+    } catch {
+      // best-effort cleanup; do not fail the stream after model work
     }
   }
 
@@ -1575,6 +1611,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       cancel() {
         // Stream was cancelled, clean up
         self.#emitter.removeAllListeners();
+        void self.#runRequestDisposersIfNeeded('early');
       },
     });
   }

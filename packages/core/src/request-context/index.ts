@@ -32,6 +32,8 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
+  private disposeHandlers: Array<() => void | Promise<void>> = [];
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     iterable?: Values extends Record<string, any>
@@ -183,5 +185,47 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    */
   public get all(): Values extends Record<string, any> ? Values : Record<string, any> {
     return Object.fromEntries(this.registry) as Values extends Record<string, any> ? Values : Record<string, any>;
+  }
+
+  /**
+   * Register a function to run when {@link RequestContext.dispose} is called (typically once the
+   * outer agent stream/generate run has finished). Use this to release per-request resources such
+   * as MCP clients created inside dynamic `tools` resolvers.
+   *
+   * Handlers run in reverse registration order (last registered runs first). Errors from an
+   * individual handler are swallowed so other handlers still run.
+   */
+  public registerDispose(handler: () => void | Promise<void>): void {
+    this.disposeHandlers.push(handler);
+  }
+
+  /**
+   * Runs all dispose handlers registered via {@link RequestContext.registerDispose}, then clears
+   * them. Safe to call multiple times: concurrent calls share the same in-flight promise; subsequent
+   * calls after completion are no-ops.
+   */
+  public dispose(): Promise<void> {
+    if (this.disposePromise) {
+      return this.disposePromise;
+    }
+
+    const handlers = [...this.disposeHandlers].reverse();
+    this.disposeHandlers.length = 0;
+
+    this.disposePromise = (async () => {
+      for (const handler of handlers) {
+        try {
+          await Promise.resolve(handler());
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    })();
+
+    void this.disposePromise.finally(() => {
+      this.disposePromise = null;
+    });
+
+    return this.disposePromise;
   }
 }

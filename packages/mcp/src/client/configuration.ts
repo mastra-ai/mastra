@@ -1,6 +1,7 @@
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
@@ -705,6 +706,24 @@ To fix this you have three different options:
     })();
 
     return this.disconnectPromise;
+  }
+
+  /**
+   * Registers {@link MCPClient.disconnect} to run when the agent request finishes (after tools have
+   * executed). Use this when you create an `MCPClient` inside a dynamic `Agent` `tools` resolver so
+   * connections are released without calling `disconnect()` before returning tools.
+   *
+   * @example
+   * ```typescript
+   * tools: async ({ requestContext }) => {
+   *   const mcp = new MCPClient({ id: `profile:${userId}`, servers: { ... } });
+   *   mcp.registerDisconnectOnRunEnd(requestContext);
+   *   return { ...(await mcp.listTools()), weatherTool };
+   * }
+   * ```
+   */
+  public registerDisconnectOnRunEnd(requestContext: RequestContext): void {
+    requestContext.registerDispose(() => this.disconnect());
   }
 
   /**
