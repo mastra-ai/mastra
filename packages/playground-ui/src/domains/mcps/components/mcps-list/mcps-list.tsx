@@ -85,6 +85,8 @@ export function McpServersList({ mcpServers, isLoading, error, search = '' }: Mc
         />
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No MCP Servers match your search" /> : null}
+
       {filteredData.map(server => (
         <McpServerRow key={server.id} server={server} />
       ))}

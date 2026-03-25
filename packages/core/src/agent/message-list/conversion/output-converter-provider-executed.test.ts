@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AIV5Type } from '../types';
-import { sanitizeV5UIMessages } from './output-converter';
+import { addStartStepPartsForAIV5, sanitizeV5UIMessages } from './output-converter';
 
 /**
  * Tests for provider-executed tool handling in sanitizeV5UIMessages.
@@ -206,5 +206,209 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
+  });
+});
+
+describe('addStartStepPartsForAIV5 — client/provider tool splitting', () => {
+  const makeToolPart = (
+    overrides: Partial<AIV5Type.ToolUIPart> & { type: string; toolCallId: string },
+  ): AIV5Type.ToolUIPart =>
+    ({
+      state: 'output-available' as const,
+      input: {},
+      output: {},
+      ...overrides,
+    }) as AIV5Type.ToolUIPart;
+
+  const makeMessage = (parts: AIV5Type.UIMessage['parts']): AIV5Type.UIMessage => ({
+    id: 'msg-1',
+    role: 'assistant',
+    parts,
+  });
+
+  it('should split client tool from completed provider tool (Anthropic ordering fix)', () => {
+    // This is the exact scenario that causes the Anthropic error:
+    // "tool_use ids were found without tool_result blocks immediately after"
+    // When tool_use(client) and server_tool_use(provider) are in the same block,
+    // the provider inlines the server result BEFORE the client result.
+    const msg = makeMessage([
+      { type: 'text', text: 'Let me search and look that up' },
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'file1.ts',
+      }),
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_provider1',
+        state: 'output-available',
+        input: { query: 'test' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    // Should insert step-start between client tool and provider tool
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual([
+      'text',
+      'tool-execute_command',
+      'step-start', // split between client and provider
+      'tool-web_search_20250305',
+    ]);
+  });
+
+  it('should NOT split provider tool followed by client tool (safe order)', () => {
+    // server_tool_use BEFORE tool_use is fine — the client result comes after
+    const msg = makeMessage([
+      { type: 'text', text: 'Let me search and look that up' },
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_provider1',
+        state: 'output-available',
+        input: { query: 'test' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'file1.ts',
+      }),
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    // No step-start between consecutive tool parts
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual(['text', 'tool-web_search_20250305', 'tool-execute_command']);
+  });
+
+  it('should split multiple client tools from provider tool', () => {
+    const msg = makeMessage([
+      makeToolPart({
+        type: 'tool-find_files',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { path: '.' },
+        output: 'file1.ts',
+      }),
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client2',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'dir/',
+      }),
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_provider1',
+        state: 'output-available',
+        input: { query: 'test' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual([
+      'tool-find_files',
+      'tool-execute_command',
+      'step-start', // split before provider tool
+      'tool-web_search_20250305',
+    ]);
+  });
+
+  it('should handle client tool, provider tool, then more text', () => {
+    const msg = makeMessage([
+      { type: 'text', text: 'Searching...' },
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'file1.ts',
+      }),
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_provider1',
+        state: 'output-available',
+        input: { query: 'test' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+      { type: 'text', text: 'Here are the results...' },
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual([
+      'text',
+      'tool-execute_command',
+      'step-start', // split between client and provider
+      'tool-web_search_20250305',
+      'step-start', // existing split between tool and text
+      'text',
+    ]);
+  });
+
+  it('should NOT split when provider tool is deferred (input-available)', () => {
+    // A deferred provider tool with no result doesn't need splitting —
+    // there's no inline result to interfere with ordering
+    const msg = makeMessage([
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'file1.ts',
+      }),
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_provider1',
+        state: 'input-available',
+        input: { query: 'test' },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    // No split — deferred provider tool has no inline result
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual(['tool-execute_command', 'tool-web_search_20250305']);
+  });
+
+  it('should NOT split between two client tools', () => {
+    const msg = makeMessage([
+      makeToolPart({
+        type: 'tool-find_files',
+        toolCallId: 'toolu_client1',
+        state: 'output-available',
+        input: { path: '.' },
+        output: 'file1.ts',
+      }),
+      makeToolPart({
+        type: 'tool-execute_command',
+        toolCallId: 'toolu_client2',
+        state: 'output-available',
+        input: { command: 'ls' },
+        output: 'dir/',
+      }),
+    ]);
+
+    const result = addStartStepPartsForAIV5([msg]);
+
+    const partTypes = result[0]!.parts.map(p => p.type);
+    expect(partTypes).toEqual(['tool-find_files', 'tool-execute_command']);
   });
 });

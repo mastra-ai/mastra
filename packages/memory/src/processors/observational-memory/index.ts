@@ -27,6 +27,8 @@ export {
 export { getObservationsAsOf } from './observation-utils';
 
 // Types
+export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+
 export type {
   ObservationConfig,
   ReflectionConfig,

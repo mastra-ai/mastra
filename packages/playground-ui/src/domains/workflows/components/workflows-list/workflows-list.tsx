@@ -58,6 +58,8 @@ export function WorkflowsList({ workflows, isLoading, error, search = '' }: Work
         <EntityList.TopCell>Number of steps</EntityList.TopCell>
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Workflows match your search" /> : null}
+
       {filteredData.map(wf => {
         const name = truncateString(wf.name, 50);
         const description = truncateString(wf.description ?? '', 200);
