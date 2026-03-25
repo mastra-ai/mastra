@@ -454,7 +454,7 @@ describe('extractTrajectoryFromTrace', () => {
         spanType: SpanType.TOOL_CALL,
         name: 'tool',
         startedAt: new Date('2025-01-01T00:00:00Z'),
-        endedAt: null as any,
+        endedAt: null as any, // Deliberately cast to simulate spans that haven't ended yet
       }),
     ];
 
