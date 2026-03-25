@@ -999,8 +999,12 @@ describe('Observability Handlers', () => {
     it('should return metric aggregate successfully', async () => {
       const mockResult = {
         value: 42.5,
+        estimatedCost: 1.23,
+        costUnit: 'usd',
         previousValue: null,
+        previousEstimatedCost: null,
         changePercent: null,
+        costChangePercent: null,
       };
 
       (mockObservabilityStore.getMetricAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
@@ -1022,8 +1026,12 @@ describe('Observability Handlers', () => {
     it('should pass compare period and filters to storage', async () => {
       const mockResult = {
         value: 100,
+        estimatedCost: 2.5,
+        costUnit: 'usd',
         previousValue: 80,
+        previousEstimatedCost: 2,
         changePercent: 25,
+        costChangePercent: 25,
       };
 
       (mockObservabilityStore.getMetricAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
@@ -1089,8 +1097,8 @@ describe('Observability Handlers', () => {
     it('should return metric breakdown successfully', async () => {
       const mockResult = {
         groups: [
-          { dimensions: { entityType: 'agent' }, value: 50 },
-          { dimensions: { entityType: 'workflow_run' }, value: 30 },
+          { dimensions: { entityType: 'agent' }, value: 50, estimatedCost: 1.5, costUnit: 'usd' },
+          { dimensions: { entityType: 'workflow_run' }, value: 30, estimatedCost: 0.9, costUnit: 'usd' },
         ],
       };
 
@@ -1161,9 +1169,10 @@ describe('Observability Handlers', () => {
         series: [
           {
             name: 'latency',
+            costUnit: 'usd',
             points: [
-              { timestamp: new Date('2024-01-01T00:00:00Z'), value: 100 },
-              { timestamp: new Date('2024-01-01T01:00:00Z'), value: 120 },
+              { timestamp: new Date('2024-01-01T00:00:00Z'), value: 100, estimatedCost: 1.0 },
+              { timestamp: new Date('2024-01-01T01:00:00Z'), value: 120, estimatedCost: 1.2 },
             ],
           },
         ],
