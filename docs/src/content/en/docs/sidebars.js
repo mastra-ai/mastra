@@ -64,7 +64,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'studio/cloud',
-          label: 'Mastra Cloud',
+          label: 'Cloud',
         },
       ],
     },
@@ -420,11 +420,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'deployment/monorepo',
           label: 'Monorepo',
         },
@@ -461,11 +456,6 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-cloud/setup',
           label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/studio',
-          label: 'Studio',
         },
         {
           type: 'doc',

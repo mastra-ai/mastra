@@ -69,7 +69,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new DefaultExporter(), // Persists traces to storage for Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
@@ -79,9 +79,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Viewing traces
-
-### Studio
+## Studio
 
 Access your traces through Studio:
 

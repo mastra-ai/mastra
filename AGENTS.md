@@ -59,6 +59,8 @@ The `@docs/` directory contains the source code and contents of the documentatio
 
 Whenever you change or add code, you MUST update/add related documentation for those changes. You always need to follow `@docs/styleguides/DOC.md` when writing documentation. The `@docs/styleguides/` folder also contains styleguides for specific types of documentation. Read `@docs/AGENTS.md` to learn more about how to work with documentation.
 
+**Important:** If you add a new package, you also MUST add new documentation for that package in `@docs/`.
+
 ## Changelogs
 
 After making changes to the codebase, you MUST create a changeset. Follow `@.claude/commands/changeset.md` for guidelines on how to create a changeset and write effective changelog messages.

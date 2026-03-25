@@ -669,6 +669,16 @@
       "source": "/docs/getting-started/studio",
       "destination": "/docs/studio/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/deployment/studio",
+      "destination": "/docs/studio/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/studio",
+      "destination": "/docs/studio/cloud",
+      "permanent": true
     }
   ]
 }

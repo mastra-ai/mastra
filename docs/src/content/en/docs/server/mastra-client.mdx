@@ -18,9 +18,11 @@ To ensure smooth local development, make sure you have:
 - TypeScript `v4.7` or higher (if using TypeScript)
 - Your local Mastra server running (typically on port `4111`)
 
-## Usage
+:::note
 
 The Mastra Client SDK is designed for browser environments and uses the native `fetch` API for making HTTP requests to your Mastra server.
+
+:::
 
 ## Installation
 
@@ -154,7 +156,7 @@ export const mastraClient = new MastraClient({
 
 Calling `.abort()` will cancel any ongoing requests tied to that signal.
 
-```typescript {4}
+```typescript
 import { mastraClient, controller } from 'lib/mastra-client'
 
 const handleAbort = () => {
@@ -168,7 +170,7 @@ Define tools directly in client-side applications using the `createTool()` funct
 
 This lets agents trigger browser-side functionality such as DOM manipulation, local storage access, or other Web APIs, enabling tool execution in the user's environment rather than on the server.
 
-```typescript {27}
+```typescript {26}
 import { createTool } from '@mastra/client-js'
 import { z } from 'zod'
 

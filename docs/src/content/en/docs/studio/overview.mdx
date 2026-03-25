@@ -1,6 +1,6 @@
 ---
 title: "Studio"
-description: Learn how to use Mastra Studio to build, test, and manage your agents, workflows, and tools.
+description: Learn how to use Studio to build, test, and manage your agents, workflows, and tools.
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -8,9 +8,9 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 # Studio
 
-Studio provides an interactive UI for building, testing, and managing your agents, workflows, and tools. Run it locally during development, or [deploy it](/docs/deployment/studio) to production so your team can manage agents, monitor performance, and gain insights through built-in observability.
+Studio provides an interactive UI for building, testing, and managing your agents, workflows, and tools. Run it locally during development, or [deploy it](/docs/studio/deployment) to production so your team can manage agents, monitor performance, and gain insights through built-in observability.
 
-Add [authentication](/docs/server/auth) to protect your deployed Studio with login screens, role-based access control, and permission-based UI rendering so you can control what each team member can see and do. You can also [create a project in Mastra Cloud](/docs/mastra-cloud/setup) for a hosted option.
+Add [authentication](/docs/studio/auth) to protect your deployed Studio with login screens, role-based access control, and permission-based UI rendering so you can control what each team member can see and do. You can also [create a project in Mastra Cloud](/docs/mastra-cloud/setup) for a hosted option.
 
 <YouTube id="ojGu6Bi4wYk" />
 
@@ -24,10 +24,10 @@ npm run dev
 
 Once the server is running, you can:
 
-- Open the Studio UI at [http://localhost:4111/](http://localhost:4111/) to interact with your agents, workflows, and tools.
+- Open the Studio UI at [http://localhost:4111](http://localhost:4111/) to interact with your agents, workflows, and tools.
 - Visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
 
-To run Studio in production, see [Deploy Studio](/docs/deployment/studio).
+To run Studio in production, see [Studio deployment](/docs/studio/deployment). To run Studio independently from your Mastra server, use [`mastra studio`](/reference/cli/mastra#mastra-studio).
 
 ## Studio UI
 
@@ -91,25 +91,11 @@ Create and manage collections of test cases to evaluate your agents and workflow
 
 See [Datasets overview](/docs/observability/datasets/overview) for the full API and versioning details.
 
-## REST API
-
-Studio is backed by a complete set of REST API routes that let you programmatically interact with your agents, workflows, and tools. These are the same routes exposed by the [Mastra Server](/docs/server/mastra-server), so everything you build against locally works identically in production.
-
-You can explore all available endpoints in the OpenAPI specification at [http://localhost:4111/api/openapi.json](http://localhost:4111/api/openapi.json), which details every endpoint and its request and response schemas.
-
-To explore the API interactively, visit the Swagger UI at [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui). Here, you can discover endpoints and test them directly from your browser.
-
-:::note
-
-The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
-
-:::
-
 ## Configuration
 
-By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and [`studioBase`](/reference/configuration#serverstudiobase) in the Mastra server configuration.
+By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and other options in the Mastra [`server`](/reference/configuration#server-options) configuration.
 
-For production deployments, see [Deploy Studio](/docs/deployment/studio) to learn about hosting Studio alongside your server, as a standalone SPA, or on a CDN.
+For production deployments, read the [Studio deployment](/docs/studio/deployment) docs to learn about hosting Studio alongside your server or as a standalone SPA.
 
 Add [authentication](/docs/server/auth) to control who can access Studio in production. Studio displays the appropriate login UI, which can be an SSO button, an email/password form, or both. All API routes require authentication. This applies to any request made to your Mastra API, whether from Studio or a direct API call.
 

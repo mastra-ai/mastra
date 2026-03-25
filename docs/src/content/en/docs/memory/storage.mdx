@@ -151,7 +151,7 @@ Mastra organizes conversations using two identifiers:
 Both identifiers are required for agents to store information:
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     ```typescript
     const response = await agent.generate('hello', {
       memory: {
@@ -162,7 +162,7 @@ Both identifiers are required for agents to store information:
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     ```typescript
     const stream = await agent.stream('hello', {
       memory: {
