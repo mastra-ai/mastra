@@ -5,6 +5,7 @@ import type { ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
+import type { ProviderMetadata } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
@@ -563,22 +564,46 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             managerConfig,
           });
 
-          console.dir(
-            { bgResolved, toolName: inputData.toolName, toolBgConfig, agentBgConfig, managerConfig },
-            { depth: null },
-          );
-
           if (bgResolved.runInBackground) {
             // Wire all three hooks using the closure context:
             // 1. Stream chunk emitter — background task chunks appear on the active stream
             backgroundTaskManager.setStreamChunkEmitter((_agentId, chunk) => {
-              console.dir({ bgManagerChunk: chunk }, { depth: null });
               try {
                 controller.enqueue({
                   ...(chunk as any),
                   runId,
                   from: ChunkFrom.AGENT,
                 });
+
+                if (chunk.type === 'background-task-completed') {
+                  controller.enqueue({
+                    type: 'tool-result',
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      toolCallId: chunk.payload.toolCallId,
+                      toolName: chunk.payload.toolName,
+                      args: inputData.args,
+                      result: chunk.payload.result,
+                      providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                      providerExecuted: inputData.providerExecuted,
+                    },
+                  });
+                } else {
+                  controller.enqueue({
+                    type: 'tool-error',
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      toolCallId: chunk.payload.toolCallId,
+                      toolName: chunk.payload.toolName,
+                      error: chunk.payload.error,
+                      args: inputData.args,
+                      providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                      providerExecuted: inputData.providerExecuted,
+                    },
+                  });
+                }
               } catch {
                 // Controller may be closed if stream ended — ignore
               }

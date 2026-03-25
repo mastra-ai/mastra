@@ -1,5 +1,5 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, Loader2Icon, StopCircleIcon } from 'lucide-react';
 
 import { ErrorAwareText } from './error-aware-text';
 import { IconButton } from '@/ds/components/IconButton';
@@ -7,6 +7,7 @@ import { ToolFallback } from '../tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { Badge } from '@/ds/components/Badge';
 
 /**
  * Content item type for assistant message content parts.
@@ -18,6 +19,7 @@ interface ContentItem {
     mode?: string;
     completionResult?: unknown;
     isTaskCompleteResult?: unknown;
+    pendingBackgroundTasksCount?: number;
   };
 }
 
@@ -36,6 +38,10 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
       (type === 'text' && (metadata?.completionResult || metadata?.isTaskCompleteResult)),
   );
 
+  const pendingBackgroundTasksCount = (data.content as readonly ContentItem[])
+    .toReversed()
+    .find(({ metadata }) => metadata?.pendingBackgroundTasksCount)?.metadata?.pendingBackgroundTasksCount;
+
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
 
   const showModelUsed = hasModelList && modelMetadata;
@@ -51,6 +57,14 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
           }}
         />
       </div>
+      {pendingBackgroundTasksCount && (
+        <div className="pt-2">
+          <Badge variant="info" icon={<Loader2Icon className="animate-spin" />}>
+            {pendingBackgroundTasksCount} background task{pendingBackgroundTasksCount > 1 ? 's' : ''}{' '}
+            {pendingBackgroundTasksCount > 1 ? 'are' : 'is'} running
+          </Badge>
+        </div>
+      )}
       {!isNotAssistantTextResponse && (
         <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
           {showModelUsed && (

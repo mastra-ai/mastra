@@ -374,6 +374,32 @@ interface IsTaskCompletePayload {
   suppressFeedback: boolean;
 }
 
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  result: unknown;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  error: { message: string };
+}
+
+export interface BackgroundTaskWaitingPayload {
+  taskIds: string[];
+  pendingCount: number;
+  elapsedMs: number;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -686,19 +712,19 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
   | (BaseChunkType & {
       type: 'background-task-started';
-      payload: { taskId: string; toolName: string; toolCallId: string };
+      payload: BackgroundTaskStartedPayload;
     })
   | (BaseChunkType & {
       type: 'background-task-completed';
-      payload: { taskId: string; toolName: string; toolCallId: string; result: unknown };
+      payload: BackgroundTaskResultPayload;
     })
   | (BaseChunkType & {
       type: 'background-task-failed';
-      payload: { taskId: string; toolName: string; toolCallId: string; error: { message: string } };
+      payload: BackgroundTaskFailedPayload;
     })
   | (BaseChunkType & {
       type: 'background-task-waiting';
-      payload: { taskIds: string[]; pendingCount: number; elapsedMs: number };
+      payload: BackgroundTaskWaitingPayload;
     });
 
 export type WorkflowStreamEvent =

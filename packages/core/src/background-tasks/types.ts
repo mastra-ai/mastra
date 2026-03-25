@@ -1,3 +1,10 @@
+import type {
+  BackgroundTaskFailedPayload,
+  BackgroundTaskResultPayload,
+  BackgroundTaskStartedPayload,
+  BackgroundTaskWaitingPayload,
+} from '../stream/types';
+
 export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export interface BackgroundTask {
@@ -170,47 +177,25 @@ export interface LLMBackgroundOverride {
 
 export interface BackgroundTaskStartedChunk {
   type: 'background-task-started';
-  payload: {
-    taskId: string;
-    toolName: string;
-    toolCallId: string;
-  };
+  payload: BackgroundTaskStartedPayload;
 }
 
 export interface BackgroundTaskCompletedChunk {
   type: 'background-task-completed';
-  payload: {
-    taskId: string;
-    toolName: string;
-    toolCallId: string;
-    result: unknown;
-  };
+  payload: BackgroundTaskResultPayload;
 }
 
 export interface BackgroundTaskFailedChunk {
   type: 'background-task-failed';
-  payload: {
-    taskId: string;
-    toolName: string;
-    toolCallId: string;
-    error: { message: string };
-  };
+  payload: BackgroundTaskFailedPayload;
 }
 
 export interface BackgroundTaskProgressChunk {
   type: 'background-task-progress';
-  payload: {
-    taskId: string;
-    toolName: string;
-    progress: unknown;
-  };
+  payload: BackgroundTaskWaitingPayload;
 }
 
-export type BackgroundTaskChunk =
-  | BackgroundTaskStartedChunk
-  | BackgroundTaskCompletedChunk
-  | BackgroundTaskFailedChunk
-  | BackgroundTaskProgressChunk;
+export type BackgroundTaskResultChunk = BackgroundTaskCompletedChunk | BackgroundTaskFailedChunk;
 
 // --- Tool resolver ---
 

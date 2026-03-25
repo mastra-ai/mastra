@@ -4,6 +4,7 @@ import type { Event } from '../events/types';
 import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
+  BackgroundTaskResultChunk,
   BackgroundTaskStatus,
   EnqueueResult,
   ResultInjector,
@@ -39,7 +40,7 @@ export class BackgroundTaskManager {
   private shuttingDown = false;
 
   // Stream chunk emitter — set externally
-  private streamChunkEmitter?: (agentId: string, chunk: unknown) => void;
+  private streamChunkEmitter?: (agentId: string, chunk: BackgroundTaskResultChunk) => void;
 
   // Result injector — injects completed/failed results into the agent's message list
   private resultInjector?: ResultInjector;
@@ -85,7 +86,7 @@ export class BackgroundTaskManager {
     this.toolResolver = resolver;
   }
 
-  setStreamChunkEmitter(emitter: (agentId: string, chunk: unknown) => void): void {
+  setStreamChunkEmitter(emitter: (agentId: string, chunk: BackgroundTaskResultChunk) => void): void {
     this.streamChunkEmitter = emitter;
   }
 

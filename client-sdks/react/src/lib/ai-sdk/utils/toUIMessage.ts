@@ -252,9 +252,28 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         {
           ...lastMessage,
           metadata: {
+            mode: metadata.mode,
             ...lastMessage.metadata,
             pendingBackgroundTasksCount: chunk.payload.pendingCount,
-          },
+          } as MastraUIMessageMetadata,
+        },
+      ];
+    }
+
+    case 'background-task-failed':
+    case 'background-task-completed': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            mode: metadata.mode,
+            ...lastMessage.metadata,
+            pendingBackgroundTasksCount: undefined,
+          } as MastraUIMessageMetadata,
         },
       ];
     }
@@ -447,12 +466,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             };
           } else {
             const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
-            const isAgent = chunk?.from === 'AGENT';
             let output;
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
-            } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }
