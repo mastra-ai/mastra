@@ -32,7 +32,7 @@ export function BarListContent({
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
-          const pct = maxVal > 0 ? (d.value / maxVal) * 100 : 0;
+          const pct = Math.min(Math.max(maxVal > 0 ? (d.value / maxVal) * 100 : 0, 0), 100);
           return (
             <div key={d.name} className="group flex items-center gap-3">
               <div className="relative flex-1 h-7">
@@ -75,14 +75,17 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
         {sorted.map(d => {
           const total = d.completed + d.errors;
           const successPct = total > 0 ? ((d.completed / total) * 100).toFixed(1) : '0.0';
-          const completedWidth = maxTotal > 0 ? (d.completed / maxTotal) * 100 : 0;
-          const errorsWidth = maxTotal > 0 ? (d.errors / maxTotal) * 100 : 0;
+          const completedWidth = Math.min(Math.max(maxTotal > 0 ? (d.completed / maxTotal) * 100 : 0, 0), 100);
+          const errorsWidth = Math.min(Math.max(maxTotal > 0 ? (d.errors / maxTotal) * 100 : 0, 0), 100);
           return (
             <div key={d.name} className="group flex items-center gap-3">
               <div className="relative flex-1 h-7">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
+                      role="img"
+                      aria-label={`${d.completed.toLocaleString()} completed`}
+                      tabIndex={0}
                       className="absolute inset-y-0 left-0 rounded-l cursor-default"
                       style={{ width: `${completedWidth}%`, backgroundColor: CHART_COLORS.blue }}
                     />
@@ -94,6 +97,9 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
+                      role="img"
+                      aria-label={`${d.errors.toLocaleString()} errors`}
+                      tabIndex={0}
                       className="absolute inset-y-0 rounded-r cursor-default"
                       style={{
                         left: `${completedWidth}%`,
