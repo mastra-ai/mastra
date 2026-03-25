@@ -40,6 +40,16 @@ function getGitBranch(projectDir: string): string | null {
   }
 }
 
+function getMastraVersion(projectDir: string): string | null {
+  try {
+    const pkgPath = join(projectDir, 'package.json');
+    const pkg = JSON.parse(require('node:fs').readFileSync(pkgPath, 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return deps['mastra'] ?? null;
+  } catch {
+    return null;
+  }
+}
 function runBuild(projectDir: string): void {
   const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
   p.log.step('Running mastra build --studio...');
@@ -234,6 +244,7 @@ export async function deployAction(
   // Gather context
   const packageName = getPackageName(targetDir);
   const gitBranch = getGitBranch(targetDir);
+  const mastraVersion = getMastraVersion(targetDir);
 
   // Step 1: Auth
   const token = await getToken();
@@ -325,6 +336,7 @@ export async function deployAction(
     gitBranch: gitBranch ?? undefined,
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
+    mastraVersion: mastraVersion ?? undefined,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 

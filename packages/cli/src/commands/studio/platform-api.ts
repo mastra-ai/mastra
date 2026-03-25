@@ -69,7 +69,7 @@ export async function uploadDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string> },
+  meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string>; mastraVersion?: string },
 ): Promise<{ id: string; status: string }> {
   const headers: Record<string, string> = {
     ...authHeaders(token, orgId),
@@ -78,6 +78,7 @@ export async function uploadDeploy(
   };
   if (meta?.gitBranch) headers['x-git-branch'] = meta.gitBranch;
   if (meta?.projectName) headers['x-project-name'] = meta.projectName;
+  if (meta?.mastraVersion) headers['x-mastra-version'] = meta.mastraVersion;
 
   // Step 1: Create the deploy with optional envVars
   const createResp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
