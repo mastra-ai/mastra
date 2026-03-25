@@ -88,6 +88,21 @@ type FinalizedResponse = {
   responseMessages: MastraDBMessage[];
 };
 
+type PreparedCreateResponseRequest = {
+  agent: Agent<any, any, any, any>;
+  configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
+  createdAt: number;
+  didStore: boolean;
+  executionInput: AgentExecutionInput;
+  previousResponseTurnRecord: ResponseTurnRecord | null;
+  responseId: string;
+  responseMetadata: Omit<
+    ResponseTurnRecordMetadata,
+    'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
+  >;
+  threadContext: ThreadExecutionContext | null;
+};
+
 function jsonResponse(data: ResponseObject, status: number = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -499,6 +514,230 @@ async function finalizeResponse({
   return { completedState, response, responseMessages };
 }
 
+async function prepareCreateResponseRequest({
+  body,
+  mastra,
+  requestContext,
+}: {
+  body: CreateResponseBody;
+  mastra: Mastra | undefined;
+  requestContext: RequestContext;
+}): Promise<PreparedCreateResponseRequest> {
+  const previousResponseTurnRecord = body.previous_response_id
+    ? await findResponseTurnRecord({ mastra, responseId: body.previous_response_id, requestContext })
+    : null;
+
+  if (body.previous_response_id && !previousResponseTurnRecord) {
+    throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+  }
+
+  const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
+  const agent = await resolveResponseAgent({
+    mastra,
+    agentId: body.agent_id,
+    previousResponseTurnRecord,
+  });
+  const configuredTools = mapMastraToolsToResponseTools(
+    (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
+  );
+
+  const responseId = createMessageId();
+  const createdAt = Math.floor(Date.now() / 1000);
+  const shouldStore = body.store ?? false;
+  const threadContext = await resolveThreadExecutionContext({
+    agent,
+    store: shouldStore,
+    conversationId: body.conversation_id,
+    previousResponseTurnRecord,
+    requestContext,
+  });
+
+  if (shouldStore && !threadContext) {
+    throw new HTTPException(400, {
+      message: 'Stored responses require the target agent to have memory configured',
+    });
+  }
+
+  const didStore = shouldStore && Boolean(threadContext);
+
+  return {
+    agent,
+    configuredTools,
+    createdAt,
+    didStore,
+    executionInput,
+    previousResponseTurnRecord,
+    responseId,
+    responseMetadata: {
+      agentId: agent.id,
+      model: body.model,
+      createdAt,
+      instructions: body.instructions,
+      previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
+      tools: configuredTools,
+      store: didStore,
+    },
+    threadContext,
+  };
+}
+
+function createResponseEventStream({
+  body,
+  configuredTools,
+  createdAt,
+  didStore,
+  mastra,
+  previousResponseTurnRecord,
+  responseId,
+  responseMetadata,
+  streamResult,
+  threadContext,
+}: {
+  body: CreateResponseBody;
+  configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
+  createdAt: number;
+  didStore: boolean;
+  mastra: Mastra | undefined;
+  previousResponseTurnRecord: ResponseTurnRecord | null;
+  responseId: string;
+  responseMetadata: Omit<
+    ResponseTurnRecordMetadata,
+    'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
+  >;
+  streamResult: ResponseStreamResult;
+  threadContext: ThreadExecutionContext | null;
+}) {
+  const createdResponse = buildInProgressResponse({
+    responseId,
+    model: body.model,
+    createdAt,
+    instructions: body.instructions,
+    previousResponseId: body.previous_response_id,
+    conversationId: threadContext?.threadId ?? body.conversation_id,
+    tools: configuredTools,
+    store: didStore,
+  });
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let sequenceNumber = 1;
+      const enqueueEvent = (eventName: string, payload: Record<string, unknown>) => {
+        controller.enqueue(
+          formatSseEvent(eventName, {
+            ...payload,
+            sequence_number: sequenceNumber++,
+          }),
+        );
+      };
+
+      enqueueEvent('response.created', {
+        type: 'response.created',
+        response: createdResponse,
+      });
+      enqueueEvent('response.in_progress', {
+        type: 'response.in_progress',
+        response: createdResponse,
+      });
+      enqueueEvent('response.output_item.added', {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: {
+          id: responseId,
+          type: 'message',
+          role: 'assistant',
+          status: 'in_progress',
+          content: [],
+        },
+      });
+      enqueueEvent('response.content_part.added', {
+        type: 'response.content_part.added',
+        output_index: 0,
+        content_index: 0,
+        item_id: responseId,
+        part: createOutputTextPart(''),
+      });
+
+      let text = '';
+      const fullStream = await streamResult.fullStream;
+      const reader = fullStream.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          const delta = extractTextDelta(value);
+          if (delta) {
+            text += delta;
+            enqueueEvent('response.output_text.delta', {
+              type: 'response.output_text.delta',
+              output_index: 0,
+              content_index: 0,
+              item_id: responseId,
+              delta,
+            });
+          }
+        }
+
+        const { completedState, response } = await finalizeResponse({
+          mastra,
+          didStore,
+          threadContext,
+          result: streamResult,
+          responseId,
+          createdAt,
+          model: body.model,
+          instructions: body.instructions,
+          previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
+          conversationId: threadContext?.threadId ?? body.conversation_id,
+          configuredTools,
+          responseMetadata,
+          fallbackText: text,
+        });
+        enqueueEvent('response.output_text.done', {
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: responseId,
+          text: completedState.text,
+        });
+
+        const completedItem = getStreamedMessageOutputItem(response, responseId) ?? {
+          id: responseId,
+          type: 'message' as const,
+          role: 'assistant' as const,
+          status: 'completed' as const,
+          content: [createOutputTextPart(completedState.text)],
+        };
+
+        enqueueEvent('response.content_part.done', {
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: responseId,
+          part: createOutputTextPart(completedState.text),
+        });
+        enqueueEvent('response.output_item.done', {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: completedItem,
+        });
+        enqueueEvent('response.completed', {
+          type: 'response.completed',
+          response,
+        });
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+}
+
 export const CREATE_RESPONSE_ROUTE = createRoute({
   method: 'POST',
   path: '/v1/responses',
@@ -512,52 +751,17 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
-      const previousResponseTurnRecord = body.previous_response_id
-        ? await findResponseTurnRecord({ mastra, responseId: body.previous_response_id, requestContext })
-        : null;
-
-      if (body.previous_response_id && !previousResponseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
-      }
-
-      const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-
-      const agent = await resolveResponseAgent({
-        mastra,
-        agentId: body.agent_id,
-        previousResponseTurnRecord,
-      });
-      const configuredTools = mapMastraToolsToResponseTools(
-        (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
-      );
-
-      const responseId = createMessageId();
-      const createdAt = Math.floor(Date.now() / 1000);
-      const shouldStore = body.store ?? false;
-      const threadContext = await resolveThreadExecutionContext({
+      const {
         agent,
-        store: shouldStore,
-        conversationId: body.conversation_id,
-        previousResponseTurnRecord,
-        requestContext,
-      });
-
-      if (shouldStore && !threadContext) {
-        throw new HTTPException(400, {
-          message: 'Stored responses require the target agent to have memory configured',
-        });
-      }
-
-      const didStore = shouldStore && Boolean(threadContext);
-      const responseMetadata = {
-        agentId: agent.id,
-        model: body.model,
+        configuredTools,
         createdAt,
-        instructions: body.instructions,
-        previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
-        tools: configuredTools,
-        store: didStore,
-      };
+        didStore,
+        executionInput,
+        previousResponseTurnRecord,
+        responseId,
+        responseMetadata,
+        threadContext,
+      } = await prepareCreateResponseRequest({ body, mastra, requestContext });
 
       if (!body.stream) {
         const result = await executeGenerate({
@@ -601,134 +805,17 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         threadContext,
       });
 
-      const createdResponse = buildInProgressResponse({
-        responseId,
-        model: body.model,
+      const stream = createResponseEventStream({
+        body,
+        configuredTools,
         createdAt,
-        instructions: body.instructions,
-        previousResponseId: body.previous_response_id,
-        conversationId: threadContext?.threadId ?? body.conversation_id,
-        tools: configuredTools,
-        store: didStore,
-      });
-
-      const stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          let sequenceNumber = 1;
-          const enqueueEvent = (eventName: string, payload: Record<string, unknown>) => {
-            controller.enqueue(
-              formatSseEvent(eventName, {
-                ...payload,
-                sequence_number: sequenceNumber++,
-              }),
-            );
-          };
-
-          enqueueEvent('response.created', {
-            type: 'response.created',
-            response: createdResponse,
-          });
-          enqueueEvent('response.in_progress', {
-            type: 'response.in_progress',
-            response: createdResponse,
-          });
-          enqueueEvent('response.output_item.added', {
-            type: 'response.output_item.added',
-            output_index: 0,
-            item: {
-              id: responseId,
-              type: 'message',
-              role: 'assistant',
-              status: 'in_progress',
-              content: [],
-            },
-          });
-          enqueueEvent('response.content_part.added', {
-            type: 'response.content_part.added',
-            output_index: 0,
-            content_index: 0,
-            item_id: responseId,
-            part: createOutputTextPart(''),
-          });
-
-          let text = '';
-          const fullStream = await streamResult.fullStream;
-          const reader = fullStream.getReader();
-
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                break;
-              }
-
-              const delta = extractTextDelta(value);
-              if (delta) {
-                text += delta;
-                enqueueEvent('response.output_text.delta', {
-                  type: 'response.output_text.delta',
-                  output_index: 0,
-                  content_index: 0,
-                  item_id: responseId,
-                  delta,
-                });
-              }
-            }
-
-            const { completedState, response } = await finalizeResponse({
-              mastra,
-              didStore,
-              threadContext,
-              result: streamResult,
-              responseId,
-              createdAt,
-              model: body.model,
-              instructions: body.instructions,
-              previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
-              conversationId: threadContext?.threadId ?? body.conversation_id,
-              configuredTools,
-              responseMetadata,
-              fallbackText: text,
-            });
-            enqueueEvent('response.output_text.done', {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: responseId,
-              text: completedState.text,
-            });
-
-            const completedItem = getStreamedMessageOutputItem(response, responseId) ?? {
-              id: responseId,
-              type: 'message' as const,
-              role: 'assistant' as const,
-              status: 'completed' as const,
-              content: [createOutputTextPart(completedState.text)],
-            };
-
-            enqueueEvent('response.content_part.done', {
-              type: 'response.content_part.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: responseId,
-              part: createOutputTextPart(completedState.text),
-            });
-            enqueueEvent('response.output_item.done', {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: completedItem,
-            });
-            enqueueEvent('response.completed', {
-              type: 'response.completed',
-              response,
-            });
-            controller.close();
-          } catch (error) {
-            controller.error(error);
-          } finally {
-            reader.releaseLock();
-          }
-        },
+        didStore,
+        mastra,
+        previousResponseTurnRecord,
+        responseId,
+        responseMetadata,
+        streamResult,
+        threadContext,
       });
 
       return new Response(stream, {
