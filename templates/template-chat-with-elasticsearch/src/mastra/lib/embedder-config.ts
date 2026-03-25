@@ -36,18 +36,26 @@ export function getEmbedderConfig(): EmbedderConfig {
  * - 'openai': Uses OpenAI's embedding models (requires OPENAI_API_KEY)
  * - 'elastic': Uses Elastic Inference Service with models like Jina
  *
- * @returns Configured embedding model or model string
+ * @returns Configured embedding model, model string, or null if no valid configuration
  */
 export function createEmbedder() {
+  if (!process.env.EMBEDDER_PROVIDER) {
+    console.log('[Embedder] No embedder configured. Memory and semantic recall disabled.');
+    console.log('[Embedder] To enable memory, set EMBEDDER_PROVIDER=openai or EMBEDDER_PROVIDER=elastic and configure an embedding model');
+    return null;
+  }
+
   const config = getEmbedderConfig();
 
   switch (config.provider) {
     case 'elastic': {
       if (!config.elasticInferenceId) {
-        throw new Error(
-          'ELASTIC_INFERENCE_ID is required when EMBEDDER_PROVIDER=elastic.\n' +
-          'Example: ELASTIC_INFERENCE_ID=jina-embeddings-v5-text-small.'
+        console.warn(
+          '[Embedder] ELASTIC_INFERENCE_ID is required when EMBEDDER_PROVIDER=elastic.\n' +
+          '[Embedder] Example: ELASTIC_INFERENCE_ID=jina-embeddings-v5-text-small.\n' +
+          '[Embedder] Memory disabled.'
         );
+        return null;
       }
 
       console.log(`[Embedder] Using Elastic Inference Service: ${config.elasticInferenceId}`);
@@ -58,10 +66,12 @@ export function createEmbedder() {
 
     case 'openai': {
       if (!process.env.OPENAI_API_KEY) {
-        throw new Error(
-          'OPENAI_API_KEY is required when EMBEDDER_PROVIDER=openai.\n' +
-          'Set OPENAI_API_KEY in your .env file.'
+        console.warn(
+          '[Embedder] OPENAI_API_KEY is required when EMBEDDER_PROVIDER=openai.\n' +
+          '[Embedder] Set OPENAI_API_KEY in your .env file.\n' +
+          '[Embedder] Memory disabled.'
         );
+        return null;
       }
 
       console.log(`[Embedder] Using OpenAI: ${config.openaiModel}`);
@@ -69,11 +79,12 @@ export function createEmbedder() {
     }
 
     default: {
-      throw new Error(
-        `Unknown embedder provider: ${config.provider}.\n` +
-        'Supported providers: openai, elastic\n' +
-        'Set EMBEDDER_PROVIDER=openai or EMBEDDER_PROVIDER=elastic\n'
+      console.warn(
+        `[Embedder] Unknown embedder provider: ${config.provider}.\n` +
+        '[Embedder] Supported providers: openai, elastic\n' +
+        '[Embedder] Memory disabled.'
       );
+      return null;
     }
   }
 }

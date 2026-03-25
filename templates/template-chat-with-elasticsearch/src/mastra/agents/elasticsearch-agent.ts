@@ -25,12 +25,22 @@ You also have access to additional tools from Kibana's MCP server. These may inc
 Use these tools when they provide functionality not covered by the built-in tools.`
   : '';
 
-const elasticsearchVector = new ElasticSearchVector({
-  id: 'elasticsearch-memory-vector',
-  client: esClient,
-});
-
 const embedder = createEmbedder();
+
+// Only configure memory if embedder is available
+const memory = embedder
+  ? new Memory({
+      vector: new ElasticSearchVector({
+        id: 'elasticsearch-memory-vector',
+        client: esClient,
+      }),
+      embedder,
+      options: {
+        semanticRecall: true,
+        lastMessages: 10,
+      },
+    })
+  : undefined;
 
 export const elasticsearchAgent = new Agent({
   id: 'elasticsearch-agent',
@@ -85,12 +95,5 @@ For summaries across multiple documents:
 - Explain your search strategy when relevant.
 - If no results are found, suggest alternative queries or filters.`,
   tools: { ...localTools, ...kibanaMcpTools },
-  memory: new Memory({
-    vector: elasticsearchVector,
-    embedder,
-    options: {
-      semanticRecall: true,
-      lastMessages: 10,
-    },
-  }),
+  memory,
 });
