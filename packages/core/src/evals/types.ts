@@ -4,6 +4,7 @@ import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
 import type { ObservabilityContext } from '../observability';
 import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
+import type { StepResult } from '../workflows/types';
 
 // ============================================================================
 // Sampling Config
@@ -250,3 +251,386 @@ export type ScorerRunInputForAgent = {
 };
 
 export type ScorerRunOutputForAgent = MastraDBMessage[];
+
+// ============================================================================
+// Trajectory Types — Discriminated Union
+// ============================================================================
+
+/**
+ * Base properties shared by all trajectory step types.
+ */
+export type TrajectoryStepBase = {
+  /** Name of the tool called, model used, or step executed */
+  name: string;
+  /** Duration of this step in milliseconds */
+  durationMs?: number;
+  /** Additional metadata about this step */
+  metadata?: Record<string, unknown>;
+  /** Nested child steps (e.g., tool calls inside a workflow step, or steps inside an agent run) */
+  children?: TrajectoryStep[];
+};
+
+// --- Individual step types ---
+
+export type ToolCallStep = TrajectoryStepBase & {
+  stepType: 'tool_call';
+  /** Arguments passed to the tool */
+  toolArgs?: Record<string, unknown>;
+  /** Result returned by the tool */
+  toolResult?: Record<string, unknown>;
+  /** Whether the tool call succeeded */
+  success?: boolean;
+};
+
+export type McpToolCallStep = TrajectoryStepBase & {
+  stepType: 'mcp_tool_call';
+  /** Arguments passed to the MCP tool */
+  toolArgs?: Record<string, unknown>;
+  /** Result returned by the MCP tool */
+  toolResult?: Record<string, unknown>;
+  /** The MCP server that handled this tool call */
+  mcpServer?: string;
+  /** Whether the tool call succeeded */
+  success?: boolean;
+};
+
+export type ModelGenerationStep = TrajectoryStepBase & {
+  stepType: 'model_generation';
+  /** The model ID used for generation */
+  modelId?: string;
+  /** Number of prompt tokens consumed */
+  promptTokens?: number;
+  /** Number of completion tokens generated */
+  completionTokens?: number;
+  /** Reason the generation finished (e.g., 'stop', 'tool-calls') */
+  finishReason?: string;
+};
+
+export type AgentRunStep = TrajectoryStepBase & {
+  stepType: 'agent_run';
+  /** The ID of the agent that was run */
+  agentId?: string;
+};
+
+export type WorkflowStepStep = TrajectoryStepBase & {
+  stepType: 'workflow_step';
+  /** The step ID within the workflow */
+  stepId?: string;
+  /** Status of the step (e.g., 'success', 'failed', 'suspended') */
+  status?: string;
+  /** Output data from the step */
+  output?: Record<string, unknown>;
+};
+
+export type WorkflowRunStep = TrajectoryStepBase & {
+  stepType: 'workflow_run';
+  /** The ID of the workflow that was run */
+  workflowId?: string;
+  /** Status of the workflow run */
+  status?: string;
+};
+
+export type WorkflowConditionalStep = TrajectoryStepBase & {
+  stepType: 'workflow_conditional';
+  /** Number of conditions evaluated */
+  conditionCount?: number;
+  /** Steps selected by the conditional */
+  selectedSteps?: string[];
+};
+
+export type WorkflowParallelStep = TrajectoryStepBase & {
+  stepType: 'workflow_parallel';
+  /** Number of parallel branches */
+  branchCount?: number;
+  /** Steps that ran in parallel */
+  parallelSteps?: string[];
+};
+
+export type WorkflowLoopStep = TrajectoryStepBase & {
+  stepType: 'workflow_loop';
+  /** Type of loop (e.g., 'dowhile', 'dountil') */
+  loopType?: string;
+  /** Total number of iterations executed */
+  totalIterations?: number;
+};
+
+export type WorkflowSleepStep = TrajectoryStepBase & {
+  stepType: 'workflow_sleep';
+  /** Sleep duration in milliseconds */
+  sleepDurationMs?: number;
+  /** Type of sleep */
+  sleepType?: string;
+};
+
+export type WorkflowWaitEventStep = TrajectoryStepBase & {
+  stepType: 'workflow_wait_event';
+  /** Name of the event being waited on */
+  eventName?: string;
+  /** Whether the event was received */
+  eventReceived?: boolean;
+};
+
+export type ProcessorRunStep = TrajectoryStepBase & {
+  stepType: 'processor_run';
+  /** The ID of the processor that was run */
+  processorId?: string;
+};
+
+/**
+ * A single step in an agent's or workflow's trajectory.
+ * Discriminated union on `stepType` — each variant carries properties specific
+ * to that kind of action.
+ */
+export type TrajectoryStep =
+  | ToolCallStep
+  | McpToolCallStep
+  | ModelGenerationStep
+  | AgentRunStep
+  | WorkflowStepStep
+  | WorkflowRunStep
+  | WorkflowConditionalStep
+  | WorkflowParallelStep
+  | WorkflowLoopStep
+  | WorkflowSleepStep
+  | WorkflowWaitEventStep
+  | ProcessorRunStep;
+
+/**
+ * The type of action taken in a trajectory step.
+ * Derived from the discriminated union for convenience.
+ */
+export type TrajectoryStepType = TrajectoryStep['stepType'];
+
+/**
+ * A complete trajectory: the ordered sequence of steps an agent or workflow took
+ * to go from input to output.
+ */
+export type Trajectory = {
+  /** Ordered list of steps taken */
+  steps: TrajectoryStep[];
+  /** Total duration of the full trajectory in milliseconds */
+  totalDurationMs?: number;
+  /** The raw agent output messages, preserved for scorers that need text context */
+  rawOutput?: ScorerRunOutputForAgent;
+  /** The raw workflow result, preserved for scorers that need workflow-specific data */
+  rawWorkflowResult?: {
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    stepExecutionPath?: string[];
+  };
+};
+
+/**
+ * Configuration for trajectory comparison behavior.
+ */
+export type TrajectoryComparisonOptions = {
+  /**
+   * How to compare step ordering.
+   * - 'strict': exact match (same steps, same order, no extras)
+   * - 'relaxed': subsequence match (extra steps OK, order matters)
+   * - 'unordered': just check presence (don't care about order)
+   * @default 'relaxed'
+   */
+  ordering?: 'strict' | 'relaxed' | 'unordered';
+  /**
+   * Whether to require exact match of the trajectory (same steps in same order, no extra steps).
+   * When false, allows additional steps as long as expected steps appear in order.
+   * @default false
+   * @deprecated Use `ordering: 'strict'` instead
+   */
+  strictOrder?: boolean;
+  /**
+   * Whether to compare step-specific data (e.g., toolArgs/toolResult for tool_call steps).
+   * @default false
+   */
+  compareStepData?: boolean;
+  /**
+   * Whether to allow repeated steps in the trajectory.
+   * When false, repeated steps (loops) are penalized.
+   * @default true
+   */
+  allowRepeatedSteps?: boolean;
+};
+
+/**
+ * Full trajectory expectation config for the unified trajectory scorer.
+ * Can be set as constructor defaults (agent-level) or per dataset item (prompt-specific).
+ * Per-item values override constructor defaults.
+ */
+export type TrajectoryExpectation = {
+  // --- Accuracy ---
+
+  /** Expected steps for accuracy checking */
+  steps?: TrajectoryStep[];
+
+  /**
+   * How to compare step ordering.
+   * - 'strict': exact match (same steps, same order, no extras)
+   * - 'relaxed': subsequence match (extra steps OK, order matters)
+   * - 'unordered': just check presence (don't care about order)
+   * @default 'relaxed'
+   */
+  ordering?: 'strict' | 'relaxed' | 'unordered';
+
+  /** Whether to compare step-specific data (toolArgs/toolResult, output, etc.) */
+  compareStepData?: boolean;
+
+  /** Whether to allow repeated steps in accuracy evaluation. @default true */
+  allowRepeatedSteps?: boolean;
+
+  // --- Efficiency ---
+
+  /** Maximum number of steps allowed */
+  maxSteps?: number;
+
+  /** Maximum total tokens across all model_generation steps */
+  maxTotalTokens?: number;
+
+  /** Maximum total duration in milliseconds */
+  maxTotalDurationMs?: number;
+
+  /** Whether to penalize redundant calls (same tool + same args consecutively). @default true */
+  noRedundantCalls?: boolean;
+
+  // --- Blacklist ---
+
+  /** Tool names that should never appear in the trajectory */
+  blacklistedTools?: string[];
+
+  /** Tool name sequences that should never appear (contiguous subsequences) */
+  blacklistedSequences?: string[][];
+
+  // --- Tool failure tolerance ---
+
+  /** Maximum acceptable retries per tool before penalizing. @default 2 */
+  maxRetriesPerTool?: number;
+};
+
+// ============================================================================
+// Trajectory Extraction — Agent
+// ============================================================================
+
+/**
+ * Extracts a Trajectory from agent output messages by walking through
+ * tool invocations.
+ *
+ * This is called automatically by `runEvals` when using `AgentScorerConfig.trajectory`
+ * scorers — trajectory scorers receive a pre-extracted `Trajectory` as their `output`
+ * instead of raw `MastraDBMessage[]`.
+ *
+ * @param output - The raw agent output messages
+ * @returns A Trajectory with ToolCallStep entries extracted from tool invocations
+ */
+export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
+  const steps: ToolCallStep[] = [];
+
+  for (const message of output) {
+    const toolInvocations = message?.content?.toolInvocations;
+    if (!toolInvocations) continue;
+
+    for (const invocation of toolInvocations) {
+      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+        const toolArgs =
+          invocation.args != null && typeof invocation.args === 'object' && !Array.isArray(invocation.args)
+            ? (invocation.args as Record<string, unknown>)
+            : invocation.args != null
+              ? { value: invocation.args }
+              : undefined;
+
+        const rawResult = invocation.state === 'result' ? invocation.result : undefined;
+        const toolResult =
+          rawResult != null && typeof rawResult === 'object' && !Array.isArray(rawResult)
+            ? (rawResult as Record<string, unknown>)
+            : rawResult != null
+              ? { value: rawResult }
+              : undefined;
+
+        steps.push({
+          stepType: 'tool_call',
+          name: invocation.toolName,
+          toolArgs,
+          toolResult,
+          success: invocation.state === 'result',
+        });
+      }
+    }
+  }
+
+  return { steps, rawOutput: output };
+}
+
+// ============================================================================
+// Trajectory Extraction — Workflow
+// ============================================================================
+
+/**
+ * Extracts a Trajectory from workflow step results.
+ *
+ * Converts the `stepResults` record (and optional `stepExecutionPath` ordering)
+ * into a flat list of `WorkflowStepStep` entries. Each step captures its status,
+ * output, and timing.
+ *
+ * This is called automatically by `runEvals` when using `WorkflowScorerConfig.trajectory`
+ * scorers.
+ *
+ * @param stepResults - The workflow step results record
+ * @param stepExecutionPath - Optional ordered list of step IDs for execution ordering
+ * @returns A Trajectory with WorkflowStepStep entries
+ */
+export function extractWorkflowTrajectory(
+  stepResults: Record<string, StepResult<any, any, any, any>>,
+  stepExecutionPath?: string[],
+): Trajectory {
+  const steps: WorkflowStepStep[] = [];
+
+  // Use stepExecutionPath ordering when available, fall back to stepResults keys
+  const stepIds = stepExecutionPath ?? Object.keys(stepResults);
+
+  let totalStartedAt: number | undefined;
+  let totalEndedAt: number | undefined;
+
+  for (const stepId of stepIds) {
+    const result = stepResults[stepId];
+    if (!result) continue;
+
+    // Track overall timing
+    if (result.startedAt != null) {
+      if (totalStartedAt == null || result.startedAt < totalStartedAt) {
+        totalStartedAt = result.startedAt;
+      }
+    }
+
+    const endedAt = 'endedAt' in result ? (result as { endedAt?: number }).endedAt : undefined;
+    if (endedAt != null) {
+      if (totalEndedAt == null || endedAt > totalEndedAt) {
+        totalEndedAt = endedAt;
+      }
+    }
+
+    const durationMs = result.startedAt != null && endedAt != null ? endedAt - result.startedAt : undefined;
+
+    const output =
+      'output' in result && result.output != null && typeof result.output === 'object' && !Array.isArray(result.output)
+        ? (result.output as Record<string, unknown>)
+        : 'output' in result && result.output != null
+          ? { value: result.output }
+          : undefined;
+
+    steps.push({
+      stepType: 'workflow_step',
+      name: stepId,
+      stepId,
+      status: result.status,
+      output,
+      durationMs,
+      metadata: result.metadata as Record<string, unknown> | undefined,
+    });
+  }
+
+  const totalDurationMs = totalStartedAt != null && totalEndedAt != null ? totalEndedAt - totalStartedAt : undefined;
+
+  return {
+    steps,
+    totalDurationMs,
+    rawWorkflowResult: { stepResults, stepExecutionPath },
+  };
+}

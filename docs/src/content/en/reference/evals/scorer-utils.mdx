@@ -22,7 +22,15 @@ import {
   extractToolCalls,
   extractInputMessages,
   extractAgentResponseMessages,
+  compareTrajectories,
+  createTrajectoryTestRun,
 } from '@mastra/evals/scorers/utils'
+```
+
+Trajectory extraction functions are available from `@mastra/core/evals`:
+
+```typescript
+import { extractTrajectory, extractWorkflowTrajectory } from '@mastra/core/evals'
 ```
 
 ## Message extraction
@@ -300,6 +308,132 @@ const result = await myScorer.run({
   output: testRun.output,
 })
 ```
+
+## Trajectory utilities
+
+### `extractTrajectory`
+
+Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers — you only need it for direct testing.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractTrajectory } from '@mastra/core/evals'
+
+const trajectory = extractTrajectory(agentOutputMessages)
+// trajectory.steps — ToolCallStep[] extracted from toolInvocations
+// trajectory.rawOutput — the original MastraDBMessage[] array
+```
+
+**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
+
+### `extractWorkflowTrajectory`
+
+Extracts a `Trajectory` from workflow step results. Converts `StepResult` records into `WorkflowStepStep` objects, respecting the execution path ordering.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractWorkflowTrajectory } from '@mastra/core/evals'
+
+const trajectory = extractWorkflowTrajectory(
+  workflowResult.steps, // Record<string, StepResult>
+  workflowResult.stepExecutionPath, // string[] (optional)
+)
+// trajectory.steps — WorkflowStepStep[] in execution order
+```
+
+**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
+
+### `compareTrajectories`
+
+Compares an actual trajectory against an expected trajectory and returns a detailed comparison result. Used internally by `createTrajectoryAccuracyScorerCode`.
+
+```typescript
+import { compareTrajectories } from '@mastra/evals/scorers/utils'
+
+const result = compareTrajectories(actualTrajectory, expectedTrajectory, {
+  strictOrder: false,
+  compareStepData: false,
+  allowRepeatedSteps: true,
+})
+// result.score — 0.0 to 1.0
+// result.missingSteps — step names not found
+// result.extraSteps — unexpected step names
+// result.outOfOrderSteps — steps found but in wrong order
+```
+
+**Returns:** `TrajectoryComparisonResult`
+
+### `createTrajectoryTestRun`
+
+Creates a test run object for trajectory scorers. Wraps a `Trajectory` into the expected `ScorerRun` format.
+
+```typescript
+import { createTrajectoryTestRun } from '@mastra/evals/scorers/utils'
+
+const run = createTrajectoryTestRun({
+  steps: [
+    { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
+    { stepType: 'tool_call', name: 'summarize' },
+  ],
+})
+
+const result = await trajectoryScorer.run(run)
+```
+
+### `checkTrajectoryEfficiency`
+
+Evaluates trajectory efficiency against step, token, and duration budgets. Also detects redundant calls (same tool with same arguments).
+
+```typescript
+import { checkTrajectoryEfficiency } from '@mastra/evals/scorers/utils'
+
+const result = checkTrajectoryEfficiency(trajectory, {
+  maxSteps: 5,
+  maxTotalTokens: 2000,
+  maxTotalDurationMs: 5000,
+  noRedundantCalls: true,
+})
+// result.score — 1.0 if within all budgets, lower with penalties
+// result.redundantCalls — duplicate tool+args combos
+// result.overBudget — which budgets were exceeded
+```
+
+**Returns:** `TrajectoryEfficiencyResult`
+
+### `checkTrajectoryBlacklist`
+
+Checks whether a trajectory contains forbidden tools or tool call sequences.
+
+```typescript
+import { checkTrajectoryBlacklist } from '@mastra/evals/scorers/utils'
+
+const result = checkTrajectoryBlacklist(trajectory, {
+  blacklistedTools: ['deleteAll', 'admin-override'],
+  blacklistedSequences: [['escalate', 'admin-override']],
+})
+// result.passed — true if no violations
+// result.violations — list of violations with type and details
+```
+
+**Returns:** `TrajectoryBlacklistResult`
+
+### `analyzeToolFailures`
+
+Detects tool failure patterns including retries, fallbacks, and argument corrections.
+
+```typescript
+import { analyzeToolFailures } from '@mastra/evals/scorers/utils'
+
+const result = analyzeToolFailures(trajectory, {
+  maxRetriesPerTool: 3,
+})
+// result.score — 1.0 if no failure patterns, lower if patterns detected
+// result.patterns — detected patterns (retry, fallback, arg_correction)
+```
+
+**Returns:** `ToolFailureAnalysisResult`
 
 ## Complete example
 

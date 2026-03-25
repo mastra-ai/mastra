@@ -9,6 +9,7 @@ import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { AnyWorkflow, WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
+import { extractTrajectory, extractWorkflowTrajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
 
 type WorkflowRunOptions = WorkflowRunStartOptions & {
@@ -22,13 +23,25 @@ type RunEvalsDataItem<TTarget = unknown> = {
       ? string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]
       : unknown;
   groundTruth?: any;
+  expectedTrajectory?: any;
   requestContext?: RequestContext;
   startOptions?: WorkflowRunOptions;
 } & Partial<ObservabilityContext>;
 
-type WorkflowScorerConfig = {
+export type WorkflowScorerConfig = {
+  /** Scorers that evaluate the overall workflow input/output */
   workflow?: MastraScorer<any, any, any, any>[];
+  /** Scorers that evaluate individual workflow steps by step ID */
   steps?: Record<string, MastraScorer<any, any, any, any>[]>;
+  /** Scorers that evaluate the workflow's step execution trajectory */
+  trajectory?: MastraScorer<any, any, any, any>[];
+};
+
+export type AgentScorerConfig = {
+  /** Scorers that evaluate the full agent input/output */
+  agent?: MastraScorer<any, any, any, any>[];
+  /** Scorers that evaluate the agent's tool call trajectory */
+  trajectory?: MastraScorer<any, any, any, any>[];
 };
 
 type RunEvalsResult = {
@@ -78,13 +91,32 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
     scorerResults: {
       workflow?: Record<string, any>;
       steps?: Record<string, Record<string, any>>;
+      trajectory?: Record<string, any>;
     };
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
+
+// Agent with agent scorer configuration (agent-level + trajectory scorers)
+export function runEvals<TAgent extends Agent>(config: {
+  data: RunEvalsDataItem<TAgent>[];
+  scorers: AgentScorerConfig;
+  target: TAgent;
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  onItemComplete?: (params: {
+    item: RunEvalsDataItem<TAgent>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
+    scorerResults: {
+      agent?: Record<string, any>;
+      trajectory?: Record<string, any>;
+    };
+  }) => void | Promise<void>;
+  concurrency?: number;
+}): Promise<RunEvalsResult>;
+
 export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
   target: Agent | Workflow;
   targetOptions?:
     | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
@@ -156,9 +188,13 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
   return typeof scorers === 'object' && !Array.isArray(scorers) && ('workflow' in scorers || 'steps' in scorers);
 }
 
+function isAgentScorerConfig(scorers: any): scorers is AgentScorerConfig {
+  return typeof scorers === 'object' && !Array.isArray(scorers) && ('agent' in scorers || 'trajectory' in scorers);
+}
+
 function validateEvalsInputs(
   data: RunEvalsDataItem<any>[],
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
+  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   target: Agent | Workflow,
 ): void {
   if (data.length === 0) {
@@ -194,22 +230,36 @@ function validateEvalsInputs(
     }
   } else if (isWorkflow(target) && isWorkflowScorerConfig(scorers)) {
     const hasScorers =
-      (scorers.workflow && scorers.workflow.length > 0) || (scorers.steps && Object.keys(scorers.steps).length > 0);
+      (scorers.workflow && scorers.workflow.length > 0) ||
+      (scorers.steps && Object.keys(scorers.steps).length > 0) ||
+      (scorers.trajectory && scorers.trajectory.length > 0);
 
     if (!hasScorers) {
       throw new MastraError({
         domain: 'SCORER',
         id: 'NO_SCORERS_PROVIDED',
         category: 'USER',
-        text: 'At least one workflow or step scorer must be provided',
+        text: 'At least one workflow, step, or trajectory scorer must be provided',
       });
     }
-  } else if (!isWorkflow(target) && !Array.isArray(scorers)) {
+  } else if (!isWorkflow(target) && isAgentScorerConfig(scorers)) {
+    const hasScorers =
+      (scorers.agent && scorers.agent.length > 0) || (scorers.trajectory && scorers.trajectory.length > 0);
+
+    if (!hasScorers) {
+      throw new MastraError({
+        domain: 'SCORER',
+        id: 'NO_SCORERS_PROVIDED',
+        category: 'USER',
+        text: 'At least one agent or trajectory scorer must be provided',
+      });
+    }
+  } else if (!isWorkflow(target) && !Array.isArray(scorers) && !isAgentScorerConfig(scorers)) {
     throw new MastraError({
       domain: 'SCORER',
       id: 'INVALID_AGENT_SCORERS',
       category: 'USER',
-      text: 'Agent scorers must be an array of scorers',
+      text: 'Agent scorers must be an array of scorers or an AgentScorerConfig',
     });
   }
 }
@@ -263,6 +313,7 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, ta
       input: item.input,
       output: workflowResult.status === 'success' ? workflowResult.result : undefined,
       stepResults: workflowResult.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: workflowResult.stepExecutionPath,
     },
   };
 }
@@ -297,7 +348,7 @@ async function executeAgent(
 }
 
 async function runScorers(
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
+  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   targetResult: any,
   item: RunEvalsDataItem<any>,
 ): Promise<Record<string, any>> {
@@ -329,6 +380,78 @@ async function runScorers(
           },
           error,
         );
+      }
+    }
+  } else if (isAgentScorerConfig(scorers)) {
+    // Handle agent scorer config (agent-level + trajectory scorers)
+    if (scorers.agent) {
+      const agentScorerResults: Record<string, any> = {};
+      for (const scorer of scorers.agent) {
+        try {
+          const score = await scorer.run({
+            input: targetResult.scoringData?.input,
+            output: targetResult.scoringData?.output,
+            groundTruth: item.groundTruth,
+            requestContext: item.requestContext,
+            ...resolveObservabilityContext(item),
+          });
+          agentScorerResults[scorer.id] = score;
+        } catch (error) {
+          throw new MastraError(
+            {
+              domain: 'SCORER',
+              id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT',
+              category: 'USER',
+              text: `Failed to run experiment: Error running agent scorer ${scorer.id}`,
+              details: {
+                scorerId: scorer.id,
+                item: JSON.stringify(item),
+              },
+            },
+            error,
+          );
+        }
+      }
+      if (Object.keys(agentScorerResults).length > 0) {
+        scorerResults.agent = agentScorerResults;
+      }
+    }
+
+    if (scorers.trajectory) {
+      const trajectoryScorerResults: Record<string, any> = {};
+      // Pre-extract the trajectory so scorers receive Trajectory, not raw MastraDBMessage[]
+      const rawOutput = targetResult.scoringData?.output;
+      const trajectory = rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
+
+      for (const scorer of scorers.trajectory) {
+        try {
+          const score = await scorer.run({
+            input: targetResult.scoringData?.input,
+            output: trajectory,
+            groundTruth: item.groundTruth,
+            expectedTrajectory: item.expectedTrajectory,
+            requestContext: item.requestContext,
+            ...resolveObservabilityContext(item),
+          });
+          trajectoryScorerResults[scorer.id] = score;
+        } catch (error) {
+          throw new MastraError(
+            {
+              domain: 'SCORER',
+              id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_TRAJECTORY',
+              category: 'USER',
+              text: `Failed to run experiment: Error running trajectory scorer ${scorer.id}`,
+              details: {
+                scorerId: scorer.id,
+                item: JSON.stringify(item),
+              },
+            },
+            error,
+          );
+        }
+      }
+      if (Object.keys(trajectoryScorerResults).length > 0) {
+        scorerResults.trajectory = trajectoryScorerResults;
       }
     }
   } else {
@@ -391,6 +514,45 @@ async function runScorers(
         scorerResults.steps = stepScorerResults;
       }
     }
+
+    if (scorers.trajectory) {
+      const trajectoryScorerResults: Record<string, any> = {};
+      // Pre-extract the workflow trajectory from step results
+      const stepResults = targetResult.scoringData?.stepResults;
+      const stepExecutionPath = targetResult.scoringData?.stepExecutionPath;
+      const trajectory = stepResults ? extractWorkflowTrajectory(stepResults, stepExecutionPath) : { steps: [] };
+
+      for (const scorer of scorers.trajectory) {
+        try {
+          const score = await scorer.run({
+            input: targetResult.scoringData?.input,
+            output: trajectory,
+            groundTruth: item.groundTruth,
+            expectedTrajectory: item.expectedTrajectory,
+            requestContext: item.requestContext,
+            ...resolveObservabilityContext(item),
+          });
+          trajectoryScorerResults[scorer.id] = score;
+        } catch (error) {
+          throw new MastraError(
+            {
+              domain: 'SCORER',
+              id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_WORKFLOW_TRAJECTORY',
+              category: 'USER',
+              text: `Failed to run experiment: Error running workflow trajectory scorer ${scorer.id}`,
+              details: {
+                scorerId: scorer.id,
+                item: JSON.stringify(item),
+              },
+            },
+            error,
+          );
+        }
+      }
+      if (Object.keys(trajectoryScorerResults).length > 0) {
+        scorerResults.trajectory = trajectoryScorerResults;
+      }
+    }
   }
 
   return scorerResults;
@@ -416,8 +578,11 @@ async function saveScoresToStorage({
   const entityId = target.id;
   const entityType = isWorkflow(target) ? 'WORKFLOW' : 'AGENT';
 
-  // Handle flat scorer results (for agents or workflow-level scorers)
-  if (Array.isArray(scorerResults) || !('workflow' in scorerResults && 'steps' in scorerResults)) {
+  const isStructuredWorkflowResult = 'workflow' in scorerResults || 'steps' in scorerResults;
+  const isStructuredAgentResult = 'agent' in scorerResults || 'trajectory' in scorerResults;
+
+  if (!isStructuredWorkflowResult && !isStructuredAgentResult) {
+    // Handle flat scorer results (simple array of scorers for agents or workflows)
     for (const [scorerId, scoreResult] of Object.entries(scorerResults)) {
       if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
         await saveSingleScore({
@@ -430,6 +595,41 @@ async function saveScoresToStorage({
           target,
           item,
         });
+      }
+    }
+  } else if (isStructuredAgentResult) {
+    // Handle agent scorer config with agent-level and trajectory scorers
+    if (scorerResults.agent) {
+      for (const [scorerId, scoreResult] of Object.entries(scorerResults.agent)) {
+        if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
+          await saveSingleScore({
+            storage,
+            scoreResult,
+            scorerId,
+            entityId,
+            entityType: 'AGENT',
+            mastra,
+            target,
+            item,
+          });
+        }
+      }
+    }
+
+    if (scorerResults.trajectory) {
+      for (const [scorerId, scoreResult] of Object.entries(scorerResults.trajectory)) {
+        if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
+          await saveSingleScore({
+            storage,
+            scoreResult,
+            scorerId,
+            entityId,
+            entityType: 'TRAJECTORY',
+            mastra,
+            target,
+            item,
+          });
+        }
       }
     }
   } else {

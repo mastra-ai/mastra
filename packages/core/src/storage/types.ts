@@ -2168,6 +2168,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2183,6 +2184,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;

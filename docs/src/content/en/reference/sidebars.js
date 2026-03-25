@@ -173,6 +173,7 @@ const sidebars = {
         { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
         { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
         { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
+        { type: 'doc', id: 'evals/trajectory-accuracy', label: 'Trajectory Accuracy Scorers' },
         { type: 'doc', id: 'evals/toxicity', label: 'Toxicity' },
       ],
     },

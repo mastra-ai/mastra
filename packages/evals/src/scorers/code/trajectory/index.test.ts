@@ -1,0 +1,463 @@
+import type { Trajectory, TrajectoryExpectation } from '@mastra/core/evals';
+import { describe, expect, test } from 'vitest';
+import { createTestMessage, createTrajectoryTestRun } from '../../utils';
+import { createTrajectoryAccuracyScorerCode, createTrajectoryScorerCode } from './index';
+
+describe('createTrajectoryAccuracyScorerCode', () => {
+  /**
+   * Helper to build a Trajectory from step names.
+   * Simulates what runEvals produces after extractTrajectory().
+   */
+  const makeTrajectory = (
+    tools: { name: string; toolArgs?: Record<string, unknown>; toolResult?: Record<string, unknown> }[],
+  ): Trajectory => ({
+    steps: tools.map(t => ({
+      stepType: 'tool_call' as const,
+      name: t.name,
+      toolArgs: t.toolArgs,
+      toolResult: t.toolResult,
+    })),
+  });
+
+  const makeRun = (trajectory: Trajectory, userMessage = 'Do the task') =>
+    createTrajectoryTestRun({
+      inputMessages: [createTestMessage({ content: userMessage, role: 'user', id: 'input-1' })],
+      trajectory,
+    });
+
+  const expectedTrajectory: Trajectory = {
+    steps: [
+      { stepType: 'tool_call', name: 'search' },
+      { stepType: 'tool_call', name: 'summarize' },
+    ],
+  };
+
+  test('should have correct scorer id and name', () => {
+    const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+
+    expect(scorer.id).toBe('code-trajectory-accuracy-scorer');
+    expect(scorer.name).toBe('Trajectory Accuracy Scorer');
+  });
+
+  describe('relaxed ordering (default)', () => {
+    test('should return 1 when trajectory matches exactly', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }])));
+
+      expect(result.score).toBe(1);
+      expect(result.preprocessStepResult?.comparison.matchedSteps).toBe(2);
+      expect(result.preprocessStepResult?.comparison.missingSteps).toEqual([]);
+      expect(result.preprocessStepResult?.comparison.extraSteps).toEqual([]);
+    });
+
+    test('should return 1 when expected steps are present with extra steps in between', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(
+        makeRun(makeTrajectory([{ name: 'search' }, { name: 'validate' }, { name: 'summarize' }])),
+      );
+
+      expect(result.score).toBe(1);
+      expect(result.preprocessStepResult?.comparison.extraSteps).toEqual(['validate']);
+    });
+
+    test('should return 0.5 when only one of two expected steps is found', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }])));
+
+      expect(result.score).toBe(0.5);
+      expect(result.preprocessStepResult?.comparison.missingSteps).toEqual(['summarize']);
+    });
+
+    test('should return 0 when no expected steps are found', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'translate' }, { name: 'format' }])));
+
+      expect(result.score).toBe(0);
+      expect(result.preprocessStepResult?.comparison.missingSteps).toEqual(['search', 'summarize']);
+    });
+
+    test('should detect out-of-order steps', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'summarize' }, { name: 'search' }])));
+
+      expect(result.score).toBe(0.5);
+      expect(result.preprocessStepResult?.comparison.outOfOrderSteps).toContain('summarize');
+    });
+
+    test('should allow repeated steps by default', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(
+        makeRun(makeTrajectory([{ name: 'search' }, { name: 'search' }, { name: 'summarize' }])),
+      );
+
+      expect(result.score).toBe(1);
+      expect(result.preprocessStepResult?.comparison.repeatedSteps).toEqual(['search']);
+    });
+
+    test('should penalize repeated steps when not allowed', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory,
+        comparisonOptions: { allowRepeatedSteps: false },
+      });
+      const result = await scorer.run(
+        makeRun(makeTrajectory([{ name: 'search' }, { name: 'search' }, { name: 'summarize' }])),
+      );
+
+      expect(result.score).toBe(0.9);
+      expect(result.preprocessStepResult?.comparison.repeatedSteps).toEqual(['search']);
+    });
+  });
+
+  describe('strict ordering', () => {
+    test('should return 1 for exact match', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory,
+        comparisonOptions: { strictOrder: true },
+      });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }])));
+
+      expect(result.score).toBe(1);
+    });
+
+    test('should penalize extra steps with calculated penalty', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory,
+        comparisonOptions: { strictOrder: true },
+      });
+      const result = await scorer.run(
+        makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }, { name: 'format' }])),
+      );
+
+      // 2 matched / 2 expected = 1.0, extra penalty: (1/2) * 0.5 = 0.25, score = 0.75
+      expect(result.score).toBe(0.75);
+      expect(result.preprocessStepResult?.comparison.extraSteps).toEqual(['format']);
+    });
+
+    test('should return 0 when steps are reversed', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory,
+        comparisonOptions: { strictOrder: true },
+      });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'summarize' }, { name: 'search' }])));
+
+      expect(result.score).toBeLessThan(0.5);
+    });
+
+    test('should identify missing steps', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory,
+        comparisonOptions: { strictOrder: true },
+      });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }])));
+
+      expect(result.score).toBe(0.5);
+      expect(result.preprocessStepResult?.comparison.missingSteps).toEqual(['summarize']);
+    });
+  });
+
+  describe('step data comparison', () => {
+    test('should match when step data is identical', async () => {
+      const expected: Trajectory = {
+        steps: [
+          { stepType: 'tool_call', name: 'search', toolArgs: { query: 'test' } },
+          { stepType: 'tool_call', name: 'summarize', toolArgs: { maxLength: 100 } },
+        ],
+      };
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory: expected,
+        comparisonOptions: { compareStepData: true },
+      });
+      const result = await scorer.run(
+        makeRun(
+          makeTrajectory([
+            { name: 'search', toolArgs: { query: 'test' } },
+            { name: 'summarize', toolArgs: { maxLength: 100 } },
+          ]),
+        ),
+      );
+
+      expect(result.score).toBe(1);
+    });
+
+    test('should not match when toolArgs data differs', async () => {
+      const expected: Trajectory = {
+        steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'test' } }],
+      };
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory: expected,
+        comparisonOptions: { compareStepData: true },
+      });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolArgs: { query: 'different' } }])));
+
+      expect(result.score).toBe(0);
+    });
+
+    test('should compare toolResult data when present', async () => {
+      const expected: Trajectory = {
+        steps: [{ stepType: 'tool_call', name: 'search', toolResult: { count: 5 } }],
+      };
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory: expected,
+        comparisonOptions: { compareStepData: true },
+      });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolResult: { count: 5 } }])));
+
+      expect(result.score).toBe(1);
+    });
+
+    test('should not match when stepType differs', async () => {
+      const expected: Trajectory = {
+        steps: [{ stepType: 'model_generation', name: 'gpt4' }],
+      };
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory: expected,
+        comparisonOptions: { compareStepData: true },
+      });
+      // actual step has same name but different stepType
+      const actual: Trajectory = {
+        steps: [{ stepType: 'tool_call', name: 'gpt4' }],
+      };
+      const result = await scorer.run(makeRun(actual));
+
+      expect(result.score).toBe(0);
+    });
+  });
+
+  describe('empty trajectories', () => {
+    test('should return 0 for empty actual trajectory', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([])));
+
+      expect(result.score).toBe(0);
+      expect(result.preprocessStepResult?.comparison.missingSteps).toEqual(['search', 'summarize']);
+    });
+  });
+
+  describe('preprocess result structure', () => {
+    test('should expose both trajectory and comparison details', async () => {
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
+      const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }])));
+
+      const pp = result.preprocessStepResult;
+      expect(pp).toBeDefined();
+      expect(pp?.actualTrajectory.steps).toHaveLength(2);
+      expect(pp?.expectedTrajectory).toBe(expectedTrajectory);
+      expect(pp?.actualStepNames).toEqual(['search', 'summarize']);
+      expect(pp?.expectedStepNames).toEqual(['search', 'summarize']);
+      expect(pp?.comparison).toHaveProperty('score');
+      expect(pp?.comparison).toHaveProperty('matchedSteps');
+      expect(pp?.comparison).toHaveProperty('missingSteps');
+      expect(pp?.comparison).toHaveProperty('extraSteps');
+    });
+  });
+
+  describe('multiple step types', () => {
+    test('should handle mixed step types in trajectory', async () => {
+      const expected: Trajectory = {
+        steps: [
+          { stepType: 'model_generation', name: 'plan' },
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'model_generation', name: 'synthesize' },
+        ],
+      };
+      const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory: expected });
+      const actual: Trajectory = {
+        steps: [
+          { stepType: 'model_generation', name: 'plan' },
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'model_generation', name: 'synthesize' },
+        ],
+      };
+      const result = await scorer.run(makeRun(actual));
+
+      expect(result.score).toBe(1);
+    });
+  });
+});
+
+describe('createTrajectoryScorerCode', () => {
+  const makeTrajectory = (
+    tools: {
+      name: string;
+      toolArgs?: Record<string, unknown>;
+      toolResult?: Record<string, unknown>;
+      success?: boolean;
+    }[],
+  ): Trajectory => ({
+    steps: tools.map(t => ({
+      stepType: 'tool_call' as const,
+      name: t.name,
+      toolArgs: t.toolArgs,
+      toolResult: t.toolResult,
+      success: t.success,
+    })),
+  });
+
+  const makeRun = (trajectory: Trajectory, expectedTrajectory?: TrajectoryExpectation, userMessage = 'Do the task') =>
+    createTrajectoryTestRun({
+      inputMessages: [createTestMessage({ content: userMessage, role: 'user', id: 'input-1' })],
+      trajectory,
+      expectedTrajectory,
+    });
+
+  test('should score 1.0 when all dimensions pass', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'tool_call', name: 'summarize' },
+        ],
+        maxSteps: 5,
+        noRedundantCalls: true,
+      },
+    });
+
+    const actual = makeTrajectory([
+      { name: 'search', success: true },
+      { name: 'summarize', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBe(1);
+  });
+
+  test('should hard fail (score 0) when blacklisted tool is used', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        blacklistedTools: ['deleteAll'],
+      },
+    });
+
+    const actual = makeTrajectory([
+      { name: 'search', success: true },
+      { name: 'deleteAll', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBe(0);
+  });
+
+  test('should hard fail when blacklisted sequence is found', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        blacklistedSequences: [['escalate', 'admin']],
+      },
+    });
+
+    const actual = makeTrajectory([
+      { name: 'escalate', success: true },
+      { name: 'admin', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBe(0);
+  });
+
+  test('should penalize redundant calls', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        noRedundantCalls: true,
+      },
+    });
+
+    const actual = makeTrajectory([
+      { name: 'search', toolArgs: { q: 'test' }, success: true },
+      { name: 'search', toolArgs: { q: 'test' }, success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBeLessThan(1);
+  });
+
+  test('should penalize when step budget is exceeded', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        maxSteps: 2,
+      },
+    });
+
+    const actual = makeTrajectory([
+      { name: 'a', success: true },
+      { name: 'b', success: true },
+      { name: 'c', success: true },
+      { name: 'd', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBeLessThan(1);
+  });
+
+  test('should use per-item expectedTrajectory to override defaults', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'tool_call', name: 'summarize' },
+        ],
+      },
+    });
+
+    // Per-item overrides with different expected steps
+    const itemExpectation: TrajectoryExpectation = {
+      steps: [
+        { stepType: 'tool_call', name: 'fetch' },
+        { stepType: 'tool_call', name: 'format' },
+      ],
+    };
+
+    const actual = makeTrajectory([
+      { name: 'fetch', success: true },
+      { name: 'format', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual, itemExpectation));
+    // Per-item steps override defaults, so this should match
+    expect(result.preprocessStepResult?.accuracy?.score).toBe(1);
+  });
+
+  test('should combine multiple dimensions with weights', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [{ stepType: 'tool_call', name: 'search' }],
+        maxSteps: 1,
+        noRedundantCalls: true,
+      },
+    });
+
+    // Accuracy is perfect, but we have too many steps
+    const actual = makeTrajectory([
+      { name: 'search', success: true },
+      { name: 'extra', success: true },
+    ]);
+
+    const result = await scorer.run(makeRun(actual));
+    // Should be between 0 and 1 (accuracy is good, efficiency is penalized)
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.score).toBeLessThan(1);
+  });
+
+  test('should score 1.0 when no expectations are configured', async () => {
+    const scorer = createTrajectoryScorerCode();
+
+    const actual = makeTrajectory([{ name: 'search', success: true }]);
+
+    const result = await scorer.run(makeRun(actual));
+    expect(result.score).toBe(1);
+  });
+
+  test('should support per-item blacklist from dataset', async () => {
+    const scorer = createTrajectoryScorerCode();
+
+    const actual = makeTrajectory([
+      { name: 'search', success: true },
+      { name: 'deleteAll', success: true },
+    ]);
+
+    const itemExpectation: TrajectoryExpectation = {
+      blacklistedTools: ['deleteAll'],
+    };
+
+    const result = await scorer.run(makeRun(actual, itemExpectation));
+    expect(result.score).toBe(0);
+  });
+});
