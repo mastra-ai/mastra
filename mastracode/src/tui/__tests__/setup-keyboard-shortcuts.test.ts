@@ -48,6 +48,7 @@ function createState(isRunning: boolean) {
     onSubmit: vi.fn(),
     onCtrlD: undefined as (() => void) | undefined,
     getText: vi.fn(() => '/help'),
+    getExpandedText: vi.fn(() => '/help'),
     addToHistory: vi.fn(),
     setText: vi.fn(),
     setAutocompleteProvider: vi.fn(),

@@ -1,28 +1,25 @@
+import type { ColumnDef, Row } from '@tanstack/react-table';
+import { extractPrompt } from '../../utils/extractPrompt';
+import { providerMapToIcon } from '../provider-map-icon';
+import type { AgentTableData } from './types';
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
-import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
-import { ColumnDef, Row } from '@tanstack/react-table';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-
-import { AgentTableData } from './types';
-import { useLinkComponent } from '@/lib/framework';
-import { providerMapToIcon } from '../provider-map-icon';
-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon, WorkflowIcon, ProcessorIcon } from '@/ds/icons';
-import { extractPrompt } from '../../utils/extractPrompt';
-import { AgentSourceIcon } from '../agent-source-icon';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
+
+import { useLinkComponent } from '@/lib/framework';
 
 export type AgentTableColumn = {
   id: string;
 } & AgentTableData;
 
-const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSourceIcon?: boolean }) => {
+const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   const { Link, paths } = useLinkComponent();
 
   return (
     <EntryCell
-      icon={showSourceIcon ? <AgentSourceIcon source={row.original.source} /> : undefined}
       name={
         <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}
@@ -132,12 +129,12 @@ const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
   },
 };
 
-export const getColumns = (experimentalFeaturesEnabled: boolean): ColumnDef<AgentTableColumn>[] => {
+export const getColumns = (): ColumnDef<AgentTableColumn>[] => {
   return [
     {
       header: 'Name',
       accessorKey: 'name',
-      cell: ({ row }) => <NameCell row={row} showSourceIcon={experimentalFeaturesEnabled} />,
+      cell: ({ row }) => <NameCell row={row} />,
     },
     modelColumn,
     attachedEntitiesColumn,

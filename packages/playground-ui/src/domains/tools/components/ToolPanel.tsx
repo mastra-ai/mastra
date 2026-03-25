@@ -1,17 +1,17 @@
-import { usePlaygroundStore } from '@/store/playground-store';
-import { useTool } from '@/domains/tools/hooks';
-import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
-import { Txt } from '@/ds/components/Txt';
-import { Skeleton } from '@/ds/components/Skeleton';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useMemo, useEffect } from 'react';
-import { toast } from '@/lib/toast';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useTool } from '@/domains/tools/hooks';
+import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { toast } from '@/lib/toast';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {
   toolId: string;

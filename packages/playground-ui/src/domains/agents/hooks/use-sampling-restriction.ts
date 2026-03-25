@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from 'react';
-import { AgentSettingsType as AgentSettings } from '@/types';
 import { isAnthropicModelWithSamplingRestriction } from '../utils/model-restrictions';
+import type { AgentSettingsType as AgentSettings } from '@/types';
 
 export interface UseSamplingRestrictionProps {
   provider: string | undefined;

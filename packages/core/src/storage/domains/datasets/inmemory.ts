@@ -30,6 +30,7 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     groundTruth: row.groundTruth,
     requestContext: row.requestContext,
     metadata: row.metadata,
+    source: row.source,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -78,6 +79,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       inputSchema: input.inputSchema,
       groundTruthSchema: input.groundTruthSchema,
       requestContextSchema: input.requestContextSchema,
+      targetType: input.targetType,
+      targetIds: input.targetIds,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -106,6 +109,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
       requestContextSchema:
         args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema,
+      tags: args.tags !== undefined ? args.tags : existing.tags,
+      targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
+      targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
@@ -180,6 +186,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       groundTruth: args.groundTruth,
       requestContext: args.requestContext,
       metadata: args.metadata,
+      source: args.source,
       createdAt: now,
       updatedAt: now,
     };
@@ -230,6 +237,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       groundTruth: args.groundTruth ?? currentRow.groundTruth,
       requestContext: args.requestContext ?? currentRow.requestContext,
       metadata: args.metadata ?? currentRow.metadata,
+      source: args.source ?? currentRow.source,
       createdAt: currentRow.createdAt,
       updatedAt: now,
     };
@@ -449,6 +457,7 @@ export class DatasetsInMemory extends DatasetsStorage {
         groundTruth: itemInput.groundTruth,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
+        source: itemInput.source,
         createdAt: now,
         updatedAt: now,
       };

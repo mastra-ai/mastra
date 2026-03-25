@@ -1,14 +1,12 @@
-import { Skeleton } from '@/ds/components/Skeleton';
-
-import '../../../index.css';
-
-import { lodashTitleCase } from '@/lib/string';
-import { AlertCircleIcon } from 'lucide-react';
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import { ReactFlowProvider } from '@xyflow/react';
-import { WorkflowGraphInner } from './workflow-graph-inner';
-import { WorkflowRunContext } from '../context/workflow-run-context';
+import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';
-import { GetWorkflowResponse } from '@mastra/client-js';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowGraphInner } from './workflow-graph-inner';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { lodashTitleCase } from '@/lib/string';
+import '../../../index.css';
 
 export interface WorkflowGraphProps {
   workflowId: string;

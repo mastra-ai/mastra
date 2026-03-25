@@ -1,8 +1,8 @@
-import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { useTreeDepth } from './tree-context';
 import { File, Folder } from 'lucide-react';
+import * as React from 'react';
+import { useTreeDepth } from './tree-context';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface TreeInputProps {
   type: 'file' | 'folder';

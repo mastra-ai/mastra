@@ -13,8 +13,11 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
+    MASTRA_THEME_TOGGLE?: string;
+    MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
 
@@ -33,7 +36,10 @@ import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/framework';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
+import AgentSession from './pages/agents/agent/session';
+import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
+import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
@@ -62,6 +68,7 @@ import { Login } from './pages/login';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
+import Metrics from './pages/metrics';
 import Observability from './pages/observability';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
@@ -78,6 +85,7 @@ import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
+import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -86,9 +94,9 @@ import Tools from '@/pages/tools';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
-      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -109,11 +117,15 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
@@ -139,6 +151,19 @@ const RootLayout = () => {
   );
 };
 
+const MinimalRootLayout = () => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+
+  return (
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
+      <MinimalLayout>
+        <Outlet />
+      </MinimalLayout>
+    </LinkComponentProvider>
+  );
+};
+
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
@@ -160,6 +185,13 @@ const routes = [
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
   {
+    element: <MinimalRootLayout />,
+    children: [
+      { path: '/agents/:agentId/session', element: <AgentSession /> },
+      { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+    ],
+  },
+  {
     element: <RootLayout />,
     children: [
       // Conditional routes (non-platform only)
@@ -173,6 +205,7 @@ const routes = [
 
       { path: '/scorers', element: <Scorers /> },
       { path: '/scorers/:scorerId', element: <Scorer /> },
+      { path: '/metrics', element: <Metrics /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
       {
@@ -205,7 +238,13 @@ const routes = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
-          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+          ...(isExperimentalFeatures
+            ? [
+                { path: 'playground', element: <AgentPlayground /> },
+                { path: 'evaluate', element: <AgentEvaluate /> },
+                { path: 'review', element: <AgentReview /> },
+              ]
+            : []),
           { path: 'traces', element: <AgentTraces /> },
         ],
       },
@@ -294,11 +333,12 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
+  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

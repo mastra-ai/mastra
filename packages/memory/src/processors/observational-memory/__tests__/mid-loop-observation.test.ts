@@ -11,14 +11,28 @@
  * Observation happens when the threshold is exceeded on step N > 0.
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
+import { ObservationalMemoryProcessor } from '../processor';
+import type { MemoryContextProvider } from '../processor';
+
+const noopMemoryProvider: MemoryContextProvider = {
+  getContext: async () => ({
+    systemMessage: undefined,
+    messages: [],
+    hasObservations: false,
+    omRecord: null,
+    continuationMessage: undefined,
+    otherThreadsContext: undefined,
+  }),
+  persistMessages: async () => {},
+};
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -54,56 +68,47 @@ function createMockObserverModel() {
   const observationText = `<observations>
 * User discussed topic X
 * Assistant explained Y
-</observations>
-<current-task>
-- Primary: Testing mid-loop observation
-</current-task>
-<suggested-response>
-Continue testing
-</suggested-response>`;
+</observations>`;
 
   return new MockLanguageModelV2({
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-      warnings: [],
-      content: [
-        {
-          type: 'text',
-          text: observationText,
-        },
-      ],
-    }),
-    doStream: async () => {
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
-            type: 'response-metadata',
-            id: 'obs-1',
-            modelId: 'mock-observer-model',
-            timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: observationText });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
+    doGenerate: async () => {
+      throw new Error('Unexpected doGenerate call — OM should use the stream path');
     },
-  } as any);
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        {
+          type: 'response-metadata',
+          id: 'mock-response',
+          modelId: 'mock-model',
+          timestamp: new Date(),
+        },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: observationText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+function createAbort() {
+  return ((reason?: string) => {
+    throw new Error(reason || 'Aborted');
+  }) as (reason?: string) => never;
+}
+
+function mockCallObserver(target: ObservationalMemory) {
+  return vi.spyOn(target.observer, 'call').mockResolvedValue({
+    observations: '* User discussed topic X\n* Assistant explained Y',
+    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+  });
 }
 
 function createRequestContext(threadId: string, resourceId: string): RequestContext {
@@ -123,6 +128,7 @@ function createRequestContext(threadId: string, resourceId: string): RequestCont
 describe('Mid-Loop Observation', () => {
   let storage: InMemoryMemory;
   let om: ObservationalMemory;
+  let processor: ObservationalMemoryProcessor;
   const threadId = 'test-thread-123';
   const resourceId = 'test-resource';
   const tokenCounter = new TokenCounter();
@@ -156,6 +162,9 @@ describe('Mid-Loop Observation', () => {
         observationTokens: 50000, // High to prevent reflection
       },
     });
+    processor = new ObservationalMemoryProcessor(om, noopMemoryProvider);
+
+    mockCallObserver(om);
   });
 
   describe('Token counting and threshold detection', () => {
@@ -208,7 +217,7 @@ describe('Mid-Loop Observation', () => {
       }
 
       // Step 0: Initialize the record (no observation yet)
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -218,11 +227,12 @@ describe('Mid-Loop Observation', () => {
         systemMessages: [],
         model: createMockObserverModel() as any,
         retryCount: 0,
-        abort: new AbortController().signal,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
       });
 
       // Step 1: Should trigger observation since threshold is exceeded
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -232,7 +242,8 @@ describe('Mid-Loop Observation', () => {
         systemMessages: [],
         model: createMockObserverModel() as any,
         retryCount: 0,
-        abort: new AbortController().signal,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
       });
 
       // Check observation was triggered
@@ -266,12 +277,17 @@ describe('Mid-Loop Observation', () => {
       }
 
       // Step 0: Should NOT trigger observation (only initializes record)
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
         stepNumber: 0,
         state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
       });
 
       // Check record was created but no observations yet
@@ -301,6 +317,9 @@ describe('Mid-Loop Observation', () => {
           observationTokens: 50000, // High to prevent reflection
         },
       });
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, noopMemoryProvider);
+
+      mockCallObserver(omWithBuffering);
 
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};
@@ -320,7 +339,7 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      await omWithBuffering.processInputStep({
+      await processorWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -330,7 +349,8 @@ describe('Mid-Loop Observation', () => {
         systemMessages: [],
         model: createMockObserverModel() as any,
         retryCount: 0,
-        abort: new AbortController().signal,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
       });
 
       // Wait for async buffering to complete (fire-and-forget operation)
@@ -361,7 +381,7 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      await omWithBuffering.processInputStep({
+      await processorWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -371,7 +391,8 @@ describe('Mid-Loop Observation', () => {
         systemMessages: [],
         model: createMockObserverModel() as any,
         retryCount: 0,
-        abort: new AbortController().signal,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
       });
 
       const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);

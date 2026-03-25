@@ -1,3 +1,5 @@
+import { FileText } from 'lucide-react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -6,8 +8,6 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { FileText } from 'lucide-react';
-import { useState } from 'react';
 
 interface PdfEntryProps {
   data: string;

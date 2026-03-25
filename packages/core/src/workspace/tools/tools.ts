@@ -112,19 +112,34 @@ function wrapWithReadTracker(
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      // Pre-execution: check read-before-write for write tools
-      if (mode === 'write' && config.requireReadBeforeWrite) {
+      // Pre-execution: enforce read-before-write policy and/or attach
+      // optimistic-concurrency mtime for write tools.
+      if (mode === 'write') {
+        // Optimistic concurrency: attach the mtime from the last read
+        // *before* stat so it's preserved even when the file has been
+        // deleted externally (stat throws FileNotFoundError).
+        const record = readTracker.getReadRecord(input.path);
+        if (record) {
+          context = { ...context, __expectedMtime: record.modifiedAtRead };
+        }
+
         try {
           const stat = await workspace.filesystem!.stat(input.path);
-          const check = readTracker.needsReRead(input.path, stat.modifiedAt);
-          if (check.needsReRead) {
-            throw new FileReadRequiredError(input.path, check.reason!);
+
+          // Policy gate: require the agent to have read the file first
+          if (config.requireReadBeforeWrite) {
+            const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+            if (check.needsReRead) {
+              throw new FileReadRequiredError(input.path, check.reason!);
+            }
           }
         } catch (error) {
           if (!(error instanceof FileNotFoundError)) {
             throw error;
           }
-          // New file — no read required
+          // Missing file: if a read record exists the expectedMtime is
+          // already attached, so downstream writeFile can treat this as
+          // stale. Otherwise it's a genuinely new file.
         }
       }
 
@@ -184,18 +199,10 @@ export function createWorkspaceTools(workspace: Workspace) {
   // Shared write lock — serializes concurrent writes to the same file path
   const writeLock: FileWriteLock = new InMemoryFileWriteLock();
 
-  // Shared read tracker for requireReadBeforeWrite
-  let readTracker: FileReadTracker | undefined;
-  const writeFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
-  const editFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
-  const astEditConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
-  if (
-    writeFileConfig.requireReadBeforeWrite ||
-    editFileConfig.requireReadBeforeWrite ||
-    astEditConfig.requireReadBeforeWrite
-  ) {
-    readTracker = new InMemoryFileReadTracker();
-  }
+  // Shared read tracker — always active so optimistic concurrency (mtime
+  // checking) works on every write, regardless of the requireReadBeforeWrite
+  // policy setting.
+  const readTracker: FileReadTracker = new InMemoryFileReadTracker();
 
   // Helper: add a tool with config-driven filtering
   const addTool = (
@@ -208,7 +215,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (opts?.requireWrite && isReadOnly) return;
 
     let wrapped: any = { ...tool, requireApproval: config.requireApproval };
-    if (readTracker && opts?.readTrackerMode) {
+    if (opts?.readTrackerMode) {
       wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     }
 

@@ -8,7 +8,7 @@ import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processor
 import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENTS_ROUTE,
