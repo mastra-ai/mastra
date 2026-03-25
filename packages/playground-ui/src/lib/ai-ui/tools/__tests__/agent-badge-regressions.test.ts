@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type * as MastraReact from '@mastra/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseAgentMessages = vi.fn();
@@ -10,7 +11,7 @@ vi.mock('@/hooks/use-agent-messages', () => ({
 }));
 
 vi.mock('@mastra/react', async () => {
-  const actual = await vi.importActual<typeof import('@mastra/react')>('@mastra/react');
+  const actual = await vi.importActual<typeof MastraReact>('@mastra/react');
 
   return {
     ...actual,
