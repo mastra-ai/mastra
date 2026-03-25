@@ -18,10 +18,15 @@
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.1",
     "@mastra/core": "latest",
+    "@mastra/elasticsearch": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/otel-exporter": "latest",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
+    "ai": "^4.0.42",
     "dotenv": "^16.4.5",
     "zod": "^4.3.6"
   },

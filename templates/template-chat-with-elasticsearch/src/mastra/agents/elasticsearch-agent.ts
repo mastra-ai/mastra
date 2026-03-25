@@ -1,8 +1,11 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { ElasticSearchVector } from '@mastra/elasticsearch';
 import { introspectIndices } from '../tools/introspect-indices';
 import { executeSearch } from '../tools/execute-search';
 import { getKibanaMcpTools } from '../mcp/kibana-mcp-client';
+import { esClient } from '../lib/elasticsearch-client';
+import { createEmbedder } from '../lib/embedder-config';
 
 const localTools = { introspectIndices, executeSearch };
 
@@ -21,6 +24,13 @@ You also have access to additional tools from Kibana's MCP server. These may inc
 
 Use these tools when they provide functionality not covered by the built-in tools.`
   : '';
+
+const elasticsearchVector = new ElasticSearchVector({
+  id: 'elasticsearch-memory-vector',
+  client: esClient,
+});
+
+const embedder = createEmbedder();
 
 export const elasticsearchAgent = new Agent({
   id: 'elasticsearch-agent',
@@ -75,5 +85,12 @@ For summaries across multiple documents:
 - Explain your search strategy when relevant.
 - If no results are found, suggest alternative queries or filters.`,
   tools: { ...localTools, ...kibanaMcpTools },
-  memory: new Memory(),
+  memory: new Memory({
+    vector: elasticsearchVector,
+    embedder,
+    options: {
+      semanticRecall: true,
+      lastMessages: 10,
+    },
+  }),
 });
