@@ -37,7 +37,7 @@ export function estimateCosts(
     costMetadata,
   };
 
-  let hasSuccessfulInputDetailCost = false;
+  const inputDetailResults: Array<{ success: boolean; costContext: CostContext }> = [];
   if (usage.inputDetails?.audio) {
     const result = estimateCostForMeter({
       meter: PricingMeter.INPUT_AUDIO_TOKENS,
@@ -45,9 +45,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_AUDIO, result.costContext);
-    if (result.success) {
-      hasSuccessfulInputDetailCost = true;
-    }
+    inputDetailResults.push(result);
   }
 
   if (usage.inputDetails?.cacheRead) {
@@ -57,9 +55,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_CACHE_READ, result.costContext);
-    if (result.success) {
-      hasSuccessfulInputDetailCost = true;
-    }
+    inputDetailResults.push(result);
   }
 
   if (usage.inputDetails?.cacheWrite) {
@@ -69,9 +65,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_CACHE_WRITE, result.costContext);
-    if (result.success) {
-      hasSuccessfulInputDetailCost = true;
-    }
+    inputDetailResults.push(result);
   }
 
   if (usage.inputDetails?.image) {
@@ -81,9 +75,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_IMAGE, result.costContext);
-    if (result.success) {
-      hasSuccessfulInputDetailCost = true;
-    }
+    inputDetailResults.push(result);
   }
 
   if (usage.inputDetails?.text) {
@@ -93,21 +85,19 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_TEXT, result.costContext);
-    if (result.success) {
-      hasSuccessfulInputDetailCost = true;
-    }
+    inputDetailResults.push(result);
   }
 
-  if (!hasSuccessfulInputDetailCost && usage.inputTokens != null) {
-    const result = estimateCostForMeter({
-      meter: PricingMeter.INPUT_TOKENS,
-      tokenCount: usage.inputTokens,
-      ...estimateFields,
-    });
-    results.set(TokenMetrics.TOTAL_INPUT, result.costContext);
-  }
+  setAggregateCostContext({
+    results,
+    totalMetric: TokenMetrics.TOTAL_INPUT,
+    fallbackMeter: PricingMeter.INPUT_TOKENS,
+    totalTokenCount: usage.inputTokens,
+    detailResults: inputDetailResults,
+    ...estimateFields,
+  });
 
-  let hasSuccessfulOutputDetailCost = false;
+  const outputDetailResults: Array<{ success: boolean; costContext: CostContext }> = [];
   if (usage.outputDetails?.audio) {
     const result = estimateCostForMeter({
       meter: PricingMeter.OUTPUT_AUDIO_TOKENS,
@@ -115,9 +105,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.OUTPUT_AUDIO, result.costContext);
-    if (result.success) {
-      hasSuccessfulOutputDetailCost = true;
-    }
+    outputDetailResults.push(result);
   }
 
   if (usage.outputDetails?.image) {
@@ -127,9 +115,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.OUTPUT_IMAGE, result.costContext);
-    if (result.success) {
-      hasSuccessfulOutputDetailCost = true;
-    }
+    outputDetailResults.push(result);
   }
 
   if (usage.outputDetails?.reasoning) {
@@ -139,9 +125,7 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.OUTPUT_REASONING, result.costContext);
-    if (result.success) {
-      hasSuccessfulOutputDetailCost = true;
-    }
+    outputDetailResults.push(result);
   }
 
   if (usage.outputDetails?.text) {
@@ -151,19 +135,17 @@ export function estimateCosts(
       ...estimateFields,
     });
     results.set(TokenMetrics.OUTPUT_TEXT, result.costContext);
-    if (result.success) {
-      hasSuccessfulOutputDetailCost = true;
-    }
+    outputDetailResults.push(result);
   }
 
-  if (!hasSuccessfulOutputDetailCost && usage.outputTokens != null) {
-    const result = estimateCostForMeter({
-      meter: PricingMeter.OUTPUT_TOKENS,
-      tokenCount: usage.outputTokens,
-      ...estimateFields,
-    });
-    results.set(TokenMetrics.TOTAL_OUTPUT, result.costContext);
-  }
+  setAggregateCostContext({
+    results,
+    totalMetric: TokenMetrics.TOTAL_OUTPUT,
+    fallbackMeter: PricingMeter.OUTPUT_TOKENS,
+    totalTokenCount: usage.outputTokens,
+    detailResults: outputDetailResults,
+    ...estimateFields,
+  });
 
   return results;
 }
@@ -176,6 +158,57 @@ function applyErrorContextForUsage(
   for (const sample of getTokenMetricSamples(usage)) {
     results.set(sample.name, errorContext);
   }
+}
+
+function setAggregateCostContext(args: {
+  results: Map<TokenMetrics, CostContext>;
+  totalMetric: TokenMetrics;
+  fallbackMeter: PricingMeter;
+  totalTokenCount: number | undefined;
+  detailResults: Array<{ success: boolean; costContext: CostContext }>;
+  pricingModel: PricingModel;
+  pricingTier: PricingTier;
+  costMetadata: Record<string, unknown>;
+}): void {
+  const {
+    results,
+    totalMetric,
+    fallbackMeter,
+    totalTokenCount,
+    detailResults,
+    pricingModel,
+    pricingTier,
+    costMetadata,
+  } = args;
+  if (totalTokenCount == null) {
+    return;
+  }
+
+  const successfulDetailCosts = detailResults
+    .filter(result => result.success)
+    .map(result => result.costContext.estimatedCost)
+    .filter((value): value is number => typeof value === 'number');
+
+  if (successfulDetailCosts.length > 0) {
+    const hasFailedDetailCost = detailResults.some(result => !result.success);
+    results.set(totalMetric, {
+      provider: pricingModel.provider,
+      model: pricingModel.model,
+      estimatedCost: successfulDetailCosts.reduce((sum, value) => sum + value, 0),
+      costUnit: pricingModel.currency,
+      costMetadata: hasFailedDetailCost ? { ...costMetadata, error: 'partial_cost' } : { ...costMetadata },
+    });
+    return;
+  }
+
+  const fallbackResult = estimateCostForMeter({
+    meter: fallbackMeter,
+    tokenCount: totalTokenCount,
+    pricingModel,
+    pricingTier,
+    costMetadata,
+  });
+  results.set(totalMetric, fallbackResult.costContext);
 }
 
 function estimateCostForMeter(args: {
