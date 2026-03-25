@@ -10,6 +10,9 @@ export class ScoreAccumulator {
     const isAgentScores = 'agent' in scorerResults;
     const hasTrajectory = 'trajectory' in scorerResults;
 
+    // Routing priority: workflow configs take precedence (they may also include
+    // trajectory scores), then agent configs (agent or trajectory-only), then
+    // flat scores for simple scorer arrays.
     if (isWorkflowScores) {
       this.addWorkflowScores(scorerResults);
     } else if (isAgentScores || hasTrajectory) {
