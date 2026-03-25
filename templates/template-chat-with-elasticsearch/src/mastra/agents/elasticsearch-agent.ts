@@ -12,6 +12,14 @@ const localTools = { introspectIndices, executeSearch };
 const kibanaMcpTools = await getKibanaMcpTools();
 const hasKibanaTools = Object.keys(kibanaMcpTools).length > 0;
 
+// Log Kibana MCP status
+if (hasKibanaTools) {
+  const toolCount = Object.keys(kibanaMcpTools).length;
+  console.log(`[Kibana MCP] Enabled with ${toolCount} tool${toolCount !== 1 ? 's' : ''}: ${Object.keys(kibanaMcpTools).join(', ')}`);
+} else {
+  console.log('[Kibana MCP] Not configured. Set KIBANA_MCP_URL to enable additional tools.');
+}
+
 const kibanaToolsInstruction = hasKibanaTools
   ? `
 
@@ -21,6 +29,7 @@ You also have access to additional tools from Kibana's MCP server. These may inc
 - Running ES|QL queries
 - Managing indices
 - Accessing Kibana features
+- Accessing O11y or Security features depending on the Elastic project type
 
 Use these tools when they provide functionality not covered by the built-in tools.`
   : '';
