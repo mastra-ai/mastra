@@ -2820,8 +2820,8 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
     }
 
     // Remove any explicitly disabled built-in tools
-    if (this.config.disabledBuiltinTools?.length) {
-      for (const toolId of this.config.disabledBuiltinTools) {
+    if (this.config.disableBuiltinTools?.length) {
+      for (const toolId of this.config.disableBuiltinTools) {
         delete builtInTools[toolId];
       }
     }

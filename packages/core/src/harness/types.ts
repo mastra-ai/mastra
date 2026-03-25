@@ -229,7 +229,7 @@ export interface HarnessConfig<TState = {}> {
    * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
    * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
    */
-  disabledBuiltinTools?: BuiltinToolId[];
+  disableBuiltinTools?: BuiltinToolId[];
 
   /**
    * Maps tool names to permission categories.
