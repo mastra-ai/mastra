@@ -453,7 +453,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'text-delta':
+    case 'text-delta': {
       const prevData = bufferedSteps.get(payload.runId!)!;
       bufferedSteps.set(payload.runId!, {
         ...prevData,
@@ -461,6 +461,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
+    }
     case 'reasoning-delta':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -489,7 +490,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'tool-result':
+    case 'tool-result': {
       const toolResultRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
         ...toolResultRun,
@@ -497,6 +498,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
+    }
     case 'object-result':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -533,10 +535,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         response: {
+          ...stepRun.response,
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
-          ...stepRun.response,
           messages: stepRun.response.messages || [],
         },
       };
