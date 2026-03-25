@@ -59,13 +59,13 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   >([]);
   const [showProposalDialog, setShowProposalDialog] = useState(false);
 
-  // Items in local state — start from server data but allow local mutations
-  const [localItems, setLocalItems] = useState<ReviewItem[]>([]);
-  const items = localItems.length > 0 ? localItems : (reviewItems ?? []);
+  // Items in local state — null means "not hydrated yet", [] means "user cleared all"
+  const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
+  const items = localItems ?? reviewItems ?? [];
 
   // Sync server data to local on initial load
   useEffect(() => {
-    if (reviewItems && localItems.length === 0) {
+    if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);
     }
   }, [reviewItems]);
@@ -126,7 +126,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   // Item actions
   const setItemTags = useCallback(
     (itemId: string, tags: string[]) => {
-      setLocalItems(prev => prev.map(i => (i.id === itemId ? { ...i, tags } : i)));
+      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, tags } : i)));
       const item = items.find(i => i.id === itemId);
       if (item?.experimentId && item?.datasetId) {
         updateExperimentResult.mutate({
@@ -157,7 +157,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
           })
           .catch(() => {});
       }
-      setLocalItems(prev => prev.map(i => (i.id === itemId ? { ...i, rating } : i)));
+      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, rating } : i)));
     },
     [items, client],
   );
@@ -180,7 +180,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
           })
           .catch(() => {});
       }
-      setLocalItems(prev => prev.map(i => (i.id === itemId ? { ...i, comment } : i)));
+      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, comment } : i)));
     },
     [items, client],
   );
@@ -188,7 +188,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   const removeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => prev.filter(i => i.id !== itemId));
+      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -209,7 +209,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   const completeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => prev.filter(i => i.id !== itemId));
+      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
