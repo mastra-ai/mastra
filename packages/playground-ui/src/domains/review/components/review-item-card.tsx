@@ -1,11 +1,6 @@
-import {
-  ThumbsUp,
-  ThumbsDown,
-  Trash2,
-  CheckCircle,
-  GaugeIcon,
-} from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
+import { TagPicker } from './tag-picker';
 import { Badge } from '@/ds/components/Badge';
 import { ButtonWithTooltip } from '@/ds/components/Button';
 import { Textarea } from '@/ds/components/Textarea';
@@ -13,7 +8,6 @@ import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
-import { TagPicker } from './tag-picker';
 
 export interface ReviewItem {
   id: string;
@@ -185,12 +179,7 @@ export function ReviewItemCard({
           {!isCompleted && (
             <div className="flex items-center gap-0.5">
               {onComplete && (
-                <ButtonWithTooltip
-                  tooltipContent="Mark as complete"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onComplete}
-                >
+                <ButtonWithTooltip tooltipContent="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
                   <Icon size="sm" className="text-positive1">
                     <CheckCircle />
                   </Icon>
@@ -211,7 +200,9 @@ export function ReviewItemCard({
         <div className="mt-3 space-y-3 border-t border-border1 pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
-              <Txt variant="ui-xs" className="text-neutral3">Experiment:</Txt>
+              <Txt variant="ui-xs" className="text-neutral3">
+                Experiment:
+              </Txt>
               <code className="text-[10px] font-mono text-neutral4 bg-surface2 px-1.5 py-0.5 rounded">
                 {item.experimentId.slice(0, 8)}
               </code>

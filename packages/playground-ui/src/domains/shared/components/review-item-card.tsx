@@ -1,7 +1,7 @@
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
-import type { ReviewItem } from '@/domains/agents/context/review-queue-context';
 import { TagPicker } from './tag-picker';
+import type { ReviewItem } from '@/domains/agents/context/review-queue-context';
 import { Badge } from '@/ds/components/Badge';
 import { ButtonWithTooltip } from '@/ds/components/Button';
 import { Textarea } from '@/ds/components/Textarea';

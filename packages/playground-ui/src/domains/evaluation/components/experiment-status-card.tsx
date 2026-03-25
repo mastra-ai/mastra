@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { HorizontalBars } from '@/ds/components/HorizontalBars';
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { useMemo } from 'react';
+import { HorizontalBars } from '@/ds/components/HorizontalBars';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 
 const STATUS_COLORS = {
   completed: '#22c55e',
@@ -71,9 +71,7 @@ export function ExperimentStatusCard({ experiments, datasets, isLoading, isError
           title="Experiments by Dataset"
           description="Experiment status breakdown per dataset."
         />
-        {hasData && (
-          <MetricsCard.Summary value={String(experiments?.length ?? 0)} label="Total experiments" />
-        )}
+        {hasData && <MetricsCard.Summary value={String(experiments?.length ?? 0)} label="Total experiments" />}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />

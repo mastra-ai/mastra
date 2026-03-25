@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { HorizontalBars } from '@/ds/components/HorizontalBars';
 import type { DatasetExperiment, DatasetRecord, ExperimentReviewCounts } from '@mastra/client-js';
+import { useMemo } from 'react';
+import { HorizontalBars } from '@/ds/components/HorizontalBars';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 
 const REVIEW_COLORS = {
   needsReview: '#facc15',
@@ -21,7 +21,13 @@ interface ReviewPipelineCardProps {
   isError: boolean;
 }
 
-export function ReviewPipelineCard({ reviewSummary, experiments, datasets, isLoading, isError }: ReviewPipelineCardProps) {
+export function ReviewPipelineCard({
+  reviewSummary,
+  experiments,
+  datasets,
+  isLoading,
+  isError,
+}: ReviewPipelineCardProps) {
   const { data, maxVal, totalInPipeline } = useMemo(() => {
     if (!reviewSummary?.counts || !experiments) return { data: [], maxVal: 0, totalInPipeline: 0 };
 
@@ -66,13 +72,8 @@ export function ReviewPipelineCard({ reviewSummary, experiments, datasets, isLoa
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription
-          title="Review Pipeline"
-          description="Items in review across experiments."
-        />
-        {hasData && (
-          <MetricsCard.Summary value={String(totalInPipeline)} label="Items in pipeline" />
-        )}
+        <MetricsCard.TitleAndDescription title="Review Pipeline" description="Items in review across experiments." />
+        {hasData && <MetricsCard.Summary value={String(totalInPipeline)} label="Items in pipeline" />}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />

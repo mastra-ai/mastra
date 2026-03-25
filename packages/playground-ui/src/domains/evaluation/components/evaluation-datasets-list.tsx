@@ -1,6 +1,8 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Plus, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { EmptyDatasetsTable } from '@/domains/datasets/components/empty-datasets-table';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
@@ -8,8 +10,6 @@ import { ErrorState } from '@/ds/components/ErrorState';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { Badge } from '@/ds/components/Badge';
-import { EmptyDatasetsTable } from '@/domains/datasets/components/empty-datasets-table';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
 
@@ -76,10 +76,10 @@ export function EvaluationDatasetsList({
     return Array.from(tagSet).sort();
   }, [datasets]);
 
-  const tagFilterOptions = useMemo(() => [
-    { value: 'all', label: 'All tags' },
-    ...allTags.map(tag => ({ value: tag, label: tag })),
-  ], [allTags]);
+  const tagFilterOptions = useMemo(
+    () => [{ value: 'all', label: 'All tags' }, ...allTags.map(tag => ({ value: tag, label: tag }))],
+    [allTags],
+  );
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
@@ -192,7 +192,15 @@ export function EvaluationDatasetsList({
         {filteredData.map(ds => {
           const successBadge =
             ds.experimentCount > 0 ? (
-              <Badge variant={ds.successPct !== null && ds.successPct >= 70 ? 'success' : ds.successPct !== null && ds.successPct >= 40 ? 'warning' : 'error'}>
+              <Badge
+                variant={
+                  ds.successPct !== null && ds.successPct >= 70
+                    ? 'success'
+                    : ds.successPct !== null && ds.successPct >= 40
+                      ? 'warning'
+                      : 'error'
+                }
+              >
                 {ds.experimentCount} ({ds.successPct ?? 0}%)
               </Badge>
             ) : (
@@ -205,7 +213,10 @@ export function EvaluationDatasetsList({
               <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
               <EntityList.Cell>
                 {Array.isArray(ds.tags) && ds.tags.length > 0 ? (
-                  <div className="flex items-center gap-1 max-w-[12rem] overflow-hidden" title={(ds.tags as string[]).join(', ')}>
+                  <div
+                    className="flex items-center gap-1 max-w-[12rem] overflow-hidden"
+                    title={(ds.tags as string[]).join(', ')}
+                  >
                     {(ds.tags as string[]).slice(0, 2).map(tag => (
                       <Badge key={tag} variant="default" className="text-[10px] px-1.5 py-0 shrink-0">
                         {tag}
@@ -221,7 +232,11 @@ export function EvaluationDatasetsList({
               </EntityList.Cell>
               <EntityList.TextCell className="text-center">v{ds.version ?? 1}</EntityList.TextCell>
               <EntityList.Cell>
-                {ds.targetType ? <Badge variant="info">{ds.targetType}</Badge> : <span className="text-neutral2">—</span>}
+                {ds.targetType ? (
+                  <Badge variant="info">{ds.targetType}</Badge>
+                ) : (
+                  <span className="text-neutral2">—</span>
+                )}
               </EntityList.Cell>
               <EntityList.Cell className="text-center">{successBadge}</EntityList.Cell>
               <EntityList.Cell className="text-center">

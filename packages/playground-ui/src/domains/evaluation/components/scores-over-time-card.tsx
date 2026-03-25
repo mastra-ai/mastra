@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
-import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import type { EvaluationScorerSummary, EvaluationScoresOverTimePoint } from '../hooks/use-evaluation-score-metrics';
+import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
+import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 
 const SERIES_COLORS = ['#22c55e', '#4f83f1', '#8b5cf6', '#fb923c', '#f472b6', '#facc15'];
 
@@ -44,12 +44,12 @@ export function ScoresOverTimeCard({
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Scores" description="Evaluation scorer performance across all scorers." />
+        <MetricsCard.TitleAndDescription
+          title="Scores"
+          description="Evaluation scorer performance across all scorers."
+        />
         {hasData && (
-          <MetricsCard.Summary
-            value={avgScore != null ? `avg ${avgScore}` : '—'}
-            label="Across all scorers"
-          />
+          <MetricsCard.Summary value={avgScore != null ? `avg ${avgScore}` : '—'} label="Across all scorers" />
         )}
       </MetricsCard.TopBar>
       {isLoading ? (

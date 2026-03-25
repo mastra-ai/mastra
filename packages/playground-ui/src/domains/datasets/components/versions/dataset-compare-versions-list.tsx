@@ -147,7 +147,10 @@ export function DatasetCompareVersionsList({
                     )}
                   </>
                 ) : (
-                  <ItemList.LinkCell href={`/evaluation/datasets/${datasetId}/items/${id}`} className="col-span-2 gap-2">
+                  <ItemList.LinkCell
+                    href={`/evaluation/datasets/${datasetId}/items/${id}`}
+                    className="col-span-2 gap-2"
+                  >
                     <VersionInfo variant="same" version={itemB?.datasetVersion} />
                   </ItemList.LinkCell>
                 )}

@@ -1,7 +1,5 @@
+import type { DatasetExperiment, DatasetRecord, GetScorerResponse } from '@mastra/client-js';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
-import type { GetScorerResponse } from '@mastra/client-js';
-import type { DatasetRecord } from '@mastra/client-js';
-import type { DatasetExperiment } from '@mastra/client-js';
 
 interface EvaluationKpiCardsProps {
   scorers?: Record<string, GetScorerResponse>;
@@ -20,9 +18,7 @@ interface EvaluationKpiCardsProps {
 function computeExperimentComparison(experiments?: DatasetExperiment[]) {
   if (!experiments || experiments.length < 2) return null;
 
-  const sorted = [...experiments].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
+  const sorted = [...experiments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const mid = Math.floor(sorted.length / 2);
   const prevCount = mid;
   const currCount = sorted.length - mid;

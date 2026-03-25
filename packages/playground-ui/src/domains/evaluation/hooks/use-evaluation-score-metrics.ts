@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 import { useMergedRequestContext } from '@/domains/request-context';
 
 export interface EvaluationScorerSummary {
@@ -88,7 +88,9 @@ export function useEvaluationScoreMetrics() {
           if (!prevByScorer.has(s.scorerId)) prevByScorer.set(s.scorerId, []);
           prevByScorer.get(s.scorerId)!.push(s.score);
         }
-        const prevScorerAvgs = Array.from(prevByScorer.values()).map(vals => vals.reduce((a, b) => a + b, 0) / vals.length);
+        const prevScorerAvgs = Array.from(prevByScorer.values()).map(
+          vals => vals.reduce((a, b) => a + b, 0) / vals.length,
+        );
         prevAvgScore = prevScorerAvgs.reduce((a, b) => a + b, 0) / prevScorerAvgs.length;
         prevAvgScore = Math.round(prevAvgScore * 100) / 100;
       }
@@ -122,27 +124,28 @@ export function useEvaluationScoreMetrics() {
       const maxTs = sortedBuckets.length > 0 ? sortedBuckets[sortedBuckets.length - 1][0] : 0;
       const spanDays = (maxTs - minTs) / 86_400_000;
 
-      const overTimeData: EvaluationScoresOverTimePoint[] = sortedBuckets
-        .map(([bucket, scorerMap]) => {
-          const d = new Date(bucket);
-          let timeLabel: string;
-          if (spanDays > 1) {
-            // Multi-day: show "Mar 20 14:00"
-            timeLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-              ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-          } else {
-            // Single day: just show time
-            timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const overTimeData: EvaluationScoresOverTimePoint[] = sortedBuckets.map(([bucket, scorerMap]) => {
+        const d = new Date(bucket);
+        let timeLabel: string;
+        if (spanDays > 1) {
+          // Multi-day: show "Mar 20 14:00"
+          timeLabel =
+            d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+            ' ' +
+            d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        } else {
+          // Single day: just show time
+          timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        const point: EvaluationScoresOverTimePoint = { time: timeLabel };
+        for (const name of scorerNames) {
+          const vals = scorerMap.get(name);
+          if (vals && vals.length > 0) {
+            point[name] = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
           }
-          const point: EvaluationScoresOverTimePoint = { time: timeLabel };
-          for (const name of scorerNames) {
-            const vals = scorerMap.get(name);
-            if (vals && vals.length > 0) {
-              point[name] = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
-            }
-          }
-          return point;
-        });
+        }
+        return point;
+      });
 
       return {
         summaryData,

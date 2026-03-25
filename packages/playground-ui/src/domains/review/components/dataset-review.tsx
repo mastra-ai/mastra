@@ -1,16 +1,17 @@
+import { useMastraClient } from '@mastra/react';
 import { CheckCircle, ChevronDown, Sparkles } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useMastraClient } from '@mastra/react';
+import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
+import { ProposalTag } from './proposal-tag';
+import type { ReviewItem } from './review-item-card';
+import { ReviewItemCard } from './review-item-card';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
-import { ReviewItemCard } from './review-item-card';
-import type { ReviewItem } from './review-item-card';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
-import { ProposalTag } from './proposal-tag';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,6 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Checkbox } from '@/ds/components/Checkbox';
 import { Label } from '@/ds/components/Label';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
@@ -61,7 +61,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
 
   // Items in local state — start from server data but allow local mutations
   const [localItems, setLocalItems] = useState<ReviewItem[]>([]);
-  const items = localItems.length > 0 ? localItems : reviewItems ?? [];
+  const items = localItems.length > 0 ? localItems : (reviewItems ?? []);
 
   // Sync server data to local on initial load
   useEffect(() => {
@@ -273,14 +273,11 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   );
 
   // Analyze
-  const openAnalyzeDialog = useCallback(
-    (mode: 'untagged' | 'selected') => {
-      setAnalyzeMode(mode);
-      setAnalyzePrompt('');
-      setShowAnalyzeDialog(true);
-    },
-    [],
-  );
+  const openAnalyzeDialog = useCallback((mode: 'untagged' | 'selected') => {
+    setAnalyzeMode(mode);
+    setAnalyzePrompt('');
+    setShowAnalyzeDialog(true);
+  }, []);
 
   const handleAnalyze = useCallback(async () => {
     if (!analyzeProvider || !analyzeModel) return;
@@ -290,7 +287,9 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
 
     try {
       const targetItems =
-        analyzeMode === 'untagged' ? items.filter(i => i.tags.length === 0) : items.filter(i => selectedItemIds.has(i.id));
+        analyzeMode === 'untagged'
+          ? items.filter(i => i.tags.length === 0)
+          : items.filter(i => selectedItemIds.has(i.id));
 
       if (targetItems.length === 0) {
         setIsAnalyzing(false);
@@ -417,7 +416,11 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                     />
                     <div className="flex-1 min-w-0">
                       <Txt variant="ui-xs" className="text-neutral4 truncate block">
-                        {item ? (typeof item.input === 'string' ? item.input.slice(0, 100) : JSON.stringify(item.input).slice(0, 100)) : proposal.itemId}
+                        {item
+                          ? typeof item.input === 'string'
+                            ? item.input.slice(0, 100)
+                            : JSON.stringify(item.input).slice(0, 100)
+                          : proposal.itemId}
                       </Txt>
                       <div className="flex gap-1 flex-wrap mt-1.5">
                         {proposal.tags.map((tag, ti) => (
@@ -433,9 +436,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                             }
                             onRemove={() =>
                               setProposedAssignments(prev =>
-                                prev.map((p, i) =>
-                                  i === idx ? { ...p, tags: p.tags.filter((_, j) => j !== ti) } : p,
-                                ),
+                                prev.map((p, i) => (i === idx ? { ...p, tags: p.tags.filter((_, j) => j !== ti) } : p)),
                               )
                             }
                           />
@@ -492,10 +493,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 <DropdownMenu.Item onClick={() => openAnalyzeDialog('untagged')} disabled={untaggedCount === 0}>
                   Analyze untagged ({untaggedCount})
                 </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onClick={() => openAnalyzeDialog('selected')}
-                  disabled={selectedItemIds.size === 0}
-                >
+                <DropdownMenu.Item onClick={() => openAnalyzeDialog('selected')} disabled={selectedItemIds.size === 0}>
                   Analyze selected ({selectedItemIds.size})
                 </DropdownMenu.Item>
               </DropdownMenu.Content>

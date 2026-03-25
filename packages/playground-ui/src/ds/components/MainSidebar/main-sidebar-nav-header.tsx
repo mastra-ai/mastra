@@ -11,7 +11,13 @@ export type MainSidebarNavHeaderProps = {
   href?: string;
   isActive?: boolean;
 };
-export function MainSidebarNavHeader({ children, className, state = 'default', href, isActive }: MainSidebarNavHeaderProps) {
+export function MainSidebarNavHeader({
+  children,
+  className,
+  state = 'default',
+  href,
+  isActive,
+}: MainSidebarNavHeaderProps) {
   const isDefaultState = state === 'default';
   const { Link } = useLinkComponent();
 

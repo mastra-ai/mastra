@@ -1,18 +1,17 @@
 import type { GetScorerResponse } from '@mastra/client-js';
+import { WorkflowIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { XIcon } from 'lucide-react';
-import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { WorkflowIcon } from '@/ds/icons';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
@@ -49,7 +48,9 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
     const term = search.toLowerCase();
     return scorerData.filter(s => {
       const matchesSearch =
-        !term || s.scorer.config?.id?.toLowerCase().includes(term) || s.scorer.config?.name?.toLowerCase().includes(term);
+        !term ||
+        s.scorer.config?.id?.toLowerCase().includes(term) ||
+        s.scorer.config?.name?.toLowerCase().includes(term);
       const matchesSource = sourceFilter === 'all' || s.source === sourceFilter;
       return matchesSearch && matchesSource;
     });
@@ -132,41 +133,41 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
       </div>
       <EntityList columns={COLUMNS}>
         <EntityList.Top>
-        <EntityList.TopCell>Name</EntityList.TopCell>
-        <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Source</EntityList.TopCell>
-        <EntityList.TopCellSmart
-          long="Agents"
-          short={<AgentIcon />}
-          tooltip="Number of attached Agents"
-          className="text-center"
-        />
-        <EntityList.TopCellSmart
-          long="Workflows"
-          short={<WorkflowIcon />}
-          tooltip="Number of attached Workflows"
-          className="text-center"
-        />
-      </EntityList.Top>
+          <EntityList.TopCell>Name</EntityList.TopCell>
+          <EntityList.TopCell>Description</EntityList.TopCell>
+          <EntityList.TopCell>Source</EntityList.TopCell>
+          <EntityList.TopCellSmart
+            long="Agents"
+            short={<AgentIcon />}
+            tooltip="Number of attached Agents"
+            className="text-center"
+          />
+          <EntityList.TopCellSmart
+            long="Workflows"
+            short={<WorkflowIcon />}
+            tooltip="Number of attached Workflows"
+            className="text-center"
+          />
+        </EntityList.Top>
 
-      {filteredData.map(scorer => {
-        const name = scorer.scorer.config?.name || scorer.id;
-        const description = scorer.scorer.config?.description || '';
-        const agentCount = scorer.agentIds?.length ?? 0;
-        const workflowCount = scorer.workflowIds?.length ?? 0;
+        {filteredData.map(scorer => {
+          const name = scorer.scorer.config?.name || scorer.id;
+          const description = scorer.scorer.config?.description || '';
+          const agentCount = scorer.agentIds?.length ?? 0;
+          const workflowCount = scorer.workflowIds?.length ?? 0;
 
-        return (
-          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
-            <EntityList.NameCell>{name}</EntityList.NameCell>
-            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.Cell>
-              <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
-            </EntityList.Cell>
-            <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
-            <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
-          </EntityList.RowLink>
-        );
-      })}
+          return (
+            <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
+              <EntityList.NameCell>{name}</EntityList.NameCell>
+              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+              <EntityList.Cell>
+                <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
+              </EntityList.Cell>
+              <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
+              <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
+            </EntityList.RowLink>
+          );
+        })}
       </EntityList>
     </div>
   );

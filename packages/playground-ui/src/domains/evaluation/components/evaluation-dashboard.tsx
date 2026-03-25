@@ -1,14 +1,4 @@
-import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
-
-import { EvaluationKpiCards } from './evaluation-kpi-cards';
-import { ScoresOverTimeCard } from './scores-over-time-card';
-import { ExperimentStatusCard } from './experiment-status-card';
-import { DatasetHealthCard } from './dataset-health-card';
-import { ReviewPipelineCard } from './review-pipeline-card';
-import { EvaluationScorersList } from './evaluation-scorers-list';
-import { EvaluationDatasetsList } from './evaluation-datasets-list';
-import { EvaluationExperimentsList } from './evaluation-experiments-list';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
+import { useState, useMemo } from 'react';
 import {
   useEvaluationScorers,
   useEvaluationDatasets,
@@ -16,7 +6,17 @@ import {
 } from '../hooks/use-evaluation-dashboard';
 import { useEvaluationScoreMetrics } from '../hooks/use-evaluation-score-metrics';
 import { useReviewSummary } from '../hooks/use-review-summary';
-import { useState, useMemo } from 'react';
+import { DatasetHealthCard } from './dataset-health-card';
+import { EvaluationDatasetsList } from './evaluation-datasets-list';
+import { EvaluationExperimentsList } from './evaluation-experiments-list';
+import { EvaluationKpiCards } from './evaluation-kpi-cards';
+import { EvaluationScorersList } from './evaluation-scorers-list';
+import { ExperimentStatusCard } from './experiment-status-card';
+
+import { ReviewPipelineCard } from './review-pipeline-card';
+import { ScoresOverTimeCard } from './scores-over-time-card';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
+import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
 import { useLinkComponent } from '@/lib/framework';
 
 export type EvaluationTab = 'overview' | 'scorers' | 'datasets' | 'experiments';
@@ -27,10 +27,18 @@ interface EvaluationDashboardProps {
   onDatasetCreated?: (datasetId: string) => void;
 }
 
-export function EvaluationDashboard({ activeTab, defaultTab = 'overview', onDatasetCreated }: EvaluationDashboardProps) {
+export function EvaluationDashboard({
+  activeTab,
+  defaultTab = 'overview',
+  onDatasetCreated,
+}: EvaluationDashboardProps) {
   const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useEvaluationScorers();
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useEvaluationDatasets();
-  const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useEvaluationExperiments();
+  const {
+    data: experimentsData,
+    isLoading: isLoadingExperiments,
+    error: errorExperiments,
+  } = useEvaluationExperiments();
   const { data: scoreMetrics, isLoading: isLoadingScores, isError: isErrorScores } = useEvaluationScoreMetrics();
   const { data: reviewSummary, isLoading: isLoadingReview, isError: errorReview } = useReviewSummary();
 
@@ -140,11 +148,7 @@ export function EvaluationDashboard({ activeTab, defaultTab = 'overview', onData
       )}
 
       {tab === 'scorers' && (
-        <EvaluationScorersList
-          scorers={scorers ?? {}}
-          isLoading={isLoadingScorers}
-          error={errorScorers}
-        />
+        <EvaluationScorersList scorers={scorers ?? {}} isLoading={isLoadingScorers} error={errorScorers} />
       )}
 
       {tab === 'datasets' && (

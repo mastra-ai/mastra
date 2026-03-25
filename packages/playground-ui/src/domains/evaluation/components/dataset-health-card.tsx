@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { HorizontalBars } from '@/ds/components/HorizontalBars';
-import { CHART_COLORS } from '@/domains/metrics/components/metrics-utils';
 import type { DatasetExperiment } from '@mastra/client-js';
+import { useMemo } from 'react';
+import { CHART_COLORS } from '@/domains/metrics/components/metrics-utils';
+import { HorizontalBars } from '@/ds/components/HorizontalBars';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 
 interface DatasetHealthCardProps {
   experiments?: DatasetExperiment[];
@@ -52,7 +52,14 @@ export function DatasetHealthCard({ experiments, isLoading, isError }: DatasetHe
       }))
       .filter(b => b.values.some(v => v > 0));
 
-    const max = bars.reduce((m, b) => Math.max(m, b.values.reduce((a, v) => a + v, 0)), 0);
+    const max = bars.reduce(
+      (m, b) =>
+        Math.max(
+          m,
+          b.values.reduce((a, v) => a + v, 0),
+        ),
+      0,
+    );
 
     return { barData: bars, maxVal: max, segments: segs };
   }, [experiments]);
