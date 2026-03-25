@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Fixed model cost reporting on total token metrics. `mastra_model_total_input_tokens` and `mastra_model_total_output_tokens` now include estimated cost for the full input and output totals, which makes dashboard and aggregate cost queries return the expected values.
+Improved model usage normalization and total cost reporting. Model generation spans now populate input and output text detail buckets from the reported totals when providers do not supply a full breakdown, and `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens` now include estimated cost based on the successfully priced detail buckets for those totals.
