@@ -844,7 +844,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       ? undefined
       : { resourceId: this.resourceId };
 
-    const result = await memoryStorage.listThreads({ filter });
+    const result = await memoryStorage.listThreads({ filter, perPage: false });
 
     return result.threads.map((thread: StorageThreadType) => ({
       id: thread.id,

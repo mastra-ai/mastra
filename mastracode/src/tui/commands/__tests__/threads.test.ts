@@ -81,7 +81,7 @@ function createContext(threads: HarnessThread[]) {
   return { ctx, state, showOverlay };
 }
 
-describe('handleThreadsCommand preview cache invalidation', () => {
+describe('handleThreadsCommand thread listing', () => {
   beforeEach(() => {
     selectorInstances.length = 0;
   });
@@ -124,6 +124,44 @@ describe('handleThreadsCommand preview cache invalidation', () => {
     const selector = selectorInstances[0];
     expect(selector.options.initialMessagePreviews.get('thread-1')).toBe('Fresh preview');
     expect(state.threadPreviewCache.get('thread-1')?.preview).toBe('Fresh preview');
+    expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(true);
+
+    selector.options.onCancel();
+    await commandPromise;
+  });
+
+  it('fetches and caches uncached previews from the harness', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+    state.harness.getFirstUserMessagesForThreads = vi.fn(
+      async () =>
+        new Map([
+          [
+            'thread-1',
+            {
+              id: 'message-1',
+              role: 'user',
+              createdAt: new Date('2026-03-17T15:00:00.000Z'),
+              content: [{ type: 'text', text: 'This is a long preview message that should be truncated for display.' }],
+            },
+          ],
+        ]),
+    );
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    const selector = selectorInstances[0];
+    expect(typeof selector.options.getMessagePreviews).toBe('function');
+    await expect(selector.options.getMessagePreviews(['thread-1'])).resolves.toEqual(
+      new Map([['thread-1', 'This is a long preview message that should be t...']]),
+    );
+    expect(state.harness.getFirstUserMessagesForThreads).toHaveBeenCalledWith({ threadIds: ['thread-1'] });
+    expect(state.threadPreviewCache.get('thread-1')).toEqual({
+      preview: 'This is a long preview message that should be t...',
+      updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
+    });
     expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(true);
 
     selector.options.onCancel();

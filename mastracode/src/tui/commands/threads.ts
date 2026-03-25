@@ -130,37 +130,37 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           threadId => !state.threadPreviewCache.has(threadId) && !state.attemptedThreadPreviewIds.has(threadId),
         );
 
-        if (uncachedThreadIds.length === 0) {
-          return new Map(
-            threadIds.flatMap(threadId => {
-              const preview = state.threadPreviewCache.get(threadId)?.preview;
-              return preview ? [[threadId, preview] as const] : [];
-            }),
-          );
-        }
+        if (uncachedThreadIds.length > 0) {
+          const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({
+            threadIds: uncachedThreadIds,
+          });
 
-        const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({ threadIds: uncachedThreadIds });
-        const previews = new Map<string, string>();
+          for (const threadId of uncachedThreadIds) {
+            state.attemptedThreadPreviewIds.add(threadId);
+          }
 
-        for (const threadId of uncachedThreadIds) {
-          state.attemptedThreadPreviewIds.add(threadId);
-        }
-
-        for (const [threadId, message] of firstUserMessages.entries()) {
-          const text = extractTextContent(message);
-          if (text) {
-            const preview = truncatePreview(text);
-            previews.set(threadId, preview);
-            const thread = threadById.get(threadId);
-            if (thread) {
-              state.threadPreviewCache.set(threadId, { preview, updatedAt: thread.updatedAt.getTime() });
+          for (const [threadId, message] of firstUserMessages.entries()) {
+            const text = extractTextContent(message);
+            if (!text) {
+              continue;
             }
+
+            const thread = threadById.get(threadId);
+            if (!thread) {
+              continue;
+            }
+
+            const preview = truncatePreview(text);
+            state.threadPreviewCache.set(threadId, {
+              preview,
+              updatedAt: thread.updatedAt.getTime(),
+            });
           }
         }
 
         return new Map(
           threadIds.flatMap(threadId => {
-            const preview = previews.get(threadId) ?? state.threadPreviewCache.get(threadId)?.preview;
+            const preview = state.threadPreviewCache.get(threadId)?.preview;
             return preview ? [[threadId, preview] as const] : [];
           }),
         );
