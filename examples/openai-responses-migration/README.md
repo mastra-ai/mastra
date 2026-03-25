@@ -4,8 +4,7 @@ This example uses the normal `create-mastra` layout:
 
 - `src/mastra/` for the Mastra project
 - `mastra dev` to start the Mastra server
-- a Next app that calls a small local API route
-- the API route talks to the Mastra server with `@mastra/client-js`
+- a Next app that calls the Mastra server directly from the client with `@mastra/client-js`
 - a local `LibSQLStore` so `store: true` and memory-backed follow-up turns work
 
 It is intentionally narrow:
@@ -14,7 +13,7 @@ It is intentionally narrow:
 - The Mastra agents live in `src/mastra/` inside the example.
 - The example focuses on plain text Responses API calls and stored follow-up turns.
 - The UI includes three demo modes: `Mastra Agent`, `Mastra Agent + Tool`, and `Provider-backed Agent`.
-- The local Next API route stays intentionally thin and only injects the default demo `agent_id`, switching to the tool agent for the agent-with-tools mode.
+- The client component calls `MastraClient.responses.create()` and `.stream()` directly so the main request shape is easy to copy.
 - The UI stays intentionally small: a sidebar, one prompt field, one response surface, and a raw JSON toggle.
 
 ## What this demonstrates
@@ -90,8 +89,8 @@ Then open:
 ## Notes
 
 - `OPENAI_API_KEY` is used by the underlying OpenAI model.
-- `MASTRA_BASE_URL` defaults to the local Mastra dev server and is used by the local Next API route.
+- `NEXT_PUBLIC_MASTRA_BASE_URL` points the browser client at the local Mastra dev server.
 - `NEXT_PUBLIC_AGENT_MODEL` configures the underlying model used by all demo modes.
-- `MASTRA_AGENT_ID` configures the registered agent used by the memory-backed demo mode.
-- `MASTRA_TOOL_AGENT_ID` configures the registered agent used by the agent-with-tools demo mode.
+- `NEXT_PUBLIC_MASTRA_AGENT_ID` configures the registered agent used by the memory-backed demo mode.
+- `NEXT_PUBLIC_MASTRA_TOOL_AGENT_ID` configures the registered agent used by the agent-with-tools demo mode.
 - The example persists threads and response IDs in `./mastra.db`.

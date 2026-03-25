@@ -1,6 +1,7 @@
 'use client';
 
-import { startTransition, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { MastraClient, type CreateResponseParams, type ResponsesResponse, type ResponsesStreamEvent } from '@mastra/client-js';
+import { startTransition, type ReactNode, useEffect, useState } from 'react';
 
 type TurnState = {
   turnId: string;
@@ -30,30 +31,43 @@ type ExampleId = 'agent-memory' | 'agent-tools' | 'provider-backed';
 type ExampleConfig = {
   id: ExampleId;
   label: string;
-  eyebrow: string;
   description: string;
   detail: string;
   instructions: string;
   model: string;
-  usesAgentMemory: boolean;
   store: boolean;
   usesProviderContinuation: boolean;
   prompts: readonly string[];
 };
 
+type StreamState = {
+  responseId: string | null;
+  providerResponseId: string | null;
+  tools: ToolState[];
+  text: string;
+  raw: string;
+  model: string | null;
+};
+
+type TurnPatch = Pick<TurnState, 'responseId' | 'providerResponseId' | 'tools' | 'text' | 'raw' | 'model' | 'tokenCount'>;
+
 const DEFAULT_MODEL = `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`;
+const DEFAULT_AGENT_ID = process.env.NEXT_PUBLIC_MASTRA_AGENT_ID ?? 'support-agent';
+const TOOL_AGENT_ID = process.env.NEXT_PUBLIC_MASTRA_TOOL_AGENT_ID ?? 'tool-agent';
+const AGENT_TOOLS_EXAMPLE = 'agent-tools';
+const mastraClient = new MastraClient({
+  baseUrl: process.env.NEXT_PUBLIC_MASTRA_BASE_URL ?? 'http://localhost:4111',
+});
 
 const EXAMPLES: readonly ExampleConfig[] = [
   {
     id: 'agent-memory',
     label: 'Mastra Agent',
-    eyebrow: 'Responses API',
     description: 'Uses `agent_id`, `store: true`, and a Mastra agent with memory for follow-up turns.',
     detail: 'Each reply returns a stored response ID, and the next turn sends it as `previous_response_id` to continue the chain.',
     instructions:
       'You are a memory-backed Mastra agent. Use prior stored turns when the user asks follow-up questions.',
     model: DEFAULT_MODEL,
-    usesAgentMemory: true,
     store: true,
     usesProviderContinuation: false,
     prompts: [
@@ -65,14 +79,12 @@ const EXAMPLES: readonly ExampleConfig[] = [
   {
     id: 'agent-tools',
     label: 'Mastra Agent + Tool',
-    eyebrow: 'Responses API',
     description: 'Uses `agent_id`, `store: true`, and a Mastra agent that can call a real tool.',
     detail:
       'This agent can call `release-status` during the turn, then the stored response stays anchored on the final assistant message.',
     instructions:
       'You are a Mastra agent with tools. Use tools when the user asks about launch readiness or release status.',
     model: DEFAULT_MODEL,
-    usesAgentMemory: true,
     store: true,
     usesProviderContinuation: false,
     prompts: [
@@ -84,7 +96,6 @@ const EXAMPLES: readonly ExampleConfig[] = [
   {
     id: 'provider-backed',
     label: 'Provider-backed Agent',
-    eyebrow: 'Responses API',
     description:
       'Uses `agent_id` with provider-managed continuation via `providerOptions.openai.previousResponseId`.',
     detail:
@@ -92,7 +103,6 @@ const EXAMPLES: readonly ExampleConfig[] = [
     instructions:
       'You are an OpenAI provider-backed Responses API example. Continue the conversation using provider-native continuation state.',
     model: DEFAULT_MODEL,
-    usesAgentMemory: false,
     store: false,
     usesProviderContinuation: true,
     prompts: [
@@ -263,88 +273,170 @@ function extractErrorMessage(raw: string) {
   return raw;
 }
 
-async function requestDemoResponse(payload: Record<string, unknown>) {
-  const response = await fetch('/api/response', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+function buildRequestBody<T extends CreateResponseParams & { example?: ExampleId }>(params: T): Omit<T, 'example'> {
+  const request = { ...params };
+  delete request.example;
 
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(await response.text()));
+  if (request.agent_id == null) {
+    request.agent_id = params.example === AGENT_TOOLS_EXAMPLE ? TOOL_AGENT_ID : DEFAULT_AGENT_ID;
   }
 
-  return response;
-}
-
-function parseSseEvent(block: string) {
-  const normalizedBlock = block.replace(/\r\n/g, '\n').trim();
-  if (!normalizedBlock) {
-    return null;
-  }
-
-  const dataLines = normalizedBlock
-    .split('\n')
-    .filter(line => line.startsWith('data:'))
-    .map(line => line.slice('data:'.length).trim());
-
-  if (!dataLines.length) {
-    return null;
-  }
-
-  const data = dataLines.join('\n');
-  if (data === '[DONE]') {
-    return null;
-  }
-
-  return JSON.parse(data) as unknown;
-}
-
-async function* streamDemoResponse(response: Response) {
-  if (!response.body) {
-    return;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-      let boundaryIndex = buffer.indexOf('\n\n');
-      while (boundaryIndex !== -1) {
-        const block = buffer.slice(0, boundaryIndex);
-        buffer = buffer.slice(boundaryIndex + 2);
-
-        const event = parseSseEvent(block);
-        if (event) {
-          yield event;
-        }
-
-        boundaryIndex = buffer.indexOf('\n\n');
-      }
-
-      if (done) {
-        break;
-      }
-    }
-
-    const finalEvent = parseSseEvent(buffer);
-    if (finalEvent) {
-      yield finalEvent;
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  return request;
 }
 
 function updateTurn(turns: TurnState[], turnId: string, updater: (turn: TurnState) => TurnState) {
   return turns.map(turn => (turn.turnId === turnId ? updater(turn) : turn));
+}
+
+function getNextAnchor(turns: TurnState[], example: ExampleConfig) {
+  const latestTurn = turns.at(-1);
+
+  if (!latestTurn) {
+    return null;
+  }
+
+  if (example.store) {
+    return latestTurn.responseId ?? latestTurn.previousResponseId ?? null;
+  }
+
+  if (example.usesProviderContinuation) {
+    return latestTurn.providerResponseId ?? null;
+  }
+
+  return null;
+}
+
+function getContinuationState(turns: TurnState[], example: ExampleConfig) {
+  const latestTurn = turns.at(-1);
+
+  return {
+    previousResponseId: example.store ? latestTurn?.responseId ?? null : null,
+    previousProviderResponseId: example.usesProviderContinuation ? latestTurn?.providerResponseId ?? null : null,
+  };
+}
+
+function createPendingTurn(
+  turnId: string,
+  prompt: string,
+  mode: 'json' | 'stream',
+  previousResponseId: string | null,
+): TurnState {
+  return {
+    turnId,
+    prompt,
+    responseId: null,
+    previousResponseId,
+    providerResponseId: null,
+    tools: [],
+    text: '',
+    raw: '',
+    model: null,
+    latencyMs: 0,
+    tokenCount: 0,
+    mode,
+    status: 'pending',
+  };
+}
+
+function buildExampleRequest(
+  example: ExampleConfig,
+  input: string,
+  previousResponseId: string | null,
+  previousProviderResponseId: string | null,
+) {
+  return buildRequestBody({
+    model: example.model,
+    input,
+    instructions: example.instructions,
+    example: example.id,
+    ...(example.store ? { store: true, previous_response_id: previousResponseId ?? undefined } : {}),
+    ...(example.usesProviderContinuation && previousProviderResponseId
+      ? {
+          providerOptions: {
+            openai: {
+              previousResponseId: previousProviderResponseId,
+            },
+          },
+        }
+      : {}),
+  });
+}
+
+function createTurnPatch(payload: unknown, fallbackModel: string | null): TurnPatch {
+  const text = extractOutputText(payload);
+
+  return {
+    responseId: extractResponseId(payload),
+    providerResponseId: extractProviderResponseId(payload),
+    tools: extractToolActivity(payload),
+    text,
+    raw: JSON.stringify(payload, null, 2),
+    model: extractModel(payload, fallbackModel),
+    tokenCount: extractTokenCount(payload, text),
+  };
+}
+
+function createInitialStreamState(
+  previousResponseId: string | null,
+  previousProviderResponseId: string | null,
+  model: string,
+): StreamState {
+  return {
+    responseId: previousResponseId,
+    providerResponseId: previousProviderResponseId,
+    tools: [],
+    text: '',
+    raw: '',
+    model,
+  };
+}
+
+function applyStreamEvent(state: StreamState, event: ResponsesStreamEvent): StreamState {
+  if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
+    return {
+      ...state,
+      text: `${state.text}${event.delta}`,
+    };
+  }
+
+  if (
+    (event.type === 'response.created' || event.type === 'response.in_progress' || event.type === 'response.completed') &&
+    isRecord(event.response)
+  ) {
+    const nextState: StreamState = {
+      ...state,
+      responseId: typeof event.response.id === 'string' ? event.response.id : state.responseId,
+      providerResponseId: extractProviderResponseId(event.response) ?? state.providerResponseId,
+      tools: extractToolActivity(event.response),
+      model: extractModel(event.response, state.model),
+    };
+
+    if (event.type === 'response.completed') {
+      const completedText = extractOutputText(event.response);
+
+      return {
+        ...nextState,
+        text: completedText || nextState.text,
+        raw: JSON.stringify(event.response, null, 2),
+      };
+    }
+
+    return nextState;
+  }
+
+  return state;
+}
+
+function finalizeStreamPatch(state: StreamState): TurnPatch {
+  return {
+    responseId: state.responseId,
+    providerResponseId: state.providerResponseId,
+    tools: state.tools,
+    text: state.text,
+    raw: state.raw,
+    model: state.model,
+    tokenCount: state.raw ? extractTokenCount(JSON.parse(state.raw) as unknown, state.text) : estimateTokenCount(state.text),
+  };
 }
 
 function AnimatedResponseText({ text }: { text: string }) {
@@ -451,13 +543,8 @@ export function MigrationDemo() {
   const [activeRequest, setActiveRequest] = useState<{ turnId: string; startedAt: number } | null>(null);
 
   const activeExample = EXAMPLE_BY_ID[activeExampleId];
-  const latestTurn = turns.at(-1) ?? null;
   const isPending = mode !== 'idle';
-  const currentAnchor = activeExample.store
-    ? latestTurn?.responseId ?? latestTurn?.previousResponseId ?? null
-    : activeExample.usesProviderContinuation
-      ? latestTurn?.providerResponseId ?? null
-      : null;
+  const currentAnchor = getNextAnchor(turns, activeExample);
   const completedTurns = turns.filter(turn => turn.status === 'done').length;
   const statusBadge = currentAnchor ? truncateResponseId(currentAnchor) : 'awaiting-agent';
 
@@ -493,8 +580,6 @@ export function MigrationDemo() {
     return () => window.clearInterval(interval);
   }, [activeRequest]);
 
-  const activePromptSuggestions = useMemo(() => activeExample.prompts, [activeExample]);
-
   const handleCopy = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
@@ -524,10 +609,7 @@ export function MigrationDemo() {
       return;
     }
 
-    const previousResponseId = activeExample.store ? turns.at(-1)?.responseId ?? null : null;
-    const previousProviderResponseId = activeExample.usesProviderContinuation
-      ? turns.at(-1)?.providerResponseId ?? null
-      : null;
+    const { previousResponseId, previousProviderResponseId } = getContinuationState(turns, activeExample);
     const turnId = createTurnId();
     const startedAt = performance.now();
 
@@ -535,121 +617,53 @@ export function MigrationDemo() {
     setMode(nextMode);
     setOpenRawTurnId(null);
     setActiveRequest({ turnId, startedAt });
-    setTurns(current => [
-      ...current,
-      {
-        turnId,
-        prompt: trimmedInput,
-        responseId: null,
-        previousResponseId,
-        providerResponseId: null,
-        tools: [],
-        text: '',
-        raw: '',
-        model: null,
-        latencyMs: 0,
-        tokenCount: 0,
-        mode: nextMode,
-        status: 'pending',
-      },
-    ]);
+    setTurns(current => [...current, createPendingTurn(turnId, trimmedInput, nextMode, previousResponseId)]);
     setInput('');
 
     try {
-      const request = {
-        model: activeExample.model,
-        input: trimmedInput,
-        instructions: activeExample.instructions,
-        example: activeExample.id,
-        ...(activeExample.store ? { store: true, previous_response_id: previousResponseId ?? undefined } : {}),
-        ...(activeExample.usesProviderContinuation && previousProviderResponseId
-          ? {
-              providerOptions: {
-                openai: {
-                  previousResponseId: previousProviderResponseId,
-                },
-              },
-            }
-          : {}),
-      };
+      const requestBody = buildExampleRequest(
+        activeExample,
+        trimmedInput,
+        previousResponseId,
+        previousProviderResponseId,
+      );
 
       if (nextMode === 'json') {
-        const response = await requestDemoResponse(request);
-        const payload = (await response.json()) as unknown;
-        const text = extractOutputText(payload);
+        const payload = await mastraClient.responses.create({
+          ...requestBody,
+          stream: false,
+        });
+        const turnPatch = createTurnPatch(payload, activeExample.model);
 
         setTurns(current =>
           updateTurn(current, turnId, turn => ({
             ...turn,
-            responseId: extractResponseId(payload),
-            providerResponseId: extractProviderResponseId(payload),
-            tools: extractToolActivity(payload),
-            text,
-            raw: JSON.stringify(payload, null, 2),
-            model: extractModel(payload, activeExample.model),
+            ...turnPatch,
             latencyMs: performance.now() - startedAt,
-            tokenCount: extractTokenCount(payload, text),
             status: 'done',
           })),
         );
         return;
       }
 
-      let streamedText = '';
-      let responseId = previousResponseId;
-      let providerResponseId = previousProviderResponseId;
-      let tools: ToolState[] = [];
-      let raw = '';
-      let model = activeExample.model;
-      const response = await requestDemoResponse({ ...request, stream: true });
+      let streamState = createInitialStreamState(previousResponseId, previousProviderResponseId, activeExample.model);
+      const stream = await mastraClient.responses.stream(requestBody);
 
-      for await (const event of streamDemoResponse(response)) {
+      for await (const event of stream) {
         if (!isRecord(event) || typeof event.type !== 'string') {
           continue;
         }
 
-        const eventType = event.type;
-
-        if (eventType === 'response.output_text.delta' && typeof event.delta === 'string') {
-          streamedText += event.delta;
-        }
-
-        if (
-          (eventType === 'response.created' ||
-            eventType === 'response.in_progress' ||
-            eventType === 'response.completed') &&
-          isRecord(event.response)
-        ) {
-          responseId = typeof event.response.id === 'string' ? event.response.id : responseId;
-          providerResponseId = extractProviderResponseId(event.response) ?? providerResponseId;
-          tools = extractToolActivity(event.response);
-          model = extractModel(event.response, model) ?? model;
-
-          if (eventType === 'response.completed') {
-            const completedText = extractOutputText(event.response);
-            if (completedText) {
-              streamedText = completedText;
-            }
-
-            raw = JSON.stringify(event.response, null, 2);
-          }
-        }
+        streamState = applyStreamEvent(streamState, event);
+        const turnPatch = finalizeStreamPatch(streamState);
 
         startTransition(() => {
           setTurns(current =>
             updateTurn(current, turnId, turn => ({
               ...turn,
-              responseId,
-              providerResponseId,
-              tools,
-              text: streamedText,
-              raw,
-              model,
+              ...turnPatch,
               latencyMs: performance.now() - startedAt,
-              tokenCount: raw
-                ? extractTokenCount(JSON.parse(raw) as unknown, streamedText)
-                : estimateTokenCount(streamedText),
-              status: eventType === 'response.completed' ? 'done' : 'pending',
+              status: event.type === 'response.completed' ? 'done' : 'pending',
             })),
           );
         });
@@ -738,7 +752,7 @@ export function MigrationDemo() {
               <div className="demo-empty-state">
                 <p>{activeExample.detail}</p>
                 <div className="demo-chip-list">
-                  {activePromptSuggestions.map(prompt => (
+                  {activeExample.prompts.map(prompt => (
                     <button key={prompt} className="demo-chip" onClick={() => setInput(prompt)} type="button">
                       {prompt}
                     </button>
