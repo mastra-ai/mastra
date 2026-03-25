@@ -23,6 +23,30 @@ To export traces to Elastic APM, create an **Observability** project (which incl
 
 Trial deployments include free token limits for [Elastic Inference Service](https://www.elastic.co/docs/explore-analyze/elastic-inference/eis#rate-limits), allowing you to use hosted embedding models without additional costs during evaluation.
 
+## Quick Start
+
+1. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+
+2. **Configure environment**
+   - Copy `.env.example` to `.env`
+   - Set `ELASTICSEARCH_URL` to your Elasticsearch endpoint
+   - (Optional) Configure embedder, APM, and Kibana MCP settings
+
+3. **Seed sample data** (optional)
+   ```bash
+   pnpm seed
+   ```
+   This creates an `articles` index with 10 sample articles about Elasticsearch.
+
+4. **Start the dev server**
+   ```bash
+   pnpm dev
+   ```
+   Open [http://localhost:4111](http://localhost:4111) to access Mastra Studio.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
