@@ -192,23 +192,27 @@ declare global {
 }
 
 /**
- * Maps tab-based sidebar links to their corresponding detail route prefixes.
- * e.g. /evaluation?tab=scorers should also be active when at /evaluation/scorers/:id
+ * Maps evaluation tab values to their corresponding detail route prefixes.
+ * e.g. tab=scorers should also be active when at /evaluation/scorers/:id
  */
-const TAB_ROUTE_MAP: Record<string, string> = {
-  '/evaluation?tab=scorers': '/evaluation/scorers',
-  '/evaluation?tab=datasets': '/evaluation/datasets',
-  '/evaluation?tab=experiments': '/evaluation/datasets', // experiments live under dataset routes
+const TAB_DETAIL_PREFIX: Record<string, string> = {
+  scorers: '/evaluation/scorers',
+  datasets: '/evaluation/datasets',
 };
 
 function getIsLinkActive(link: SidebarLink, pathname: string, search: string): boolean {
   if (link.url.includes('?')) {
     const [linkPath, linkQuery] = link.url.split('?');
-    // Exact match: same base path and same query string
-    if (pathname === linkPath && search === `?${linkQuery}`) return true;
+    // Parse the tab param from both the link URL and the current location
+    const linkTab = new URLSearchParams(linkQuery).get('tab');
+    const currentTab = new URLSearchParams(search).get('tab');
+    // Exact tab match on the same base path
+    if (pathname === linkPath && linkTab && linkTab === currentTab) return true;
     // Detail page match: e.g. /evaluation/scorers/:id while Scorers tab link is active
-    const routePrefix = TAB_ROUTE_MAP[link.url];
-    if (routePrefix && pathname.startsWith(routePrefix)) return true;
+    if (linkTab) {
+      const routePrefix = TAB_DETAIL_PREFIX[linkTab];
+      if (routePrefix && pathname.startsWith(routePrefix)) return true;
+    }
     return false;
   }
   // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
