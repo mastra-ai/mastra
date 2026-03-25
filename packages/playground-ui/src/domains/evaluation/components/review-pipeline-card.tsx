@@ -8,6 +8,7 @@ const REVIEW_COLORS = {
   complete: '#22c55e',
 };
 
+// "complete" is the DB status value; we label it "Reviewed" in the UI for clarity
 const SEGMENTS = [
   { label: 'Needs Review', color: REVIEW_COLORS.needsReview },
   { label: 'Reviewed', color: REVIEW_COLORS.complete },
