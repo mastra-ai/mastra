@@ -245,15 +245,19 @@ export function EvaluationDatasetsList({
                   if (!review) return <span className="text-neutral2">—</span>;
                   if (review.needsReview > 0) {
                     return (
-                      <a
-                        href={`${paths.datasetLink(ds.id)}?tab=review`}
-                        onClick={e => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.location.href = `${paths.datasetLink(ds.id)}?tab=review`;
+                        }}
                         className="inline-flex"
                       >
                         <Badge variant="warning" className="hover:opacity-80 transition-opacity cursor-pointer">
                           {review.needsReview} pending
                         </Badge>
-                      </a>
+                      </button>
                     );
                   }
                   return <Badge variant="success">{review.complete} reviewed</Badge>;
