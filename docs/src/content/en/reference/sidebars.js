@@ -69,6 +69,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
+        { type: 'doc', id: 'auth/okta', label: 'Okta' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
         { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
       ],
