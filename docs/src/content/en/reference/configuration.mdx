@@ -660,8 +660,6 @@ export const mastra = new Mastra({
 
 Host address the Mastra development server binds to. If the `MASTRA_HOST` environment variable is set, it takes precedence over the default.
 
-For deployer-built production servers, leaving `server.host` and `MASTRA_HOST` unset preserves the runtime's default bind address. Set either value explicitly when you need a specific bind host such as `0.0.0.0`.
-
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 
