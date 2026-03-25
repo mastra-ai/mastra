@@ -326,6 +326,7 @@ const sidebars = {
           label: 'PromptInjectionDetector',
         },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
+        { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
