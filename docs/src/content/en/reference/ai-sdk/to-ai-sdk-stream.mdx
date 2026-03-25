@@ -17,6 +17,8 @@ This is useful when building custom streaming endpoints outside Mastra's provide
 
 `toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'` in the options object.
 
+When converting resumed agent streams, `toAISdkStream()` continues from the resumed point in the run. This includes nested supervisor and router sub-agent streams that resume with tool result events instead of a fresh `start` chunk.
+
 ## Usage example
 
 Next.js App Router example:
