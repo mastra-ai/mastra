@@ -248,8 +248,18 @@ describe('AutoExtractedMetrics', () => {
     expect(byName('mastra_model_output_reasoning_tokens')!.metric.value).toBe(30);
     expect(byName('mastra_model_output_audio_tokens')!.metric.value).toBe(10);
     expect(byName('mastra_model_output_image_tokens')!.metric.value).toBe(10);
-    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00006375);
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'partial_cost',
+    });
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00009);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'partial_cost',
+    });
     expect(byName('mastra_model_input_text_tokens')!.metric.costContext).toMatchObject({
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -434,9 +444,14 @@ describe('AutoExtractedMetrics', () => {
     emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
-    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015);
     expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015);
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00003);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'partial_cost',
+    });
     expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00003);
     expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext).toEqual({
       provider: 'openai',
@@ -476,8 +491,8 @@ describe('AutoExtractedMetrics', () => {
     emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
-    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000372);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.0006);
     expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00036);
     expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000012);
     expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.0006);
