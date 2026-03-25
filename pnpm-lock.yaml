@@ -6570,6 +6570,10 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.31.1)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   workspaces/vercel:
+    dependencies:
+      '@vercel/sandbox':
+        specifier: ^1.9.0
+        version: 1.9.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6577,15 +6581,15 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
-      '@vercel/sandbox':
-        specifier: ^1.9.0
-        version: 1.9.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18)

@@ -5,7 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.integration.test.ts'],
     setupFiles: ['dotenv/config'],
-    testTimeout: 120000,
+    testTimeout: 60000,
     coverage: {
       reporter: ['text', 'json', 'html'],
     },

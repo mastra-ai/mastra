@@ -7,7 +7,7 @@
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
-import type { Sandbox, Command as VercelCommand } from '@vercel/sandbox';
+import type { Command as VercelCommand } from '@vercel/sandbox';
 import type { VercelSandbox } from './index';
 
 // =============================================================================
@@ -135,6 +135,7 @@ export class VercelProcessManager extends SandboxProcessManager<VercelSandbox> {
     });
 
     const handle = new VercelProcessHandle(vercelCommand, Date.now(), options);
+    handle.command = command;
     this._tracked.set(handle.pid, handle);
     return handle;
   }

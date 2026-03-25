@@ -56,7 +56,7 @@ export class VercelSandbox extends MastraSandbox {
   readonly provider = 'vercel';
   status: ProviderStatus = 'pending';
 
-  private readonly _runtime: string;
+  private readonly _runtime: NonNullable<VercelSandboxOptions['runtime']>;
   private readonly _vcpus: number;
   private readonly _timeout: number;
   private readonly _ports: number[];

@@ -2,7 +2,7 @@
 '@mastra/vercel': minor
 ---
 
-Added Vercel serverless sandbox provider for executing commands as Vercel Functions. Deploys code as serverless functions and executes commands via HTTP invocation — providing globally-distributed, zero-infrastructure execution.
+Added Vercel sandbox provider powered by `@vercel/sandbox` microVMs. Provides ephemeral Linux environments with persistent filesystem, real shell access, and background process support via Firecracker VMs.
 
 **Usage:**
 
@@ -12,7 +12,9 @@ import { Workspace } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   sandbox: new VercelSandbox({
-    token: process.env.VERCEL_TOKEN,
+    runtime: 'node24',
+    vcpus: 2,
+    timeout: 300_000,
   }),
 });
 ```

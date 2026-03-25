@@ -2,4 +2,3 @@ node_modules/
 dist/
 *.tsbuildinfo
 .turbo/
-e2e/

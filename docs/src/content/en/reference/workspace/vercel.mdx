@@ -1,23 +1,17 @@
 ---
 title: "Reference: VercelSandbox | Workspace"
-description: "API reference for VercelSandbox, a serverless sandbox provider that deploys and executes commands as Vercel Functions."
+description: "API reference for VercelSandbox, a sandbox provider powered by Vercel Sandbox microVMs for ephemeral Linux environments."
 packages:
   - "@mastra/vercel"
 ---
 
 # VercelSandbox
 
-Executes commands as [Vercel](https://vercel.com) serverless functions. Provides globally-distributed, zero-infrastructure execution with automatic scaling.
+Executes commands in ephemeral [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) microVMs. Each sandbox is a full Firecracker VM with a persistent filesystem, real shell with sudo access, and support for background processes.
 
 :::info
 
 For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
-
-:::warning
-
-VercelSandbox is stateless. There is no persistent filesystem, no interactive shell, and no support for long-running or background processes. Only `/tmp` is writable and is ephemeral between invocations.
 
 :::
 
@@ -38,7 +32,7 @@ import { VercelSandbox } from '@mastra/vercel'
 
 const workspace = new Workspace({
   sandbox: new VercelSandbox({
-    token: process.env.VERCEL_TOKEN,
+    runtime: 'node24',
   }),
 })
 
@@ -49,16 +43,15 @@ const agent = new Agent({
 })
 ```
 
-### Team-scoped deployment with custom resources
+### Custom resources and port exposure
 
 ```typescript
 const workspace = new Workspace({
   sandbox: new VercelSandbox({
-    token: process.env.VERCEL_TOKEN,
-    teamId: 'team_abc123',
-    regions: ['iad1', 'sfo1'],
-    maxDuration: 120,
-    memory: 3008,
+    runtime: 'node24',
+    vcpus: 4,
+    timeout: 600_000,
+    ports: [3000, 8080],
     env: {
       NODE_ENV: 'production',
     },
@@ -71,57 +64,44 @@ const workspace = new Workspace({
 <PropertiesTable
   content={[
   {
-    name: 'token',
-    type: 'string',
-    description: 'Vercel API token. Falls back to `VERCEL_TOKEN` environment variable.',
+    name: 'runtime',
+    type: "'node24' | 'node22' | 'python3.13'",
+    description: 'Runtime image for the microVM.',
     isOptional: true,
+    defaultValue: "'node24'",
   },
   {
-    name: 'teamId',
-    type: 'string',
-    description: 'Vercel team ID for team-scoped deployments.',
+    name: 'vcpus',
+    type: '1 | 2 | 4 | 8',
+    description: 'Number of virtual CPUs allocated to the microVM.',
     isOptional: true,
+    defaultValue: '2',
   },
   {
-    name: 'projectName',
-    type: 'string',
-    description: 'Existing Vercel project name. Auto-generated if omitted.',
-    isOptional: true,
-  },
-  {
-    name: 'regions',
-    type: 'string[]',
-    description: 'Deployment regions.',
-    isOptional: true,
-    defaultValue: "['iad1']",
-  },
-  {
-    name: 'maxDuration',
+    name: 'timeout',
     type: 'number',
-    description: 'Function maximum duration in seconds.',
+    description: 'Sandbox timeout in milliseconds.',
     isOptional: true,
-    defaultValue: '60',
+    defaultValue: '300000',
   },
   {
-    name: 'memory',
-    type: 'number',
-    description: 'Function memory in MB.',
+    name: 'ports',
+    type: 'number[]',
+    description: 'Ports to expose for public access via `sandbox.domain()`.',
     isOptional: true,
-    defaultValue: '1024',
   },
   {
     name: 'env',
     type: 'Record<string, string>',
-    description:
-      'Environment variables baked into the deployed function source. These are embedded at deploy time, not set dynamically.',
+    description: 'Environment variables available to commands in the sandbox.',
     isOptional: true,
   },
   {
-    name: 'commandTimeout',
-    type: 'number',
-    description: 'Per-invocation command timeout in milliseconds.',
+    name: 'networkPolicy',
+    type: 'NetworkPolicy',
+    description: 'Network firewall policy for the sandbox.',
     isOptional: true,
-    defaultValue: '55000',
+    defaultValue: "'allow-all'",
   },
   {
     name: 'instructions',
@@ -158,21 +138,87 @@ const workspace = new Workspace({
     description:
       "Current lifecycle status: `'pending'`, `'starting'`, `'running'`, `'stopping'`, `'stopped'`, `'destroying'`, `'destroyed'`, or `'error'`.",
   },
+  {
+    name: 'vercel',
+    type: 'Sandbox',
+    description:
+      'Direct access to the underlying `@vercel/sandbox` Sandbox instance. Throws `SandboxNotReadyError` if accessed before `start()`.',
+  },
+  {
+    name: 'processes',
+    type: 'VercelProcessManager',
+    description: 'Process manager for spawning and managing background processes in the sandbox.',
+  },
 ]}
 />
 
+## Methods
+
+### Lifecycle
+
+#### `start()`
+
+Creates the Vercel Sandbox microVM. Called automatically by the base class lifecycle.
+
+```typescript
+await sandbox._start()
+```
+
+#### `stop()`
+
+Stops the microVM. The sandbox cannot be reused after stopping.
+
+```typescript
+await sandbox._stop()
+```
+
+#### `destroy()`
+
+Stops the microVM with blocking, ensuring full cleanup.
+
+```typescript
+await sandbox._destroy()
+```
+
+### Info
+
+#### `getInfo()`
+
+Returns current sandbox metadata including the Vercel sandbox ID, runtime, and VM status.
+
+```typescript
+const info = await sandbox.getInfo()
+// { id, name, provider, status, createdAt, metadata: { sandboxId, runtime, vcpus, timeout, vmStatus } }
+```
+
+#### `getInstructions(opts?)`
+
+Returns instructions describing the sandbox capabilities for use in agent system prompts.
+
+```typescript
+const instructions = sandbox.getInstructions()
+```
+
+## Authentication
+
+Vercel Sandbox requires authentication. Either:
+
+1. **OIDC (recommended)**: Link your Vercel project and pull credentials:
+   ```bash
+   npx vercel link
+   npx vercel env pull
+   ```
+
+1. **Manual credentials**: Provide `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, and `VERCEL_PROJECT_ID` as environment variables.
+
 ## Limitations
 
-VercelSandbox uses serverless functions under the hood, which means:
-
-- **No persistent filesystem**: Files written to `/tmp` are ephemeral and cleared between invocations.
-- **No interactive shell**: Commands run via `child_process.execSync` with no stdin streaming.
-- **No background processes**: No process manager, PIDs, or long-running tasks.
-- **No mounting**: Cloud storage mounting (S3, GCS) is not supported.
-- **Timeout limits**: Maximum execution time is bounded by `maxDuration` (default 60s).
+- **No cloud storage mounting**: S3/GCS/R2 FUSE mounts are not supported. Use `writeFiles`/`readFileToBuffer` on the Vercel SDK directly.
+- **No stdin**: Interactive process input (`sendStdin`) is not supported by the Vercel Sandbox SDK.
+- **Sandbox timeout**: MicroVMs have a maximum lifetime bounded by `timeout` (default 5 minutes).
 
 ## Related
 
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [Workspace class](/reference/workspace/workspace-class)
-- [E2BSandbox](/reference/workspace/e2b-sandbox) — full-featured cloud sandbox with persistent filesystem and process management
+- [E2BSandbox](/reference/workspace/e2b-sandbox) — cloud sandbox with FUSE mounting support
