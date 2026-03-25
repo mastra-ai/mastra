@@ -14,6 +14,7 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  CorrelationContext,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
@@ -143,6 +144,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /** Cached canonical correlation context for this live span */
+  protected correlationContext?: CorrelationContext;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
@@ -259,6 +262,53 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     return undefined;
+  }
+
+  /** Build and cache the canonical correlation context for this live span. */
+  public getCorrelationContext(): CorrelationContext {
+    if (this.correlationContext) {
+      return this.correlationContext;
+    }
+
+    const metadata = this.metadata ?? {};
+    const getMetadataString = (key: string): string | undefined =>
+      typeof metadata[key] === 'string' ? metadata[key] : undefined;
+    const parentSpan = this.getParentSpan(false);
+
+    let rootSpan: AnySpan = this;
+    while (rootSpan.parent) {
+      rootSpan = rootSpan.parent;
+    }
+
+    const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;
+
+    this.correlationContext = {
+      traceId: this.traceId,
+      spanId: this.id,
+      tags: rootTags,
+      entityType: this.entityType,
+      entityId: this.entityId,
+      entityName: this.entityName,
+      parentEntityType: parentSpan?.entityType,
+      parentEntityId: parentSpan?.entityId,
+      parentEntityName: parentSpan?.entityName,
+      rootEntityType: rootSpan.entityType,
+      rootEntityId: rootSpan.entityId,
+      rootEntityName: rootSpan.entityName,
+      userId: getMetadataString('userId'),
+      organizationId: getMetadataString('organizationId'),
+      resourceId: getMetadataString('resourceId'),
+      runId: getMetadataString('runId'),
+      sessionId: getMetadataString('sessionId'),
+      threadId: getMetadataString('threadId'),
+      requestId: getMetadataString('requestId'),
+      environment: getMetadataString('environment'),
+      source: getMetadataString('source'),
+      serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
+      experimentId: getMetadataString('experimentId'),
+    };
+
+    return this.correlationContext;
   }
 
   /** Returns a lightweight span ready for export */
