@@ -167,8 +167,8 @@ const memory = new Memory({
         model: new ModelByInputTokens({
           upTo: {
             10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
-            40_000: 'openai/gpt-4o', // Stronger for medium inputs
-            1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
+            40_000: 'openai/gpt-5.4-mini', // Stronger for medium inputs
+            1_000_000: 'openai/gpt-5.4', // Most capable for very large inputs
           },
         }),
       },
@@ -176,7 +176,7 @@ const memory = new Memory({
         model: new ModelByInputTokens({
           upTo: {
             20_000: 'google/gemini-2.5-flash',
-            80_000: 'openai/gpt-4o',
+            80_000: 'openai/gpt-5.4-mini',
           },
         }),
       },
