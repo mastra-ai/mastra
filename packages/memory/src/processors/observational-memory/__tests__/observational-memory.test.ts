@@ -5,6 +5,7 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
+import { wrapInCollapsed } from '../collapsed-nodes';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -1565,6 +1566,17 @@ describe('Reflector Agent Helpers', () => {
 
       expect(prompt).toContain('COMPRESSION REQUIRED');
       expect(prompt).toContain('more compression');
+    });
+
+    it('should use positional anchors when prompt includes collapsed nodes', () => {
+      const observations = `- Start\n${wrapInCollapsed('c1', 'Compressed thread work', '- detail one\n  - nested detail')}\n- End`;
+      const prompt = buildReflectorPrompt(observations);
+
+      expect(prompt).toContain('[O1] - Start');
+      expect(prompt).toContain('[O2] <collapsed id="c1" summary="Compressed thread work">');
+      expect(prompt).toContain('[O2.1] - detail one');
+      expect(prompt).toContain('[O2.1.1] - nested detail');
+      expect(prompt).toContain('[O3] - End');
     });
   });
 

@@ -1,4 +1,5 @@
-import { injectAnchorIds, stripEphemeralAnchorIds } from './anchor-ids';
+import { stripEphemeralAnchorIds } from './anchor-ids';
+import { renderCollapsedNodesForReflector } from './collapsed-nodes';
 import { reconcileObservationGroupsFromReflection, renderObservationGroupsForReflection } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
@@ -242,7 +243,7 @@ export function buildReflectorPrompt(
   // Normalize: boolean `true` maps to level 1 for backwards compat
   const level: CompressionLevel = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
   const reflectionView = renderObservationGroupsForReflection(observations) ?? observations;
-  const anchoredObservations = injectAnchorIds(reflectionView);
+  const anchoredObservations = renderCollapsedNodesForReflector(reflectionView);
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 

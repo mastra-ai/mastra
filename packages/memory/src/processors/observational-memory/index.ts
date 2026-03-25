@@ -68,7 +68,16 @@ export type {
 
 // Utilities
 export { TokenCounter } from './token-counter';
-export { injectAnchorIds, stripEphemeralAnchorIds, parseAnchorId } from './anchor-ids';
+export {
+  injectAnchorIds,
+  stripEphemeralAnchorIds,
+  parseAnchorId,
+  parsePositionalId,
+  findNodeByAnchorId,
+  buildAnchorTree,
+  type AnchorInjectionMode,
+  type AnchorTreeNode,
+} from './anchor-ids';
 export {
   parseObservationGroups,
   stripObservationGroups,
@@ -79,3 +88,13 @@ export {
   combineObservationGroupRanges,
   type ObservationGroup,
 } from './observation-groups';
+export {
+  parseCollapsedNodes,
+  wrapInCollapsed,
+  renderCollapsedNodesForAgent,
+  renderCollapsedNodesForReflector,
+  findCollapsedNodeById,
+  collapseToExternalRef,
+  type CollapsedNode,
+} from './collapsed-nodes';
+export { applyEdits, type Edit } from './reflection-edits';
