@@ -156,6 +156,10 @@ Consider denormalization. Unlike relational databases, Elasticsearch works best 
   },
 ];
 
+/**
+ * Seeds the Elasticsearch cluster with sample articles about Elasticsearch topics.
+ * Creates the 'articles' index and indexes 10 sample documents.
+ */
 async function seed() {
   console.log('Connecting to Elasticsearch...');
 

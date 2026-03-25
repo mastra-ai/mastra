@@ -17,7 +17,8 @@ export interface EmbedderConfig {
 }
 
 /**
- * Reads embedder configuration from environment variables
+ * Reads embedder configuration from environment variables.
+ * @returns Configuration object with provider and model settings.
  */
 export function getEmbedderConfig(): EmbedderConfig {
   const provider = (process.env.EMBEDDER_PROVIDER || 'openai') as EmbedderProvider;
@@ -30,13 +31,9 @@ export function getEmbedderConfig(): EmbedderConfig {
 }
 
 /**
- * Creates an embedder based on the configuration
- *
- * Supports two providers:
- * - 'openai': Uses OpenAI's embedding models (requires OPENAI_API_KEY)
- * - 'elastic': Uses Elastic Inference Service with models like Jina
- *
- * @returns Configured embedding model, model string, or null if no valid configuration
+ * Creates an embedder based on environment configuration.
+ * Supports OpenAI (requires OPENAI_API_KEY) and Elastic Inference Service providers.
+ * @returns Configured embedding model, model string, or null if unconfigured.
  */
 export function createEmbedder() {
   if (!process.env.EMBEDDER_PROVIDER) {

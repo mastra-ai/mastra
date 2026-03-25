@@ -33,6 +33,9 @@ if (process.env.ELASTIC_APM_ENDPOINT) {
   console.log('[Observability] Elastic APM not configured. Set ELASTIC_APM_ENDPOINT to enable.');
 }
 
+/**
+ * Mastra instance configured with Elasticsearch agent, LibSQL storage, and observability.
+ */
 export const mastra = new Mastra({
   agents: { elasticsearchAgent },
   storage: new LibSQLStore({

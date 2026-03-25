@@ -51,6 +51,10 @@ const memory = embedder
     })
   : undefined;
 
+/**
+ * AI agent for querying Elasticsearch clusters using natural language.
+ * Includes schema introspection, hybrid search, and optional Kibana MCP tools.
+ */
 export const elasticsearchAgent = new Agent({
   id: 'elasticsearch-agent',
   name: 'Elasticsearch Agent',
