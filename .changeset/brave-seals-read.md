@@ -3,14 +3,18 @@
 '@mastra/evals': minor
 ---
 
-**Trajectory evaluation overhaul**: Redesigned `TrajectoryStep` as a discriminated union on `stepType` with 12 specific step types (`tool_call`, `mcp_tool_call`, `model_generation`, `agent_run`, `workflow_step`, `workflow_run`, `workflow_conditional`, `workflow_parallel`, `workflow_loop`, `workflow_sleep`, `workflow_wait_event`, `processor_run`). Each variant has type-specific properties (e.g., `toolArgs`/`toolResult` for tool calls, `status`/`output` for workflow steps).
+**Trajectory evaluation**: Added trajectory scoring for evaluating agent tool call sequences and workflow execution paths.
 
-Added hierarchical trajectory support via optional `children: TrajectoryStep[]` on all step types.
+`TrajectoryStep` is a discriminated union on `stepType` with 12 specific step types (`tool_call`, `mcp_tool_call`, `model_generation`, `agent_run`, `workflow_step`, `workflow_run`, `workflow_conditional`, `workflow_parallel`, `workflow_loop`, `workflow_sleep`, `workflow_wait_event`, `processor_run`). Each variant has type-specific properties (e.g., `toolArgs`/`toolResult` for tool calls, `status`/`output` for workflow steps). Supports hierarchical trajectories via optional `children`.
 
-Added `TrajectoryExpectation` type for multi-dimensional trajectory expectations — supports `steps`, `ordering`, `maxSteps`, `maxTotalTokens`, `maxTotalDurationMs`, `noRedundantCalls`, `blacklistedTools`, `blacklistedSequences`, and `maxRetriesPerTool`. Used as `expectedTrajectory` on dataset items and `ScorerRun`.
+`TrajectoryExpectation` type for multi-dimensional trajectory expectations — supports `steps`, `ordering`, `maxSteps`, `maxTotalTokens`, `maxTotalDurationMs`, `noRedundantCalls`, `blacklistedTools`, `blacklistedSequences`, and `maxRetriesPerTool`.
 
-Added `extractWorkflowTrajectory()` to convert workflow step results into trajectories.
+**Scorers:**
 
-Added `expectedTrajectory` flow through the `runEvals` pipeline — dataset items with `expectedTrajectory` now pass it to trajectory scorers as `run.expectedTrajectory`.
+- `createTrajectoryScorerCode` — unified multi-dimensional scorer evaluating accuracy, efficiency, blacklist violations, and tool failure patterns in a single pass. Supports per-item `TrajectoryExpectation` from datasets with static defaults.
+- `createTrajectoryAccuracyScorerCode` — deterministic code-based accuracy scorer with strict/relaxed/unordered ordering modes.
+- `createTrajectoryAccuracyScorerLLM` — LLM-based scorer for semantic trajectory evaluation.
 
-Added `trajectory` key to `WorkflowScorerConfig` for workflow trajectory scoring alongside existing `workflow` and `steps` keys.
+**Utility functions:** `extractTrajectory`, `extractWorkflowTrajectory`, `compareTrajectories`, `checkTrajectoryEfficiency`, `checkTrajectoryBlacklist`, `analyzeToolFailures`.
+
+**Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
