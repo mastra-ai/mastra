@@ -418,9 +418,10 @@ export class DaytonaSandbox extends MastraSandbox {
       // Orphan cleanup: _start() may have failed after the SDK created
       // a server-side sandbox (e.g. bad image → BUILD_FAILED).
       // Try to find and delete it so it doesn't leak.
-      if (this._daytonaSandboxId) {
+      const lookupKey = this._daytonaSandboxId ?? this.sandboxName;
+      if (lookupKey) {
         try {
-          const orphan = await this._daytona.get(this._daytonaSandboxId);
+          const orphan = await this._daytona.get(lookupKey);
           await this._daytona.delete(orphan);
         } catch {
           // Best-effort — orphan may not exist or may already be gone
@@ -965,11 +966,9 @@ export class DaytonaSandbox extends MastraSandbox {
         this._daytonaSandboxId = undefined;
         return null;
       }
-      if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
-        throw error;
-      }
-      this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by ID/name: ${error}`);
-      return null;
+      // Any other error (auth, transient, network) — propagate so the caller
+      // can handle or retry rather than silently creating a duplicate sandbox.
+      throw error;
     }
 
     const state = sandbox.state;
