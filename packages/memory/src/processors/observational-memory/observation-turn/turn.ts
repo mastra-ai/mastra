@@ -1,0 +1,198 @@
+import type { MessageList } from '@mastra/core/agent';
+import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+
+import type { ObservationalMemory } from '../observational-memory';
+import type { MemoryContextProvider } from '../processor';
+
+import { ObservationStep } from './step';
+import type { TurnContext, TurnResult } from './types';
+
+/**
+ * Represents a single turn in the agent conversation — one user message → agent response cycle.
+ *
+ * The turn manages record caching, context loading, and step lifecycle.
+ * Create via `om.beginTurn(...)`, then call `start()` to load context,
+ * `step(n)` to create steps, and `end()` to finalize.
+ *
+ * @example
+ * ```ts
+ * const turn = om.beginTurn({ threadId, resourceId, messageList });
+ * await turn.start(memory);
+ *
+ * const step0 = turn.step(0);
+ * const ctx = await step0.prepare();
+ * // ... agent generates ...
+ *
+ * const step1 = turn.step(1);  // finalizes step 0
+ * const ctx1 = await step1.prepare();
+ * // ... agent generates ...
+ *
+ * await turn.end();  // finalizes last step, cleanup
+ * ```
+ */
+export class ObservationTurn {
+  private _record?: ObservationalMemoryRecord;
+  private _context?: TurnContext;
+  private _currentStep?: ObservationStep;
+  private _started = false;
+  private _ended = false;
+
+  /** Generation count at turn start — used to detect if reflection happened during the turn. */
+  private _generationCountAtStart = -1;
+
+  /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
+  memory?: MemoryContextProvider;
+
+  /** Optional stream writer for emitting markers. */
+  writer?: ProcessorStreamWriter;
+
+  /** Optional request context for observation calls. */
+  requestContext?: RequestContext;
+
+  constructor(
+    readonly om: ObservationalMemory,
+    readonly threadId: string,
+    readonly resourceId: string | undefined,
+    readonly messageList: MessageList,
+  ) {}
+
+  /** The current cached record. Refreshed after mutations (activate/observe/reflect). */
+  get record(): ObservationalMemoryRecord {
+    if (!this._record) throw new Error('Turn not started — call start() first');
+    return this._record;
+  }
+
+  /** The context loaded during start(). */
+  get context(): TurnContext {
+    if (!this._context) throw new Error('Turn not started — call start() first');
+    return this._context;
+  }
+
+  /** The current step, if one exists. */
+  get currentStep(): ObservationStep | undefined {
+    return this._currentStep;
+  }
+
+  /**
+   * Load context and cache the record. Call once at the start of the turn.
+   *
+   * If a MemoryContextProvider is passed, loads historical messages and adds
+   * them to the MessageList. Without a provider, only fetches/caches the record.
+   */
+  async start(memory?: MemoryContextProvider): Promise<TurnContext> {
+    if (this._started) throw new Error('Turn already started');
+    this._started = true;
+
+    this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+    this._generationCountAtStart = this._record.generationCount;
+    this.memory = memory;
+
+    if (memory) {
+      const ctx = await memory.getContext({ threadId: this.threadId, resourceId: this.resourceId });
+
+      // Add historical messages to the MessageList, filtering out system messages
+      for (const msg of ctx.messages) {
+        if (msg.role !== 'system') {
+          this.messageList.add(msg, 'memory');
+        }
+      }
+
+      this._context = {
+        messages: ctx.messages,
+        systemMessage: ctx.systemMessage,
+        continuation: ctx.continuationMessage,
+        otherThreadsContext: ctx.otherThreadsContext,
+        record: this._record,
+      };
+    } else {
+      this._context = {
+        messages: [],
+        systemMessage: undefined,
+        continuation: undefined,
+        otherThreadsContext: undefined,
+        record: this._record,
+      };
+    }
+
+    return this._context;
+  }
+
+  /**
+   * Create a step handle. If a previous step exists, it is finalized
+   * (its output messages will be saved at the start of the new step's prepare()).
+   */
+  step(stepNumber: number): ObservationStep {
+    if (!this._started) throw new Error('Turn not started — call start() first');
+    if (this._ended) throw new Error('Turn already ended');
+
+    this._currentStep = new ObservationStep(this, stepNumber);
+    return this._currentStep;
+  }
+
+  /**
+   * Finalize the turn: save any remaining messages, await in-flight buffering, return final state.
+   */
+  async end(): Promise<TurnResult> {
+    if (this._ended) throw new Error('Turn already ended');
+    this._ended = true;
+
+    // Save any unsaved messages from the last step
+    const unsavedInput = this.messageList.get.input.db();
+    const unsavedOutput = this.messageList.get.response.db();
+    const unsavedMessages = [...unsavedInput, ...unsavedOutput];
+    if (unsavedMessages.length > 0) {
+      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+    }
+
+    // Await any in-flight async buffering
+    await this.om.waitForBuffering(this.threadId, this.resourceId);
+
+    // Trigger observation if threshold is exceeded but no step > 0 ran.
+    // This handles the agent.generate() path where processInputStep is only called
+    // for step 0 (which doesn't observe), and step 1+ never gets processInputStep.
+    const status = await this.om.getStatus({
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      messages: this.messageList.get.all.db(),
+    });
+    if (status.shouldObserve) {
+      await this.om.observe({
+        threadId: this.threadId,
+        resourceId: this.resourceId,
+        messages: this.messageList.get.all.db(),
+        requestContext: this.requestContext,
+        writer: this.writer,
+      });
+    }
+
+    // Fetch final record state
+    await this.refreshRecord();
+
+    return { record: this._record! };
+  }
+
+  /**
+   * Refresh the cached record from storage. Called internally after mutations.
+   * @internal
+   */
+  async refreshRecord(): Promise<void> {
+    this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+  }
+
+  /**
+   * Refresh cross-thread context for resource scope. Called per-step.
+   * @internal
+   */
+  async refreshOtherThreadsContext(): Promise<string | undefined> {
+    if (this.om.scope === 'resource' && this.resourceId) {
+      const otherThreadsContext = await this.om.getOtherThreadsContext(this.resourceId!, this.threadId);
+      if (this._context) {
+        this._context.otherThreadsContext = otherThreadsContext;
+      }
+      return otherThreadsContext;
+    }
+    return this._context?.otherThreadsContext;
+  }
+}
