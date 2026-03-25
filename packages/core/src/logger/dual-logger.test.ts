@@ -1,0 +1,183 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { LoggerContext } from '../observability/types/logging';
+import { DualLogger } from './dual-logger';
+import type { IMastraLogger } from './logger';
+
+function createMockLogger(): IMastraLogger {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trackException: vi.fn(),
+    getTransports: vi.fn(() => new Map()),
+    listLogs: vi.fn(async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false })),
+    listLogsByRunId: vi.fn(async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false })),
+  };
+}
+
+function createMockLoggerVNext(): LoggerContext {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  };
+}
+
+describe('DualLogger', () => {
+  let inner: IMastraLogger;
+  let vnext: LoggerContext;
+
+  beforeEach(() => {
+    inner = createMockLogger();
+    vnext = createMockLoggerVNext();
+  });
+
+  describe('forwarding to both loggers', () => {
+    it.each(['debug', 'info', 'warn', 'error'] as const)('%s forwards to inner and loggerVNext', level => {
+      const dual = new DualLogger(inner, () => vnext);
+      dual[level]('test message', { key: 'value' });
+
+      expect(inner[level]).toHaveBeenCalledWith('test message', { key: 'value' });
+      expect(vnext[level]).toHaveBeenCalledWith('test message', { key: 'value' });
+    });
+  });
+
+  describe('when loggerVNext is not set', () => {
+    it('only forwards to inner logger', () => {
+      const dual = new DualLogger(inner);
+      dual.info('test message', { key: 'value' });
+
+      expect(inner.info).toHaveBeenCalledWith('test message', { key: 'value' });
+      expect(vnext.info).not.toHaveBeenCalled();
+    });
+
+    it('only forwards to inner logger when getter returns undefined', () => {
+      const dual = new DualLogger(inner, () => undefined);
+      dual.info('test message', { key: 'value' });
+
+      expect(inner.info).toHaveBeenCalledWith('test message', { key: 'value' });
+      expect(vnext.info).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setLoggerVNext', () => {
+    it('connects loggerVNext after construction', () => {
+      const dual = new DualLogger(inner);
+      dual.info('before');
+      expect(vnext.info).not.toHaveBeenCalled();
+
+      dual.setLoggerVNext(() => vnext);
+      dual.info('after', { key: 'value' });
+      expect(vnext.info).toHaveBeenCalledWith('after', { key: 'value' });
+    });
+
+    it('uses lazy getter — resolves loggerVNext at call time', () => {
+      let current: LoggerContext | undefined;
+      const dual = new DualLogger(inner, () => current);
+
+      dual.info('before');
+      expect(vnext.info).not.toHaveBeenCalled();
+
+      current = vnext;
+      dual.info('after', { key: 'value' });
+      expect(vnext.info).toHaveBeenCalledWith('after', { key: 'value' });
+    });
+  });
+
+  describe('args adaptation', () => {
+    it('extracts first object arg as data for loggerVNext', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('msg', { a: 1 }, 'extra', { b: 2 });
+
+      // Inner gets all args as-is
+      expect(inner.info).toHaveBeenCalledWith('msg', { a: 1 }, 'extra', { b: 2 });
+      // VNext gets the first object as data
+      expect(vnext.info).toHaveBeenCalledWith('msg', { a: 1 });
+    });
+
+    it('forwards with undefined data when no object args', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('string only');
+
+      expect(inner.info).toHaveBeenCalledWith('string only');
+      expect(vnext.info).toHaveBeenCalledWith('string only', undefined);
+    });
+
+    it('skips null args when finding data object', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('msg', null, { actual: 'data' });
+
+      expect(vnext.info).toHaveBeenCalledWith('msg', { actual: 'data' });
+    });
+  });
+
+  describe('delegation methods', () => {
+    it('trackException delegates to inner only', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      const error = { message: 'test' } as any;
+      dual.trackException(error);
+
+      expect(inner.trackException).toHaveBeenCalledWith(error);
+    });
+
+    it('getTransports delegates to inner', () => {
+      const transports = new Map();
+      (inner.getTransports as ReturnType<typeof vi.fn>).mockReturnValue(transports);
+
+      const dual = new DualLogger(inner, () => vnext);
+      expect(dual.getTransports()).toBe(transports);
+    });
+
+    it('listLogs delegates to inner', async () => {
+      const result = { logs: [], total: 0, page: 1, perPage: 100, hasMore: false };
+      (inner.listLogs as ReturnType<typeof vi.fn>).mockResolvedValue(result);
+
+      const dual = new DualLogger(inner, () => vnext);
+      const logs = await dual.listLogs('transport1');
+      expect(logs).toBe(result);
+      expect(inner.listLogs).toHaveBeenCalledWith('transport1', undefined);
+    });
+
+    it('listLogsByRunId delegates to inner', async () => {
+      const result = { logs: [], total: 0, page: 1, perPage: 100, hasMore: false };
+      (inner.listLogsByRunId as ReturnType<typeof vi.fn>).mockResolvedValue(result);
+
+      const dual = new DualLogger(inner, () => vnext);
+      const args = { transportId: 'transport1', runId: 'run1' };
+      const logs = await dual.listLogsByRunId(args);
+      expect(logs).toBe(result);
+      expect(inner.listLogsByRunId).toHaveBeenCalledWith(args);
+    });
+  });
+
+  describe('error isolation', () => {
+    it('loggerVNext errors do not break the inner logger', () => {
+      const throwingVnext: LoggerContext = {
+        debug: vi.fn(() => {
+          throw new Error('vnext boom');
+        }),
+        info: vi.fn(() => {
+          throw new Error('vnext boom');
+        }),
+        warn: vi.fn(() => {
+          throw new Error('vnext boom');
+        }),
+        error: vi.fn(() => {
+          throw new Error('vnext boom');
+        }),
+        fatal: vi.fn(() => {
+          throw new Error('vnext boom');
+        }),
+      };
+
+      const dual = new DualLogger(inner, () => throwingVnext);
+
+      // Should not throw
+      expect(() => dual.info('test')).not.toThrow();
+      expect(inner.info).toHaveBeenCalledWith('test');
+    });
+  });
+});
