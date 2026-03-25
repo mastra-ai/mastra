@@ -7,7 +7,6 @@ import { elasticsearchAgent } from './agents/elasticsearch-agent';
 
 const exporters = [
   new DefaultExporter(), // For local Mastra Playground UI
-  new CloudExporter(), // For Mastra Cloud (optional)
 ];
 
 if (process.env.ELASTIC_APM_ENDPOINT) {
