@@ -36,8 +36,8 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 function sanitizeJsonForPg(jsonString: string): string {
   return (
     jsonString
-      // Fix invalid JSON escape sequences like \v, \k, \g
-      .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+      // Fix invalid JSON escape sequences safely (respect existing escapes)
+      .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')
       // Remove problematic Unicode sequences
       .replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
   );

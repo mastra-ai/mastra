@@ -348,22 +348,26 @@ describe('PostgresStore pool integration', () => {
 
 // handles invalid JSON escape sequences in workflow snapshot persistence
 describe('sanitizeJsonForPg - invalid escape handling', () => {
-  it('should handle invalid JSON escape sequences like \\v without throwing', async () => {
+  it('should handle invalid JSON escape sequences without throwing', async () => {
     const pool = createTestPool();
     const workflows = new WorkflowsPG({ pool });
 
-    const snapshot = {
-      text: 'bad \\v escape',
-    };
+    try {
+      await workflows.init();
 
-    await expect(
-      workflows.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: 'run-1',
-        snapshot: snapshot as any,
-      }),
-    ).resolves.not.toThrow();
+      const snapshot = {
+        text: 'bad \\v escape',
+      };
 
-    await pool.end();
+      await expect(
+        workflows.persistWorkflowSnapshot({
+          workflowName: 'test-workflow',
+          runId: 'run-1',
+          snapshot: snapshot as any,
+        }),
+      ).resolves.not.toThrow();
+    } finally {
+      await pool.end();
+    }
   });
 });
