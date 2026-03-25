@@ -139,6 +139,8 @@ const AgentsTableSkeleton = () => (
 const EmptyAgentsTable = () => {
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
   return (
     <div className="flex h-full items-center justify-center">
@@ -146,14 +148,14 @@ const EmptyAgentsTable = () => {
         iconSlot={<AgentCoinIcon />}
         titleSlot="No Agents Yet"
         descriptionSlot={
-          canCreateAgent
+          showCreateCta
             ? 'Create your first agent or configure agents in code.'
             : 'Configure agents in code to get started.'
         }
         actionSlot={
           <div className="flex flex-col sm:flex-row gap-2">
-            {canCreateAgent && (
-              <Button size="lg" variant="primary" as={FrameworkLink} to={paths.cmsAgentCreateLink()}>
+            {showCreateCta && (
+              <Button size="lg" variant="primary" as={FrameworkLink} to={createAgentPath}>
                 <Icon>
                   <Plus />
                 </Icon>

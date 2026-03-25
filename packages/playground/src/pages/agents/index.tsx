@@ -29,6 +29,8 @@ function Agents() {
   const [search, setSearch] = useState('');
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
   if (variant === 'new-proposal') {
     return (
@@ -41,8 +43,8 @@ function Agents() {
               </MainHeader.Title>
             </MainHeader.Column>
             <MainHeader.Column className="flex justify-end gap-2">
-              {canCreateAgent && (
-                <ButtonWithTooltip as={FrameworkLink} to={paths.cmsAgentCreateLink()} tooltipContent="Create an agent">
+              {showCreateCta && (
+                <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
                   <Plus />
                 </ButtonWithTooltip>
               )}
@@ -78,8 +80,8 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {canCreateAgent && (
-            <Button variant="light" as={FrameworkLink} to={paths.cmsAgentCreateLink()}>
+          {showCreateCta && (
+            <Button variant="light" as={FrameworkLink} to={createAgentPath}>
               <Icon>
                 <Plus />
               </Icon>

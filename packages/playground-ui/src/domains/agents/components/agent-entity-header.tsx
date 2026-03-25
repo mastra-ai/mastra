@@ -26,14 +26,15 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   });
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
-  const showEditButton = canCreateAgent && isStoredAgent;
+  const editPath = paths.cmsAgentEditLink(agentId);
+  const showEditButton = canCreateAgent && isStoredAgent && Boolean(editPath);
 
   return (
     <TooltipProvider>
       <EntityHeader icon={<AgentIcon />} title={agentName} isLoading={isLoading}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
           {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={paths.cmsAgentEditLink(agentId)}>
+            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
               <Icon size="sm">
                 <Pencil />
               </Icon>
