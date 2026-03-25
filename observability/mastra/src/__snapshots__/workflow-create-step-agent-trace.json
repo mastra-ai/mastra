@@ -136,7 +136,13 @@
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 10,
-                        "outputTokens": 20
+                        "outputTokens": 20,
+                        "inputDetails": {
+                          "text": 10
+                        },
+                        "outputDetails": {
+                          "text": 20
+                        }
                       }
                     },
                     "metadata": {
@@ -185,7 +191,13 @@
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 10,
-                            "outputTokens": 20
+                            "outputTokens": 20,
+                            "inputDetails": {
+                              "text": 10
+                            },
+                            "outputDetails": {
+                              "text": 20
+                            }
                           },
                           "isContinued": false,
                           "finishReason": "stop"
