@@ -328,6 +328,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
+        { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
