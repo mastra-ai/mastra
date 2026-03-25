@@ -61,7 +61,7 @@ Whenever you change or add code, you MUST update/add related documentation for t
 
 ## Changelogs
 
-After making changes to the codebase, you MUST create a changeset. Follow `@.claude/commands/changeset.md` for guidelines on how to create a changeset and write effective changelog messages.
+After making changes to the codebase, you MUST create a changeset. Follow `@.mastracode/commands/changeset.md` for guidelines on how to create a changeset and write effective changelog messages.
 
 ## Architecture overview
 

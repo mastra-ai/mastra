@@ -1,5 +1,13 @@
 # @mastra/braintrust
 
+## 1.0.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d), [`6e6a2bb`](https://github.com/mastra-ai/mastra/commit/6e6a2bb1c4538ac46679d0140cd84745cbb78395), [`9a3e532`](https://github.com/mastra-ai/mastra/commit/9a3e532a85ce404fa99eea8091b5a1d1ef764b43)]:
+  - @mastra/core@1.16.1-alpha.1
+  - @mastra/observability@1.6.0-alpha.0
+
 ## 1.0.9
 
 ### Patch Changes
