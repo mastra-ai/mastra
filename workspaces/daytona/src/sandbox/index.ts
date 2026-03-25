@@ -226,6 +226,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly autoDeleteInterval?: number;
   private readonly volumeConfigs: Array<VolumeMount>;
   private readonly sandboxName?: string;
+  private _daytonaSandboxId?: string;
   private readonly sandboxUser?: string;
   private readonly sandboxPublic?: boolean;
   private readonly networkBlockAll?: boolean;
@@ -322,6 +323,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const existing = await this.findExistingSandbox();
     if (existing) {
       this._sandbox = existing;
+      this._daytonaSandboxId = existing.id;
       this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
 
@@ -371,6 +373,7 @@ export class DaytonaSandbox extends MastraSandbox {
 
     // Create sandbox
     this._sandbox = await this._daytona.create(createParams);
+    this._daytonaSandboxId = this._sandbox.id;
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
@@ -415,17 +418,18 @@ export class DaytonaSandbox extends MastraSandbox {
       // Orphan cleanup: _start() may have failed after the SDK created
       // a server-side sandbox (e.g. bad image → BUILD_FAILED).
       // Try to find and delete it so it doesn't leak.
-      try {
-        const orphan = await this._daytona.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-        if (orphan) {
+      if (this._daytonaSandboxId) {
+        try {
+          const orphan = await this._daytona.get(this._daytonaSandboxId);
           await this._daytona.delete(orphan);
+        } catch {
+          // Best-effort — orphan may not exist or may already be gone
         }
-      } catch {
-        // Best-effort — orphan may not exist or may already be gone
       }
     }
 
     this._sandbox = null;
+    this._daytonaSandboxId = undefined;
     this._daytona = null;
     this.mounts?.clear();
   }
@@ -919,16 +923,7 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Try to find and reconnect to an existing Daytona sandbox.
-   *
-   * Uses two strategies:
-   * 1. `get()` by sandbox name — calls the getSandbox API directly, which
-   *    returns sandboxes in ANY state (including stopped). This is the
-   *    primary path and fixes reconnection after stop/start cycles.
-   * 2. `findOne()` by label — falls back to label-based search. Note: the
-   *    SDK's list() API only returns started sandboxes by default (no states
-   *    param in v0.143.0), so this only finds running sandboxes.
-   *
+   * Try to find and reconnect to an existing Daytona sandbox by ID.
    * Returns the sandbox if found and usable, or null if a fresh one should
    * be created.
    */
@@ -954,43 +949,27 @@ export class DaytonaSandbox extends MastraSandbox {
       SandboxState.BUILD_FAILED,
     ];
 
-    let sandbox: Sandbox | null = null;
-
-    // Strategy 1: lookup by name (works for stopped sandboxes)
-    if (this.sandboxName) {
-      try {
-        sandbox = await this._daytona!.get(this.sandboxName);
-      } catch (error) {
-        if (error instanceof DaytonaNotFoundError) {
-          // Not found by name — fall through to label lookup
-        } else if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
-          throw error; // Auth failure — propagate immediately
-        } else {
-          // Transient/network error (ETIMEDOUT, 5xx, etc.) — fall through
-          this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by name: ${error}`);
-        }
-      }
+    // Prefer the stored Daytona ID (same-process stop→start); fall back to name
+    // for cross-process reconnection (e.g. process restart).
+    const lookupKey = this._daytonaSandboxId ?? this.sandboxName;
+    if (!lookupKey) {
+      return null;
     }
 
-    // Strategy 2: fallback to label-based lookup
-    if (!sandbox) {
-      try {
-        sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-      } catch (error) {
-        if (
-          error instanceof DaytonaNotFoundError ||
-          (error instanceof Error && error.message.includes('No sandbox found'))
-        ) {
-          // Not found by label either — create a fresh sandbox
-          return null;
-        }
-        if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
-          throw error; // Auth failure — propagate immediately
-        }
-        // Transient/network error — fall through to create fresh sandbox
-        this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by label: ${error}`);
+    let sandbox: Sandbox;
+
+    try {
+      sandbox = await this._daytona!.get(lookupKey);
+    } catch (error) {
+      if (error instanceof DaytonaNotFoundError) {
+        this._daytonaSandboxId = undefined;
         return null;
       }
+      if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
+        throw error;
+      }
+      this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by ID/name: ${error}`);
+      return null;
     }
 
     const state = sandbox.state;
