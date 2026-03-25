@@ -39,25 +39,19 @@ export function useModelUsageCostMetrics() {
         ),
       );
 
-      type ModelEntry = {
-        input: number;
-        output: number;
-        cacheRead: number;
-        cacheWrite: number;
-        cost: number | null;
-        costUnit: string | null;
-      };
+      const modelMap = new Map<
+        string,
+        { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number | null; costUnit: string | null }
+      >();
 
-      const modelMap = new Map<string, ModelEntry>();
-
-      const ensureModel = (model: string): ModelEntry => {
+      const ensureModel = (model: string) => {
         if (!modelMap.has(model)) {
           modelMap.set(model, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: null, costUnit: null });
         }
         return modelMap.get(model)!;
       };
 
-      const addCost = (entry: ModelEntry, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
+      const addCost = (entry: ReturnType<typeof ensureModel>, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
         if (group.estimatedCost != null) {
           entry.cost = (entry.cost ?? 0) + group.estimatedCost;
           if (group.costUnit) entry.costUnit = group.costUnit;

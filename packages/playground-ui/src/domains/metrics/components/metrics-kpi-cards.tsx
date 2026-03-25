@@ -9,6 +9,8 @@ export function AgentRunsKpiCard() {
   const { data: agentRunsKpi, isLoading, isError } = useAgentRunsKpiMetrics();
   const hasData = agentRunsKpi?.value != null;
 
+  console.log({ agentRunsKpi, isLoading, isError });
+
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
@@ -38,6 +40,8 @@ export function AgentRunsKpiCard() {
 export function ModelCostKpiCard() {
   const { data: costKpi, isLoading, isError } = useModelCostKpiMetrics();
   const hasData = costKpi?.cost != null;
+
+  console.log({ costKpi });
 
   return (
     <MetricsKpiCard>

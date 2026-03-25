@@ -32,6 +32,8 @@ import {
   Cpu,
   DatabaseIcon,
   BarChart3Icon,
+  ScrollTextIcon,
+  LogsIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui-manager';
@@ -139,6 +141,14 @@ const mainNavigation: SidebarSection[] = [
         icon: <DatabaseIcon />,
         isOnMastraPlatform: false,
         requiredPermission: 'datasets:read',
+      },
+      {
+        name: 'Logs',
+        url: '/logs',
+        icon: <LogsIcon />,
+        isOnMastraPlatform: true,
+        requiresExperimentalFeatures: true,
+        isExperimental: true,
       },
     ],
   },
