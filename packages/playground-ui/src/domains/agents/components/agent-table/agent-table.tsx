@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { BookOpen, Plus } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { useCanCreateAgent } from '../../hooks/use-can-create-agent';
 import { getColumns } from './columns';
 import type { AgentTableData } from './types';
 import { Button } from '@/ds/components/Button';
@@ -18,7 +19,6 @@ import { Icon } from '@/ds/icons/Icon';
 
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { useCanCreateAgent } from '../../hooks/use-can-create-agent';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -145,7 +145,11 @@ const EmptyAgentsTable = () => {
       <EmptyState
         iconSlot={<AgentCoinIcon />}
         titleSlot="No Agents Yet"
-        descriptionSlot={canCreateAgent ? 'Create your first agent or configure agents in code.' : 'Configure agents in code to get started.'}
+        descriptionSlot={
+          canCreateAgent
+            ? 'Create your first agent or configure agents in code.'
+            : 'Configure agents in code to get started.'
+        }
         actionSlot={
           <div className="flex flex-col sm:flex-row gap-2">
             {canCreateAgent && (

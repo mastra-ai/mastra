@@ -4,9 +4,9 @@ import { useCanCreateAgent } from '../hooks/use-can-create-agent';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { EntityHeader } from '@/ds/components/EntityHeader';
-import { Icon } from '@/ds/icons/Icon';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useLinkComponent } from '@/lib/framework';
 
