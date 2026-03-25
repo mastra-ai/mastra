@@ -64,7 +64,6 @@ function createContext(threads: HarnessThread[]) {
       listThreads: vi.fn(async () => threads),
       getCurrentThreadId: vi.fn(() => null),
       getResourceId: vi.fn(() => 'resource-1'),
-      getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -81,7 +80,7 @@ function createContext(threads: HarnessThread[]) {
   return { ctx, state, showOverlay };
 }
 
-describe('handleThreadsCommand preview cache invalidation', () => {
+describe('handleThreadsCommand thread listing', () => {
   beforeEach(() => {
     selectorInstances.length = 0;
   });
@@ -125,6 +124,24 @@ describe('handleThreadsCommand preview cache invalidation', () => {
     expect(selector.options.initialMessagePreviews.get('thread-1')).toBe('Fresh preview');
     expect(state.threadPreviewCache.get('thread-1')?.preview).toBe('Fresh preview');
     expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(true);
+
+    selector.options.onCancel();
+    await commandPromise;
+  });
+
+  it('does not request message previews from the harness', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    const selector = selectorInstances[0];
+    expect(typeof selector.options.getMessagePreviews).toBe('function');
+    await expect(selector.options.getMessagePreviews(['thread-1'])).resolves.toEqual(new Map());
+    expect(state.threadPreviewCache.size).toBe(0);
+    expect(state.attemptedThreadPreviewIds.size).toBe(0);
 
     selector.options.onCancel();
     await commandPromise;
