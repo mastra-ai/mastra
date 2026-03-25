@@ -626,6 +626,21 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 });
 
+describe('provider registry static overrides', () => {
+  it('uses CLOUDFLARE_API_TOKEN for cloudflare-workers-ai authentication', () => {
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: false });
+
+    expect(registry.getProviders()['cloudflare-workers-ai']).toMatchObject({
+      url: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+      apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
+      apiKeyHeader: 'Authorization',
+    });
+  });
+});
+
 describe('Corrupted JSON recovery', () => {
   const originalReadFileSync = fs.readFileSync.bind(fs);
   const originalWriteFileSync = fs.writeFileSync.bind(fs);
