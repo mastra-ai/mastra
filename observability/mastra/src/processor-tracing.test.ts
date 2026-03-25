@@ -1748,9 +1748,9 @@ describe('Processor Tracing Tests', () => {
      *
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input step processor: model-router PROCESSOR_RUN
      *   - MODEL_GENERATION (attributes should reflect overridden model)
      *     - MODEL_STEP
+     *       - input step processor: model-router PROCESSOR_RUN
      */
     it('should update MODEL_GENERATION span when processInputStep overrides model', async () => {
       const originalModel = new MockLanguageModelV2({
