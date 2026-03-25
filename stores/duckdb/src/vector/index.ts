@@ -1,5 +1,5 @@
 import { DuckDBInstance } from '@duckdb/node-api';
-import type { DuckDBValue } from '@duckdb/node-api';
+
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
@@ -15,6 +15,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { bindParam } from '../storage/db/index';
 import { buildFilterClause } from './filter-builder';
 import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types';
 
@@ -119,8 +120,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
       const stmt = await connection.prepare(preparedSql);
-      // Bind parameters as array - DuckDB Node API bind() accepts array
-      stmt.bind(params as DuckDBValue[]);
+      for (let i = 0; i < params.length; i++) {
+        bindParam(stmt, i + 1, params[i]);
+      }
       const result = await stmt.run();
       const rows = await result.getRows();
 
@@ -152,8 +154,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
         const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
         const stmt = await connection.prepare(preparedSql);
-        // Bind parameters as array - DuckDB Node API bind() accepts array
-        stmt.bind(params as DuckDBValue[]);
+        for (let i = 0; i < params.length; i++) {
+          bindParam(stmt, i + 1, params[i]);
+        }
         await stmt.run();
       }
     } finally {
