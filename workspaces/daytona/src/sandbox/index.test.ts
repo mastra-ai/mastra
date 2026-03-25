@@ -475,6 +475,16 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledTimes(1);
     });
 
+    it('propagates non-404 get() errors instead of creating a duplicate sandbox', async () => {
+      const serverError = new DaytonaError('Internal Server Error');
+      (serverError as any).statusCode = 500;
+      mockDaytona.get.mockRejectedValue(serverError);
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await expect(sandbox._start()).rejects.toThrow('Internal Server Error');
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+    });
+
     it('restarts a stopped sandbox on stop→start cycle without calling create', async () => {
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
