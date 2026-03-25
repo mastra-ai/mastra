@@ -1,5 +1,5 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import type * as MastraReact from '@mastra/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseAgentMessages = vi.fn();
