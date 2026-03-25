@@ -54,7 +54,7 @@ const memory = embedder
 export const elasticsearchAgent = new Agent({
   id: 'elasticsearch-agent',
   name: 'Elasticsearch Agent',
-  model: 'openai/gpt-5.2',
+  model: 'openai/gpt-5.4',
   instructions: `You are an Elasticsearch assistant that helps users explore and query their Elasticsearch cluster using natural language.
 
 ## Tools
