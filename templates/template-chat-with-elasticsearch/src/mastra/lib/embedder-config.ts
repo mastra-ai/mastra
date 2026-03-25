@@ -49,15 +49,6 @@ export function createEmbedder() {
 
   switch (config.provider) {
     case 'elastic': {
-      if (!config.elasticInferenceId) {
-        console.warn(
-          '[Embedder] ELASTIC_INFERENCE_ID is required when EMBEDDER_PROVIDER=elastic.\n' +
-          '[Embedder] Example: ELASTIC_INFERENCE_ID=jina-embeddings-v5-text-small.\n' +
-          '[Embedder] Memory disabled.'
-        );
-        return null;
-      }
-
       console.log(`[Embedder] Using Elastic Inference Service: ${config.elasticInferenceId}`);
       return createElasticsearchInferenceEmbedder({
         inferenceId: config.elasticInferenceId,
