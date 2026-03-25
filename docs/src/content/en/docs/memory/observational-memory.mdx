@@ -130,7 +130,7 @@ With retrieval mode enabled, OM:
 - Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
 - Registers a `recall` tool the agent can call to page through the raw messages behind any range
 
-Retrieval mode is only active for thread-scoped OM. Setting `retrieval: true` with `scope: 'resource'` has no effect — OM keeps resource-scoped behavior but skips retrieval-mode context and does not register the `recall` tool.
+Retrieval mode is only active for thread-scoped OM. Setting `retrieval: true` with `scope: 'resource'` has no effect — OM keeps resource-scoped behavior but skips retrieval-mode context and doesn't register the `recall` tool.
 
 See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, and token limiting).
 
