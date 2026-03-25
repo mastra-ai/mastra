@@ -9,9 +9,9 @@ import type {
   ResponseOutputItem,
   ResponseTool,
 } from '../schemas/responses';
-import type { StoredResponseTurn, ProviderMetadataLike, UsageLike } from './responses.storage';
+import type { ProviderMetadataLike, ResponseTurnRecord, UsageLike } from './responses.storage';
 
-export type InputMessage = {
+export type ResponseExecutionMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
@@ -57,9 +57,9 @@ function normalizeToolParameters(schema: unknown): unknown {
 }
 
 /**
- * Converts configured Mastra tools into the Responses API tool definition shape.
+ * Maps configured Mastra tools into Responses API tool definitions.
  */
-export function serializeResponseTools(tools: Record<string, unknown> | undefined): ResponseTool[] {
+export function mapMastraToolsToResponseTools(tools: Record<string, unknown> | undefined): ResponseTool[] {
   if (!tools) {
     return [];
   }
@@ -182,7 +182,7 @@ function createFunctionCallOutputItem({ itemId, callId, output }: { itemId: stri
   };
 }
 
-function buildToolCallItems(messages: MastraDBMessage[]) {
+function mapMastraMessagesToResponseToolItems(messages: MastraDBMessage[]) {
   const items: Array<Extract<ConversationItem, { type: 'function_call' | 'function_call_output' }>> = [];
   const toolResultCallIds = new Set<string>();
   const emittedCallIds = new Set<string>();
@@ -255,15 +255,15 @@ function buildToolCallItems(messages: MastraDBMessage[]) {
 }
 
 /**
- * Converts stored thread messages into OpenAI-style conversation items.
+ * Maps Mastra thread messages into OpenAI-style conversation items.
  */
-export function buildConversationItems(messages: MastraDBMessage[]): ConversationItem[] {
+export function mapMastraMessagesToConversationItems(messages: MastraDBMessage[]): ConversationItem[] {
   if (!messages.length) {
     return [];
   }
 
   const items: ConversationItem[] = [];
-  const toolItems = buildToolCallItems(messages);
+  const toolItems = mapMastraMessagesToResponseToolItems(messages);
 
   for (const message of messages) {
     const role = getMessageRole(message);
@@ -300,9 +300,9 @@ export function buildConversationItems(messages: MastraDBMessage[]): Conversatio
 }
 
 /**
- * Converts stored response-turn messages into Responses API output items.
+ * Maps Mastra response-turn messages into Responses API output items.
  */
-export function buildResponseOutput({
+export function mapMastraMessagesToResponseOutputItems({
   messages,
   outputMessageId,
   status,
@@ -319,7 +319,7 @@ export function buildResponseOutput({
 
   const output: ResponseOutputItem[] = [];
   const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
-  output.push(...buildToolCallItems(messages));
+  output.push(...mapMastraMessagesToResponseToolItems(messages));
 
   for (const [messageIndex, message] of messages.entries()) {
     const text = getMessageText(message);
@@ -349,9 +349,11 @@ export function createMessageId() {
 }
 
 /**
- * Normalizes incoming Responses API input into plain text messages for agent execution.
+ * Maps Responses API input into the plain execution messages Mastra agents expect.
  */
-export function normalizeInputToMessages(input: ResponseInputMessage[] | string): InputMessage[] {
+export function mapResponseInputToExecutionMessages(
+  input: ResponseInputMessage[] | string,
+): ResponseExecutionMessage[] {
   if (typeof input === 'string') {
     return [{ role: 'user', content: input }];
   }
@@ -411,9 +413,9 @@ export function createOutputTextPart(text: string) {
 }
 
 /**
- * Builds a completed response object from the final response state.
+ * Builds a completed Responses API object from Mastra execution state.
  */
-export function buildResponseObject({
+export function buildCompletedResponse({
   responseId,
   outputMessageId,
   model,
@@ -453,7 +455,7 @@ export function buildResponseObject({
     completed_at: completedAt,
     model,
     status,
-    output: buildResponseOutput({
+    output: mapMastraMessagesToResponseOutputItems({
       messages,
       outputMessageId,
       status,
@@ -472,9 +474,9 @@ export function buildResponseObject({
 }
 
 /**
- * Builds the initial in-progress response object emitted at stream start.
+ * Builds the initial in-progress Responses API object emitted at stream start.
  */
-export function buildCreatedResponseObject({
+export function buildInProgressResponse({
   responseId,
   model,
   createdAt,
@@ -513,9 +515,9 @@ export function buildCreatedResponseObject({
 }
 
 /**
- * Reconstructs a stored response object from the assistant message that owns the turn.
+ * Reconstructs a Responses API object from a stored response-turn record.
  */
-export function buildStoredResponseObject(match: StoredResponseTurn): ResponseObject {
+export function mapResponseTurnRecordToResponse(match: ResponseTurnRecord): ResponseObject {
   return {
     id: match.message.id,
     object: 'response',
@@ -523,7 +525,7 @@ export function buildStoredResponseObject(match: StoredResponseTurn): ResponseOb
     completed_at: match.metadata.completedAt,
     model: match.metadata.model,
     status: match.metadata.status,
-    output: buildResponseOutput({
+    output: mapMastraMessagesToResponseOutputItems({
       messages: match.messages,
       outputMessageId: match.message.id,
       status: match.metadata.status,

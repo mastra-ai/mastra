@@ -14,28 +14,28 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import {
-  buildCreatedResponseObject,
-  buildResponseObject,
-  buildStoredResponseObject,
+  buildCompletedResponse,
+  buildInProgressResponse,
   createMessageId,
   createOutputTextPart,
   extractTextDelta,
   formatSseEvent,
-  normalizeInputToMessages,
-  serializeResponseTools,
+  mapMastraToolsToResponseTools,
+  mapResponseInputToExecutionMessages,
+  mapResponseTurnRecordToResponse,
   toResponseStatus,
   toResponseUsage,
 } from './responses.adapter';
 import {
-  deleteStoredResponseTurn,
-  findStoredResponseTurn,
-  persistStoredResponseTurn,
-  resolveStoredResponseTurnMessages,
+  deleteResponseTurnRecord,
+  findResponseTurnRecord,
+  persistResponseTurnRecord,
+  resolveResponseTurnMessagesForStorage,
 } from './responses.storage';
 import type {
   ProviderMetadataLike,
-  StoredResponseTurn,
-  StoredResponseTurnMetadata,
+  ResponseTurnRecord,
+  ResponseTurnRecordMetadata,
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
@@ -121,26 +121,26 @@ async function resolveThreadExecutionContext({
   agent,
   store,
   conversationId,
-  previousResponseTurn,
+  previousResponseTurnRecord,
   requestContext,
 }: {
   agent: Agent<any, any, any, any>;
   store: boolean;
   conversationId?: string;
-  previousResponseTurn: StoredResponseTurn | null;
+  previousResponseTurnRecord: ResponseTurnRecord | null;
   requestContext: RequestContext;
 }): Promise<ThreadExecutionContext | null> {
-  if (conversationId && previousResponseTurn && previousResponseTurn.thread.id !== conversationId) {
+  if (conversationId && previousResponseTurnRecord && previousResponseTurnRecord.thread.id !== conversationId) {
     throw new HTTPException(400, {
       message:
         'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
     });
   }
 
-  if (previousResponseTurn) {
+  if (previousResponseTurnRecord) {
     return {
-      threadId: previousResponseTurn.thread.id,
-      resourceId: previousResponseTurn.thread.resourceId,
+      threadId: previousResponseTurnRecord.thread.id,
+      resourceId: previousResponseTurnRecord.thread.resourceId,
     };
   }
 
@@ -210,13 +210,13 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
 async function resolveResponseAgent({
   mastra,
   agentId,
-  previousResponseTurn,
+  previousResponseTurnRecord,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
-  previousResponseTurn: StoredResponseTurn | null;
+  previousResponseTurnRecord: ResponseTurnRecord | null;
 }): Promise<Agent<any, any, any, any>> {
-  const resolvedAgentId = agentId ?? previousResponseTurn?.metadata.agentId;
+  const resolvedAgentId = agentId ?? previousResponseTurnRecord?.metadata.agentId;
 
   if (!resolvedAgentId) {
     throw new HTTPException(400, {
@@ -402,7 +402,7 @@ async function storeCompletedResponse({
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
   responseId: string;
-  metadata: Omit<StoredResponseTurnMetadata, 'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'>;
+  metadata: Omit<ResponseTurnRecordMetadata, 'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'>;
   completedState: CompletedResponseState;
   messages: MastraDBMessage[];
 }): Promise<void> {
@@ -410,7 +410,7 @@ async function storeCompletedResponse({
     return;
   }
 
-  await persistStoredResponseTurn({
+  await persistResponseTurnRecord({
     mastra,
     responseId,
     metadata: {
@@ -454,21 +454,21 @@ async function finalizeResponse({
   instructions: string | undefined;
   previousResponseId?: string;
   conversationId?: string;
-  configuredTools: ReturnType<typeof serializeResponseTools>;
+  configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   responseMetadata: Omit<
-    StoredResponseTurnMetadata,
+    ResponseTurnRecordMetadata,
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
   >;
   fallbackText: string;
 }): Promise<FinalizedResponse> {
   const completedState = await resolveCompletedResponseState(result, fallbackText);
-  const responseMessages = await resolveStoredResponseTurnMessages({
+  const responseMessages = await resolveResponseTurnMessagesForStorage({
     result,
     responseId,
     text: completedState.text,
     threadContext,
   });
-  const response = buildResponseObject({
+  const response = buildCompletedResponse({
     responseId,
     outputMessageId: responseId,
     model,
@@ -512,22 +512,22 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
-      const previousResponseTurn = body.previous_response_id
-        ? await findStoredResponseTurn({ mastra, responseId: body.previous_response_id, requestContext })
+      const previousResponseTurnRecord = body.previous_response_id
+        ? await findResponseTurnRecord({ mastra, responseId: body.previous_response_id, requestContext })
         : null;
 
-      if (body.previous_response_id && !previousResponseTurn) {
+      if (body.previous_response_id && !previousResponseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
       }
 
-      const executionInput = normalizeInputToMessages(body.input) as AgentExecutionInput;
+      const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
 
       const agent = await resolveResponseAgent({
         mastra,
         agentId: body.agent_id,
-        previousResponseTurn,
+        previousResponseTurnRecord,
       });
-      const configuredTools = serializeResponseTools(
+      const configuredTools = mapMastraToolsToResponseTools(
         (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
       );
 
@@ -538,7 +538,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         agent,
         store: shouldStore,
         conversationId: body.conversation_id,
-        previousResponseTurn,
+        previousResponseTurnRecord,
         requestContext,
       });
 
@@ -554,7 +554,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         model: body.model,
         createdAt,
         instructions: body.instructions,
-        previousResponseId: previousResponseTurn?.message.id ?? body.previous_response_id,
+        previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
         tools: configuredTools,
         store: didStore,
       };
@@ -580,7 +580,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           createdAt,
           model: body.model,
           instructions: body.instructions,
-          previousResponseId: previousResponseTurn?.message.id ?? body.previous_response_id,
+          previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
@@ -601,7 +601,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         threadContext,
       });
 
-      const createdResponse = buildCreatedResponseObject({
+      const createdResponse = buildInProgressResponse({
         responseId,
         model: body.model,
         createdAt,
@@ -684,7 +684,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               createdAt,
               model: body.model,
               instructions: body.instructions,
-              previousResponseId: previousResponseTurn?.message.id ?? body.previous_response_id,
+              previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
               conversationId: threadContext?.threadId ?? body.conversation_id,
               configuredTools,
               responseMetadata,
@@ -758,12 +758,12 @@ export const GET_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const storedResponseTurn = await findStoredResponseTurn({ mastra, responseId, requestContext });
-      if (!storedResponseTurn) {
+      const responseTurnRecord = await findResponseTurnRecord({ mastra, responseId, requestContext });
+      if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
 
-      return buildStoredResponseObject(storedResponseTurn);
+      return mapResponseTurnRecordToResponse(responseTurnRecord);
     } catch (error) {
       return handleError(error, 'Error retrieving response');
     }
@@ -783,7 +783,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:delete',
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const deleted = await deleteStoredResponseTurn({ mastra, responseId, requestContext });
+      const deleted = await deleteResponseTurnRecord({ mastra, responseId, requestContext });
       if (!deleted) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }

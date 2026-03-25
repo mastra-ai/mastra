@@ -22,7 +22,7 @@ export type UsageLike = {
 
 export type ProviderMetadataLike = Record<string, Record<string, unknown> | undefined> | undefined;
 
-export type StoredResponseTurnMetadata = {
+export type ResponseTurnRecordMetadata = {
   agentId: string;
   model: string;
   createdAt: number;
@@ -37,8 +37,8 @@ export type StoredResponseTurnMetadata = {
   messageIds: string[];
 };
 
-export type StoredResponseTurn = {
-  metadata: StoredResponseTurnMetadata;
+export type ResponseTurnRecord = {
+  metadata: ResponseTurnRecordMetadata;
   message: MastraDBMessage;
   messages: MastraDBMessage[];
   thread: StorageThreadType;
@@ -60,9 +60,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Resolves the memory storage domain used for stored Responses API entries.
+ * Resolves the memory storage used by response-turn records.
  */
-export async function getMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage | null> {
+export async function getResponseMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage | null> {
   const storage = mastra?.getStorage();
   if (!storage) {
     return null;
@@ -77,9 +77,9 @@ export async function getMemoryStore(mastra: Mastra | undefined): Promise<Memory
 }
 
 /**
- * Reads the Responses-specific metadata attached to a stored assistant message.
+ * Reads the response-turn record metadata attached to a stored assistant message.
  */
-function getStoredResponseTurnMetadata(message: MastraDBMessage): StoredResponseTurnMetadata | null {
+function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnRecordMetadata | null {
   const mastraMetadata = isPlainObject(message.content?.metadata?.mastra) ? message.content.metadata.mastra : null;
   const responseMetadata = mastraMetadata && isPlainObject(mastraMetadata.response) ? mastraMetadata.response : null;
 
@@ -115,11 +115,11 @@ function getStoredResponseTurnMetadata(message: MastraDBMessage): StoredResponse
 }
 
 /**
- * Attaches Responses-specific metadata to the persisted assistant message.
+ * Writes response-turn record metadata onto a persisted assistant message.
  */
-function setStoredResponseTurnMetadata(
+function writeResponseTurnRecordMetadata(
   message: MastraDBMessage,
-  metadata: StoredResponseTurnMetadata,
+  metadata: ResponseTurnRecordMetadata,
 ): MastraDBMessage {
   const contentMetadata = isPlainObject(message.content?.metadata) ? message.content.metadata : {};
   const mastraMetadata = isPlainObject(contentMetadata.mastra) ? contentMetadata.mastra : {};
@@ -140,9 +140,9 @@ function setStoredResponseTurnMetadata(
 }
 
 /**
- * Looks up a stored response by assistant message ID.
+ * Looks up a stored response-turn record by assistant message ID.
  */
-export async function findStoredResponseTurn({
+export async function findResponseTurnRecord({
   mastra,
   responseId,
   requestContext,
@@ -150,8 +150,8 @@ export async function findStoredResponseTurn({
   mastra: Mastra | undefined;
   responseId: string;
   requestContext: RequestContext;
-}): Promise<StoredResponseTurn | null> {
-  const memoryStore = await getMemoryStore(mastra);
+}): Promise<ResponseTurnRecord | null> {
+  const memoryStore = await getResponseMemoryStore(mastra);
   if (!memoryStore) {
     return null;
   }
@@ -163,7 +163,7 @@ export async function findStoredResponseTurn({
     return null;
   }
 
-  const metadata = getStoredResponseTurnMetadata(message);
+  const metadata = readResponseTurnRecordMetadata(message);
   if (!metadata) {
     return null;
   }
@@ -208,9 +208,9 @@ function createSyntheticResponseMessage({
 }
 
 /**
- * Resolves the response messages that should represent the stored assistant turn.
+ * Resolves the Mastra messages that belong to the response turn being stored.
  */
-export async function resolveStoredResponseTurnMessages({
+export async function resolveResponseTurnMessagesForStorage({
   result,
   responseId,
   text,
@@ -236,9 +236,9 @@ export async function resolveStoredResponseTurnMessages({
 }
 
 /**
- * Persists the response turn and records the response metadata on the final assistant message.
+ * Persists a response-turn record and writes its metadata onto the final assistant message.
  */
-export async function persistStoredResponseTurn({
+export async function persistResponseTurnRecord({
   mastra,
   responseId,
   metadata,
@@ -247,11 +247,11 @@ export async function persistStoredResponseTurn({
 }: {
   mastra: Mastra | undefined;
   responseId: string;
-  metadata: StoredResponseTurnMetadata;
+  metadata: ResponseTurnRecordMetadata;
   threadContext: ThreadExecutionContext;
   messages: MastraDBMessage[];
 }): Promise<void> {
-  const memoryStore = await getMemoryStore(mastra);
+  const memoryStore = await getResponseMemoryStore(mastra);
   if (!memoryStore) {
     throw new HTTPException(500, { message: 'Memory storage was not available while storing the response' });
   }
@@ -293,7 +293,7 @@ export async function persistStoredResponseTurn({
       ? [messages[lastAssistantIndex]!.id]
       : [];
 
-  const storedMessage = setStoredResponseTurnMetadata(lastAssistantMessage, {
+  const storedMessage = writeResponseTurnRecordMetadata(lastAssistantMessage, {
     ...metadata,
     messageIds: normalizedMessages.map(message => message.id),
   });
@@ -312,9 +312,9 @@ export async function persistStoredResponseTurn({
 }
 
 /**
- * Removes all persisted messages for a stored response.
+ * Removes all persisted messages for a stored response-turn record.
  */
-export async function deleteStoredResponseTurn({
+export async function deleteResponseTurnRecord({
   mastra,
   responseId,
   requestContext,
@@ -323,7 +323,7 @@ export async function deleteStoredResponseTurn({
   responseId: string;
   requestContext: RequestContext;
 }): Promise<boolean> {
-  const match = await findStoredResponseTurn({ mastra, responseId, requestContext });
+  const match = await findResponseTurnRecord({ mastra, responseId, requestContext });
   if (!match) {
     return false;
   }

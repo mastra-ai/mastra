@@ -10,8 +10,8 @@ import type { ConversationItemsList, ConversationObject } from '../schemas/conve
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
-import { buildConversationItems } from './responses.adapter';
-import { getMemoryStore } from './responses.storage';
+import { mapMastraMessagesToConversationItems } from './responses.adapter';
+import { getResponseMemoryStore } from './responses.storage';
 import { getEffectiveResourceId } from './utils';
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
@@ -84,7 +84,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
-      const memoryStore = await getMemoryStore(mastra);
+      const memoryStore = await getResponseMemoryStore(mastra);
       if (!memoryStore) {
         throw new HTTPException(500, { message: 'Memory storage is not available' });
       }
@@ -119,7 +119,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
-      const memoryStore = await getMemoryStore(mastra);
+      const memoryStore = await getResponseMemoryStore(mastra);
       if (!memoryStore) {
         throw new HTTPException(500, { message: 'Memory storage is not available' });
       }
@@ -140,7 +140,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
         perPage: 1000,
       });
 
-      return buildConversationItemsList(buildConversationItems(messages));
+      return buildConversationItemsList(mapMastraMessagesToConversationItems(messages));
     } catch (error) {
       return handleError(error, 'Error retrieving conversation');
     }
