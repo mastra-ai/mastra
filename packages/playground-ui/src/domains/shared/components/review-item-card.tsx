@@ -194,7 +194,7 @@ export function ReviewItemCard({
               Input
             </Txt>
             <pre className="text-xs text-neutral4 bg-surface3 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-24 overflow-y-auto">
-              {typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}
+              {formatUnknown(item.input)}
             </pre>
           </div>
 
