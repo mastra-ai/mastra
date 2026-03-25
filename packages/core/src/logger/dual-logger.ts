@@ -53,6 +53,15 @@ export class DualLogger implements IMastraLogger {
 
   trackException(error: MastraError): void {
     this.#inner.trackException(error);
+    this.#forwardToVNext('error', error.message, [
+      {
+        errorId: error.id,
+        domain: error.domain,
+        category: error.category,
+        details: error.details,
+        cause: error.cause?.message,
+      },
+    ]);
   }
 
   getTransports(): Map<string, LoggerTransport> {

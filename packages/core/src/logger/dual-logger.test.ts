@@ -115,12 +115,26 @@ describe('DualLogger', () => {
   });
 
   describe('delegation methods', () => {
-    it('trackException delegates to inner only', () => {
+    it('trackException delegates to inner and forwards structured data to loggerVNext', () => {
       const dual = new DualLogger(inner, () => vnext);
-      const error = { message: 'test' } as any;
+      const error = {
+        message: 'Something failed',
+        id: 'AGENT_GENERATE_FAILED',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { agentId: 'test-agent' },
+        cause: { message: 'underlying cause' },
+      } as any;
       dual.trackException(error);
 
       expect(inner.trackException).toHaveBeenCalledWith(error);
+      expect(vnext.error).toHaveBeenCalledWith('Something failed', {
+        errorId: 'AGENT_GENERATE_FAILED',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { agentId: 'test-agent' },
+        cause: 'underlying cause',
+      });
     });
 
     it('getTransports delegates to inner', () => {
