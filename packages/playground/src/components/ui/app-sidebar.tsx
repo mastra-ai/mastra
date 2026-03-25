@@ -211,7 +211,7 @@ function getIsLinkActive(link: SidebarLink, pathname: string, search: string): b
     // Detail page match: e.g. /evaluation/scorers/:id while Scorers tab link is active
     if (linkTab) {
       const routePrefix = TAB_DETAIL_PREFIX[linkTab];
-      if (routePrefix && pathname.startsWith(routePrefix)) return true;
+      if (routePrefix && (pathname === routePrefix || pathname.startsWith(routePrefix + '/'))) return true;
     }
     return false;
   }
