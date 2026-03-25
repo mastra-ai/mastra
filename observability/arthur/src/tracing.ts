@@ -23,7 +23,8 @@ export type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider' | 'export
    */
   taskId?: string;
   /**
-   * Optional headers to be added to each OTLP request
+   * Optional headers to be added to each OTLP request.
+   * Note: the Authorization header is managed internally when apiKey is provided.
    */
   headers?: Record<string, string>;
 };
