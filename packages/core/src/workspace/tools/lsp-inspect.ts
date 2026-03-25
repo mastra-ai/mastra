@@ -6,7 +6,9 @@
  * line content to indicate the cursor position.
  */
 
+import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
@@ -21,7 +23,6 @@ const CURSOR_MARKER = '<<<';
  */
 async function getLinePreview(filePath: string, lineNumber: number): Promise<string | null> {
   try {
-    const fs = await import('node:fs/promises');
     const content = await fs.readFile(filePath, 'utf-8');
     const lines = content.split('\n');
     const line = lines[lineNumber - 1];
@@ -29,6 +30,39 @@ async function getLinePreview(filePath: string, lineNumber: number): Promise<str
   } catch {
     return null;
   }
+}
+
+function getAbsolutePath(
+  workspacePath: string,
+  lspRoot: string,
+  resolveAbsolutePath?: (path: string) => string | undefined,
+) {
+  const resolvedPath = resolveAbsolutePath?.(workspacePath);
+  if (resolvedPath) {
+    return resolvedPath;
+  }
+
+  if (path.isAbsolute(workspacePath)) {
+    return workspacePath;
+  }
+
+  return path.resolve(lspRoot, workspacePath);
+}
+
+function locationUriToPath(uri: string): string | null {
+  if (!uri.startsWith('file://')) {
+    return null;
+  }
+
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    return null;
+  }
+}
+
+function locationKey(location: { path: string; line: number }): string {
+  return `${location.path}:L${location.line}`;
 }
 
 /**
@@ -100,14 +134,14 @@ export const lspInspectTool = createTool({
       };
     }
 
-    // Resolve absolute path
-    const absolutePath =
-      workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
-      path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
+    const absolutePath = getAbsolutePath(
+      filePath,
+      lspManager.root,
+      workspace.filesystem?.resolveAbsolutePath?.bind(workspace.filesystem),
+    );
 
     let fileContent = '';
     try {
-      const fs = await import('node:fs/promises');
       fileContent = await fs.readFile(absolutePath, 'utf-8');
     } catch {
       fileContent = '';
@@ -159,82 +193,95 @@ export const lspInspectTool = createTool({
         }
       }
 
+      const diagnosticsPromise = fileContent
+        ? Promise.resolve()
+            .then(() => {
+              client.notifyChange(absolutePath, fileContent, 1);
+              return client.waitForDiagnostics(absolutePath, 5000, true);
+            })
+            .catch(() => [])
+        : Promise.resolve([]);
+
       // Secondary queries: diagnostics, definition, and implementation
       const [diagnosticsResult, definitionResult, implResult] = await Promise.all([
-        lspManager.getDiagnostics(absolutePath, fileContent).catch(() => []),
+        diagnosticsPromise,
         client.queryDefinition(uri, position).catch(() => []),
         client.queryImplementation(uri, position).catch(() => []),
       ]);
 
       if (diagnosticsResult && diagnosticsResult.length > 0) {
         const lineDiagnostics = diagnosticsResult
-          .filter(diagnostic => diagnostic.line === line)
-          .map(diagnostic => ({
-            severity: diagnostic.severity,
+          .map((diagnostic: any) => ({
+            line: typeof diagnostic.line === 'number' ? diagnostic.line : (diagnostic.range?.start?.line ?? -1) + 1,
+            severity:
+              typeof diagnostic.severity === 'number'
+                ? diagnostic.severity === 1
+                  ? 'error'
+                  : diagnostic.severity === 2
+                    ? 'warning'
+                    : diagnostic.severity === 3
+                      ? 'info'
+                      : 'hint'
+                : diagnostic.severity,
             message: diagnostic.message,
             source: diagnostic.source ?? null,
-          }));
+          }))
+          .filter(diagnostic => diagnostic.line === line)
+          .map(({ severity, message, source }) => ({ severity, message, source }));
 
         if (lineDiagnostics.length > 0) {
           result.diagnostics = lineDiagnostics;
         }
       }
 
-      if (definitionResult.length > 0) {
-        const definitionLocations = definitionResult
-          .map((loc: any) => ({
-            // Handle both Location (uri + range) and LocationLink (targetUri + targetRange) formats
-            uri: loc.uri ?? loc.targetUri,
-            range: loc.range ?? loc.targetRange,
-          }))
-          .filter((loc: any) => loc.uri)
-          .map((loc: any) => ({
-            path: String(loc.uri).replace(/^file:\/\//, ''),
-            line: (loc.range?.start?.line ?? 0) + 1,
-            character: (loc.range?.start?.character ?? 0) + 1,
-          }))
-          // Filter out definitions that point to the same location we're querying
-          .filter((loc: any) => !(loc.path === absolutePath && loc.line === line));
+      const definitionLocations = definitionResult
+        .map((loc: any) => ({
+          uri: loc.uri ?? loc.targetUri,
+          range: loc.range ?? loc.targetRange,
+        }))
+        .map((loc: any) => {
+          const resolvedPath = loc.uri ? locationUriToPath(String(loc.uri)) : null;
+          return resolvedPath
+            ? {
+                path: resolvedPath,
+                line: (loc.range?.start?.line ?? 0) + 1,
+                character: (loc.range?.start?.character ?? 0) + 1,
+              }
+            : null;
+        })
+        .filter((loc): loc is { path: string; line: number; character: number } => Boolean(loc))
+        .filter(loc => !(loc.path === absolutePath && loc.line === line));
 
-        // Fetch previews for definition locations
-        const previewPromises = definitionLocations.map((loc: any) => getLinePreview(loc.path, loc.line));
-        const previews = await Promise.all(previewPromises);
-
-        // Format: path:Lline:Cchar - with preview included
-        result.definition = definitionLocations.map((loc: any, i: number) => ({
+      if (definitionLocations.length > 0) {
+        const previews = await Promise.all(definitionLocations.map(loc => getLinePreview(loc.path, loc.line)));
+        result.definition = definitionLocations.map((loc, i) => ({
           location: `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
           preview: previews[i],
         }));
       }
 
-      if (implResult.length > 0) {
-        const defPaths: string[] = Array.isArray(result.definition)
-          ? result.definition.map((d: any) =>
-              d.location?.split(':L')[1]
-                ? `${d.location.split(':L')[0]}:L${d.location.split(':L')[1].split(':C')[0]}`
-                : '',
-            )
-          : [];
-        const implementationLocations = implResult
-          .map((loc: any) => ({
-            uri: loc.uri ?? loc.targetUri,
-            range: loc.range ?? loc.targetRange,
-          }))
-          .filter((loc: any) => loc.uri)
-          .map((loc: any) => ({
-            path: String(loc.uri).replace(/^file:\/\//, ''),
-            line: (loc.range?.start?.line ?? 0) + 1,
-            character: (loc.range?.start?.character ?? 0) + 1,
-          }))
-          // Filter out implementations that match definition (same path+line) or same file/line as query
-          .filter(
-            (loc: any) =>
-              !defPaths.includes(`${loc.path}:${loc.line}`) && !(loc.path === absolutePath && loc.line === line),
-          );
+      const definitionKeys = new Set(definitionLocations.map(locationKey));
+      const implementationLocations = implResult
+        .map((loc: any) => ({
+          uri: loc.uri ?? loc.targetUri,
+          range: loc.range ?? loc.targetRange,
+        }))
+        .map((loc: any) => {
+          const resolvedPath = loc.uri ? locationUriToPath(String(loc.uri)) : null;
+          return resolvedPath
+            ? {
+                path: resolvedPath,
+                line: (loc.range?.start?.line ?? 0) + 1,
+                character: (loc.range?.start?.character ?? 0) + 1,
+              }
+            : null;
+        })
+        .filter((loc): loc is { path: string; line: number; character: number } => Boolean(loc))
+        .filter(loc => !definitionKeys.has(locationKey(loc)) && !(loc.path === absolutePath && loc.line === line));
 
-        // Compress implementation to just path:line:character strings for efficiency
+      if (implementationLocations.length > 0) {
         result.implementation = implementationLocations.map(
-          (loc: any) => `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
+          loc => `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
         );
       }
     } catch (err) {

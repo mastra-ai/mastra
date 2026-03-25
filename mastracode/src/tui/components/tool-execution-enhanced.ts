@@ -1128,7 +1128,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       shortPath = shortenPath(absPath);
     } else if (rawPath.startsWith('/')) {
       absPath = rawPath;
-      shortPath = rawPath.slice(process.cwd().length + 1); // Strip cwd prefix
+      shortPath = absPath.startsWith(process.cwd() + '/')
+        ? absPath.slice(process.cwd().length + 1)
+        : shortenPath(absPath);
     } else {
       absPath = process.cwd() + '/' + rawPath;
       shortPath = rawPath;

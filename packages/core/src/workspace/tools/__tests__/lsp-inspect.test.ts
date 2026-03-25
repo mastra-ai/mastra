@@ -83,13 +83,14 @@ describe('workspace_lsp_inspect', () => {
       queryDefinition: vi.fn().mockResolvedValue([]),
       queryTypeDefinition: vi.fn().mockResolvedValue([]),
       queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
       notifyClose: vi.fn(),
       serverName: 'typescript',
     };
 
     const mockLsp = {
       root: tempDir,
-      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -127,13 +128,14 @@ describe('workspace_lsp_inspect', () => {
       queryDefinition: vi.fn().mockResolvedValue([]),
       queryTypeDefinition: vi.fn().mockResolvedValue([]),
       queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
       notifyClose: vi.fn(),
       serverName: 'typescript',
     };
 
     const mockLsp = {
       root: tempDir,
-      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -170,13 +172,14 @@ describe('workspace_lsp_inspect', () => {
       ]),
       queryTypeDefinition: vi.fn().mockResolvedValue([]),
       queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
       notifyClose: vi.fn(),
       serverName: 'typescript',
     };
 
     const mockLsp = {
       root: tempDir,
-      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -204,28 +207,27 @@ describe('workspace_lsp_inspect', () => {
       queryHover: vi.fn().mockResolvedValue(null),
       queryDefinition: vi.fn().mockResolvedValue([]),
       queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([
+        {
+          severity: 1,
+          message: "Type 'number' is not assignable to type 'string'.",
+          range: { start: { line: 0, character: 6 } },
+          source: 'typescript',
+        },
+        {
+          severity: 2,
+          message: 'Unused variable bar',
+          range: { start: { line: 1, character: 6 } },
+          source: 'typescript',
+        },
+      ]),
       notifyClose: vi.fn(),
       serverName: 'typescript',
     };
 
     const mockLsp = {
       root: tempDir,
-      getDiagnostics: vi.fn().mockResolvedValue([
-        {
-          severity: 'error',
-          message: "Type 'number' is not assignable to type 'string'.",
-          line: 1,
-          character: 7,
-          source: 'typescript',
-        },
-        {
-          severity: 'warning',
-          message: 'Unused variable bar',
-          line: 2,
-          character: 7,
-          source: 'typescript',
-        },
-      ]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -250,7 +252,12 @@ describe('workspace_lsp_inspect', () => {
         },
       ],
     });
-    expect(mockLsp.getDiagnostics).toHaveBeenCalled();
+    expect(mockClient.notifyChange).toHaveBeenCalledWith(
+      path.join(tempDir, 'test.ts'),
+      'const foo: string = 42\nconst bar = true',
+      1,
+    );
+    expect(mockClient.waitForDiagnostics).toHaveBeenCalledWith(path.join(tempDir, 'test.ts'), 5000, true);
   });
 
   it('should handle prepareQuery returning null (no server available)', async () => {
@@ -303,13 +310,14 @@ describe('workspace_lsp_inspect', () => {
       queryDefinition: vi.fn().mockResolvedValue([]),
       queryTypeDefinition: vi.fn().mockResolvedValue([]),
       queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
       notifyClose: vi.fn(),
       serverName: 'typescript',
     };
 
     const mockLsp = {
       root: tempDir,
-      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -331,5 +339,88 @@ describe('workspace_lsp_inspect', () => {
         kind: 'plaintext',
       },
     });
+  });
+
+  it('should preserve absolute input paths when filesystem resolution is unavailable', async () => {
+    const absolutePath = path.join(tempDir, 'absolute.ts');
+    await fs.writeFile(absolutePath, 'const foo = 1');
+
+    const mockClient = {
+      queryHover: vi.fn().mockResolvedValue(null),
+      queryDefinition: vi.fn().mockResolvedValue([]),
+      queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
+      notifyClose: vi.fn(),
+      serverName: 'typescript',
+    };
+
+    const mockLsp = {
+      root: '/different-root',
+      prepareQuery: vi.fn().mockResolvedValue({
+        client: mockClient,
+        uri: `file://${absolutePath}`,
+        languageId: 'typescript',
+        serverName: 'typescript',
+      }),
+    };
+
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    Object.defineProperty(workspace, 'filesystem', { get: () => undefined });
+
+    await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: absolutePath, line: 1, match: 'const foo <<< = 1' },
+      { workspace },
+    );
+
+    expect(mockLsp.prepareQuery).toHaveBeenCalledWith(absolutePath);
+    expect(mockClient.notifyClose).toHaveBeenCalledWith(absolutePath);
+  });
+
+  it('should filter implementations that share the same file and line as definitions', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1\nconst bar = foo');
+
+    const fileUri = `file://${path.join(tempDir, 'test.ts')}`;
+    const mockClient = {
+      queryHover: vi.fn().mockResolvedValue(null),
+      queryDefinition: vi.fn().mockResolvedValue([
+        {
+          uri: fileUri,
+          range: { start: { line: 1, character: 0 }, end: { line: 1, character: 3 } },
+        },
+      ]),
+      queryImplementation: vi.fn().mockResolvedValue([
+        {
+          uri: fileUri,
+          range: { start: { line: 1, character: 5 }, end: { line: 1, character: 8 } },
+        },
+      ]),
+      notifyChange: vi.fn(),
+      waitForDiagnostics: vi.fn().mockResolvedValue([]),
+      notifyClose: vi.fn(),
+      serverName: 'typescript',
+    };
+
+    const mockLsp = {
+      root: tempDir,
+      prepareQuery: vi.fn().mockResolvedValue({
+        client: mockClient,
+        uri: fileUri,
+        languageId: 'typescript',
+        serverName: 'typescript',
+      }),
+    };
+
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+
+    const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: 'test.ts', line: 1, match: 'const <<<foo = 1' },
+      { workspace },
+    );
+
+    expect(result).toMatchObject({
+      definition: [{ location: expect.stringContaining('test.ts:L2:C1') }],
+    });
+    expect(result).not.toHaveProperty('implementation');
   });
 });
