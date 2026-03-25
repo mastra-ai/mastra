@@ -1,4 +1,4 @@
-import { MastraBrowser, ScreencastStreamImpl, createError } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
   BrowserToolError,
   ScreencastOptions,
@@ -65,8 +65,7 @@ export class AgentBrowser extends MastraBrowser {
 
     // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
-      const cdpUrl = typeof localConfig.cdpUrl === 'function' ? await localConfig.cdpUrl() : localConfig.cdpUrl;
-      launchOptions.cdpEndpoint = cdpUrl;
+      launchOptions.cdpEndpoint = await this.resolveCdpUrl(localConfig.cdpUrl);
     }
 
     await this.browserManager.launch(launchOptions);
@@ -142,74 +141,40 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
-   * Check if an error message indicates browser disconnection.
+   * Handle browser disconnection by clearing internal state and calling base class.
    */
-  isDisconnectionError(message: string): boolean {
-    const disconnectPatterns = [
-      'Target closed',
-      'Target page, context or browser has been closed',
-      'Browser has been closed',
-      'Connection closed',
-      'Protocol error',
-      'Session closed',
-      'browser has disconnected',
-      'closed externally',
-    ];
-    return disconnectPatterns.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()));
-  }
-
-  /**
-   * Handle browser disconnection by updating status.
-   * This allows ensureReady() to re-launch on next use.
-   */
-  handleBrowserDisconnected(): void {
-    if (this.status !== 'closed') {
-      this.status = 'closed';
-      this.browserManager = null;
-      this.logger.debug?.('Browser was externally closed, status set to closed');
-      this.notifyBrowserClosed();
-    }
+  override handleBrowserDisconnected(): void {
+    this.browserManager = null;
+    super.handleBrowserDisconnected();
   }
 
   /**
    * Create an error response from an exception.
-   * Handles disconnection detection and returns a consistent BrowserToolError.
+   * Extends base class to add agent-browser specific error handling.
    */
-  private createErrorFromException(error: unknown, context: string): BrowserToolError {
+  protected override createErrorFromException(error: unknown, context: string): BrowserToolError {
     const msg = error instanceof Error ? error.message : String(error);
 
-    // Check for browser disconnection errors first
-    if (this.isDisconnectionError(msg)) {
-      this.handleBrowserDisconnected();
-      return createError(
-        'browser_closed',
-        'Browser was closed externally.',
-        'The browser window was closed. Please retry to re-launch.',
+    // Check for stale refs (agent-browser specific)
+    if (msg.includes('stale') || msg.includes('Stale')) {
+      return this.createError(
+        'stale_ref',
+        'Element ref is no longer valid.',
+        'Get a fresh snapshot and use updated refs.',
       );
     }
 
-    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
-      return createError('timeout', `${context} timed out.`, 'Try again or increase timeout.');
-    }
-    if (msg.includes('not launched') || msg.includes('Browser is not launched')) {
-      return createError(
-        'browser_error',
-        'Browser was not initialized.',
-        'This is an internal error - please try again.',
-      );
-    }
-    if (msg.includes('stale') || msg.includes('Stale')) {
-      return createError('stale_ref', 'Element ref is no longer valid.', 'Get a fresh snapshot and use updated refs.');
-    }
+    // Check for element not found (agent-browser specific)
     if (msg.includes('not found') || msg.includes('No element')) {
-      return createError(
+      return this.createError(
         'element_not_found',
-        `Element not found.`,
+        'Element not found.',
         'Check the ref is correct or get a fresh snapshot.',
       );
     }
 
-    return createError('browser_error', `${context} failed: ${msg}`, 'Check the browser state and try again.');
+    // Delegate to base class for common errors
+    return super.createErrorFromException(error, context);
   }
 
   private requireLocator(ref: string): BrowserLocator | null {
@@ -389,7 +354,7 @@ export class AgentBrowser extends MastraBrowser {
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Ref ${input.ref} not found. The page has changed.`,
           'Take a new snapshot to see the current page state and get fresh refs.',
@@ -412,7 +377,7 @@ export class AgentBrowser extends MastraBrowser {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
       if (errorMsg.includes('intercepts pointer events')) {
-        return createError(
+        return this.createError(
           'element_blocked',
           `Element ${input.ref} is blocked by another element.`,
           'Take a new snapshot to see what is blocking. Dismiss any modals or scroll the element into view.',
@@ -435,7 +400,7 @@ export class AgentBrowser extends MastraBrowser {
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Ref ${input.ref} not found. The page has changed.`,
           'Take a new snapshot to see the current page state and get fresh refs.',
@@ -474,7 +439,7 @@ export class AgentBrowser extends MastraBrowser {
         errorMsg.includes('Cannot type') ||
         errorMsg.includes('not focusable')
       ) {
-        return createError(
+        return this.createError(
           'not_focusable',
           `Element ${input.ref} is not a text input field.`,
           'Take a new snapshot and look for elements with role "textbox" or "searchbox".',
@@ -516,7 +481,7 @@ export class AgentBrowser extends MastraBrowser {
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Ref ${input.ref} not found. The page has changed.`,
           'Take a new snapshot to get fresh refs.',
@@ -626,7 +591,7 @@ export class AgentBrowser extends MastraBrowser {
       if (input.ref) {
         const locator = this.requireLocator(input.ref);
         if (!locator) {
-          return createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
+          return this.createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
         }
         buffer = await locator.screenshot(options);
       } else {
@@ -649,7 +614,7 @@ export class AgentBrowser extends MastraBrowser {
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Ref ${input.ref} not found. The page has changed.`,
           'Take a new snapshot to get fresh refs.',
@@ -698,7 +663,7 @@ export class AgentBrowser extends MastraBrowser {
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Ref ${input.ref} not found. The page has changed.`,
           'Take a new snapshot to get fresh refs.',
@@ -766,7 +731,7 @@ export class AgentBrowser extends MastraBrowser {
       if (input.ref) {
         const locator = this.requireLocator(input.ref);
         if (!locator) {
-          return createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
+          return this.createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
         }
 
         const state = input.state ?? 'visible';
@@ -807,7 +772,7 @@ export class AgentBrowser extends MastraBrowser {
     try {
       const browser = this.browserManager;
       if (!browser) {
-        return createError(
+        return this.createError(
           'browser_closed',
           'Browser not launched',
           'Call a navigation tool first to launch the browser.',
@@ -817,7 +782,7 @@ export class AgentBrowser extends MastraBrowser {
       switch (input.action) {
         case 'list': {
           if (!browser.listTabs) {
-            return createError(
+            return this.createError(
               'browser_error',
               'Tab management not supported',
               'This browser provider does not support tab management.',
@@ -833,7 +798,7 @@ export class AgentBrowser extends MastraBrowser {
 
         case 'new': {
           if (!browser.newTab) {
-            return createError(
+            return this.createError(
               'browser_error',
               'Tab management not supported',
               'This browser provider does not support tab management.',
@@ -849,7 +814,7 @@ export class AgentBrowser extends MastraBrowser {
 
         case 'switch': {
           if (!browser.switchTo) {
-            return createError(
+            return this.createError(
               'browser_error',
               'Tab management not supported',
               'This browser provider does not support tab management.',
@@ -868,7 +833,7 @@ export class AgentBrowser extends MastraBrowser {
 
         case 'close': {
           if (!browser.closeTab) {
-            return createError(
+            return this.createError(
               'browser_error',
               'Tab management not supported',
               'This browser provider does not support tab management.',
@@ -884,7 +849,7 @@ export class AgentBrowser extends MastraBrowser {
         }
 
         default:
-          return createError(
+          return this.createError(
             'browser_error',
             `Unknown tabs action: ${(input as any).action}`,
             'Use "list", "new", "switch", or "close".',
@@ -906,7 +871,7 @@ export class AgentBrowser extends MastraBrowser {
       const targetLocator = this.requireLocator(input.targetRef);
 
       if (!sourceLocator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Source ref ${input.sourceRef} not found.`,
           'Take a new snapshot to get fresh refs.',
@@ -914,7 +879,7 @@ export class AgentBrowser extends MastraBrowser {
       }
 
       if (!targetLocator) {
-        return createError(
+        return this.createError(
           'stale_ref',
           `Target ref ${input.targetRef} not found.`,
           'Take a new snapshot to get fresh refs.',

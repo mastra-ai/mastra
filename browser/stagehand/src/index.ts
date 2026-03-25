@@ -9,7 +9,6 @@ export type {
   ExtractResult,
   ObserveResult,
   ModelConfiguration,
-  CdpUrlProvider,
 } from './types';
 
 // Tool exports

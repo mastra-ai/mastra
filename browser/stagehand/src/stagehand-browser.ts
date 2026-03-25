@@ -8,7 +8,7 @@
  */
 
 import type { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, createError } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
   BrowserToolError,
   ScreencastOptions,
@@ -19,17 +19,7 @@ import type {
 import type { Tool } from '@mastra/core/tools';
 import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
 import { createStagehandTools } from './tools';
-import type { StagehandBrowserConfig, StagehandAction, CdpUrlProvider } from './types';
-
-/**
- * Resolve a CDP URL provider to a string
- */
-async function resolveCdpUrl(provider: CdpUrlProvider): Promise<string> {
-  if (typeof provider === 'string') {
-    return provider;
-  }
-  return provider();
-}
+import type { StagehandBrowserConfig, StagehandAction } from './types';
 
 /**
  * StagehandBrowser - AI-powered browser using Stagehand v3
@@ -83,9 +73,8 @@ export class StagehandBrowser extends MastraBrowser {
 
     // Handle CDP URL for local browser with custom endpoint
     if (config.cdpUrl && config.env !== 'BROWSERBASE') {
-      const cdpUrl = await resolveCdpUrl(config.cdpUrl);
       stagehandOptions.localBrowserLaunchOptions = {
-        cdpUrl,
+        cdpUrl: await this.resolveCdpUrl(config.cdpUrl),
         headless: config.headless,
       };
     } else if (config.headless !== undefined && config.env !== 'BROWSERBASE') {
@@ -149,65 +138,31 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Check if an error message indicates browser disconnection.
+   * Handle browser disconnection by clearing internal state and calling base class.
    */
-  isDisconnectionError(message: string): boolean {
-    const disconnectPatterns = [
-      'Target closed',
-      'Target page, context or browser has been closed',
-      'Browser has been closed',
-      'Connection closed',
-      'Protocol error',
-      'Session closed',
-      'browser has disconnected',
-      'closed externally',
-    ];
-    return disconnectPatterns.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()));
-  }
-
-  /**
-   * Handle browser disconnection by updating status.
-   * This allows ensureReady() to re-launch on next use.
-   */
-  handleBrowserDisconnected(): void {
-    if (this.status !== 'closed') {
-      this.status = 'closed';
-      this.stagehand = null;
-      this.logger.debug?.('Browser was externally closed, status set to closed');
-      this.notifyBrowserClosed();
-    }
+  override handleBrowserDisconnected(): void {
+    this.stagehand = null;
+    super.handleBrowserDisconnected();
   }
 
   /**
    * Create an error response from an exception.
-   * Handles disconnection detection and returns a consistent BrowserToolError.
+   * Extends base class to add Stagehand-specific error handling.
    */
-  private createErrorFromException(error: unknown, context: string): BrowserToolError {
+  protected override createErrorFromException(error: unknown, context: string): BrowserToolError {
     const msg = error instanceof Error ? error.message : String(error);
 
-    // Check for browser disconnection errors first
-    if (this.isDisconnectionError(msg)) {
-      this.handleBrowserDisconnected();
-      return createError(
-        'browser_closed',
-        'Browser was closed externally.',
-        'The browser window was closed. Please retry to re-launch.',
-      );
-    }
-
-    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
-      return createError('timeout', `${context} timed out.`, 'Try again or increase timeout.');
-    }
-
+    // Check for Stagehand-specific "no actions found" errors
     if (msg.includes('No actions found') || msg.includes('Could not find')) {
-      return createError(
+      return this.createError(
         'element_not_found',
         `${context}: Could not find matching element or action.`,
         'Try rephrasing the instruction or use observe() to see available actions.',
       );
     }
 
-    return createError('browser_error', `${context} failed: ${msg}`, 'Check the browser state and try again.');
+    // Delegate to base class for common errors
+    return super.createErrorFromException(error, context);
   }
 
   // ---------------------------------------------------------------------------
@@ -376,7 +331,7 @@ export class StagehandBrowser extends MastraBrowser {
     const page = this.getPage();
 
     if (!page) {
-      return createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
+      return this.createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
     }
 
     try {
@@ -405,7 +360,7 @@ export class StagehandBrowser extends MastraBrowser {
     const page = this.getPage();
 
     if (!page) {
-      return createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
+      return this.createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
     }
 
     try {

@@ -24,6 +24,8 @@
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import type { Tool } from '../tools/tool';
+import { createError } from './errors';
+import type { BrowserToolError, ErrorCode } from './errors';
 
 // Re-export screencast types from the screencast module
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
@@ -51,6 +53,12 @@ export type BrowserLifecycleHook = (args: { browser: MastraBrowser }) => void | 
 // =============================================================================
 
 /**
+ * CDP URL provider - can be a static string or an async function.
+ * Useful for cloud providers where the CDP URL may change per session.
+ */
+export type CdpUrlProvider = string | (() => string | Promise<string>);
+
+/**
  * Base configuration shared by all browser providers.
  * Provider packages extend this with their own options.
  */
@@ -66,6 +74,13 @@ export interface BrowserConfig {
    * @default 10000 (10 seconds)
    */
   timeout?: number;
+
+  /**
+   * CDP WebSocket URL or async provider function.
+   * When provided, connects to an existing browser instead of launching a new one.
+   * Useful for cloud providers (Browserbase, Browserless, Kernel, etc.).
+   */
+  cdpUrl?: CdpUrlProvider;
 
   /**
    * Called after the browser reaches 'ready' status.
@@ -344,6 +359,109 @@ export abstract class MastraBrowser extends MastraBase {
    */
   isBrowserRunning(): boolean {
     return this.status === 'ready';
+  }
+
+  // ---------------------------------------------------------------------------
+  // CDP URL Resolution
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve a CDP URL from a static string or async provider function.
+   * @param cdpUrl - Static string or async function returning the CDP URL
+   * @returns Resolved CDP URL string
+   */
+  protected async resolveCdpUrl(cdpUrl: CdpUrlProvider): Promise<string> {
+    return typeof cdpUrl === 'function' ? await cdpUrl() : cdpUrl;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Disconnection Detection & Error Handling
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Error patterns that indicate browser disconnection.
+   * Used by isDisconnectionError() to detect external browser closure.
+   */
+  protected static readonly DISCONNECTION_PATTERNS = [
+    'Target closed',
+    'Target page, context or browser has been closed',
+    'Browser has been closed',
+    'Connection closed',
+    'Protocol error',
+    'Session closed',
+    'browser has disconnected',
+    'closed externally',
+  ];
+
+  /**
+   * Check if an error message indicates browser disconnection.
+   * @param message - Error message to check
+   * @returns true if the message indicates disconnection
+   */
+  isDisconnectionError(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    return MastraBrowser.DISCONNECTION_PATTERNS.some(pattern => lowerMessage.includes(pattern.toLowerCase()));
+  }
+
+  /**
+   * Handle browser disconnection by updating status and notifying listeners.
+   * Called when browser is detected as externally closed.
+   * Subclasses should call this and also clear their internal instance references.
+   */
+  handleBrowserDisconnected(): void {
+    if (this.status !== 'closed') {
+      this.status = 'closed';
+      this.logger.debug?.('Browser was externally closed, status set to closed');
+      this.notifyBrowserClosed();
+    }
+  }
+
+  /**
+   * Create a BrowserToolError from an exception.
+   * Handles common error patterns including disconnection detection.
+   * Subclasses can override to add provider-specific error handling.
+   *
+   * @param error - The caught error
+   * @param context - Description of what operation failed (e.g., "Click operation")
+   * @returns Structured BrowserToolError
+   */
+  protected createErrorFromException(error: unknown, context: string): BrowserToolError {
+    const msg = error instanceof Error ? error.message : String(error);
+
+    // Check for browser disconnection errors first
+    if (this.isDisconnectionError(msg)) {
+      this.handleBrowserDisconnected();
+      return createError(
+        'browser_closed',
+        'Browser was closed externally.',
+        'The browser window was closed. Please retry to re-launch.',
+      );
+    }
+
+    // Timeout errors
+    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
+      return createError('timeout', `${context} timed out.`, 'Try again or increase timeout.');
+    }
+
+    // Not launched errors
+    if (msg.includes('not launched') || msg.includes('Browser is not launched')) {
+      return createError(
+        'browser_error',
+        'Browser was not initialized.',
+        'This is an internal error - please try again.',
+      );
+    }
+
+    // Default to generic browser error
+    return createError('browser_error', `${context} failed: ${msg}`, 'Check the browser state and try again.');
+  }
+
+  /**
+   * Create a specific error type.
+   * Convenience method for providers to create typed errors.
+   */
+  protected createError(code: ErrorCode, message: string, hint?: string): BrowserToolError {
+    return createError(code, message, hint);
   }
 
   // ---------------------------------------------------------------------------

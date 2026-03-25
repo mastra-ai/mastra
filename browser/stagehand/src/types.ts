@@ -16,12 +16,6 @@ export type ModelConfiguration =
     };
 
 /**
- * CDP URL provider - can be a string or a function that returns a string/promise
- * This allows dynamic CDP URL resolution from cloud providers like Browserbase, Browserless, etc.
- */
-export type CdpUrlProvider = string | (() => string | Promise<string>);
-
-/**
  * Configuration for StagehandBrowser
  */
 export interface StagehandBrowserConfig extends BrowserConfig {
@@ -32,12 +26,6 @@ export interface StagehandBrowserConfig extends BrowserConfig {
    * @default 'LOCAL'
    */
   env?: 'LOCAL' | 'BROWSERBASE';
-
-  /**
-   * CDP URL for connecting to a remote browser.
-   * Can be a string or a function that returns the URL (for dynamic resolution).
-   */
-  cdpUrl?: CdpUrlProvider;
 
   /**
    * Browserbase API key (required when env = 'BROWSERBASE')
