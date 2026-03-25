@@ -121,5 +121,15 @@
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260325-004943",
+    "fancy-fans-fly",
+    "green-birds-knock",
+    "jolly-kiwis-vanish",
+    "large-yaks-shout",
+    "lemon-donuts-serve",
+    "quick-llamas-accept",
+    "spicy-cobras-own",
+    "wild-coats-dream"
+  ]
 }

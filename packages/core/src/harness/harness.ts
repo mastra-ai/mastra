@@ -844,7 +844,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       ? undefined
       : { resourceId: this.resourceId };
 
-    const result = await memoryStorage.listThreads({ filter });
+    const result = await memoryStorage.listThreads({ filter, perPage: false });
 
     return result.threads.map((thread: StorageThreadType) => ({
       id: thread.id,
@@ -2817,6 +2817,13 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
       });
+    }
+
+    // Remove any explicitly disabled built-in tools
+    if (this.config.disableBuiltinTools?.length) {
+      for (const toolId of this.config.disableBuiltinTools) {
+        delete builtInTools[toolId];
+      }
     }
 
     if (resolvedHarnessTools) {
