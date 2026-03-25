@@ -28,9 +28,34 @@ export type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider' | 'export
   headers?: Record<string, string>;
 };
 
+/**
+ * Exports Mastra traces to Arthur AI using OpenInference semantic conventions.
+ *
+ * Supports zero-config setup via environment variables (ARTHUR_API_KEY, ARTHUR_BASE_URL,
+ * ARTHUR_TASK_ID) or explicit configuration. Automatically disables itself with a warning
+ * when required credentials are missing.
+ *
+ * @example
+ * ```ts
+ * const mastra = new Mastra({
+ *   observability: new Observability({
+ *     configs: {
+ *       arthur: {
+ *         serviceName: 'my-service',
+ *         exporters: [new ArthurExporter()],
+ *       },
+ *     },
+ *   }),
+ * });
+ * ```
+ */
 export class ArthurExporter extends OtelExporter {
   name = 'arthur';
 
+  /**
+   * @param config - Arthur exporter configuration. All fields are optional when
+   * the corresponding environment variables are set.
+   */
   constructor(config: ArthurExporterConfig = {}) {
     const apiKey = config.apiKey ?? process.env.ARTHUR_API_KEY;
     const endpoint = config.endpoint ?? process.env.ARTHUR_BASE_URL;
