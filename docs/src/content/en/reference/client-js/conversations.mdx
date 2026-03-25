@@ -7,7 +7,7 @@ packages:
 
 # Conversations API
 
-The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation and retrieve its stored items.
+The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation, retrieve it, and list its stored items.
 
 In Mastra, a conversation ID is the raw memory thread ID. Responses API calls can return this value as `conversation_id`, and the Conversations API lets you create and inspect the same thread directly.
 
@@ -27,12 +27,16 @@ const conversation = await client.conversations.create({
 })
 
 console.log(conversation.id)
+
+const sameConversation = await client.conversations.retrieve(conversation.id)
+
+console.log(sameConversation.thread)
 ```
 
-Retrieve the stored items for a conversation:
+List the stored items for a conversation:
 
 ```typescript
-const items = await client.conversations.retrieve('thread_123')
+const items = await client.conversations.items.list('thread_123')
 
 console.log(items.data)
 ```
@@ -99,10 +103,24 @@ const conversation = await client.conversations.create({
 
 #### `retrieve(conversationId, requestContext?)`
 
+Retrieves a conversation object by its thread ID.
+
+```typescript
+const conversation = await client.conversations.retrieve('thread_123')
+
+console.log(conversation.thread)
+```
+
+**Returns:** `Promise<Conversation>`.
+
+### Items
+
+#### `items.list(conversationId, requestContext?)`
+
 Retrieves the item list for a conversation by its thread ID.
 
 ```typescript
-const items = await client.conversations.retrieve('thread_123')
+const items = await client.conversations.items.list('thread_123')
 
 console.log(items.data)
 ```
@@ -117,7 +135,7 @@ console.log(items.data)
 - `object`: Always `'conversation'`
 - `thread`: The stored thread record
 
-`retrieve()` returns an item list with:
+`items.list()` returns an item list with:
 
 - `object`: Always `'list'`
 - `data`: Conversation items such as `message`, `function_call`, and `function_call_output`

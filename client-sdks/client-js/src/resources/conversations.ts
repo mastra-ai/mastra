@@ -3,9 +3,24 @@ import type { ClientOptions, Conversation, ConversationItemsPage, CreateConversa
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
-export class Conversations extends BaseResource {
+export class ConversationItems extends BaseResource {
   constructor(options: ClientOptions) {
     super(options);
+  }
+
+  list(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<ConversationItemsPage> {
+    return this.request(
+      `/v1/conversations/${encodeURIComponent(conversationId)}/items${requestContextQueryString(requestContext)}`,
+    );
+  }
+}
+
+export class Conversations extends BaseResource {
+  public readonly items: ConversationItems;
+
+  constructor(options: ClientOptions) {
+    super(options);
+    this.items = new ConversationItems(options);
   }
 
   create(params: CreateConversationParams): Promise<Conversation> {
@@ -16,12 +31,9 @@ export class Conversations extends BaseResource {
     });
   }
 
-  retrieve(
-    conversationId: string,
-    requestContext?: RequestContext | Record<string, any>,
-  ): Promise<ConversationItemsPage> {
+  retrieve(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<Conversation> {
     return this.request(
-      `/v1/conversations/${encodeURIComponent(conversationId)}/items${requestContextQueryString(requestContext)}`,
+      `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
     );
   }
 }

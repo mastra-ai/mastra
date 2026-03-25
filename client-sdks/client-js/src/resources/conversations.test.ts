@@ -62,7 +62,7 @@ describe('Conversations Resource', () => {
     );
   });
 
-  it('retrieves a conversation', async () => {
+  it('lists conversation items', async () => {
     mockJsonResponse({
       object: 'list',
       data: [
@@ -79,11 +79,32 @@ describe('Conversations Resource', () => {
       has_more: false,
     });
 
-    const items = await client.conversations.retrieve('conv_123');
+    const items = await client.conversations.items.list('conv_123');
     expect(items.data).toHaveLength(1);
     expect(items.first_id).toBe('msg_1');
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:4111/api/v1/conversations/conv_123/items',
+      expect.objectContaining({
+        headers: expect.objectContaining(clientOptions.headers),
+      }),
+    );
+  });
+
+  it('retrieves a conversation', async () => {
+    mockJsonResponse({
+      id: 'conv_123',
+      object: 'conversation',
+      thread: {
+        id: 'conv_123',
+        resourceId: 'conv_123',
+      },
+    });
+
+    const conversation = await client.conversations.retrieve('conv_123');
+    expect(conversation.id).toBe('conv_123');
+    expect(conversation.thread.id).toBe('conv_123');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/conversations/conv_123',
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

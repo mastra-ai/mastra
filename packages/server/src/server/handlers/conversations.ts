@@ -71,6 +71,41 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   },
 });
 
+export const GET_CONVERSATION_ROUTE = createRoute({
+  method: 'GET',
+  path: '/v1/conversations/:conversationId',
+  responseType: 'json',
+  pathParamSchema: conversationIdPathParams,
+  responseSchema: conversationObjectSchema,
+  summary: 'Retrieve a conversation',
+  description: 'Returns a conversation object backed by a Mastra memory thread',
+  tags: ['Responses'],
+  requiresAuth: true,
+  requiresPermission: 'agents:read',
+  handler: async ({ mastra, requestContext, conversationId }) => {
+    try {
+      const memoryStore = await getMemoryStore(mastra);
+      if (!memoryStore) {
+        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      }
+
+      const thread = await memoryStore.getThreadById({ threadId: conversationId });
+      if (!thread) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      }
+
+      return buildConversationObject({ thread });
+    } catch (error) {
+      return handleError(error, 'Error retrieving conversation');
+    }
+  },
+});
+
 export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   method: 'GET',
   path: '/v1/conversations/:conversationId/items',

@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CREATE_CONVERSATION_ROUTE, GET_CONVERSATION_ITEMS_ROUTE } from './conversations';
+import { CREATE_CONVERSATION_ROUTE, GET_CONVERSATION_ITEMS_ROUTE, GET_CONVERSATION_ROUTE } from './conversations';
 import { createTestServerContext } from './test-utils';
 
 describe('Conversation Handlers', () => {
@@ -89,6 +89,27 @@ describe('Conversation Handlers', () => {
           content: [{ type: 'input_text', text: 'Hello conversation' }],
         },
       ],
+    });
+  });
+
+  it('retrieves a conversation by thread id', async () => {
+    const thread = await memory.createThread({
+      threadId: 'conv_789',
+      resourceId: 'conv_789',
+    });
+
+    const conversation = await GET_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      conversationId: thread.id,
+    });
+
+    expect(conversation).toMatchObject({
+      id: thread.id,
+      object: 'conversation',
+      thread: {
+        id: thread.id,
+        resourceId: thread.resourceId,
+      },
     });
   });
 });
