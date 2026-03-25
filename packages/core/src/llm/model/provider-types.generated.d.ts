@@ -802,6 +802,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-codex',
     'openai/gpt-5.3-instant',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-image-1',
     'openai/gpt-image-1-mini',
@@ -1142,6 +1144,7 @@ export type ProviderModelsMap = {
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M2.1',
+    'MiniMaxAI/MiniMax-M2.5',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
