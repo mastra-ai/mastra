@@ -186,11 +186,19 @@ function isWorkflow(target: Agent | Workflow): target is Workflow {
 }
 
 function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
-  return typeof scorers === 'object' && !Array.isArray(scorers) && ('workflow' in scorers || 'steps' in scorers);
+  return (
+    typeof scorers === 'object' &&
+    !Array.isArray(scorers) &&
+    ('workflow' in scorers || 'steps' in scorers || ('trajectory' in scorers && !('agent' in scorers)))
+  );
 }
 
 function isAgentScorerConfig(scorers: any): scorers is AgentScorerConfig {
-  return typeof scorers === 'object' && !Array.isArray(scorers) && ('agent' in scorers || 'trajectory' in scorers);
+  return (
+    typeof scorers === 'object' &&
+    !Array.isArray(scorers) &&
+    ('agent' in scorers || ('trajectory' in scorers && !('workflow' in scorers) && !('steps' in scorers)))
+  );
 }
 
 function validateEvalsInputs(
