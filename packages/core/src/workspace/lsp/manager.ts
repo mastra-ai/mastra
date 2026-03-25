@@ -194,6 +194,40 @@ export class LSPManager {
   }
 
   /**
+   * Get LSP client ready to query a file.
+   * Opens the file in the client so queries can be made.
+   * Returns null when no LSP client is available.
+   */
+  async prepareQuery(filePath: string): Promise<{
+    client: LSPClient;
+    uri: string;
+    languageId: string | null;
+    serverName: string;
+  } | null> {
+    const client = await this.getClient(filePath);
+    if (!client) return null;
+
+    const languageId = getLanguageId(filePath);
+    if (!languageId) return null;
+
+    // Open the file (content doesn't matter for position queries, but server may need it)
+    const fs = await import('node:fs/promises');
+    let content = '';
+    try {
+      content = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      content = '';
+    }
+
+    client.notifyOpen(filePath, content, languageId);
+
+    // Use the same URI format as notifyOpen (pathToFileURL for proper encoding)
+    const { pathToFileURL } = await import('node:url');
+    const uri = pathToFileURL(filePath).toString();
+    return { client, uri, languageId, serverName: client.serverName };
+  }
+
+  /**
    * Convenience method: open file, send content, wait for diagnostics, return normalized results.
    * Returns null when no LSP client is available; otherwise returns diagnostics
    * (or an empty array on runtime failures after client acquisition).
