@@ -521,9 +521,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage
+      // Move ORDER BY and LIMIT inside the CTE for HNSW/IVFFlat indexes without filters to enable index usage
       const hasFilter = filterQuery.trim().length > 0;
-      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter;
+      const useIndexedOrder = (indexInfo.type === 'hnsw' || indexInfo.type === 'ivfflat') && !hasFilter;
 
       const query = useIndexedOrder
         ? `
