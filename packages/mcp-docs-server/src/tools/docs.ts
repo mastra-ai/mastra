@@ -13,7 +13,7 @@ type ReadDocsResult =
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {
   try {
-    void logger.debug(`Listing directory contents: ${dirPath}`);
+    void logger.debug('Listing directory contents', { path: dirPath });
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const dirs: string[] = [];
     const files: string[] = [];
@@ -32,7 +32,7 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
       files: files.sort(),
     };
   } catch (error) {
-    void logger.error(`Failed to list directory contents: ${dirPath}`, error);
+    void logger.error('Failed to list directory contents', { path: dirPath, error });
     throw error;
   }
 }
@@ -41,10 +41,10 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 async function readDocsContent(docPath: string, queryKeywords: string[]): Promise<ReadDocsResult> {
   const fullPath = path.resolve(path.join(docsBaseDir, docPath));
   if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
-    void logger.error(`Path traversal attempt detected`);
+    void logger.error('Path traversal attempt detected');
     return { found: false, isSecurityViolation: true };
   }
-  void logger.debug(`Reading docs content from: ${fullPath}`);
+  void logger.debug('Reading docs content', { path: fullPath });
 
   // Try multiple approaches to find the content:
   // 1. Try as a direct file path (with .md extension)
@@ -113,7 +113,7 @@ async function readDocsContent(docPath: string, queryKeywords: string[]): Promis
 
 // Helper function to find nearest existing directory and its contents
 async function findNearestDirectory(docPath: string, availablePaths: string): Promise<string> {
-  void logger.debug(`Finding nearest directory for: ${docPath}`);
+  void logger.debug('Finding nearest directory', { path: docPath });
   // Split path into parts and try each parent directory
   const parts = docPath.split('/');
 
@@ -146,7 +146,7 @@ async function findNearestDirectory(docPath: string, availablePaths: string): Pr
       }
     } catch {
       // Directory doesn't exist, try parent
-      void logger.debug(`Directory not found, trying parent: ${parts.slice(0, -1).join('/')}`);
+      void logger.debug('Directory not found, trying parent', { parent: parts.slice(0, -1).join('/') });
     }
     parts.pop();
   }

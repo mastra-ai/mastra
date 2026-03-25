@@ -389,7 +389,6 @@ export class ProcessorRunner {
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.id} failed:`, error);
         throw error;
       }
     }
@@ -471,7 +470,7 @@ export class ProcessorRunner {
                 processorId: error.processorId || workflowId,
               };
             }
-            this.logger.error(`[Agent:${this.agentName}] - Output processor workflow ${workflowId} failed:`, error);
+            this.logger.error('Output processor workflow failed', { agent: this.agentName, workflowId, error });
           }
           continue;
         }
@@ -539,7 +538,7 @@ export class ProcessorRunner {
           const state = processorStates.get(processor.id);
           state?.span?.error({ error: error as Error, endSpan: true });
           // Log error but continue with original part
-          this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.id} failed:`, error);
+          this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
         }
       }
 
@@ -555,7 +554,7 @@ export class ProcessorRunner {
 
       return { part: processedPart, blocked: false };
     } catch (error) {
-      this.logger.error(`[Agent:${this.agentName}] - Stream part processing failed:`, error);
+      this.logger.error('Stream part processing failed', { agent: this.agentName, error });
       // End all spans on fatal error
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true });
@@ -607,7 +606,8 @@ export class ProcessorRunner {
 
             if (blocked) {
               // Log that part was blocked
-              void this.logger.debug(`[Agent:${this.agentName}] - Stream part blocked by output processor`, {
+              void this.logger.debug('Stream part blocked by output processor', {
+                agent: this.agentName,
                 reason,
                 originalPart: value,
               });
@@ -841,7 +841,6 @@ export class ProcessorRunner {
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        this.logger.error(`[Agent:${this.agentName}] - Input processor ${processor.id} failed:`, error);
         throw error;
       }
     }
@@ -1059,7 +1058,6 @@ export class ProcessorRunner {
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        this.logger.error(`[Agent:${this.agentName}] - Input step processor ${processor.id} failed:`, error);
         throw error;
       }
     }
@@ -1275,7 +1273,6 @@ export class ProcessorRunner {
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        this.logger.error(`[Agent:${this.agentName}] - Output step processor ${processor.id} failed:`, error);
         throw error;
       }
     }

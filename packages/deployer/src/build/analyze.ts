@@ -268,7 +268,7 @@ async function validateOutput(
       continue;
     }
 
-    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    logger.debug('Validating module', { fileName: file.fileName });
     if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
       result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
@@ -324,12 +324,10 @@ export async function analyzeBundle(
   });
 
   if (!mastraConfigResult.hasValidConfig) {
-    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
-export const mastra = new Mastra({
-  // your options
-})
-
-If you think your configuration is valid, please open an issue.`);
+    logger.warn('Invalid Mastra config', {
+      details:
+        'Please make sure that your entry file looks like this:\nexport const mastra = new Mastra({\n  // your options\n})\n\nIf you think your configuration is valid, please open an issue.',
+    });
   }
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
@@ -414,7 +412,7 @@ If you think your configuration is valid, please open an issue.`);
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
+  logger.debug('Sorted dependencies', { deps: sortedDeps });
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {

@@ -246,7 +246,7 @@ export class AgentLegacyHandler {
     return {
       before: async () => {
         if (process.env.NODE_ENV !== 'test') {
-          this.capabilities.logger.debug(`[Agents:${this.capabilities.name}] - Starting generation`, { runId });
+          this.capabilities.logger.debug('Starting generation', { agentName: this.capabilities.name, runId });
         }
 
         const agentSpan = getOrCreateSpan({
@@ -292,7 +292,9 @@ export class AgentLegacyHandler {
         ]
           .filter(Boolean)
           .join(', ');
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Enhancing tools: ${toolEnhancements}`, {
+        this.capabilities.logger.debug('Enhancing tools', {
+          agentName: this.capabilities.name,
+          toolEnhancements,
           runId,
           toolsets: toolsets ? Object.keys(toolsets) : undefined,
           clientTools: clientTools ? Object.keys(clientTools) : undefined,
@@ -375,7 +377,6 @@ export class AgentLegacyHandler {
             text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${threadId}" and resourceId "${resourceId}"`,
           });
           (this.capabilities.logger as any).trackException(mastraError);
-          this.capabilities.logger.error(mastraError.toString());
           agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
@@ -519,7 +520,8 @@ export class AgentLegacyHandler {
           }),
         };
 
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Post processing LLM response`, {
+        this.capabilities.logger.debug('Post processing LLM response', {
+          agentName: this.capabilities.name,
           runId,
           result: resToLog,
           threadId,
@@ -634,7 +636,6 @@ export class AgentLegacyHandler {
               e,
             );
             (this.capabilities.logger as any).trackException(mastraError);
-            this.capabilities.logger.error(mastraError.toString());
             agentSpan?.error({ error: mastraError });
             throw mastraError;
           }
@@ -1379,7 +1380,8 @@ export class AgentLegacyHandler {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     if (!output || experimental_output) {
-      this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm stream call`, {
+      this.capabilities.logger.debug('Starting LLM stream call', {
+        agent: this.capabilities.name,
         runId,
       });
 
@@ -1443,7 +1445,8 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
-    this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
+    this.capabilities.logger.debug('Starting LLM streamObject call', {
+      agent: this.capabilities.name,
       runId,
     });
 

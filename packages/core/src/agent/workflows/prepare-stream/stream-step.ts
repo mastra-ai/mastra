@@ -60,7 +60,8 @@ export function createStreamStep<OUTPUT = undefined>({
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
 
-      capabilities.logger.debug(`Starting agent ${capabilities.agentName} llm stream call`, {
+      capabilities.logger.debug('Starting LLM stream call', {
+        agent: capabilities.agentName,
         runId,
       });
 

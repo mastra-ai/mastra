@@ -231,7 +231,7 @@ export class Memory extends MastraMemory {
     }[] = [];
 
     // Log memory recall parameters, excluding potentially large schema objects
-    this.logger.debug(`Memory recall() with:`, {
+    this.logger.debug('Memory recall', {
       threadId,
       perPage,
       page,
@@ -476,12 +476,12 @@ export class Memory extends MastraMemory {
               filter: { thread_id: threadId },
             });
           } catch {
-            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
+            this.logger.debug('Failed to delete vectors for thread, skipping', { threadId, indexName });
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
+      this.logger.debug('Failed to clean up vectors for thread', { threadId });
     }
   }
 
@@ -1592,13 +1592,13 @@ Notes:
                       filter: { message_id: { $in: batch } },
                     });
                   } catch {
-                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                    this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
                   }
                 }
               }),
             );
           } catch {
-            this.logger.debug(`Failed to clean up old vectors during message update`);
+            this.logger.debug('Failed to clean up old vectors during message update');
           }
         }
 
@@ -1695,13 +1695,13 @@ Notes:
                 filter: { message_id: { $in: batch } },
               });
             } catch {
-              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+              this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
             }
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for deleted messages`);
+      this.logger.debug('Failed to clean up vectors for deleted messages');
     }
   }
 

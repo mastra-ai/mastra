@@ -47,7 +47,6 @@ export class MastraLLMVNext extends MastraBase {
         category: ErrorCategory.USER,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     } else {
       this.#models = models;
@@ -145,7 +144,7 @@ export class MastraLLMVNext extends MastraBase {
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
-    this.logger.debug(`[LLM] - Streaming text`, {
+    this.logger.debug('Streaming text', {
       runId,
       threadId,
       resourceId,

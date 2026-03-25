@@ -115,7 +115,6 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           },
           text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${thread?.id}" and resourceId "${resourceId}"`,
         });
-        capabilities.logger.error(mastraError.toString());
         capabilities.logger.trackException(mastraError);
         throw mastraError;
       }

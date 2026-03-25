@@ -47,7 +47,7 @@ export class MastraBase {
     this.logger = logger;
 
     if (this.component !== RegisteredLogger.LLM) {
-      this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
+      this.logger.debug('Logger updated', { component: this.component, name: this.name });
     }
   }
 }

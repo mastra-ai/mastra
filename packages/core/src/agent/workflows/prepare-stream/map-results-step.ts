@@ -219,9 +219,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             const isUpstreamError = APICallError.isInstance(payload.error);
 
             if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelId ? ` (model: ${modelId})` : '';
-              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              capabilities.logger.error('Upstream LLM API error', {
                 error: payload.error,
                 runId,
                 ...(provider && { provider }),

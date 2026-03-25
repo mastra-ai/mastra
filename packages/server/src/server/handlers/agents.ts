@@ -574,7 +574,7 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
+    logger.debug('Agent not found, looking through sub-agents', { agentId });
     const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
@@ -606,7 +606,7 @@ export async function getAgentFromSystem({
 
   // If still not found, try to get stored agent
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
     } catch (error) {

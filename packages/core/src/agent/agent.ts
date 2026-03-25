@@ -222,7 +222,6 @@ export class Agent<
         text: `LanguageModel is required to create an Agent. Please provide the 'model'.`,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     }
 
@@ -238,7 +237,6 @@ export class Agent<
           text: `Model array is empty. Please provide at least one model.`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
       this.model = config.model.map(mdl => ({
@@ -435,7 +433,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based agents returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -861,7 +858,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based memory returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
     }
@@ -954,7 +950,6 @@ export class Agent<
         text: 'Voice is not compatible when instructions are a function. Please use getVoice() instead.',
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     }
 
@@ -1018,7 +1013,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based scorers returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1078,7 +1072,6 @@ export class Agent<
             text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
           });
           this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
           throw mastraError;
         }
 
@@ -1199,7 +1192,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1237,7 +1229,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1276,7 +1267,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based default options returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1318,7 +1308,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based default network options returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1360,7 +1349,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Function-based tools returned empty value`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1404,7 +1392,6 @@ export class Agent<
           text: `[Agent:${this.name}] - No enabled models found in model list`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1467,7 +1454,6 @@ export class Agent<
         text: `[Agent:${this.name}] - Failed to resolve model configuration`,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     }
   }
@@ -1523,7 +1509,6 @@ export class Agent<
         text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     }
   }
@@ -1554,7 +1539,6 @@ export class Agent<
             text: `[Agent:${this.name}] - Dynamic function returned empty model array`,
           });
           this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
           throw mastraError;
         }
 
@@ -1576,7 +1560,6 @@ export class Agent<
           text: `[Agent:${this.name}] - Empty model array provided`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1621,7 +1604,6 @@ export class Agent<
           text: `[Agent:${this.name}] - No enabled models found in model list`,
         });
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
@@ -1667,7 +1649,7 @@ export class Agent<
    */
   __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>) {
     this.#instructions = newInstructions as DynamicArgument<AgentInstructions, TRequestContext>;
-    this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
+    this.logger.debug('Instructions updated', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1676,7 +1658,7 @@ export class Agent<
    */
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> | ModelFallbacks }) {
     this.model = model;
-    this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+    this.logger.debug('Model updated', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1686,7 +1668,7 @@ export class Agent<
    */
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
-    this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
+    this.logger.debug('Model reset to original', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1705,7 +1687,7 @@ export class Agent<
 
   reorderModels(modelIds: string[]) {
     if (!Array.isArray(this.model)) {
-      this.logger.warn(`[Agents:${this.name}] model is not an array`);
+      this.logger.warn('Model is not an array', { agent: this.name });
       return;
     }
 
@@ -1719,7 +1701,7 @@ export class Agent<
       const bPos = bIndex === -1 ? Infinity : bIndex;
       return aPos - bPos;
     });
-    this.logger.debug(`[Agents:${this.name}] Models reordered`);
+    this.logger.debug('Models reordered', { agent: this.name });
   }
 
   updateModelInModelList({
@@ -1734,7 +1716,7 @@ export class Agent<
     maxRetries?: number;
   }) {
     if (!Array.isArray(this.model)) {
-      this.logger.warn(`[Agents:${this.name}] model is not an array`);
+      this.logger.warn('Model is not an array', { agent: this.name });
       return;
     }
 
@@ -1744,7 +1726,7 @@ export class Agent<
     const modelArray = this.model as ModelFallbacks;
     const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
-      this.logger.warn(`[Agents:${this.name}] model ${id} not found`);
+      this.logger.warn('Model not found', { agent: this.name, modelId: id });
       return;
     }
 
@@ -1759,7 +1741,7 @@ export class Agent<
       }
       return mdl;
     });
-    this.logger.debug(`[Agents:${this.name}] model ${id} updated`);
+    this.logger.debug('Model updated', { agent: this.name, modelId: id });
   }
 
   #primitives?: MastraPrimitives;
@@ -1776,7 +1758,7 @@ export class Agent<
     // Store primitives for later use when creating LLM instances
     this.#primitives = p;
 
-    this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+    this.logger.debug('Agent initialized', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1851,7 +1833,7 @@ export class Agent<
    */
   __setTools(tools: DynamicArgument<TTools, any>) {
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
-    this.logger.debug(`[Agents:${this.name}] Tools set for agent ${this.name}`, { model: this.model, name: this.name });
+    this.logger.debug('Tools set', { agent: this.name, model: this.model });
   }
 
   async generateTitleFromUserMessage({
@@ -1979,7 +1961,7 @@ export class Agent<
       // If no user message, return undefined so existing title is preserved
       return undefined;
     } catch (e) {
-      this.logger.error('Error generating title:', e);
+      this.logger.error('Error generating title', { agent: this.name, error: e });
       // Return undefined on error so existing title is preserved
       return undefined;
     }
@@ -2027,7 +2009,7 @@ export class Agent<
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
-      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (agent network context)`, { runId });
+      this.logger.debug('Skipping memory tools (agent network context)', { agent: this.name, runId });
       return convertedMemoryTools;
     }
 
@@ -2036,19 +2018,14 @@ export class Agent<
 
     // Skip memory tools if there's no usable context — thread-scoped needs threadId, resource-scoped needs resourceId
     if (!threadId && !resourceId) {
-      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (no thread or resource context)`, { runId });
+      this.logger.debug('Skipping memory tools (no thread or resource context)', { agent: this.name, runId });
       return convertedMemoryTools;
     }
 
     const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
-      this.logger.debug(
-        `[Agent:${this.name}] - Adding tools from memory ${Object.keys(memoryTools || {}).join(', ')}`,
-        {
-          runId,
-        },
-      );
+      this.logger.debug('Adding memory tools', { agent: this.name, tools: Object.keys(memoryTools || {}), runId });
       for (const [toolName, tool] of Object.entries(memoryTools)) {
         const toolObj = tool;
         const options: ToolOptions = {
@@ -2099,7 +2076,7 @@ export class Agent<
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
-      this.logger.debug(`[Agent:${this.name}] - Skipping workspace tools (agent network context)`, { runId });
+      this.logger.debug('Skipping workspace tools (agent network context)', { agent: this.name, runId });
       return convertedWorkspaceTools;
     }
 
@@ -2113,9 +2090,7 @@ export class Agent<
     const workspaceTools = createWorkspaceTools(workspace);
 
     if (Object.keys(workspaceTools).length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding workspace tools: ${Object.keys(workspaceTools).join(', ')}`, {
-        runId,
-      });
+      this.logger.debug('Adding workspace tools', { agent: this.name, tools: Object.keys(workspaceTools), runId });
 
       for (const [toolName, tool] of Object.entries(workspaceTools)) {
         const toolObj = tool;
@@ -2181,9 +2156,7 @@ export class Agent<
     const skillTools = createSkillTools(workspace.skills);
 
     if (Object.keys(skillTools).length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding skill tools: ${Object.keys(skillTools).join(', ')}`, {
-        runId,
-      });
+      this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
 
       for (const [toolName, tool] of Object.entries(skillTools)) {
         const toolObj = tool;
@@ -2393,7 +2366,7 @@ export class Agent<
             metadata: e.options?.metadata,
             processorId: e.processorId,
           };
-          this.logger.debug(`[Agent:${this.name}] - Output processor tripwire triggered: ${e.message}`);
+          this.logger.debug('Output processor tripwire triggered', { agent: this.name, message: e.message });
         } else {
           throw e;
         }
@@ -2471,7 +2444,7 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
 
-    this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
+    this.logger.debug('Assembling assigned tools', { agent: this.name, runId, threadId, resourceId });
 
     const memory = await this.getMemory({ requestContext });
 
@@ -2547,7 +2520,9 @@ export class Agent<
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`, {
+      this.logger.debug('Adding tools from toolsets', {
+        agent: this.name,
+        toolsets: Object.keys(toolsets || {}),
         runId,
       });
       for (const toolset of toolsFromToolsets) {
@@ -2606,9 +2581,7 @@ export class Agent<
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
     if (clientToolsForInput.length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
-        runId,
-      });
+      this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
         const options: ToolOptions = {
@@ -2835,9 +2808,11 @@ export class Agent<
                   if (startResult.proceed === false) {
                     const rejectionMessage =
                       startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
-                    this.logger.debug(
-                      `[Agent:${this.name}] - Delegation to ${agentName} rejected: ${rejectionMessage}`,
-                    );
+                    this.logger.debug('Delegation rejected', {
+                      agent: this.name,
+                      targetAgent: agentName,
+                      reason: rejectionMessage,
+                    });
 
                     if (
                       (methodType === 'stream' || methodType === 'streamLegacy') &&
@@ -2905,9 +2880,10 @@ export class Agent<
                           messages: [userMessage, assistantMessage],
                         });
                       } catch (memoryError) {
-                        this.logger.error(
-                          `[Agent:${this.name}] - Failed to save rejection to sub-agent memory: ${memoryError}`,
-                        );
+                        this.logger.error('Failed to save rejection to sub-agent memory', {
+                          agent: this.name,
+                          error: memoryError,
+                        });
                       }
                     }
 
@@ -2929,7 +2905,7 @@ export class Agent<
                   }
                 }
               } catch (hookError) {
-                this.logger.error(`[Agent:${this.name}] - onDelegationStart hook error: ${hookError}`);
+                this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
                 // Continue with original values on hook error
               }
             }
@@ -2946,8 +2922,9 @@ export class Agent<
             }
 
             try {
-              this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
-                name: agentName,
+              this.logger.debug('Executing agent as tool', {
+                agent: this.name,
+                targetAgent: agentName,
                 args: inputData,
                 runId,
                 threadId,
@@ -2978,7 +2955,7 @@ export class Agent<
                     toolCallId,
                   });
                 } catch (filterError) {
-                  this.logger.error(`[Agent:${this.name}] - messageFilter error: ${filterError}`);
+                  this.logger.error('messageFilter error', { agent: this.name, error: filterError });
                   // Fall back to unfiltered context on error
                 }
               }
@@ -3069,9 +3046,10 @@ export class Agent<
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
-                    this.logger.error(
-                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
-                    );
+                    this.logger.error('Failed to save messages to sub-agent memory', {
+                      agent: this.name,
+                      error: memoryError,
+                    });
                   }
                 }
 
@@ -3211,9 +3189,10 @@ export class Agent<
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
-                    this.logger.error(
-                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
-                    );
+                    this.logger.error('Failed to save messages to sub-agent memory', {
+                      agent: this.name,
+                      error: memoryError,
+                    });
                   }
                 }
 
@@ -3309,14 +3288,15 @@ export class Agent<
                           messages: [feedbackMessage],
                         });
                       } catch (memoryError) {
-                        this.logger.error(
-                          `[Agent:${this.name}] - Failed to save feedback to supervisor memory: ${memoryError}`,
-                        );
+                        this.logger.error('Failed to save feedback to supervisor memory', {
+                          agent: this.name,
+                          error: memoryError,
+                        });
                       }
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error: ${hookError}`);
+                  this.logger.error('onDelegationComplete hook error', { agent: this.name, error: hookError });
                 }
               }
               // Restore the parent agent's MastraMemory after sub-agent execution
@@ -3381,14 +3361,18 @@ export class Agent<
                           messages: [feedbackMessage],
                         });
                       } catch (memoryError) {
-                        this.logger.error(
-                          `[Agent:${this.name}] - Failed to save feedback to supervisor memory: ${memoryError}`,
-                        );
+                        this.logger.error('Failed to save feedback to supervisor memory', {
+                          agent: this.name,
+                          error: memoryError,
+                        });
                       }
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error on failure: ${hookError}`);
+                  this.logger.error('onDelegationComplete hook error on failure', {
+                    agent: this.name,
+                    error: hookError,
+                  });
                 }
               }
 
@@ -3416,7 +3400,6 @@ export class Agent<
                 err,
               );
               this.logger.trackException(mastraError);
-              this.logger.error(mastraError.toString());
               throw mastraError;
             }
           },
@@ -3541,8 +3524,9 @@ export class Agent<
               // tool-call-step (from metadata stored during suspension).
               // For fresh calls: generate a new unique runId.
               const runIdToUse = suspendedToolRunId || randomUUID();
-              this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
-                name: workflowName,
+              this.logger.debug('Executing workflow as tool', {
+                agent: this.name,
+                workflow: workflowName,
                 description: workflow.description,
                 args: inputData,
                 runId: runIdToUse,
@@ -3630,7 +3614,11 @@ export class Agent<
                   const key = firstSuspendedStepPath.shift();
                   if (key) {
                     if (!wflowStep.steps[key]) {
-                      this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
+                      this.logger.warn('Suspended step not found in workflow', {
+                        agent: this.name,
+                        step: key,
+                        workflow: workflowName,
+                      });
                       break;
                     }
                     wflowStep = wflowStep.steps[key] as any;
@@ -3677,7 +3665,6 @@ export class Agent<
                 err,
               );
               this.logger.trackException(mastraError);
-              this.logger.error(mastraError.toString());
               throw mastraError;
             }
           },
@@ -3875,7 +3862,6 @@ export class Agent<
             text: `Two or more tools resolve to the same name "${newKey}". Please rename one of the tools to avoid this collision.`,
           });
           this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
           throw mastraError;
         }
 
@@ -3920,6 +3906,7 @@ export class Agent<
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
+        agent: this.name,
         error: e,
         runId,
       });
@@ -3953,7 +3940,7 @@ export class Agent<
         ? this.resolveOverrideScorerReferences(overrideScorers)
         : await this.listScorers({ requestContext });
     } catch (e) {
-      this.logger.warn(`[Agent:${this.name}] - Failed to get scorers: ${e}`);
+      this.logger.warn('Failed to get scorers', { agent: this.name, error: e });
       return;
     }
 
@@ -4014,7 +4001,7 @@ export class Agent<
           const scorer = this.#mastra.getScorerById(scorerObject.scorer);
           result[id] = { scorer, sampling: scorerObject.sampling };
         } catch (error) {
-          this.logger.warn(`[Agent:${this.name}] - Failed to get scorer ${scorerObject.scorer}: ${error}`);
+          this.logger.warn('Failed to get scorer', { agent: this.name, scorer: scorerObject.scorer, error });
         }
       } else {
         result[id] = scorerObject;
@@ -4086,7 +4073,6 @@ export class Agent<
             text: `[Agent:${this.name}] - Unable to determine model ID. Please provide an explicit ID in the model configuration.`,
           });
           this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
           throw mastraError;
         }
 
@@ -4145,9 +4131,7 @@ export class Agent<
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
-      this.logger.warn(
-        `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
-      );
+      this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
@@ -4221,7 +4205,7 @@ export class Agent<
     });
 
     if (process.env.NODE_ENV !== 'test') {
-      this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
+      this.logger.debug('Starting generation', { agent: this.name, runId });
     }
 
     // Create a capabilities object with bound methods
@@ -4326,7 +4310,8 @@ export class Agent<
         };
       }),
     };
-    this.logger.debug(`[Agent:${this.name}] - Post processing LLM response`, {
+    this.logger.debug('Post processing LLM response', {
+      agent: this.name,
       runId,
       result: resToLog,
       threadId,
@@ -4430,7 +4415,6 @@ export class Agent<
           e,
         );
         this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
         throw mastraError;
       }
     }

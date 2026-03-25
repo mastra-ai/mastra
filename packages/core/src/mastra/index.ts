@@ -891,7 +891,7 @@ export class Mastra<
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
       const logger = this.getLogger();
-      logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+      logger.debug('Agent already exists, skipping', { key: agentKey });
       return;
     }
 
@@ -1164,7 +1164,7 @@ export class Mastra<
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
       const logger = this.getLogger();
-      logger.debug(`Vector with key ${vectorKey} already exists. Skipping addition.`);
+      logger.debug('Vector already exists, skipping', { key: vectorKey });
       return;
     }
 
@@ -1306,7 +1306,7 @@ export class Mastra<
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
       const logger = this.getLogger();
-      logger.debug(`Workspace with key ${workspaceKey} already exists. Skipping addition.`);
+      logger.debug('Workspace already exists, skipping', { key: workspaceKey });
       return;
     }
 
@@ -1504,9 +1504,13 @@ export class Mastra<
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
-        this.#logger.debug(`Restarted ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}`);
+        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
       } catch (error) {
-        this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
+        this.#logger.error('Failed to restart workflow run', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+          error,
+        });
       }
     }
   }
@@ -1571,7 +1575,7 @@ export class Mastra<
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
       const logger = this.getLogger();
-      logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
+      logger.debug('Scorer already exists, skipping', { key: scorerKey });
       return;
     }
 
@@ -1738,7 +1742,7 @@ export class Mastra<
     const blockKey = key || promptBlock.id;
     if (this.#promptBlocks[blockKey]) {
       const logger = this.getLogger();
-      logger.debug(`Prompt block with key ${blockKey} already exists. Skipping addition.`);
+      logger.debug('Prompt block already exists, skipping', { key: blockKey });
       return;
     }
     this.#promptBlocks[blockKey] = promptBlock;
@@ -1944,7 +1948,7 @@ export class Mastra<
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
       const logger = this.getLogger();
-      logger.debug(`Tool with key ${toolKey} already exists. Skipping addition.`);
+      logger.debug('Tool already exists, skipping', { key: toolKey });
       return;
     }
 
@@ -2095,7 +2099,7 @@ export class Mastra<
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
       const logger = this.getLogger();
-      logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
+      logger.debug('Processor already exists, skipping', { key: processorKey });
       return;
     }
 
@@ -2279,7 +2283,7 @@ export class Mastra<
     const memoryRegistry = this.#memory as Record<string, MastraMemory>;
     if (memoryRegistry[memoryKey]) {
       const logger = this.getLogger();
-      logger.debug(`Memory with key ${memoryKey} already exists. Skipping addition.`);
+      logger.debug('Memory already exists, skipping', { key: memoryKey });
       return;
     }
 
@@ -2349,7 +2353,7 @@ export class Mastra<
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
       const logger = this.getLogger();
-      logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
+      logger.debug('Workflow already exists, skipping', { key: workflowKey });
       return;
     }
 
@@ -2840,7 +2844,7 @@ export class Mastra<
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
       const logger = this.getLogger();
-      logger.debug(`MCP server with key ${serverKey} already exists. Skipping addition.`);
+      logger.debug('MCP server already exists, skipping', { key: serverKey });
       return;
     }
 
@@ -3167,7 +3171,7 @@ export class Mastra<
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {
       const logger = this.getLogger();
-      logger.debug(`Gateway with key ${gatewayKey} already exists. Skipping addition.`);
+      logger.debug('Gateway already exists, skipping', { key: gatewayKey });
       return;
     }
 

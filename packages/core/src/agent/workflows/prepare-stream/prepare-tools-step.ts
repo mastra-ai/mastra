@@ -47,7 +47,9 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         .filter(Boolean)
         .join(', ');
 
-      capabilities.logger.debug(`[Agent:${capabilities.agentName}] - Enhancing tools: ${toolEnhancements}`, {
+      capabilities.logger.debug('Enhancing tools', {
+        agentName: capabilities.agentName,
+        toolEnhancements,
         runId,
         toolsets: options?.toolsets ? Object.keys(options?.toolsets) : undefined,
         clientTools: options?.clientTools ? Object.keys(options?.clientTools) : undefined,
