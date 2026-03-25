@@ -439,21 +439,22 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
   );
 
   // Score enrichment
-  const { scoresByTraceId } = useAgentTraceScores({
+  const { scoresByTraceId, isLoading: isTraceScoresLoading } = useAgentTraceScores({
     agentId,
     scorerId: filters.scorerId,
     enabled: Boolean(filters.scorerId),
   });
 
-  // Client-side score filtering
+  // Client-side score filtering — skip while scores are still loading
+  // to avoid clearing the list (and bulk selection) before data arrives
   const scoreFilteredTraces = useMemo(() => {
-    if (!filters.scorerId || filters.scoreThreshold === undefined) return filteredTraces;
+    if (!filters.scorerId || filters.scoreThreshold === undefined || isTraceScoresLoading) return filteredTraces;
     return filteredTraces.filter(t => {
       const scores = scoresByTraceId.get(t.traceId);
       if (!scores?.length) return false;
       return scores.some(s => s.score <= filters.scoreThreshold!);
     });
-  }, [filteredTraces, filters.scorerId, filters.scoreThreshold, scoresByTraceId]);
+  }, [filteredTraces, filters.scorerId, filters.scoreThreshold, scoresByTraceId, isTraceScoresLoading]);
 
   const scorerActive = Boolean(filters.scorerId);
 
