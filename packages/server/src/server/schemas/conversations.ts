@@ -1,5 +1,6 @@
 import z from 'zod';
-import { getThreadByIdResponseSchema, listMessagesResponseSchema } from './memory';
+import { getThreadByIdResponseSchema } from './memory';
+import { conversationItemSchema } from './responses';
 
 export const conversationIdPathParams = z.object({
   conversationId: z.string().describe('Unique identifier for the conversation thread'),
@@ -19,7 +20,15 @@ export const conversationObjectSchema = z.object({
   id: z.string(),
   object: z.literal('conversation'),
   thread: getThreadByIdResponseSchema,
-  messages: listMessagesResponseSchema.shape.messages,
+});
+
+export const conversationItemsListSchema = z.object({
+  object: z.literal('list'),
+  data: z.array(conversationItemSchema),
+  first_id: z.string().nullable(),
+  last_id: z.string().nullable(),
+  has_more: z.boolean(),
 });
 
 export type ConversationObject = z.infer<typeof conversationObjectSchema>;
+export type ConversationItemsList = z.infer<typeof conversationItemsListSchema>;

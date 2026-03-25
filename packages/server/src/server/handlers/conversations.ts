@@ -2,28 +2,33 @@ import { randomUUID } from 'node:crypto';
 import { HTTPException } from '../http-exception';
 import {
   conversationIdPathParams,
+  conversationItemsListSchema,
   conversationObjectSchema,
   createConversationBodySchema,
 } from '../schemas/conversations';
-import type { ConversationObject } from '../schemas/conversations';
+import type { ConversationItemsList, ConversationObject } from '../schemas/conversations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
+import { buildConversationItems } from './responses.adapter';
 import { getMemoryStore } from './responses.storage';
 import { getEffectiveResourceId } from './utils';
 
-function buildConversationObject({
-  thread,
-  messages,
-}: {
-  thread: ConversationObject['thread'];
-  messages: ConversationObject['messages'];
-}): ConversationObject {
+function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
   return {
     id: thread.id,
     object: 'conversation',
     thread,
-    messages,
+  };
+}
+
+function buildConversationItemsList(items: ConversationItemsList['data']): ConversationItemsList {
+  return {
+    object: 'list',
+    data: items,
+    first_id: items[0]?.id ?? null,
+    last_id: items.at(-1)?.id ?? null,
+    has_more: false,
   };
 }
 
@@ -59,21 +64,21 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
         metadata,
       });
 
-      return buildConversationObject({ thread, messages: [] });
+      return buildConversationObject({ thread });
     } catch (error) {
       return handleError(error, 'Error creating conversation');
     }
   },
 });
 
-export const GET_CONVERSATION_ROUTE = createRoute({
+export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   method: 'GET',
-  path: '/v1/conversations/:conversationId',
+  path: '/v1/conversations/:conversationId/items',
   responseType: 'json',
   pathParamSchema: conversationIdPathParams,
-  responseSchema: conversationObjectSchema,
-  summary: 'Retrieve a conversation',
-  description: 'Returns a thread-backed conversation and the messages stored in that thread',
+  responseSchema: conversationItemsListSchema,
+  summary: 'List conversation items',
+  description: 'Returns OpenAI-style conversation items derived from the stored thread messages',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
@@ -100,7 +105,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
         perPage: 1000,
       });
 
-      return buildConversationObject({ thread, messages });
+      return buildConversationItemsList(buildConversationItems(messages));
     } catch (error) {
       return handleError(error, 'Error retrieving conversation');
     }

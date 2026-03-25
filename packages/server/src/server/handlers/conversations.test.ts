@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CREATE_CONVERSATION_ROUTE, GET_CONVERSATION_ROUTE } from './conversations';
+import { CREATE_CONVERSATION_ROUTE, GET_CONVERSATION_ITEMS_ROUTE } from './conversations';
 import { createTestServerContext } from './test-utils';
 
 describe('Conversation Handlers', () => {
@@ -47,11 +47,10 @@ describe('Conversation Handlers', () => {
         id: 'conv_123',
         resourceId: 'conv_123',
       },
-      messages: [],
     });
   });
 
-  it('retrieves a conversation with its thread messages', async () => {
+  it('lists conversation items derived from thread messages', async () => {
     const thread = await memory.createThread({
       threadId: 'conv_456',
       resourceId: 'conv_456',
@@ -74,22 +73,20 @@ describe('Conversation Handlers', () => {
       ],
     });
 
-    const conversation = await GET_CONVERSATION_ROUTE.handler({
+    const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
       ...createTestServerContext({ mastra }),
       conversationId: thread.id,
     });
 
-    expect(conversation).toMatchObject({
-      id: thread.id,
-      object: 'conversation',
-      thread: {
-        id: thread.id,
-      },
-      messages: [
+    expect(items).toMatchObject({
+      object: 'list',
+      data: [
         {
           id: 'msg_1',
-          threadId: thread.id,
+          type: 'message',
           role: 'user',
+          status: 'completed',
+          content: [{ type: 'input_text', text: 'Hello conversation' }],
         },
       ],
     });

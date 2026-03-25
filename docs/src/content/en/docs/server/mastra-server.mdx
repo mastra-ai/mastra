@@ -60,7 +60,7 @@ Visit the [configuration reference](/reference/configuration#server-options) for
 
 ## OpenAI-compatible Responses API
 
-Mastra also exposes a Responses API-compatible route. This route is an adapter layer on top of Mastra agents, memory, and storage, not a raw provider proxy. By default, the generated server serves it at `/api/v1/responses`, along with `GET /api/v1/responses/:responseId`, `DELETE /api/v1/responses/:responseId`, `POST /api/v1/conversations`, and `GET /api/v1/conversations/:conversationId`.
+Mastra also exposes a Responses API-compatible route. This route is an adapter layer on top of Mastra agents, memory, and storage, not a raw provider proxy. By default, the generated server serves it at `/api/v1/responses`, along with `GET /api/v1/responses/:responseId`, `DELETE /api/v1/responses/:responseId`, `POST /api/v1/conversations`, and `GET /api/v1/conversations/:conversationId/items`.
 
 Use a Mastra model string such as `openai/gpt-5` for `model`, and pass `agent_id` to select the registered Mastra agent that should handle the request. Initial Responses requests must target an agent directly. Stored follow-up turns can omit `agent_id` when continuing with `previous_response_id`:
 

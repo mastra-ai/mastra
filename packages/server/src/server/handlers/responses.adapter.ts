@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { isProviderDefinedTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
-import type { ResponseInputMessage, ResponseObject, ResponseOutputItem, ResponseTool } from '../schemas/responses';
+import type {
+  ConversationItem,
+  ResponseInputMessage,
+  ResponseObject,
+  ResponseOutputItem,
+  ResponseTool,
+} from '../schemas/responses';
 import type { StoredResponseTurn, ProviderMetadataLike, UsageLike } from './responses.storage';
 
 export type InputMessage = {
@@ -121,6 +127,31 @@ function createOutputMessage({
   };
 }
 
+function createConversationMessage({
+  messageId,
+  role,
+  text,
+}: {
+  messageId: string;
+  role: 'system' | 'user' | 'assistant';
+  text: string;
+}) {
+  return {
+    id: messageId,
+    type: 'message' as const,
+    role,
+    status: 'completed' as const,
+    content: [
+      role === 'assistant'
+        ? createOutputTextPart(text)
+        : {
+            type: 'input_text' as const,
+            text,
+          },
+    ],
+  };
+}
+
 function createFunctionCallItem({
   itemId,
   callId,
@@ -151,29 +182,11 @@ function createFunctionCallOutputItem({ itemId, callId, output }: { itemId: stri
   };
 }
 
-/**
- * Converts stored response-turn messages into Responses API output items.
- */
-export function buildResponseOutput({
-  messages,
-  outputMessageId,
-  status,
-  fallbackText,
-}: {
-  messages: MastraDBMessage[] | undefined;
-  outputMessageId: string;
-  status: ResponseObject['status'];
-  fallbackText: string;
-}): ResponseOutputItem[] {
-  if (!messages?.length) {
-    return [createOutputMessage({ messageId: outputMessageId, status, text: fallbackText })];
-  }
-
-  const output: ResponseOutputItem[] = [];
+function buildToolCallItems(messages: MastraDBMessage[]) {
+  const items: Array<Extract<ConversationItem, { type: 'function_call' | 'function_call_output' }>> = [];
   const toolResultCallIds = new Set<string>();
   const emittedCallIds = new Set<string>();
   const emittedResultCallIds = new Set<string>();
-  const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
 
   for (const message of messages) {
     const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
@@ -194,9 +207,8 @@ export function buildResponseOutput({
     }
   }
 
-  for (const [messageIndex, message] of messages.entries()) {
+  for (const message of messages) {
     const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
-    const text = getMessageText(message);
 
     for (const [partIndex, part] of parts.entries()) {
       if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
@@ -211,7 +223,7 @@ export function buildResponseOutput({
           : getToolKey(null, message.id, partIndex);
 
       if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
-        output.push(
+        items.push(
           createFunctionCallItem({
             itemId: `${message.id}:${partIndex}:call`,
             callId: toolCallId,
@@ -227,7 +239,7 @@ export function buildResponseOutput({
         !emittedResultCallIds.has(toolCallId) &&
         (getMessageRole(message) === 'tool' || !toolResultCallIds.has(toolCallId))
       ) {
-        output.push(
+        items.push(
           createFunctionCallOutputItem({
             itemId: `${message.id}:${partIndex}:output`,
             callId: toolCallId,
@@ -237,7 +249,80 @@ export function buildResponseOutput({
         emittedResultCallIds.add(toolCallId);
       }
     }
+  }
 
+  return items;
+}
+
+/**
+ * Converts stored thread messages into OpenAI-style conversation items.
+ */
+export function buildConversationItems(messages: MastraDBMessage[]): ConversationItem[] {
+  if (!messages.length) {
+    return [];
+  }
+
+  const items: ConversationItem[] = [];
+  const toolItems = buildToolCallItems(messages);
+
+  for (const message of messages) {
+    const role = getMessageRole(message);
+    const text = getMessageText(message);
+
+    if ((role === 'user' || role === 'system' || role === 'assistant') && text) {
+      items.push(
+        createConversationMessage({
+          messageId: message.id,
+          role,
+          text,
+        }),
+      );
+      continue;
+    }
+
+    if (role === 'assistant' && !text) {
+      const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+      const hasOnlyToolInvocations = parts.every(
+        part => isRecord(part) && part.type === 'tool-invocation' && isRecord(part.toolInvocation),
+      );
+
+      if (hasOnlyToolInvocations) {
+        continue;
+      }
+    }
+
+    if (role === 'tool') {
+      continue;
+    }
+  }
+
+  return [...toolItems, ...items];
+}
+
+/**
+ * Converts stored response-turn messages into Responses API output items.
+ */
+export function buildResponseOutput({
+  messages,
+  outputMessageId,
+  status,
+  fallbackText,
+}: {
+  messages: MastraDBMessage[] | undefined;
+  outputMessageId: string;
+  status: ResponseObject['status'];
+  fallbackText: string;
+}): ResponseOutputItem[] {
+  if (!messages?.length) {
+    return [createOutputMessage({ messageId: outputMessageId, status, text: fallbackText })];
+  }
+
+  const output: ResponseOutputItem[] = [];
+  const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
+  output.push(...buildToolCallItems(messages));
+
+  for (const [messageIndex, message] of messages.entries()) {
+    const text = getMessageText(message);
     if (getMessageRole(message) === 'assistant' && text) {
       output.push(
         createOutputMessage({

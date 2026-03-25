@@ -39,7 +39,6 @@ describe('Conversations Resource', () => {
         id: 'conv_123',
         resourceId: 'conv_123',
       },
-      messages: [],
     });
 
     const conversation = await client.conversations.create({
@@ -65,29 +64,26 @@ describe('Conversations Resource', () => {
 
   it('retrieves a conversation', async () => {
     mockJsonResponse({
-      id: 'conv_123',
-      object: 'conversation',
-      thread: {
-        id: 'conv_123',
-        resourceId: 'conv_123',
-      },
-      messages: [
+      object: 'list',
+      data: [
         {
           id: 'msg_1',
-          threadId: 'conv_123',
-          resourceId: 'conv_123',
+          type: 'message',
           role: 'user',
-          type: 'text',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          status: 'completed',
+          content: [{ type: 'input_text', text: 'Hello' }],
         },
       ],
+      first_id: 'msg_1',
+      last_id: 'msg_1',
+      has_more: false,
     });
 
-    const conversation = await client.conversations.retrieve('conv_123');
-    expect(conversation.thread.id).toBe('conv_123');
-    expect(conversation.messages).toHaveLength(1);
+    const items = await client.conversations.retrieve('conv_123');
+    expect(items.data).toHaveLength(1);
+    expect(items.first_id).toBe('msg_1');
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/v1/conversations/conv_123',
+      'http://localhost:4111/api/v1/conversations/conv_123/items',
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

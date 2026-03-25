@@ -1,5 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ClientOptions, Conversation, CreateConversationParams } from '../types';
+import type { ClientOptions, Conversation, ConversationItemsPage, CreateConversationParams } from '../types';
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
@@ -16,9 +16,12 @@ export class Conversations extends BaseResource {
     });
   }
 
-  retrieve(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<Conversation> {
+  retrieve(
+    conversationId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ConversationItemsPage> {
     return this.request(
-      `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
+      `/v1/conversations/${encodeURIComponent(conversationId)}/items${requestContextQueryString(requestContext)}`,
     );
   }
 }

@@ -144,6 +144,29 @@ export type ResponseTool = {
 
 export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
 
+export type ConversationItemInputText = {
+  type: 'input_text';
+  text: string;
+};
+
+export type ConversationItemMessage = {
+  id: string;
+  type: 'message';
+  role: 'system' | 'user' | 'assistant';
+  status: 'completed';
+  content: Array<ConversationItemInputText | ResponseOutputText>;
+};
+
+export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemsPage = {
+  object: 'list';
+  data: ConversationItem[];
+  first_id: string | null;
+  last_id: string | null;
+  has_more: boolean;
+};
+
 export type ResponsesResponse = {
   id: string;
   object: 'response';
@@ -197,7 +220,6 @@ export type Conversation = {
   id: string;
   object: 'conversation';
   thread: StorageThreadType;
-  messages: MastraDBMessage[];
 };
 
 export type CreateConversationParams = {

@@ -7,7 +7,7 @@ packages:
 
 # Conversations API
 
-The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation and retrieve its stored messages.
+The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation and retrieve its stored items.
 
 In Mastra, a conversation ID is the raw memory thread ID. Responses API calls can return this value as `conversation_id`, and the Conversations API lets you create and inspect the same thread directly.
 
@@ -29,12 +29,12 @@ const conversation = await client.conversations.create({
 console.log(conversation.id)
 ```
 
-Retrieve a conversation and its stored messages:
+Retrieve the stored items for a conversation:
 
 ```typescript
-const conversation = await client.conversations.retrieve('thread_123')
+const items = await client.conversations.retrieve('thread_123')
 
-console.log(conversation.messages)
+console.log(items.data)
 ```
 
 ## Parameters
@@ -99,24 +99,30 @@ const conversation = await client.conversations.create({
 
 #### `retrieve(conversationId, requestContext?)`
 
-Retrieves a conversation by its thread ID and includes the stored messages in that thread.
+Retrieves the item list for a conversation by its thread ID.
 
 ```typescript
-const conversation = await client.conversations.retrieve('thread_123')
+const items = await client.conversations.retrieve('thread_123')
 
-console.log(conversation.thread)
-console.log(conversation.messages)
+console.log(items.data)
 ```
 
-**Returns:** `Promise<Conversation>`.
+**Returns:** `Promise<ConversationItemsPage>`.
 
-## Conversation shape
+## Response shapes
 
-A conversation object includes:
+`create()` returns a conversation object with:
 
 - `id`: The raw thread ID
 - `object`: Always `'conversation'`
 - `thread`: The stored thread record
-- `messages`: The messages currently stored in that thread
 
-Use this API when you want to create a conversation before the first Responses request, or when you want to inspect the full thread behind a stored Responses flow.
+`retrieve()` returns an item list with:
+
+- `object`: Always `'list'`
+- `data`: Conversation items such as `message`, `function_call`, and `function_call_output`
+- `first_id`: The first item ID in the page
+- `last_id`: The last item ID in the page
+- `has_more`: Whether more items exist beyond this page
+
+Use this API when you want to create a conversation before the first Responses request, or when you want to inspect the stored item history behind a Responses flow.

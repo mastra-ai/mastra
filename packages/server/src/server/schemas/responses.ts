@@ -66,6 +66,13 @@ export const responseOutputTextSchema = z.object({
   logprobs: z.array(z.unknown()).optional(),
 });
 
+export const responseInputTextContentSchema = z.object({
+  type: z.literal('input_text'),
+  text: z.string(),
+});
+
+export const conversationMessageContentSchema = z.union([responseInputTextContentSchema, responseOutputTextSchema]);
+
 export const responseOutputMessageSchema = z.object({
   id: z.string(),
   type: z.literal('message'),
@@ -124,6 +131,22 @@ export const responseOutputItemSchema = z.union([
 ]);
 
 export type ResponseOutputItem = z.infer<typeof responseOutputItemSchema>;
+
+export const conversationItemMessageSchema = z.object({
+  id: z.string(),
+  type: z.literal('message'),
+  role: z.enum(['system', 'user', 'assistant']),
+  status: z.literal('completed'),
+  content: z.array(conversationMessageContentSchema),
+});
+
+export const conversationItemSchema = z.union([
+  conversationItemMessageSchema,
+  responseOutputFunctionCallSchema,
+  responseOutputFunctionCallOutputSchema,
+]);
+
+export type ConversationItem = z.infer<typeof conversationItemSchema>;
 
 export const responseObjectSchema = z.object({
   id: z.string(),
