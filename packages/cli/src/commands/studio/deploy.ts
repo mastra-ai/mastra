@@ -52,15 +52,15 @@ function getMastraVersion(projectDir: string): string | null {
 }
 function runBuild(projectDir: string): void {
   const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
-  p.log.step('Running mastra build --studio...');
+  p.log.step('Running mastra build...');
   try {
-    execSync(`"${localMastra}" build --studio`, {
+    execSync(`"${localMastra}" build`, {
       cwd: projectDir,
       stdio: 'inherit',
       env: { ...process.env, NODE_ENV: 'production' },
     });
   } catch {
-    throw new Error('mastra build --studio failed');
+    throw new Error('mastra build failed');
   }
   console.info('');
 }
