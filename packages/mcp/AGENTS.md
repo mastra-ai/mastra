@@ -4,43 +4,16 @@
 
 This file applies to work in `packages/mcp/`.
 
-## Overview
-
-- `mcp` is Mastra's Model Context Protocol package for client and server integrations.
-- It affects both internal integrations and external MCP interoperability.
-
 ## Commands
 
-### Build
+- Build from root: `pnpm --filter ./packages/mcp build:lib`
+- Test from root: use `pnpm --filter ./packages/mcp test`, or the narrower `pnpm --filter ./packages/mcp test:client`, `pnpm --filter ./packages/mcp test:server`, or `pnpm --filter ./packages/mcp test:integration`
 
-- `pnpm build:mcp` from the repository root.
+## Test shape
 
-### Test
+- This package splits client, server, and integration coverage
+- Prefer the narrowest suite over running everything
 
-- `pnpm test`, `pnpm test:client`, `pnpm test:server`, or `pnpm test:integration` inside the package.
-- `pnpm test:mcp` from the repository root.
-- Prefer the client/server/integration split over running everything while iterating.
+## Notes
 
-### Typecheck
-
-- No package-local typecheck script is defined.
-- Use build and test commands to validate changes.
-
-### Lint and format
-
-- `pnpm lint` inside the package.
-- `pnpm --filter ./packages/mcp lint` from the repository root.
-
-## Working guidelines
-
-- Keep client, server, and shared code concerns separate.
-- Be careful with protocol compatibility, OAuth flows, and external SDK behavior.
-
-## Verification
-
-- Run the narrowest relevant suite first; do not default to broad repo verification for client-only or server-only MCP changes.
-- Run `pnpm build:lib` for export or packaging changes.
-
-## Dependencies
-
-- Downstream packages include editor integrations and MCP-related servers.
+- Keep client, server, and shared protocol concerns separate
