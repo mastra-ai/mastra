@@ -5,7 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@mastra/auth-auth0': link:../../auth/auth0
   '@mastra/auth-better-auth': link:../../auth/better-auth
+  '@mastra/auth-okta': link:../../auth/okta
   '@mastra/auth-workos': link:../../auth/workos
   '@mastra/auth-cloud': link:../../auth/cloud
   '@mastra/core': link:../../packages/core
@@ -36,12 +38,18 @@ importers:
       '@ai-sdk/provider':
         specifier: ^2.0.0
         version: 2.0.1
+      '@mastra/auth-auth0':
+        specifier: link:../../auth/auth0
+        version: link:../../auth/auth0
       '@mastra/auth-better-auth':
         specifier: link:../../auth/better-auth
         version: link:../../auth/better-auth
       '@mastra/auth-cloud':
         specifier: link:../../auth/cloud
         version: link:../../auth/cloud
+      '@mastra/auth-okta':
+        specifier: link:../../auth/okta
+        version: link:../../auth/okta
       '@mastra/auth-workos':
         specifier: link:../../auth/workos
         version: link:../../auth/workos

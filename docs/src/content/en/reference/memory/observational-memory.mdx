@@ -50,7 +50,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
     description:
       'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
     isOptional: true,
@@ -91,7 +91,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
             isOptional: true,
@@ -202,7 +202,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
             isOptional: true,
@@ -973,6 +973,57 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
     name: 'count',
     type: 'number',
     description: 'Number of matching messages found.',
+  },
+]}
+/>
+
+### ModelByInputTokens
+
+`ModelByInputTokens` selects a model based on the input token count. It chooses the model for the smallest threshold that covers the actual input size.
+
+#### Constructor
+
+```typescript
+new ModelByInputTokens(config)
+```
+
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+
+#### Example
+
+```typescript
+import { ModelByInputTokens } from '@mastra/memory'
+
+const selector = new ModelByInputTokens({
+  upTo: {
+    10_000: 'google/gemini-2.5-flash', // Fast for small inputs
+    40_000: 'openai/gpt-5.4-mini', // Stronger for medium inputs
+    1_000_000: 'openai/gpt-5.4', // Most capable for large inputs
+  },
+})
+```
+
+#### Behavior
+
+- Thresholds are sorted internally, so the order in the config object does not matter.
+- `inputTokens ≤ smallest threshold` → uses that threshold's model
+- `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
+- OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly
+
+#### Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resolve',
+    type: '(inputTokens: number) => MastraModelConfig',
+    description:
+      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold. When this happens during an OM run, callers receive a TripWire/empty-text outcome instead of a normal assistant response.',
+  },
+  {
+    name: 'getThresholds',
+    type: '() => number[]',
+    description: 'Returns the configured thresholds in ascending order. Useful for introspection.',
   },
 ]}
 />

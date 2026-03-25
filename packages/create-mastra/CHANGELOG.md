@@ -1,5 +1,23 @@
 # create-mastra
 
+## 1.3.16-alpha.1
+
+## 1.3.16-alpha.0
+
+## 1.3.15
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.5
+
+## 1.3.15-alpha.4
+
+## 1.3.15-alpha.3
+
+## 1.3.15-alpha.2
+
 ## 1.3.15-alpha.1
 
 ### Patch Changes

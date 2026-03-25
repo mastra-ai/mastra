@@ -2254,7 +2254,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const existingPending = Number(row.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await this.#client.execute({
+      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
+      const updateResult = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
           "observationTokenCount" = ?,
@@ -2262,7 +2263,9 @@ export class MemoryLibSQL extends MemoryStorage {
           "bufferedObservationChunks" = ?,
           "lastObservedAt" = ?,
           "updatedAt" = ?
-        WHERE id = ?`,
+        WHERE id = ?
+          AND "bufferedObservationChunks" IS NOT NULL
+          AND "bufferedObservationChunks" != '[]'`,
         args: [
           newActive,
           newTokenCount,
@@ -2273,6 +2276,17 @@ export class MemoryLibSQL extends MemoryStorage {
           input.id,
         ],
       });
+
+      if (updateResult.rowsAffected === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

@@ -67,14 +67,7 @@ function Datasets() {
             </div>
           </EntityListPageLayout.Top>
 
-          <DatasetsList
-            datasets={datasets}
-            isLoading={isLoading}
-            error={error}
-            onCreateClick={() => setIsCreateDialogOpen(true)}
-            search={search}
-            onSearch={setSearch}
-          />
+          <DatasetsList datasets={datasets} isLoading={isLoading} error={error} search={search} />
         </EntityListPageLayout>
 
         <CreateDatasetDialog

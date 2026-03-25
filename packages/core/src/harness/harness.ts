@@ -2819,6 +2819,13 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       });
     }
 
+    // Remove any explicitly disabled built-in tools
+    if (this.config.disableBuiltinTools?.length) {
+      for (const toolId of this.config.disableBuiltinTools) {
+        delete builtInTools[toolId];
+      }
+    }
+
     if (resolvedHarnessTools) {
       return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
     }
@@ -3031,6 +3038,15 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         console.error(`[Heartbeat:${id}] shutdown failed:`, error);
       }
     }
+  }
+
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
+
+  async destroy(): Promise<void> {
+    await this.stopHeartbeats();
+    await this.destroyWorkspace();
   }
 
   // ===========================================================================

@@ -53,14 +53,7 @@ function Agents() {
           </div>
         </EntityListPageLayout.Top>
 
-        <AgentsList
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          search={search}
-          onSearch={setSearch}
-          hideToolbar
-        />
+        <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
       </EntityListPageLayout>
     );
   }
