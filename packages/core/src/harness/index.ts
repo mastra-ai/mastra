@@ -32,5 +32,6 @@ export type {
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
+  BuiltinToolId,
   TokenUsage,
 } from './types';
