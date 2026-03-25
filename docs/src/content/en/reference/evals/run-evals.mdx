@@ -256,7 +256,7 @@ const result = await runEvals({
     },
   ],
   scorers: {
-    agent: [responseQualityScorer],
+    // agent: [responseQualityScorer], // Optional: add agent-level scorers
     trajectory: [trajectoryScorer],
   },
 })
