@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
 import type { ObservabilityContext } from '../observability';
+import type { SpanRecord } from '../storage/domains/observability/tracing';
 import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
 import type { StepResult } from '../workflows/types';
 
@@ -633,4 +634,257 @@ export function extractWorkflowTrajectory(
     totalDurationMs,
     rawWorkflowResult: { stepResults, stepExecutionPath },
   };
+}
+
+// ============================================================================
+// Trajectory Extraction — From Trace (Hierarchical)
+// ============================================================================
+
+/**
+ * Span types that are considered noise and should be skipped during
+ * trace-to-trajectory conversion (internal implementation details, not
+ * meaningful trajectory steps).
+ */
+const SKIPPED_SPAN_TYPES = new Set([
+  SpanType.GENERIC,
+  SpanType.MODEL_STEP,
+  SpanType.MODEL_CHUNK,
+  SpanType.WORKFLOW_CONDITIONAL_EVAL,
+]);
+
+type SpanTreeNode = {
+  span: SpanRecord;
+  children: SpanTreeNode[];
+};
+
+/**
+ * Converts a `SpanRecord` to the appropriate `TrajectoryStep` discriminated
+ * union type, including recursively-converted children.
+ */
+function spanToTrajectoryStep(node: SpanTreeNode): TrajectoryStep | null {
+  const { span, children: childNodes } = node;
+
+  if (SKIPPED_SPAN_TYPES.has(span.spanType)) {
+    return null;
+  }
+
+  const durationMs =
+    span.endedAt != null && span.startedAt != null ? span.endedAt.getTime() - span.startedAt.getTime() : undefined;
+
+  const childSteps = childNodes.map(spanToTrajectoryStep).filter((s): s is TrajectoryStep => s !== null);
+
+  const base: TrajectoryStepBase = {
+    name: span.name,
+    durationMs,
+    metadata: span.metadata as Record<string, unknown> | undefined,
+    ...(childSteps.length > 0 ? { children: childSteps } : {}),
+  };
+
+  const attrs = (span.attributes ?? {}) as Record<string, unknown>;
+
+  switch (span.spanType) {
+    case SpanType.TOOL_CALL: {
+      const toolArgs = toRecordOrUndefined(span.input);
+      const toolResult = toRecordOrUndefined(span.output);
+      return {
+        ...base,
+        stepType: 'tool_call',
+        toolArgs,
+        toolResult,
+        success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
+      };
+    }
+
+    case SpanType.MCP_TOOL_CALL: {
+      const toolArgs = toRecordOrUndefined(span.input);
+      const toolResult = toRecordOrUndefined(span.output);
+      return {
+        ...base,
+        stepType: 'mcp_tool_call',
+        toolArgs,
+        toolResult,
+        mcpServer: typeof attrs.mcpServer === 'string' ? attrs.mcpServer : undefined,
+        success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
+      };
+    }
+
+    case SpanType.MODEL_GENERATION: {
+      const usage = attrs.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+      return {
+        ...base,
+        stepType: 'model_generation',
+        modelId: typeof attrs.model === 'string' ? attrs.model : undefined,
+        promptTokens: usage?.inputTokens,
+        completionTokens: usage?.outputTokens,
+        finishReason: typeof attrs.finishReason === 'string' ? attrs.finishReason : undefined,
+      };
+    }
+
+    case SpanType.AGENT_RUN:
+      return {
+        ...base,
+        stepType: 'agent_run',
+        agentId: span.entityId ?? undefined,
+      };
+
+    case SpanType.WORKFLOW_RUN:
+      return {
+        ...base,
+        stepType: 'workflow_run',
+        workflowId: span.entityId ?? undefined,
+      };
+
+    case SpanType.WORKFLOW_STEP: {
+      const output = toRecordOrUndefined(span.output);
+      return {
+        ...base,
+        stepType: 'workflow_step',
+        stepId: span.name,
+        output,
+      };
+    }
+
+    case SpanType.WORKFLOW_CONDITIONAL:
+      return {
+        ...base,
+        stepType: 'workflow_conditional',
+      };
+
+    case SpanType.WORKFLOW_PARALLEL:
+      return {
+        ...base,
+        stepType: 'workflow_parallel',
+      };
+
+    case SpanType.WORKFLOW_LOOP:
+      return {
+        ...base,
+        stepType: 'workflow_loop',
+      };
+
+    case SpanType.WORKFLOW_SLEEP:
+      return {
+        ...base,
+        stepType: 'workflow_sleep',
+      };
+
+    case SpanType.WORKFLOW_WAIT_EVENT:
+      return {
+        ...base,
+        stepType: 'workflow_wait_event',
+      };
+
+    case SpanType.PROCESSOR_RUN:
+      return {
+        ...base,
+        stepType: 'processor_run',
+      };
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Safely converts a value to `Record<string, unknown>` or returns undefined.
+ */
+function toRecordOrUndefined(value: unknown): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return { value };
+}
+
+/**
+ * Extracts a hierarchical Trajectory from trace spans (as returned by the
+ * observability store's `getTrace()`).
+ *
+ * Builds a parent-child tree from `parentSpanId` references, then recursively
+ * converts each span to the appropriate `TrajectoryStep` discriminated union
+ * type with nested `children`.
+ *
+ * Noise spans (`generic`, `model_step`, `model_chunk`, `workflow_conditional_eval`)
+ * are automatically skipped.
+ *
+ * This is used by `runEvals` when storage is available to produce richer,
+ * hierarchical trajectories that include nested agent runs, tool calls, and
+ * model generations inside workflow or agent steps.
+ *
+ * @param spans - Flat array of span records from `getTrace().spans`
+ * @param rootSpanId - Optional span ID to use as root. If omitted, spans with
+ *   no parent are used as roots.
+ * @returns A Trajectory with hierarchical TrajectoryStep entries
+ *
+ * @example
+ * ```ts
+ * const trace = await observabilityStore.getTrace({ traceId });
+ * const trajectory = extractTrajectoryFromTrace(trace.spans, workflowSpanId);
+ * ```
+ */
+export function extractTrajectoryFromTrace(spans: SpanRecord[], rootSpanId?: string): Trajectory {
+  if (spans.length === 0) {
+    return { steps: [] };
+  }
+
+  // Build lookup map
+  const nodeMap = new Map<string, SpanTreeNode>();
+  for (const span of spans) {
+    nodeMap.set(span.spanId, { span, children: [] });
+  }
+
+  // Attach children to parents
+  const roots: SpanTreeNode[] = [];
+  for (const span of spans) {
+    const node = nodeMap.get(span.spanId)!;
+    if (span.parentSpanId && nodeMap.has(span.parentSpanId)) {
+      nodeMap.get(span.parentSpanId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  // Sort children by start time
+  for (const node of nodeMap.values()) {
+    node.children.sort((a, b) => a.span.startedAt.getTime() - b.span.startedAt.getTime());
+  }
+
+  // Find the root to start from
+  let targetRoots: SpanTreeNode[];
+  if (rootSpanId) {
+    const rootNode = nodeMap.get(rootSpanId);
+    targetRoots = rootNode ? [rootNode] : roots;
+  } else {
+    targetRoots = roots;
+  }
+
+  // If the target is a single root span (e.g., a workflow_run or agent_run),
+  // convert its children directly as the trajectory steps (the root itself
+  // is the "container", not a step in the trajectory)
+  let stepsToConvert: SpanTreeNode[];
+  if (targetRoots.length === 1) {
+    const root = targetRoots[0]!;
+    // If root is a container span type, use its children as trajectory steps
+    const containerTypes = new Set([SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN]);
+    if (containerTypes.has(root.span.spanType)) {
+      stepsToConvert = root.children;
+    } else {
+      stepsToConvert = targetRoots;
+    }
+  } else {
+    stepsToConvert = targetRoots;
+  }
+
+  const steps = stepsToConvert.map(spanToTrajectoryStep).filter((s): s is TrajectoryStep => s !== null);
+
+  // Calculate total duration from the root span(s)
+  let totalDurationMs: number | undefined;
+  if (targetRoots.length === 1) {
+    const root = targetRoots[0]!.span;
+    if (root.endedAt && root.startedAt) {
+      totalDurationMs = root.endedAt.getTime() - root.startedAt.getTime();
+    }
+  }
+
+  return { steps, totalDurationMs };
 }

@@ -101,9 +101,9 @@ console.log(`Processed ${result.summary.totalItems} items`)
   },
   {
     name: 'expectedTrajectory',
-    type: 'Trajectory',
+    type: 'TrajectoryExpectation',
     description:
-      'Expected trajectory for trajectory scoring. Passed to trajectory scorers as `run.expectedTrajectory`. Overrides the static `expectedTrajectory` in scorer constructors.',
+      'Expected trajectory configuration for trajectory scoring. Includes expected steps, ordering, efficiency budgets, blacklists, and tool failure tolerance. Passed to trajectory scorers as `run.expectedTrajectory`. Overrides the static defaults in scorer constructors.',
     isOptional: true,
   },
   {
@@ -145,7 +145,7 @@ For agents, use `AgentScorerConfig` to separate agent-level scorers from traject
     name: 'trajectory',
     type: 'MastraScorer[]',
     description:
-      'Scorers that receive a pre-extracted Trajectory object. The pipeline automatically converts agent messages to a Trajectory before passing to these scorers.',
+      'Scorers that receive a pre-extracted Trajectory object. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested tool calls and model generations). Otherwise, it falls back to extracting tool calls from agent messages.',
     isOptional: true,
   },
 ]}
@@ -173,7 +173,7 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
     name: 'trajectory',
     type: 'MastraScorer[]',
     description:
-      'Scorers that receive a pre-extracted Trajectory from the workflow step results and execution path. The pipeline automatically converts step results to a Trajectory before passing to these scorers.',
+      'Scorers that receive a pre-extracted Trajectory from the workflow execution. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested agent runs and tool calls within workflow steps). Otherwise, it falls back to extracting step results from the workflow output.',
     isOptional: true,
   },
 ]}

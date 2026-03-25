@@ -6,10 +6,11 @@ import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
+import type { MastraCompositeStore } from '../../storage';
 import { Workflow } from '../../workflows';
 import type { AnyWorkflow, WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
-import { extractTrajectory, extractWorkflowTrajectory } from '../types';
+import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
 
 type WorkflowRunOptions = WorkflowRunStartOptions & {
@@ -145,7 +146,7 @@ export async function runEvals(config: {
     data,
     async (item: RunEvalsDataItem<any>) => {
       const targetResult = await executeTarget(target, item, targetOptions);
-      const scorerResults = await runScorers(scorers, targetResult, item);
+      const scorerResults = await runScorers(scorers, targetResult, item, storage);
       scoreAccumulator.addScores(scorerResults);
 
       // Save scores to storage if available
@@ -309,6 +310,8 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, ta
   });
 
   return {
+    traceId: workflowResult.traceId,
+    spanId: workflowResult.spanId,
     scoringData: {
       input: item.input,
       output: workflowResult.status === 'success' ? workflowResult.result : undefined,
@@ -347,10 +350,36 @@ async function executeAgent(
   }
 }
 
+/**
+ * Attempts to extract a hierarchical trajectory from observability traces.
+ * Falls back to undefined if storage is not available or trace cannot be fetched.
+ */
+async function extractTrajectoryFromTraceStore(
+  storage: MastraCompositeStore | undefined,
+  traceId: string | undefined,
+  spanId: string | undefined,
+): Promise<ReturnType<typeof extractTrajectoryFromTrace> | undefined> {
+  if (!storage || !traceId) return undefined;
+
+  try {
+    const observabilityStore = await storage.getStore('observability');
+    if (!observabilityStore) return undefined;
+
+    const trace = await observabilityStore.getTrace({ traceId });
+    if (!trace?.spans?.length) return undefined;
+
+    return extractTrajectoryFromTrace(trace.spans, spanId);
+  } catch {
+    // Trace-based extraction is best-effort; fall back to existing extraction
+    return undefined;
+  }
+}
+
 async function runScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   targetResult: any,
   item: RunEvalsDataItem<any>,
+  storage?: MastraCompositeStore,
 ): Promise<Record<string, any>> {
   const scorerResults: Record<string, any> = {};
 
@@ -419,9 +448,13 @@ async function runScorers(
 
     if (scorers.trajectory) {
       const trajectoryScorerResults: Record<string, any> = {};
-      // Pre-extract the trajectory so scorers receive Trajectory, not raw MastraDBMessage[]
+
+      // Prefer hierarchical trace-based extraction when storage + traceId are available
+      const traceTrajectory = await extractTrajectoryFromTraceStore(storage, targetResult.traceId, targetResult.spanId);
+
+      // Fall back to flat extraction from MastraDBMessage[] tool invocations
       const rawOutput = targetResult.scoringData?.output;
-      const trajectory = rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
+      const trajectory = traceTrajectory ?? (rawOutput ? extractTrajectory(rawOutput) : { steps: [] });
 
       for (const scorer of scorers.trajectory) {
         try {
@@ -517,10 +550,17 @@ async function runScorers(
 
     if (scorers.trajectory) {
       const trajectoryScorerResults: Record<string, any> = {};
-      // Pre-extract the workflow trajectory from step results
-      const stepResults = targetResult.scoringData?.stepResults;
-      const stepExecutionPath = targetResult.scoringData?.stepExecutionPath;
-      const trajectory = stepResults ? extractWorkflowTrajectory(stepResults, stepExecutionPath) : { steps: [] };
+
+      // Prefer hierarchical trace-based extraction when storage + traceId are available
+      const traceTrajectory = await extractTrajectoryFromTraceStore(storage, targetResult.traceId, targetResult.spanId);
+
+      // Fall back to flat extraction from step results
+      let trajectory = traceTrajectory;
+      if (!trajectory) {
+        const stepResults = targetResult.scoringData?.stepResults;
+        const stepExecutionPath = targetResult.scoringData?.stepExecutionPath;
+        trajectory = stepResults ? extractWorkflowTrajectory(stepResults, stepExecutionPath) : { steps: [] };
+      }
 
       for (const scorer of scorers.trajectory) {
         try {

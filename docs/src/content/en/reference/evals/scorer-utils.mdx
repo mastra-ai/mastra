@@ -30,7 +30,11 @@ import {
 Trajectory extraction functions are available from `@mastra/core/evals`:
 
 ```typescript
-import { extractTrajectory, extractWorkflowTrajectory } from '@mastra/core/evals'
+import {
+  extractTrajectory,
+  extractWorkflowTrajectory,
+  extractTrajectoryFromTrace,
+} from '@mastra/core/evals'
 ```
 
 ## Message extraction
@@ -344,6 +348,49 @@ const trajectory = extractWorkflowTrajectory(
 ```
 
 **Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
+
+### `extractTrajectoryFromTrace`
+
+Builds a hierarchical `Trajectory` from observability trace spans (`SpanRecord[]`). Reconstructs the parent-child span tree and maps each span to the appropriate `TrajectoryStep` discriminated union type with nested `children`.
+
+This is the preferred extraction method when storage is available. The `runEvals` pipeline calls this automatically when the target's `Mastra` instance has a configured storage backend. It produces richer trajectories than `extractTrajectory` or `extractWorkflowTrajectory` because it captures the full execution tree, including nested agent runs, tool calls, and model generations.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractTrajectoryFromTrace } from '@mastra/core/evals'
+
+// After fetching a trace from the observability store
+const traceData = await observabilityStore.getTrace({ traceId })
+const trajectory = extractTrajectoryFromTrace(traceData.spans, rootSpanId)
+// trajectory.steps — hierarchical TrajectoryStep[] with children
+```
+
+**Parameters:**
+
+- `spans` (`SpanRecord[]`) — Array of span records from a trace query.
+- `rootSpanId` (`string`, optional) — Span ID to use as the starting point. When omitted, uses spans with no parent.
+
+**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]` with recursive `children` and `totalDurationMs`.
+
+**Span type mapping:**
+
+| Span type | Trajectory step type | Key fields extracted |
+| - | - | - |
+| `TOOL_CALL` | `tool_call` | `toolArgs`, `toolResult`, `success` |
+| `MCP_TOOL_CALL` | `mcp_tool_call` | `toolArgs`, `toolResult`, `mcpServer`, `success` |
+| `MODEL_GENERATION` | `model_generation` | `modelId`, `promptTokens`, `completionTokens`, `finishReason` |
+| `AGENT_RUN` | `agent_run` | `agentId` (from entity ID) |
+| `WORKFLOW_RUN` | `workflow_run` | `workflowId` (from entity ID) |
+| `WORKFLOW_STEP` | `workflow_step` | `output` |
+| `WORKFLOW_CONDITIONAL` | `workflow_conditional` | `conditionCount`, `selectedSteps` |
+| `WORKFLOW_PARALLEL` | `workflow_parallel` | `branchCount`, `parallelSteps` |
+| `WORKFLOW_LOOP` | `workflow_loop` | `loopType`, `totalIterations` |
+| `WORKFLOW_SLEEP` | `workflow_sleep` | `sleepDurationMs`, `sleepType` |
+| `WORKFLOW_WAIT_EVENT` | `workflow_wait_event` | `eventName`, `eventReceived` |
+| `PROCESSOR_RUN` | `processor_run` | `processorId` |
+
+Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITIONAL_EVAL` are skipped as noise.
 
 ### `compareTrajectories`
 

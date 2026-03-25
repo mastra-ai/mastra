@@ -13,7 +13,38 @@ Mastra provides two trajectory accuracy scorers for evaluating whether an agent 
 1. **Code-based scorer** - Deterministic evaluation using exact step matching and ordering
 1. **LLM-based scorer** - Semantic evaluation using AI to assess trajectory quality and appropriateness
 
-Both scorers work with agents and workflows. The `runEvals` pipeline automatically extracts trajectories from agent tool calls or workflow step results, so scorers receive a `Trajectory` object directly.
+Both scorers work with agents and workflows. The `runEvals` pipeline automatically extracts trajectories, so scorers receive a `Trajectory` object directly.
+
+## Trajectory extraction
+
+The `runEvals` pipeline uses two extraction strategies, depending on whether observability storage is configured:
+
+### Trace-based extraction (preferred)
+
+When the target's `Mastra` instance has storage configured, the pipeline fetches the full execution trace from the observability store and calls `extractTrajectoryFromTrace()`. This produces a hierarchical trajectory with nested `children`, capturing the complete execution tree — including nested agent runs, tool calls within workflow steps, and model generations.
+
+For example, a workflow that calls an agent, which in turn calls tools, produces:
+
+```
+workflow_run
+  └─ workflow_step (validate-input)
+  └─ workflow_step (process-data)
+       └─ agent_run (my-agent)
+            └─ model_generation
+            └─ tool_call (search)
+            └─ model_generation
+            └─ tool_call (summarize)
+  └─ workflow_step (save-result)
+```
+
+### Fallback extraction
+
+When storage is not available, the pipeline falls back to:
+
+- **Agents:** `extractTrajectory()` — Extracts `ToolCallStep` entries from `toolInvocations` in the agent's message output. Produces a flat list of tool calls.
+- **Workflows:** `extractWorkflowTrajectory()` — Extracts `WorkflowStepStep` entries from `stepResults`. Produces a flat list of workflow steps.
+
+These fallbacks don't capture nested execution or non-tool-call spans.
 
 ## Trajectory types
 
@@ -115,7 +146,7 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
   content={[
   {
     name: 'expectedTrajectory',
-    type: 'Trajectory',
+    type: 'TrajectoryExpectation',
     description:
       'Static expected trajectory to compare against. When provided, all dataset items use this trajectory. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
     isOptional: true,
@@ -125,7 +156,7 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
         type: 'TrajectoryStep[]',
         description:
           'Ordered list of expected steps. Each step uses the discriminated union — properties depend on stepType.',
-        required: true,
+        isOptional: true,
       },
     ],
   },
@@ -365,7 +396,7 @@ The `createTrajectoryAccuracyScorerLLM()` function from `@mastra/evals/scorers/p
   },
   {
     name: 'expectedTrajectory',
-    type: 'Trajectory',
+    type: 'TrajectoryExpectation',
     description:
       'Optional static expected trajectory to compare against. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
     isOptional: true,

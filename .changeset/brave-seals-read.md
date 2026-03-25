@@ -15,7 +15,9 @@
 - `createTrajectoryAccuracyScorerCode` — deterministic code-based accuracy scorer with strict/relaxed/unordered ordering modes.
 - `createTrajectoryAccuracyScorerLLM` — LLM-based scorer for semantic trajectory evaluation.
 
-**Utility functions:** `extractTrajectory`, `extractWorkflowTrajectory`, `compareTrajectories`, `checkTrajectoryEfficiency`, `checkTrajectoryBlacklist`, `analyzeToolFailures`.
+**Trace-based extraction:** `extractTrajectoryFromTrace()` builds hierarchical trajectories from observability trace spans. The `runEvals` pipeline automatically uses this when storage is configured, falling back to `extractTrajectory` (agents) or `extractWorkflowTrajectory` (workflows) when storage is unavailable. Trace-based extraction captures the full execution tree including nested agent runs, tool calls within workflow steps, and model generations.
+
+**Utility functions:** `extractTrajectory`, `extractWorkflowTrajectory`, `extractTrajectoryFromTrace`, `compareTrajectories`, `checkTrajectoryEfficiency`, `checkTrajectoryBlacklist`, `analyzeToolFailures`.
 
 **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
 
