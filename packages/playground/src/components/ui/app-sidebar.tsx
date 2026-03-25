@@ -211,7 +211,8 @@ function getIsLinkActive(link: SidebarLink, pathname: string, search: string): b
     if (routePrefix && pathname.startsWith(routePrefix)) return true;
     return false;
   }
-  return pathname.startsWith(link.url);
+  // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
+  return pathname === link.url || pathname.startsWith(link.url + '/');
 }
 
 export function AppSidebar() {
