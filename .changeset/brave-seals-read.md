@@ -19,11 +19,10 @@
 
 **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
 
-**Example — scoring an agent with static defaults:**
+**Example — unified scorer with agent-level defaults:**
 
 ```ts
 import { createTrajectoryScorerCode } from '@mastra/evals/scorers'
-import { runEvals } from '@mastra/core/evals'
 
 const scorer = createTrajectoryScorerCode({
   defaults: {
@@ -36,44 +35,28 @@ const scorer = createTrajectoryScorerCode({
     blacklistedTools: ['deleteAll'],
   },
 })
-
-const result = await runEvals({
-  target: myAgent,
-  scorers: { trajectory: [scorer] },
-  data: [{ input: 'Search and summarize the weather' }],
-})
 ```
 
-**Example — per-item expectations from a dataset:**
+**Example — dataset items with per-item trajectory expectations:**
 
 ```ts
-const scorer = createTrajectoryScorerCode({
-  defaults: {
-    blacklistedTools: ['deleteAll'],
-    maxSteps: 10,
+const datasetItems = [
+  {
+    input: 'Search for weather',
+    expectedTrajectory: {
+      steps: [{ stepType: 'tool_call', name: 'search' }],
+      maxSteps: 2,
+    },
   },
-})
-
-const result = await runEvals({
-  target: myAgent,
-  scorers: { trajectory: [scorer] },
-  data: [
-    {
-      input: 'Search for weather',
-      expectedTrajectory: {
-        steps: [{ stepType: 'tool_call', name: 'search' }],
-        maxSteps: 2,
-      },
+  {
+    input: 'Search and summarize weather',
+    expectedTrajectory: {
+      steps: [
+        { stepType: 'tool_call', name: 'search' },
+        { stepType: 'tool_call', name: 'summarize' },
+      ],
+      blacklistedTools: ['deleteAll'],
     },
-    {
-      input: 'Search and summarize weather',
-      expectedTrajectory: {
-        steps: [
-          { stepType: 'tool_call', name: 'search' },
-          { stepType: 'tool_call', name: 'summarize' },
-        ],
-      },
-    },
-  ],
-})
+  },
+]
 ```
