@@ -1,6 +1,38 @@
-import { DuckDBInstance, DuckDBTimestampValue } from '@duckdb/node-api';
-import type { DuckDBValue } from '@duckdb/node-api';
+import { DuckDBInstance, DuckDBTimestampValue, DuckDBTimestampTZValue } from '@duckdb/node-api';
+import type { DuckDBPreparedStatement } from '@duckdb/node-api';
 import { MastraBase } from '@mastra/core/base';
+
+/**
+ * Bind a single parameter to a prepared statement using explicit typed methods.
+ * This avoids the "Cannot create values of type ANY" error that occurs when
+ * DuckDB cannot infer parameter types from SQL context (e.g. json_extract_string).
+ */
+export function bindParam(stmt: DuckDBPreparedStatement, index: number, value: unknown): void {
+  if (value === null || value === undefined) {
+    stmt.bindNull(index);
+  } else if (typeof value === 'string') {
+    stmt.bindVarchar(index, value);
+  } else if (typeof value === 'number') {
+    if (Number.isInteger(value) && value >= -2147483648 && value <= 2147483647) {
+      stmt.bindInteger(index, value);
+    } else {
+      stmt.bindDouble(index, value);
+    }
+  } else if (typeof value === 'boolean') {
+    stmt.bindBoolean(index, value);
+  } else if (typeof value === 'bigint') {
+    stmt.bindBigInt(index, value);
+  } else if (value instanceof Date) {
+    stmt.bindTimestamp(index, new DuckDBTimestampValue(BigInt(value.getTime()) * 1000n));
+  } else if (value instanceof DuckDBTimestampValue) {
+    stmt.bindTimestamp(index, value);
+  } else if (value instanceof DuckDBTimestampTZValue) {
+    stmt.bindTimestampTZ(index, value);
+  } else {
+    // Fallback: serialize to JSON string
+    stmt.bindVarchar(index, JSON.stringify(value));
+  }
+}
 
 /** Convert DuckDB-specific return types to plain JS types */
 function toJsValue(val: unknown): unknown {
@@ -122,7 +154,9 @@ export class DuckDBConnection extends MastraBase {
       let paramIndex = 0;
       const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
       const stmt = await connection.prepare(preparedSql);
-      stmt.bind(params as DuckDBValue[]);
+      for (let i = 0; i < params.length; i++) {
+        bindParam(stmt, i + 1, params[i]);
+      }
       const result = await stmt.run();
       const rows = await result.getRows();
       const columns = result.columnNames();
@@ -151,7 +185,9 @@ export class DuckDBConnection extends MastraBase {
       let paramIndex = 0;
       const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
       const stmt = await connection.prepare(preparedSql);
-      stmt.bind(params as DuckDBValue[]);
+      for (let i = 0; i < params.length; i++) {
+        bindParam(stmt, i + 1, params[i]);
+      }
       await stmt.run();
     } finally {
       this.closeConnection(connection);
