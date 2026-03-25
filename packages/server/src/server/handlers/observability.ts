@@ -14,7 +14,7 @@ import {
   getTraceResponseSchema,
   dateRangeSchema,
 } from '@mastra/core/storage';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';

@@ -1,9 +1,8 @@
-import { ItemList } from '@/ds/components/ItemList';
-import { Column } from '@/ds/components/Columns';
-import { ScoreDelta } from './score-delta';
 import type { CompareExperimentsResponse } from '@mastra/client-js';
+import { ScoreDelta } from './score-delta';
+import { Column } from '@/ds/components/Columns';
+import { ItemList } from '@/ds/components/ItemList';
 import type { ItemListColumn } from '@/ds/components/ItemList/types';
-import { Ban, BanIcon } from 'lucide-react';
 
 type ComparisonItem = CompareExperimentsResponse['items'][number];
 

@@ -54,6 +54,8 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Observer-generated thread title */
+  threadTitle?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -1186,6 +1188,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   blockAfter?: number;
   /** Optional token budget for observer context (0 = full truncation, false = disabled) */
   previousObserverTokens?: number | false;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

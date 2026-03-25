@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { IconButton } from '@/ds/components/IconButton';

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -297,6 +297,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
+  agentId?: string;
   model?: MastraLanguageModel | MastraLegacyLanguageModel;
   /**
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.

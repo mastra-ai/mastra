@@ -1,5 +1,5 @@
-import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
 import { StudioConfigForm } from './studio-config-form';
+import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
 
 export const PlaygroundConfigGuard = () => {
   return (
