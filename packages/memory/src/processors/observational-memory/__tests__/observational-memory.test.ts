@@ -4,6 +4,15 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
+import { ModelByInputTokens } from '../model-by-input-tokens';
+import {
+  deriveObservationGroupProvenance,
+  parseObservationGroups,
+  reconcileObservationGroupsFromReflection,
+  renderObservationGroupsForReflection,
+} from '../observation-groups';
+import { getObservationsAsOf } from '../observation-utils';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -723,6 +732,34 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('**User');
       expect(formatted).toContain('Real content');
     });
+
+    it('should strip encryptedContent and truncate oversized tool results', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'WorkOS FGA Node SDK createResource assignRole check query' },
+              result: {
+                encryptedContent: 'x'.repeat(6000),
+                snippet: 'useful snippet '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
+      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
+      expect(formatted).toContain('[truncated ~');
+      expect(formatted).not.toContain('x'.repeat(200));
+    });
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -805,6 +842,42 @@ describe('Observer Agent Helpers', () => {
       expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-b">'))).toBe(true);
       expect(content.some(part => part.type === 'text' && part.text.includes('[Image #2: b.jpeg]'))).toBe(true);
       expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
+    });
+
+    it('should apply tool-result truncation in multi-thread observer history', () => {
+      const threadA = createTestMessage('ignored', 'assistant', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'search query' },
+              result: {
+                encryptedContent: 'y'.repeat(7000),
+                snippet: 'kept '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(new Map([['thread-a', [threadA]]]), ['thread-a'], {
+        maxToolResultTokens: 200,
+      });
+
+      const content = historyMessage.content as any[];
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+      expect(joinedText).toContain('[stripped encryptedContent: 7000 characters]');
+      expect(joinedText).toContain('[truncated ~');
+      expect(joinedText).not.toContain('y'.repeat(200));
     });
   });
 
@@ -1273,9 +1346,20 @@ User asked about </current-task> parsing and how it works
   });
 
   describe('sanitizeObservationLines', () => {
-    it('should pass through normal observations unchanged', () => {
+    it('should leave normal observation lines unchanged', () => {
       const obs = '- 🔴 User asked about React\n- 🟡 Some context';
-      expect(sanitizeObservationLines(obs)).toBe(obs);
+      const sanitized = sanitizeObservationLines(obs);
+
+      expect(sanitized).toBe(obs);
+    });
+
+    it('should preserve existing anchor IDs', () => {
+      const obs = '[O1] - 🔴 Already anchored\nDate: Mar 11, 2026';
+      const sanitized = sanitizeObservationLines(obs);
+      const lines = sanitized.split('\n');
+
+      expect(lines[0]).toBe('[O1] - 🔴 Already anchored');
+      expect(lines[1]).toBe('Date: Mar 11, 2026');
     });
 
     it('should truncate lines exceeding 10k characters', () => {
@@ -1285,13 +1369,47 @@ User asked about </current-task> parsing and how it works
       expect(result).toContain('- 🔴 Short line');
       expect(result).toContain('- 🟡 Another line');
       expect(result).toContain(' … [truncated]');
-      // The truncated line should be 10k + the suffix
+      expect(result).not.toContain('[O');
       const lines = result.split('\n');
-      expect(lines[1]!.length).toBeLessThan(11_000);
+      expect(lines[1]!.length).toBeLessThan(11_100);
     });
 
     it('should handle empty input', () => {
       expect(sanitizeObservationLines('')).toBe('');
+    });
+  });
+
+  describe('anchor IDs', () => {
+    it('should inject ordinal anchors into observation lines only', () => {
+      const observations = `Date: Mar 11, 2026
+- 🔴 First observation
+<observation-group id="abcd" range="m1:m2">
+  - 🟡 Nested observation
+</observation-group>
+- 🔴 Second observation`;
+      const anchored = injectAnchorIds(observations);
+      const lines = anchored.split('\n');
+
+      expect(lines[0]).toBe('Date: Mar 11, 2026');
+      expect(lines[1]).toBe('[O1] - 🔴 First observation');
+      expect(lines[2]).toBe('<observation-group id="abcd" range="m1:m2">');
+      expect(lines[3]).toBe('  [O1-N1] - 🟡 Nested observation');
+      expect(lines[4]).toBe('</observation-group>');
+      expect(lines[5]).toBe('[O2] - 🔴 Second observation');
+    });
+
+    it('should strip ephemeral anchors before canonical storage', () => {
+      const observations = `[O1] - 🔴 First observation\n  [O1-N1] - 🟡 Nested observation\n[O2] - 🔴 Second observation`;
+
+      expect(stripEphemeralAnchorIds(observations)).toBe(
+        `- 🔴 First observation\n  - 🟡 Nested observation\n- 🔴 Second observation`,
+      );
+    });
+
+    it('should parse existing anchor IDs', () => {
+      expect(parseAnchorId('[O12] - 🔴 Observation')).toBe('O12');
+      expect(parseAnchorId('[O12-N3] - 🔴 Observation')).toBe('O12-N3');
+      expect(parseAnchorId('- 🔴 Observation')).toBeNull();
     });
   });
 
@@ -1339,6 +1457,16 @@ User asked about </current-task> parsing and how it works
       expect(optimized).toContain('🔴 Critical info');
       expect(optimized).not.toContain('🟡');
       expect(optimized).not.toContain('🟢');
+    });
+
+    it('should strip anchor IDs before injecting context', () => {
+      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
+      const optimized = optimizeObservationsForContext(observations);
+
+      expect(optimized).toContain('🔴 Critical info');
+      expect(optimized).toContain('- Medium info');
+      expect(optimized).not.toContain('[O1]');
+      expect(optimized).not.toContain('[O2]');
     });
 
     it('should preserve red emojis', () => {
@@ -1396,12 +1524,31 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('buildReflectorPrompt', () => {
-    it('should include observations to reflect on', () => {
+    it('should include observations to reflect on with ephemeral anchor IDs', () => {
       const observations = '- 🔴 User is building a React app';
       const prompt = buildReflectorPrompt(observations);
 
       expect(prompt).toContain('OBSERVATIONS TO REFLECT ON');
-      expect(prompt).toContain('User is building a React app');
+      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+    });
+
+    it('should render grouped observations as markdown sections for reflection', () => {
+      const observations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+
+      const prompt = buildReflectorPrompt(observations);
+
+      expect(prompt).toContain('## Group `group-a`');
+      expect(prompt).toContain('_range: `m1:m2`_');
+      expect(prompt).toContain('## Group `group-b`');
+      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+      expect(prompt).toContain('[O2] - 🟡 Needs help with auth flow');
+      expect(prompt).not.toContain('[O1-N1] ## Group `group-a`');
     });
 
     it('should include manual prompt guidance if provided', () => {
@@ -1422,6 +1569,117 @@ describe('Reflector Agent Helpers', () => {
     });
   });
 
+  describe('Observation Groups', () => {
+    it('should render canonical groups into reflection markdown', () => {
+      const observations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+
+      expect(renderObservationGroupsForReflection(observations)).toBe(`## Group \`group-a\`
+_range: \`m1:m2\`_
+
+- 🔴 User is building a React app
+
+## Group \`group-b\`
+_range: \`m3:m4\`_
+
+- 🟡 Needs help with auth flow`);
+    });
+
+    it('should preserve ungrouped text in order when mixed with observation groups', () => {
+      const observations = `## Monday Jan 6
+
+- Legacy observation from before retrieval was enabled
+
+<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+## Tuesday Jan 7
+
+- Another legacy note added mid-stream
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>
+
+- Final ungrouped note`;
+
+      const rendered = renderObservationGroupsForReflection(observations)!;
+
+      // Ungrouped text and groups must appear in original order
+      const mondayIdx = rendered.indexOf('## Monday Jan 6');
+      const groupAIdx = rendered.indexOf('## Group `group-a`');
+      const tuesdayIdx = rendered.indexOf('## Tuesday Jan 7');
+      const groupBIdx = rendered.indexOf('## Group `group-b`');
+      const finalIdx = rendered.indexOf('Final ungrouped note');
+
+      expect(mondayIdx).toBeGreaterThanOrEqual(0);
+      expect(groupAIdx).toBeGreaterThan(mondayIdx);
+      expect(tuesdayIdx).toBeGreaterThan(groupAIdx);
+      expect(groupBIdx).toBeGreaterThan(tuesdayIdx);
+      expect(finalIdx).toBeGreaterThan(groupBIdx);
+
+      // Legacy content preserved verbatim
+      expect(rendered).toContain('Legacy observation from before retrieval was enabled');
+      expect(rendered).toContain('Another legacy note added mid-stream');
+      expect(rendered).toContain('Final ungrouped note');
+
+      // Groups still rendered with metadata
+      expect(rendered).toContain('_range: `m1:m2`_');
+      expect(rendered).toContain('_range: `m3:m4`_');
+    });
+
+    it('should derive merged group provenance from reflection edits', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const reflection = `## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow`;
+
+      expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
+        {
+          id: 'merged-project',
+          range: 'm1:m2,m3:m4',
+          content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
+          sourceGroupIds: ['group-a', 'group-b'],
+        },
+      ]);
+    });
+
+    it('should reconcile reflected markdown back into canonical grouped observations', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const reflection = `## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow`;
+
+      expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
+        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+  });
+
   describe('parseReflectorOutput', () => {
     it('should extract observations from output', () => {
       const output = `
@@ -1434,6 +1692,68 @@ describe('Reflector Agent Helpers', () => {
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should strip ephemeral anchor IDs from reflector output', () => {
+      const output = `
+<observations>
+[O1] - 🔴 Critical project context
+  [O1-N1] - 🟡 Nested detail
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output);
+      expect(result.observations).toContain('Critical project context');
+      expect(result.observations).toContain('Nested detail');
+      expect(result.observations).not.toContain('[O1]');
+      expect(result.observations).not.toContain('[O1-N1]');
+    });
+
+    it('should reconcile reflected markdown groups back to canonical grouped observations', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+[O2] - 🟡 Needs help with auth flow
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations)
+        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+
+    it('should keep original group ids for unchanged reflected sections', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`group-a\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" source-group-ids="group-a">
+- 🔴 User is building a React app
+</observation-group>`);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -1596,7 +1916,7 @@ describe('Token Counter', () => {
           parts: [
             {
               type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', args: {}, result: 'ok' },
             },
             { type: 'data-om-activation', data: { cycleId: 'cycle-1', observations: largeObservationText } } as any,
             { type: 'data-om-buffering-start', data: { cycleId: 'cycle-2' } } as any,
@@ -1614,7 +1934,7 @@ describe('Token Counter', () => {
           parts: [
             {
               type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', args: {}, result: 'ok' },
             },
           ],
         },
@@ -1797,6 +2117,68 @@ describe('ObservationalMemory Integration', () => {
 
       const history = await om.getHistory(threadId, resourceId);
       expect(history.length).toBe(2);
+    });
+  });
+
+  describe('config', () => {
+    it('should expose retrieval mode when enabled', () => {
+      const retrievalOm = new ObservationalMemory({
+        storage,
+        retrieval: true,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+      expect(retrievalOm.config).toEqual({
+        scope: 'thread',
+        retrieval: true,
+        observation: {
+          messageTokens: 500,
+          previousObserverTokens: 2000,
+        },
+        reflection: {
+          observationTokens: 1000,
+        },
+      });
+    });
+
+    it('should preserve observation group ranges in actor context when retrieval mode is enabled', () => {
+      const retrievalOm = new ObservationalMemory({
+        storage,
+        retrieval: true,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+      const formatted = (retrievalOm as any).formatObservationsForContext(
+        '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 User prefers direct answers\n</observation-group>',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      const formattedText = formatted.join('\n\n');
+
+      expect(formattedText).toContain('## Group `group-1`');
+      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
+      expect(formattedText).toContain('recall tool');
+    });
+
+    it('should default retrieval mode to false', () => {
+      expect(om.config.retrieval).toBe(false);
     });
   });
 
@@ -2848,6 +3230,14 @@ describe('Scenario: Information should be preserved through observation cycle', 
     // Both should be identical
     expect(systemPrompt).toBe(systemPromptWithUndefined);
     expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).not.toContain('<thread-title>');
+  });
+
+  it('observer system prompt should include thread title instructions when enabled', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+
+    expect(systemPrompt).toContain('<thread-title>');
+    expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
   });
 
   it('multi-thread observer system prompt should include custom instruction', () => {
@@ -2856,6 +3246,14 @@ describe('Scenario: Information should be preserved through observation cycle', 
 
     expect(systemPrompt).toContain(customInstruction);
     expect(systemPrompt).toContain('<thread id=');
+    expect(systemPrompt).not.toContain('<thread-title>');
+  });
+
+  it('multi-thread observer system prompt should include thread title instructions when enabled', () => {
+    const systemPrompt = buildObserverSystemPrompt(true, undefined, true);
+
+    expect(systemPrompt).toContain('<thread-title>Feature X implementation</thread-title>');
+    expect(systemPrompt).toContain('current-task, suggested-response, and thread-title');
   });
 });
 
@@ -3311,6 +3709,32 @@ describe('Thread Attribution Helpers', () => {
 
       expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
     });
+
+    it('should wrap observations in an observation group when a message range is provided and retrieval is enabled', async () => {
+      const retrievalOm = new ObservationalMemory({
+        storage,
+        retrieval: true,
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
+      const observations = '- 🔴 User likes coffee';
+      const result = await (retrievalOm as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
+
+      expect(result).toContain('<thread id="thread-123">');
+      expect(result).toContain('<observation-group id="');
+      expect(result).toContain('range="msg-1:msg-2"');
+      expect(result).toContain(observations);
+      expect(result).toContain('</observation-group>');
+      expect(result).toContain('</thread>');
+    });
+
+    it('should NOT wrap in observation group when retrieval is disabled even if messageRange is provided', async () => {
+      const observations = '- 🔴 User likes coffee';
+      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
+
+      expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
+      expect(result).not.toContain('<observation-group');
+    });
   });
 
   describe('replaceOrAppendThreadSection', () => {
@@ -3319,7 +3743,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toBe(newSection);
     });
@@ -3329,11 +3753,12 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toContain(existing);
       expect(result).toContain(newSection);
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // Message boundary delimiter is inserted between chunks for cache stability
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
     });
 
     it('should always append new thread sections (preserves temporal ordering)', () => {
@@ -3347,15 +3772,83 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
       expect(result).toContain('<thread id="thread-2">');
       // Old observation is preserved (appended, not replaced)
       expect(result).toContain('Old observation');
-      // New section is appended at the end
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // New section is appended at the end with a message boundary delimiter
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
+    });
+  });
+
+  describe('getObservationsAsOf', () => {
+    it('should return all chunks when asOf is after all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-03T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).toContain('User is working on a TypeScript project');
+    });
+
+    it('should exclude chunks after the asOf date', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-01T12:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).not.toContain('User is working on a TypeScript project');
+    });
+
+    it('should return only the first chunk when asOf is before all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2024-12-31T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).not.toContain('User prefers dark mode');
+    });
+
+    it('should include a chunk when asOf exactly matches its boundary date', () => {
+      const boundary = new Date('2025-01-01T10:00:00Z');
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(boundary),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, boundary);
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+    });
+
+    it('should return empty string for empty observations', () => {
+      expect(getObservationsAsOf('', new Date())).toBe('');
+      expect(getObservationsAsOf('  ', new Date())).toBe('');
+    });
+
+    it('should return the full text when there are no boundaries', () => {
+      const observations = '- User likes cats\n- User prefers dark mode';
+      const result = getObservationsAsOf(observations, new Date('2020-01-01'));
+      expect(result).toBe(observations);
     });
   });
 
@@ -3469,10 +3962,11 @@ Ask about preferred brewing method
       unobservedMessages: messages,
     });
 
-    // Check stored observations have thread tag
+    // Check stored observations have thread tag but no observation-group (retrieval is thread-only)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     expect(record?.activeObservations).toContain('<thread id="thread-1">');
     expect(record?.activeObservations).toContain('</thread>');
+    expect(record?.activeObservations).not.toContain('<observation-group');
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
@@ -3645,12 +4139,13 @@ Ask about preferred brewing method
 
     const om = new ObservationalMemory({
       storage,
+      retrieval: true,
       observation: {
         messageTokens: 100000,
         model: mockModel as any,
       },
       reflection: { observationTokens: 10000 },
-      scope: 'thread', // Thread scope
+      scope: 'thread', // Thread scope with retrieval
     });
 
     // Initialize record
@@ -3672,6 +4167,8 @@ Ask about preferred brewing method
     const record = await storage.getObservationalMemory('thread-1', 'resource-1');
     // Should NOT have thread tags in thread scope
     expect(record?.activeObservations).not.toContain('<thread id=');
+    expect(record?.activeObservations).toContain('<observation-group id="');
+    expect(record?.activeObservations).toContain('range="msg-1:msg-1"');
     expect(record?.activeObservations).toContain('User mentioned they like tea');
   });
 });
@@ -4187,7 +4684,11 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     });
     await storage.updateActiveObservations({
       id: record.id,
-      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      observations: [
+        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T09:30:00.000Z')).trim(),
+        '<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
+      ].join('\n\n'),
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
     });
@@ -4242,13 +4743,23 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       }) as any,
     });
 
-    // Extract the OM system message (tagged as 'observational-memory')
+    // Extract the OM system messages (tagged as 'observational-memory')
     const omSystemMessages = messageList.getSystemMessages('observational-memory');
-    expect(omSystemMessages.length).toBeGreaterThan(0);
+    expect(omSystemMessages.length).toBeGreaterThan(1);
 
-    const omSystemMessage = omSystemMessages[0]!;
-    const omContent =
-      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+    const omContents = omSystemMessages.map(message =>
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+    );
+    const omContent = omContents.join('\n\n');
+
+    expect(omContents[0]).toContain(
+      'The following observations block contains your memory of past conversations with this user.',
+    );
+    expect(omContents).toContain('<observations>');
+    expect(omContents).toContain(`<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>`);
+    expect(omContents).toContain(
+      `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
+    );
 
     // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
     // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
@@ -4771,6 +5282,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Reflected: User prefers TypeScript',
         tokenCount: 30,
+        inputTokenCount: 30,
         reflectedObservationLineCount: 5,
       });
 
@@ -4801,6 +5313,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Condensed reflection of obs 1 and 2',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: 2,
       });
 
@@ -4844,6 +5357,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Full condensed reflection',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: lineCount,
       });
 
@@ -4880,6 +5394,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Reflected summary of originals',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: 3,
       });
 
@@ -7324,6 +7839,370 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-thread';
+    const resourceId = 'pending-tool-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 2000, // Low threshold so observation would normally trigger
+        bufferTokens: 500,
+        bufferActivation: 0.7,
+      },
+      reflection: {
+        observationTokens: 50000, // High - don't trigger reflection
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold, but the last assistant
+    // message contains a pending tool call (state: 'call')
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            providerExecuted: true,
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Helper to wait for async buffering ops
+    async function waitForAsyncOps(timeoutMs = 3000) {
+      const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // Step 0: Load messages with pending tool call.
+    // Even though total tokens (~2200) exceed threshold (2000),
+    // OM should NOT trigger async buffering because a message has state: 'call'.
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: update the message in the messageList ───
+    // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 1: Now all tool calls are resolved, async buffering should fire
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should defer sync observation when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-sync-thread';
+    const resourceId = 'pending-tool-sync-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // bufferTokens: false → async buffering disabled, only sync observation path
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 500, // Low threshold so sync observation triggers at step > 0
+        bufferTokens: false as any, // Disable async buffering entirely
+      },
+      reflection: {
+        observationTokens: 50000,
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Sync Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `sync-pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'sync-pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            providerExecuted: true,
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_sync_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Step 0: Load messages (sync observation doesn't run at step 0 regardless)
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Step 1: Sync observation would normally fire (stepNumber > 0, tokens >= threshold),
+    // but should be skipped because of the pending tool call
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: mutate the part in the messageList ───
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'sync-pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 2: Now all tool calls are resolved, sync observation should fire
+    const requestContext3 = new RequestContext();
+    requestContext3.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext3.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext3,
+      stepNumber: 2,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
   describe('Full Async Reflection Flow', () => {
     /**
      * Helper that directly exercises storage-level buffering and activation
@@ -7687,6 +8566,7 @@ describe('Full Async Buffering Flow', () => {
         id: initial.id,
         reflection: '* Already buffered reflection',
         tokenCount: 20,
+        inputTokenCount: 20,
         reflectedObservationLineCount: 3,
       });
 
@@ -9000,6 +9880,40 @@ describe('Observer Context Optimization', () => {
       expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
     });
 
+    it('should preserve ✅ completion observations around truncation when budget allows', () => {
+      const tc = new TokenCounter();
+      const observations = [
+        '- Detail early 1',
+        '- ✅ Early completion marker',
+        '- Detail early 3',
+        ...Array.from({ length: 16 }, (_, i) => `- Observation line ${i + 4}`),
+      ].join('\n');
+      const desired = [
+        '- ✅ Early completion marker',
+        '[10 observations truncated here]',
+        '- Observation line 12',
+        '- Observation line 13',
+        '- Observation line 14',
+        '- Observation line 15',
+        '- Observation line 16',
+        '- Observation line 17',
+        '- Observation line 18',
+        '- Observation line 19',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObserverTokens: budget });
+
+      const result = prepareObserverContext(om, observations)!;
+      const lines = result.split('\n').filter(Boolean);
+      const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
+      const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
+
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('✅ Early completion marker');
+      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
+    });
+
     it('should drop oldest important observations first when still over budget', () => {
       const tc = new TokenCounter();
       // Budget just large enough to keep the newest important line + a small tail,
@@ -10252,5 +11166,129 @@ describe('Single-thread replay red tests', () => {
 
     const remainingIds = messageList.get.all.db().map((m: any) => m.id);
     expect(remainingIds).toEqual(unobservedIds);
+  });
+});
+
+describe('ModelByInputTokens with ObservationalMemory', () => {
+  it('should select observer model based on input token count', async () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+        50000: 'openai/gpt-4o',
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(4000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(10000)).toBe('openai/gpt-4o');
+  });
+
+  it('should throw when input exceeds the largest configured threshold', async () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+        50000: 'openai/gpt-4o',
+      },
+    });
+
+    // Tokens within range should work
+    expect(modelSelector.resolve(5000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(50000)).toBe('openai/gpt-4o');
+
+    // Tokens exceeding largest threshold should throw
+    expect(() => modelSelector.resolve(50001)).toThrow('exceeds the largest configured threshold');
+  });
+
+  it('should correctly report thresholds in ascending order', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        100000: 'model-c',
+        1000: 'model-a',
+        10000: 'model-b',
+      },
+    });
+
+    // getThresholds should return them sorted
+    expect(modelSelector.getThresholds()).toEqual([1000, 10000, 100000]);
+  });
+
+  it('should handle single threshold correctly', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(5000)).toBe('openai/gpt-4o-mini');
+    expect(() => modelSelector.resolve(5001)).toThrow('exceeds the largest configured threshold');
+  });
+
+  it('should reject thresholds with missing model targets', () => {
+    expect(
+      () =>
+        new ModelByInputTokens({
+          upTo: {
+            5000: undefined as any,
+          },
+        }),
+    ).toThrow('requires a valid model target for threshold 5000');
+  });
+
+  it('should accept object model targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          provider: 'openai',
+          modelId: 'gpt-4o-mini',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+    });
+  });
+
+  it('should accept OpenAI-compatible model config targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          id: 'openai/gpt-4o-mini',
+          url: 'https://example.com/v1',
+        },
+        10000: {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      id: 'openai/gpt-4o-mini',
+      url: 'https://example.com/v1',
+    });
+    expect(modelSelector.resolve(9000)).toEqual({
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+    });
+  });
+
+  it('should accept model instance targets', () => {
+    const modelInstance = {
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+      doGenerate: async () => ({}) as any,
+      doStream: async () => ({}) as any,
+    } as any;
+
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: modelInstance,
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe(modelInstance);
   });
 });

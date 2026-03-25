@@ -23,7 +23,8 @@
         "entityType": "agent",
         "entityId": "multi-step-agent",
         "attributes": {
-          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it."
+          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "availableTools": ["calculator"]
         },
         "metadata": {
           "runId": "<runId-1>"

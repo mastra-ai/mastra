@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { validateJSONData, type ImportableItem, type JSONValidationError } from '../utils/json-validation';
+import { validateJSONData } from '../utils/json-validation';
+import type { ImportableItem, JSONValidationError } from '../utils/json-validation';
 
 /** Result of parsing a JSON file */
 export interface ParsedJSON {
@@ -29,7 +30,7 @@ export function useJSONParser() {
       let data: unknown;
       try {
         data = JSON.parse(text);
-      } catch (parseErr) {
+      } catch {
         throw new Error('Invalid JSON format. Please check your file syntax.');
       }
 

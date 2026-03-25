@@ -1,6 +1,3 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
 import type {
   ListScorerVersionsParams,
   CreateScorerVersionParams,
@@ -10,6 +7,9 @@ import type {
   ActivateScorerVersionResponse,
   DeleteScorerVersionResponse,
 } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListScorerVersionsParams, CreateScorerVersionParams };
 
@@ -53,8 +53,8 @@ export const useCreateScorerVersion = ({ scorerId }: { scorerId: string }) => {
     mutationFn: (params?: CreateScorerVersionParams) =>
       client.getStoredScorer(scorerId).createVersion(params, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
     },
   });
 };
@@ -70,8 +70,8 @@ export const useActivateScorerVersion = ({ scorerId }: { scorerId: string }) => 
   return useMutation<ActivateScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).activateVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
     },
   });
 };
@@ -87,8 +87,8 @@ export const useRestoreScorerVersion = ({ scorerId }: { scorerId: string }) => {
   return useMutation<ScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).restoreVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
     },
   });
 };
@@ -104,7 +104,7 @@ export const useDeleteScorerVersion = ({ scorerId }: { scorerId: string }) => {
   return useMutation<DeleteScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).deleteVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+      void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
     },
   });
 };

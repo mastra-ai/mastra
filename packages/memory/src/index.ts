@@ -40,24 +40,51 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compa
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
+import type { ObservationalMemoryConfig } from './processors/observational-memory';
+import { recallTool } from './tools/om-tools';
 import {
   updateWorkingMemoryTool,
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
 
+export {
+  ModelByInputTokens,
+  type ModelByInputTokensConfig,
+} from './processors/observational-memory/model-by-input-tokens';
+
 /**
  * Normalize a `boolean | object` observational memory config.
  * Returns the options object if enabled, undefined if disabled.
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
+type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> & {
+  model?: ObservationalMemoryConfig['model'];
+  observation?: ObservationalMemoryConfig['observation'];
+  reflection?: ObservationalMemoryConfig['reflection'];
+};
+
+type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
+  observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+};
+
+type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
+  options?: MemoryOptions;
+};
+
+type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
+  observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+};
+
+type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions;
+
 function normalizeObservationalMemoryConfig(
-  config: boolean | ObservationalMemoryOptions | undefined,
-): ObservationalMemoryOptions | undefined {
+  config: boolean | MemoryObservationalMemoryOptions | undefined,
+): NormalizedObservationalMemoryConfig | undefined {
   if (config === true) return { model: 'google/gemini-2.5-flash' };
   if (config === false || config === undefined) return undefined;
-  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
-  return config as ObservationalMemoryOptions;
+  if (typeof config === 'object' && config.enabled === false) return undefined;
+  return config as NormalizedObservationalMemoryConfig;
 }
 
 // Re-export for testing purposes
@@ -76,8 +103,8 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
-    super({ name: 'Memory', ...config });
+  constructor(config: MemoryConstructorConfig = {}) {
+    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -87,7 +114,7 @@ export class Memory extends MastraMemory {
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
-      observationalMemory: config.options?.observationalMemory,
+      observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
     this.threadConfig = mergedConfig;
   }
@@ -550,11 +577,13 @@ export class Memory extends MastraMemory {
 
       let reason = '';
 
+      const templateContent = typeof template?.content === 'string' ? template.content : null;
+
       // Normalize content for comparison (handles whitespace variations)
       // This catches template duplicates even when LLM returns slightly different whitespace
       const normalizeForComparison = (str: string) => str.replace(/\s+/g, ' ').trim();
       const normalizedNewMemory = normalizeForComparison(workingMemory);
-      const normalizedTemplate = template?.content ? normalizeForComparison(template.content) : '';
+      const normalizedTemplate = templateContent ? normalizeForComparison(templateContent) : '';
 
       if (existingWorkingMemory) {
         if (searchString && existingWorkingMemory?.includes(searchString)) {
@@ -562,7 +591,7 @@ export class Memory extends MastraMemory {
           reason = `found and replaced searchString with newMemory`;
         } else if (
           existingWorkingMemory.includes(workingMemory) ||
-          template?.content?.trim() === workingMemory.trim() ||
+          templateContent?.trim() === workingMemory.trim() ||
           // Also check normalized versions to catch template variations with different whitespace
           normalizedNewMemory === normalizedTemplate
         ) {
@@ -591,7 +620,7 @@ export class Memory extends MastraMemory {
             `
 ${workingMemory}`;
         }
-      } else if (workingMemory === template?.content || normalizedNewMemory === normalizedTemplate) {
+      } else if (workingMemory === templateContent || normalizedNewMemory === normalizedTemplate) {
         return {
           success: false,
           reason: `try again when you have data to add. newMemory was equal to the working memory template`,
@@ -602,11 +631,11 @@ ${workingMemory}`;
 
       // Remove empty template insertions which models sometimes duplicate
       // Use both exact and normalized matching to catch variations
-      if (template?.content) {
-        workingMemory = workingMemory.replaceAll(template.content, '');
+      if (templateContent) {
+        workingMemory = workingMemory.replaceAll(templateContent, '');
         // Also try to remove template with normalized line endings
-        const templateWithUnixLineEndings = template.content.replace(/\r\n/g, '\n');
-        const templateWithWindowsLineEndings = template.content.replace(/\n/g, '\r\n');
+        const templateWithUnixLineEndings = templateContent.replace(/\r\n/g, '\n');
+        const templateWithWindowsLineEndings = templateContent.replace(/\n/g, '\r\n');
         workingMemory = workingMemory.replaceAll(templateWithUnixLineEndings, '');
         workingMemory = workingMemory.replaceAll(templateWithWindowsLineEndings, '');
       }
@@ -1188,16 +1217,20 @@ Notes:
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
-    // Don't provide update tools in readOnly mode
+    const tools: Record<string, ToolAction<any, any, any>> = {};
+
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
-      return {
-        updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
-          ? // use the new experimental tool
-            __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-          : updateWorkingMemoryTool(mergedConfig),
-      };
+      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
+        ? __experimental_updateWorkingMemoryToolVNext(mergedConfig)
+        : updateWorkingMemoryTool(mergedConfig);
     }
-    return {};
+
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
+      tools.recall = recallTool(mergedConfig);
+    }
+
+    return tools;
   }
 
   /**
@@ -1945,9 +1978,17 @@ Notes:
     );
 
     // Get effective config (runtime config merged with instance config)
-    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
+    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
-    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+    const effectiveConfig = runtimeMemoryConfig
+      ? this.getMergedThreadConfig({
+          ...runtimeMemoryConfig,
+          observationalMemory: runtimeMemoryConfig.observationalMemory as
+            | ObservationalMemoryOptions
+            | boolean
+            | undefined,
+        })
+      : this.threadConfig;
 
     // Add ObservationalMemory processor if configured and not already present
     const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
@@ -2002,6 +2043,7 @@ Notes:
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
+      retrieval: omConfig.retrieval,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       observation: omConfig.observation
@@ -2016,6 +2058,7 @@ Notes:
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
+            threadTitle: omConfig.observation.threadTitle,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -2038,3 +2081,6 @@ export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/proc
 
 // Re-export clone-related types for convenience
 export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';
+
+// Observational Memory utilities
+export { getObservationsAsOf } from './processors/observational-memory';

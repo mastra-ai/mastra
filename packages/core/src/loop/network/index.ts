@@ -1,5 +1,5 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
@@ -27,14 +27,14 @@ import { PRIMITIVE_TYPES } from '../types';
 
 /**
  * Convert a schema (PublicSchema) to JSON Schema.
- * Handles Zod v3/v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
+ * Handles Zod v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
  */
 function schemaToJsonSchema(schema: PublicSchema): unknown {
   if (isStandardSchemaWithJSON(schema)) {
     return standardSchemaToJSONSchema(schema);
   }
 
-  // Try to convert raw Zod schema (v3 or v4) to StandardSchema
+  // Try to convert raw Zod v4 schema to StandardSchema
   try {
     const standardSchema = toStandardSchema(schema);
     return standardSchemaToJSONSchema(standardSchema);
@@ -1708,6 +1708,7 @@ export async function createNetworkLoop({
           requestContext,
           mastra: agent.getMastraInstance(),
           agent: {
+            agentId: agent.id,
             resourceId: initData.threadResourceId || networkName,
             toolCallId,
             threadId: initData.threadId,

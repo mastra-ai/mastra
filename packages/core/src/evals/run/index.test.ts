@@ -1,7 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { NoOpObservability } from '../../observability';

@@ -579,12 +579,12 @@ await agent.generateLegacy(
         sentiment: z.enum(['positive', 'negative', 'neutral']),
         confidence: z.number(),
       }),
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       errorStrategy: 'warn',
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: 'openai/gpt-4.1-nano' }),
+      new ModerationProcessor({ model: 'openai/gpt-5-mini' }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },
@@ -595,5 +595,5 @@ await agent.generateLegacy(
 
 - [Migration Guide](/guides/migrations/vnext-to-standard-apis)
 - [New .generate() method](./generate)
-- [Generating responses](/docs/agents/overview#generating-responses)
-- [Streaming responses](/docs/agents/overview#generating-responses)
+- [Generating responses](/docs/agents/overview#use-your-agent)
+- [Streaming responses](/docs/agents/overview#use-your-agent)
