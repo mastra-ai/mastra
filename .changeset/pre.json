@@ -121,5 +121,9 @@
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260325-004943",
+    "green-birds-knock",
+    "spicy-cobras-own"
+  ]
 }

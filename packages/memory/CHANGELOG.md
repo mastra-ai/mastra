@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.10.1-alpha.0
+
+### Patch Changes
+
+- Improved observational memory continuation prompts to reduce leaked context-management language in long conversations. ([#14650](https://github.com/mastra-ai/mastra/pull/14650))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067)]:
+  - @mastra/core@1.16.1-alpha.0
+
 ## 1.10.0
 
 ### Minor Changes
