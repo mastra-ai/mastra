@@ -34,12 +34,6 @@ export const browserWorkspace = new Workspace({
     // Use agent-browser CLI for browser automation
     // Skills are auto-installed on workspace.init()
     cli: 'agent-browser',
-    // Screencast options for BrowserViewer
-    // screencast: {
-    //   quality: 80,
-    //   maxWidth: 1280,
-    //   maxHeight: 720,
-    // },
   },
 });
 

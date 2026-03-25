@@ -132,15 +132,6 @@ export interface BrowserViewerConfig extends BrowserConfig {
    */
   cli?: CLIProvider;
 
-  /** Screencast options */
-  screencast?: ScreencastOptions;
-
-  /** Auto-reconnect on disconnect (default: false) */
-  autoReconnect?: boolean;
-
-  /** Reconnect delay in ms (default: 1000) */
-  reconnectDelay?: number;
-
   /**
    * Command executor for running CLI commands.
    * If not provided, will use child_process.exec directly.
@@ -644,7 +635,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
     this.cdpClient = null;
     this.notifyBrowserClosed();
 
-    if (this.viewerConfig.autoReconnect) {
+    if (this.config.autoReconnect) {
       this.scheduleReconnect();
     }
   }
@@ -656,7 +647,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
         this.logger.error('Failed to reconnect to browser', error);
         this.scheduleReconnect();
       });
-    }, this.viewerConfig.reconnectDelay ?? 1000);
+    }, this.config.reconnectDelay ?? 1000);
   }
 
   private clearReconnectTimer(): void {
@@ -773,7 +764,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
       await this._screencastStream.stop();
     }
 
-    this._screencastStream = new ScreencastStream(this, options ?? this.viewerConfig.screencast);
+    this._screencastStream = new ScreencastStream(this, options ?? this.config.screencast);
 
     // Update URL cache on each frame so getCurrentUrl() returns fresh data
     this._screencastStream.on('frame', () => {

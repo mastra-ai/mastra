@@ -91,6 +91,26 @@ export interface BrowserConfig {
    * Called before the browser is closed.
    */
   onClose?: BrowserLifecycleHook;
+
+  /**
+   * Screencast options for streaming browser frames.
+   * Controls image format, quality, and dimensions.
+   */
+  screencast?: ScreencastOptions;
+
+  /**
+   * Auto-reconnect to the browser on disconnect.
+   * Useful for cloud CDP connections that may drop.
+   * @default false
+   */
+  autoReconnect?: boolean;
+
+  /**
+   * Delay in milliseconds before attempting to reconnect.
+   * Only used when autoReconnect is true.
+   * @default 1000
+   */
+  reconnectDelay?: number;
 }
 
 // =============================================================================
@@ -577,12 +597,14 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
+   * Uses config.screencast options as defaults if no options provided.
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
     if (!this.isBrowserRunning()) {
       return null;
     }
-    return this.startScreencast(options);
+    // Use provided options, fall back to config screencast options
+    return this.startScreencast(options ?? this.config.screencast);
   }
 
   // ---------------------------------------------------------------------------
