@@ -195,7 +195,9 @@ export function applyCompatLayer({
 
     for (const compat of compatLayers) {
       if (compat.shouldApply()) {
-        return compat.processToJSONSchema(standardSchema, 'input');
+        const compatSchema = compat.processToCompatSchema(standardSchema);
+
+        return standardSchemaToJSONSchema(compatSchema);
       }
     }
 

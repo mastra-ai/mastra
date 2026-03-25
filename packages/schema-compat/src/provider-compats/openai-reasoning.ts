@@ -1,10 +1,7 @@
-import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
-import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import {
   isOptional,
@@ -19,8 +16,9 @@ import {
   isNull,
   isIntersection,
 } from '../zodTypes';
+import { OpenAISchemaCompatLayer } from './openai';
 
-export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
+export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `openApi3`;
   }
@@ -128,26 +126,5 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
-  }
-
-  preProcessJSONNode(schema: JSONSchema7): void {
-    if (isAllOfSchema(schema)) {
-      this.defaultAllOfHandler(schema);
-    }
-
-    if (isObjectSchema(schema)) {
-      this.defaultObjectHandler(schema);
-    } else if (isArraySchema(schema)) {
-      this.defaultArrayHandler(schema);
-    } else if (isStringSchema(schema)) {
-      this.defaultStringHandler(schema);
-    }
-  }
-
-  postProcessJSONNode(schema: JSONSchema7): void {
-    // Handle union schemas in post-processing (after children are processed)
-    if (isUnionSchema(schema)) {
-      this.defaultUnionHandler(schema);
-    }
   }
 }

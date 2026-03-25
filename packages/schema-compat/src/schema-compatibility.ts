@@ -362,18 +362,19 @@ export abstract class SchemaCompatLayer {
     return jsonSchema;
   }
 
-  public processToCompatSchema<T>(schema: PublicSchema<T>, io?: 'input' | 'output'): StandardSchemaWithJSON<T> {
-    const originalStandardSchema = toStandardSchema(schema);
-    const jsonSchema = this.processToJSONSchema(schema, io);
-
+  public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
     return {
       '~standard': {
         version: 1,
         vendor: 'mastra',
-        validate: (value: unknown) => originalStandardSchema['~standard'].validate(value),
+        validate: (value: unknown) => toStandardSchema(schema)['~standard'].validate(value),
         jsonSchema: {
-          input: () => jsonSchema as Record<string, unknown>,
-          output: () => jsonSchema as Record<string, unknown>,
+          input: () => {
+            return this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
+          },
+          output: () => {
+            return this.processToJSONSchema(schema, 'output') as Record<string, unknown>;
+          },
         },
       },
     };

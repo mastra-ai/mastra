@@ -1,17 +1,22 @@
 import type { JSONSchema7 } from 'json-schema';
-import traverse from 'json-schema-traverse';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
 import { jsonSchema } from '../json-schema';
-import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import {
+  isAllOfSchema,
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { PublicSchema, ZodType } from '../schema.types';
-import { toStandardSchema } from '../standard-schema/standard-schema';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
 import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.types';
-import { zodToJsonSchema } from '../zod-to-json';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault, isIntersection } from '../zodTypes';
 
 // @see https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas
@@ -146,54 +151,44 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
    * which causes OpenAI strict mode to reject tool schemas missing additionalProperties: false.
    */
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
-    // Convert to JSON Schema from the original Zod schema
-    const jsonSchemaResult = zodToJsonSchema(zodSchema, this.getSchemaTarget());
+    const compat = this.processToCompatSchema(zodSchema);
 
     // Apply the same JSON Schema fixes as processToJSONSchema
-    traverse(jsonSchemaResult, {
-      cb: {
-        pre: (schema: JSONSchema7) => {
-          this.preProcessJSONNode(schema);
-        },
-        post: (schema: JSONSchema7) => {
-          this.postProcessJSONNode(schema);
-        },
-      },
-    });
-
-    // Capture the traversed schema (with x-optional metadata) for #traverse
-    const traversedJsonSchema = JSON.parse(JSON.stringify(jsonSchemaResult));
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
 
     // Post-process the raw LLM value: strip falsy optional fields and convert
     // date strings back to Date objects, then validate against the original Zod schema.
-    return jsonSchema(jsonSchemaResult, {
+    return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
-        const transformed = this.#traverse(value, traversedJsonSchema);
+        const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
         const result = zodSchema.safeParse(transformed);
         return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
       },
     });
   }
 
-  public processToCompatSchema<T>(schema: PublicSchema<T>, io?: 'input' | 'output'): StandardSchemaWithJSON<T> {
+  public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
     const originalStandardSchema = toStandardSchema(schema);
-
-    // Get the OpenAI-transformed JSON Schema (with all properties required, etc.)
-    const transformedJsonSchema = this.processToJSONSchema(schema, io);
-    const transformedStandardSchema = toStandardSchema(transformedJsonSchema);
 
     return {
       '~standard': {
-        ...transformedStandardSchema['~standard'],
-        version: 1 as const,
+        version: 1,
         vendor: 'mastra',
-        types: originalStandardSchema['~standard'].types,
         validate: (value: unknown) => {
+          const transformedJsonSchema = this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
           // Apply OpenAI-specific transforms: null→undefined for optional fields, date string→Date
           const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
 
           // Then validate against the original schema
           return originalStandardSchema['~standard'].validate(transformed);
+        },
+        jsonSchema: {
+          input: () => {
+            return this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
+          },
+          output: () => {
+            return this.processToJSONSchema(schema, 'output') as Record<string, unknown>;
+          },
         },
       },
     };
@@ -208,6 +203,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {
       this.defaultArrayHandler(schema);
+    } else if (isNumberSchema(schema)) {
+      this.defaultNumberHandler(schema);
     } else if (isStringSchema(schema)) {
       if (schema.format) {
         if (!(allowedStringFormats as readonly string[]).includes(schema.format as string)) {
@@ -260,7 +257,6 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             // @ts-expect-error - x-optional is a custom property
             schema['x-optional'] = [...(schema['x-optional'] || []), key];
             schema.required?.push(key);
-
             if (prop.type) {
               if (Array.isArray(prop.type)) {
                 if (!prop.type.includes('null')) {
@@ -277,28 +273,35 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   #traverse(value: unknown, schema: Record<string, unknown>): unknown {
-    if (isDateFormat(schema)) {
-      return new Date(value as string);
+    // If schema uses anyOf, find the non-null variant for traversal
+    const resolved = this.#resolveAnyOf(schema);
+
+    if ((isDateFormat(resolved) || resolved['x-date'] === true) && typeof value === 'string') {
+      return new Date(value);
     }
 
-    const isArrayType = schema.type === 'array' || (Array.isArray(schema.type) && schema.type.includes('array'));
+    const isArrayType =
+      resolved.type === 'array' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('array'));
     if (isArrayType) {
-      const arr = value as unknown[];
-      return arr.map(item => this.#traverse(item, schema.items as Record<string, unknown>));
+      if (!Array.isArray(value)) {
+        return value;
+      }
+      return value.map(item => this.#traverse(item, resolved.items as Record<string, unknown>));
     }
 
-    const isObjectType = schema.type === 'object' || (Array.isArray(schema.type) && schema.type.includes('object'));
+    const isObjectType =
+      resolved.type === 'object' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('object'));
     if (!isObjectType) {
       return value;
     }
 
-    const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
+    const properties = resolved.properties as Record<string, Record<string, unknown>> | undefined;
     if (!properties || !value) {
       return value;
     }
 
     const obj = value as Record<string, unknown>;
-    const optionalProperties = (schema['x-optional'] ?? []) as string[];
+    const optionalProperties = (resolved['x-optional'] ?? []) as string[];
     for (const key in obj) {
       if (optionalProperties.includes(key) && obj[key] === null) {
         obj[key] = undefined;
@@ -308,6 +311,21 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     }
 
     return obj;
+  }
+
+  /**
+   * If schema has anyOf, return the first non-null variant for traversal.
+   * Otherwise return the schema itself.
+   */
+  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+    if (Array.isArray(schema.anyOf)) {
+      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
+      if (nonNull) {
+        return nonNull;
+      }
+    }
+
+    return schema;
   }
 }
 

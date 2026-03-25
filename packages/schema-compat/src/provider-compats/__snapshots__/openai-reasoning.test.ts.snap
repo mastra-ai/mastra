@@ -150,9 +150,18 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle opti
         "a",
         "b",
       ],
-      "type": "object",
+      "type": [
+        "null",
+        "object",
+      ],
     },
   },
+  "required": [
+    "data",
+  ],
   "type": "object",
+  "x-optional": [
+    "data",
+  ],
 }
 `;

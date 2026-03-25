@@ -1,5 +1,5 @@
 import { google } from '@ai-sdk/google';
-import { generateText, Output, jsonSchema } from '@internal/ai-v6';
+import { generateText, Output, jsonSchema, stepCountIs } from '@internal/ai-v6';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -47,6 +47,7 @@ const allSchemas = {
   date: z.coerce.date().describe('a valid sample date'),
   dateAfter: z.coerce.date().min(new Date('2024-01-01')).describe('a valid sample date after 2024-01-01'),
   dateBefore: z.coerce.date().max(new Date()).describe('a valid sample date before today'),
+  actualData: z.date().describe('a valid sample date'),
 
   // Object types
   object: z.object({ foo: z.string(), bar: z.number() }).describe('any valid sample object with a string and a number'),
@@ -84,12 +85,58 @@ const allSchemas = {
   default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
 
+const expectedOutput = {
+  string: expect.any(String),
+  stringMin: expect.any(String),
+  stringMax: expect.any(String),
+  stringEmail: expect.any(String),
+  stringEmoji: expect.any(String),
+  stringUrl: expect.any(String),
+  stringUuid: expect.any(String),
+  stringCuid: expect.any(String),
+  stringRegex: expect.any(String),
+  number: expect.any(Number),
+  numberGt: expect.any(Number),
+  numberLt: expect.any(Number),
+  numberGte: expect.any(Number),
+  numberLte: expect.any(Number),
+  numberMultipleOf: expect.any(Number),
+  numberInt: expect.any(Number),
+  exampleArray: expect.arrayContaining([expect.any(String)]),
+  arrayMin: expect.arrayContaining([expect.any(String)]),
+  arrayMax: expect.arrayContaining([expect.any(String)]),
+  date: expect.any(Date),
+  dateAfter: expect.any(Date),
+  dateBefore: expect.any(Date),
+  actualData: expect.any(Date),
+  object: {
+    foo: expect.any(String),
+    bar: expect.any(Number),
+  },
+  objectNested: {
+    user: {
+      name: expect.any(String),
+      age: expect.any(Number),
+    },
+  },
+  objectPassthrough: expect.any(Object),
+  objectLoose: expect.any(Object),
+  nullable: null,
+  unionPrimitives: expect.toSatisfy(v => typeof v === 'string' || typeof v === 'number'),
+  unionObjects: expect.toSatisfy(
+    v => ('amount' in v && 'inventoryItemName' in v) || ('type' in v && 'permissions' in v),
+  ),
+  default: expect.any(String),
+  enum: expect.stringMatching(/^[ABC]$/),
+  nativeEnum: expect.stringMatching(/^[ABC]$/),
+};
+
 describe('Google e2e test', () => {
   const mock = createGatewayMock();
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should pass', { timeout: 30000 }, async () => {
+  it('should be succesful with structured_output', { timeout: 60000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = google('gemini-3.1-pro-preview');
@@ -109,7 +156,8 @@ describe('Google e2e test', () => {
       output: Output.object({
         schema: jsonSchema<z.infer<typeof schema>>(compatJsonSchema),
       }),
-      prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
+      prompt:
+        'You are a test agent. Your task is to respond with valid JSON matching the schema provided. When a field is optional or nullable please mark it as null..',
     });
 
     expect(result.finishReason).toBe('stop');
@@ -148,7 +196,96 @@ describe('Google e2e test', () => {
       },
       enum: expect.stringMatching(/^[ABC]$/),
       nativeEnum: expect.stringMatching(/^[ABC]$/),
+      default: 'default text',
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
+  });
+
+  it('should handle tool call with manySchemas input', { timeout: 30_000 }, async () => {
+    const schema = z.object(allSchemas);
+    const model = google('gemini-3.1-pro-preview');
+
+    const compat = new GoogleSchemaCompatLayer({
+      provider: model.modelId,
+      modelId: model.provider,
+      supportsStructuredOutputs: true,
+    });
+
+    const compatSchema = compat.processToCompatSchema(schema);
+    const compatJsonSchema = standardSchemaToJSONSchema(compatSchema);
+
+    const result = await generateText({
+      model,
+      tools: {
+        manySchemasTool: {
+          description:
+            'A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.',
+          inputSchema: jsonSchema<z.infer<typeof schema>>(compatJsonSchema),
+          execute: async (input: z.infer<typeof schema>) => input,
+        },
+      },
+      toolChoice: 'auto' as const,
+      stopWhen: stepCountIs(2),
+      prompt: 'Call the manySchemasTool tool with valid sample data.',
+    });
+
+    const expectation = {
+      ...expectedOutput,
+      date: expect.any(String),
+      dateAfter: expect.any(String),
+      dateBefore: expect.any(String),
+      actualData: expect.any(String),
+    };
+    delete expectation.optional;
+    const toolCall = result.steps[0].toolCalls[0];
+    expect(toolCall).toBeDefined();
+    expect(toolCall.toolName).toBe('manySchemasTool');
+    expect(toolCall.input).toMatchObject(expectation);
+    expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
+  });
+
+  it('should handle tool call with manySchemas input and output', { timeout: 30_000 }, async () => {
+    const schema = z.object(allSchemas);
+    const model = google('gemini-3.1-pro-preview');
+
+    const compat = new GoogleSchemaCompatLayer({
+      provider: model.modelId,
+      modelId: model.provider,
+      supportsStructuredOutputs: true,
+    });
+
+    const compatSchema = compat.processToCompatSchema(schema);
+    const compatJsonSchema = standardSchemaToJSONSchema(compatSchema);
+
+    const result = await generateText({
+      model,
+      tools: {
+        manySchemasTool: {
+          description:
+            'A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.',
+          inputSchema: jsonSchema<z.infer<typeof schema>>(compatJsonSchema),
+          outputSchema: jsonSchema<z.infer<typeof schema>>(compatJsonSchema),
+          execute: async (input: z.infer<typeof schema>) => {
+            const result = await compatSchema['~standard'].validate(input);
+            console.log(result);
+            if ('issues' in result && result.issues) {
+              throw new Error(result.issues.map((i: any) => i.message).join(', '));
+            }
+
+            console.log(result.value);
+            return (result as { value: z.infer<typeof schema> }).value;
+          },
+        },
+      },
+      toolChoice: 'auto' as const,
+      stopWhen: stepCountIs(3),
+      prompt: 'Call the manySchemasTool tool with valid sample data.',
+    });
+
+    const toolResult = result.steps[0].toolResults[0];
+    expect(toolResult).toBeDefined();
+    expect(toolResult.toolName).toBe('manySchemasTool');
+    expect(toolResult.output).toMatchObject(expectedOutput);
+    expect(result.text).toMatchSnapshot();
   });
 });

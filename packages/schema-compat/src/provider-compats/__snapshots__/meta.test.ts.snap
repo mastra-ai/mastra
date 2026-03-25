@@ -614,6 +614,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Basic Transformations > should
         {
           "description": "constraints: a valid date-time",
           "type": "string",
+          "x-date": true,
         },
         {
           "type": "null",
@@ -687,6 +688,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Complex Schemas > should handl
         {
           "description": "constraints: a valid date-time",
           "type": "string",
+          "x-date": true,
         },
         {
           "type": "null",
