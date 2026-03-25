@@ -146,7 +146,7 @@ describe('AutoExtractedMetrics', () => {
       entityType: EntityType.TOOL,
       entityName: 'my-tool',
       endTime: new Date('2026-01-01T00:00:00.200Z'),
-      errorInfo: { message: 'tool failed', name: 'Error' },
+      errorInfo: { message: 'tool failed', id: 'Error' },
     });
 
     emitAutoExtractedMetrics(span, createMetricsContext(span));
@@ -508,8 +508,8 @@ describe('AutoExtractedMetrics', () => {
     expect(emittedMetrics).toHaveLength(0);
   });
 
-  it('should filter auto-extracted labels through CardinalityFilter in MetricsContextImpl', () => {
-    setup(new CardinalityFilter({ blockedLabels: ['entity_name'] }));
+  it('should filter emitted labels through CardinalityFilter in MetricsContextImpl', () => {
+    setup(new CardinalityFilter({ blockedLabels: ['status'] }));
     const span = createMockSpan({
       type: SpanType.AGENT_RUN,
       entityName: 'my-agent',
@@ -519,10 +519,10 @@ describe('AutoExtractedMetrics', () => {
     emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     expect(emittedMetrics).toHaveLength(1);
-    expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
+    expect(emittedMetrics[0]!.metric.labels).toEqual({});
   });
 
-  it('should pass all labels through when no CardinalityFilter is provided', () => {
+  it('should preserve status labels with the default filter behavior', () => {
     setup();
     const span = createMockSpan({
       type: SpanType.AGENT_RUN,

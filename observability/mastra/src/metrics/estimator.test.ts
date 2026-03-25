@@ -34,6 +34,39 @@ describe('estimateCosts', () => {
     });
   });
 
+  it('applies pricing lookup failures to the same detail rows auto-extract will emit', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'openai',
+        model: 'definitely-not-a-real-model',
+        usage: {
+          inputTokens: 0,
+          outputTokens: 5,
+          inputDetails: {
+            text: 10,
+            cacheRead: 5,
+          },
+          outputDetails: {
+            text: 5,
+          },
+        },
+      },
+      pricingRegistry,
+    );
+
+    const expectedError = {
+      provider: 'openai',
+      model: 'definitely-not-a-real-model',
+      costMetadata: { error: 'no_matching_model' },
+    };
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual(expectedError);
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)).toEqual(expectedError);
+    expect(costs.get(TokenMetrics.INPUT_TEXT)).toEqual(expectedError);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)).toEqual(expectedError);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)).toEqual(expectedError);
+  });
+
   it('uses the base tier for total input when the base tier applies', () => {
     const costs = estimateCosts(
       {
@@ -146,5 +179,40 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00036);
     expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.000012);
     expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0006);
+  });
+
+  it('keeps zero-valued totals when aggregate counts are explicitly provided', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      estimatedCost: 0,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      estimatedCost: 0,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
   });
 });

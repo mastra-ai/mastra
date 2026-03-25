@@ -5,7 +5,8 @@
 import { SpanType } from '@mastra/core/observability';
 import type { AnySpan, CostContext, MetricsContext, ModelGenerationAttributes } from '@mastra/core/observability';
 import { estimateCosts } from './estimator';
-import { TokenMetrics } from './types';
+import type { TokenMetrics } from './types';
+import { getTokenMetricSamples } from './usage-metrics';
 
 /** Emit duration metrics for a live span. */
 export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): void {
@@ -71,34 +72,8 @@ function emitUsageMetrics(
     metrics.emit(name, value, undefined, { costContext });
   };
 
-  const emitIfDefined = (name: TokenMetrics, value: number | undefined) => {
-    if (value != null) {
-      emit(name, value);
-    }
-  };
-
-  const emitIfPositive = (name: TokenMetrics, value: number | undefined) => {
-    if (value != null && value > 0) {
-      emit(name, value);
-    }
-  };
-
-  emitIfDefined(TokenMetrics.TOTAL_INPUT, usage.inputTokens);
-  emitIfDefined(TokenMetrics.TOTAL_OUTPUT, usage.outputTokens);
-
-  if (usage.inputDetails) {
-    emitIfPositive(TokenMetrics.INPUT_TEXT, usage.inputDetails.text);
-    emitIfPositive(TokenMetrics.INPUT_CACHE_READ, usage.inputDetails.cacheRead);
-    emitIfPositive(TokenMetrics.INPUT_CACHE_WRITE, usage.inputDetails.cacheWrite);
-    emitIfPositive(TokenMetrics.INPUT_AUDIO, usage.inputDetails.audio);
-    emitIfPositive(TokenMetrics.INPUT_IMAGE, usage.inputDetails.image);
-  }
-
-  if (usage.outputDetails) {
-    emitIfPositive(TokenMetrics.OUTPUT_TEXT, usage.outputDetails.text);
-    emitIfPositive(TokenMetrics.OUTPUT_REASONING, usage.outputDetails.reasoning);
-    emitIfPositive(TokenMetrics.OUTPUT_AUDIO, usage.outputDetails.audio);
-    emitIfPositive(TokenMetrics.OUTPUT_IMAGE, usage.outputDetails.image);
+  for (const sample of getTokenMetricSamples(usage)) {
+    emit(sample.name, sample.value);
   }
 }
 

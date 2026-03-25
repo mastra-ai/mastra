@@ -548,16 +548,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    const processedSpan = this.getProcessedSpan(span);
-    return processedSpan?.exportSpan(this.config.includeInternalSpans);
-  }
-
-  /** Process a span through output processors, returning undefined if filtered out. */
-  getProcessedSpan(span: AnySpan): AnySpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
 
-    return this.processSpan(span);
+    const processedSpan = this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
   }
 
   /**
@@ -578,12 +573,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * then routes the exported tracing event through the ObservabilityBus.
    */
   protected emitSpanEnded(span: AnySpan): void {
-    const processedSpan = this.getProcessedSpan(span);
-    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
+    const exportedSpan = this.getSpanForExport(span);
 
-    if (exportedSpan && processedSpan) {
+    if (exportedSpan) {
       try {
-        emitAutoExtractedMetrics(processedSpan, this.getMetricsContext(processedSpan));
+        // TODO: We intentionally export first so auto-extracted metrics are skipped
+        // when the span is filtered out by processors. Metrics still use the live
+        // span for correlation and parent traversal, but current span processors
+        // mutate spans in place during export, so those mutations can still affect
+        // the live span before metrics run. Future options to explore:
+        // 1. Make span processors pure/non-mutating.
+        // 2. Split trace processors from metric-specific processors/enrichers.
+        // 3. Revisit whether auto-extracted metrics should run before export.
+        emitAutoExtractedMetrics(span, this.getMetricsContext(span));
       } catch (err) {
         this.logger.error('[Observability] Auto-extraction error:', err);
       }

@@ -14,12 +14,17 @@ import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 // Tracing imports
 import { Observability } from './default';
 import { TestExporter } from './exporters';
+import { PricingRegistry } from './metrics/pricing-registry';
+
+const testPricingRegistry = PricingRegistry.fromText(`
+{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
+`);
 
 /**
  * Performs final test expectations that are common to all tracing tests.
@@ -1236,6 +1241,8 @@ describe('Tracing Integration Tests', () => {
         agents: { testAgent },
       });
 
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Use metadata tool to process some data');
       expect(result.text).toBeDefined();
@@ -1276,16 +1283,28 @@ describe('Tracing Integration Tests', () => {
       const inputTokens = testExporter.getMetricsByName('mastra_model_total_input_tokens');
       expect(inputTokens.length).toBeGreaterThanOrEqual(1);
       expect(inputTokens[0]!.value).toBeGreaterThan(0);
-      expect(inputTokens[0]!.costContext).toBeDefined();
-      expect(typeof inputTokens[0]!.costContext?.provider).toBe('string');
-      expect(typeof inputTokens[0]!.costContext?.model).toBe('string');
+      expect(
+        inputTokens.some(
+          metric =>
+            metric.costContext?.provider === 'mock-provider' &&
+            metric.costContext?.model === 'mock-model-id' &&
+            metric.costContext?.costUnit === 'USD' &&
+            metric.costContext?.estimatedCost === 0.000003,
+        ),
+      ).toBe(true);
 
       const outputTokens = testExporter.getMetricsByName('mastra_model_total_output_tokens');
       expect(outputTokens.length).toBeGreaterThanOrEqual(1);
       expect(outputTokens[0]!.value).toBeGreaterThan(0);
-      expect(outputTokens[0]!.costContext).toBeDefined();
-      expect(typeof outputTokens[0]!.costContext?.provider).toBe('string');
-      expect(typeof outputTokens[0]!.costContext?.model).toBe('string');
+      expect(
+        outputTokens.some(
+          metric =>
+            metric.costContext?.provider === 'mock-provider' &&
+            metric.costContext?.model === 'mock-model-id' &&
+            metric.costContext?.costUnit === 'USD' &&
+            metric.costContext?.estimatedCost === 0.000007,
+        ),
+      ).toBe(true);
 
       // Auto-extracted tool call metrics
       const toolDuration = testExporter.getMetricsByName('mastra_tool_duration_ms');
@@ -1293,6 +1312,8 @@ describe('Tracing Integration Tests', () => {
       expect(toolDuration[0]!.correlationContext?.entityName).toBe('metadataTool');
       expect(toolDuration[0]!.labels.status).toBe('ok');
       expect(toolDuration[0]!.value).toBeGreaterThanOrEqual(0);
+
+      pricingRegistrySpy.mockRestore();
     });
   });
 

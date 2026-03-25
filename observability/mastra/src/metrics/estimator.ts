@@ -2,6 +2,7 @@ import type { CostContext, UsageStats } from '@mastra/core/observability';
 import type { PricingTier, PricingModel } from './pricing-model';
 import { PricingRegistry } from './pricing-registry';
 import { TokenMetrics, PricingMeter } from './types';
+import { getTokenMetricSamples } from './usage-metrics';
 
 export function estimateCosts(
   args: {
@@ -17,8 +18,7 @@ export function estimateCosts(
   const pricingModel = pricingRegistry?.get({ provider, model });
   if (!pricingModel) {
     const errorContext: CostContext = { costMetadata: { error: 'no_matching_model' }, provider, model };
-    results.set(TokenMetrics.TOTAL_INPUT, errorContext);
-    results.set(TokenMetrics.TOTAL_OUTPUT, errorContext);
+    applyErrorContextForUsage(results, usage, errorContext);
     return results;
   }
   const costMetadata: Record<string, unknown> = { pricing_id: pricingModel.id };
@@ -26,8 +26,7 @@ export function estimateCosts(
   const pricingTier = pricingModel.getPricingTierForUsage(usage);
   if (!pricingTier) {
     const errorContext: CostContext = { costMetadata: { ...costMetadata, error: 'no_matching_tier' }, provider, model };
-    results.set(TokenMetrics.TOTAL_INPUT, errorContext);
-    results.set(TokenMetrics.TOTAL_OUTPUT, errorContext);
+    applyErrorContextForUsage(results, usage, errorContext);
     return results;
   }
   costMetadata['tier_index'] = pricingTier.index;
@@ -99,7 +98,7 @@ export function estimateCosts(
     }
   }
 
-  if (!hasSuccessfulInputDetailCost && usage.inputTokens) {
+  if (!hasSuccessfulInputDetailCost && usage.inputTokens != null) {
     const result = estimateCostForMeter({
       meter: PricingMeter.INPUT_TOKENS,
       tokenCount: usage.inputTokens,
@@ -157,7 +156,7 @@ export function estimateCosts(
     }
   }
 
-  if (!hasSuccessfulOutputDetailCost && usage.outputTokens) {
+  if (!hasSuccessfulOutputDetailCost && usage.outputTokens != null) {
     const result = estimateCostForMeter({
       meter: PricingMeter.OUTPUT_TOKENS,
       tokenCount: usage.outputTokens,
@@ -167,6 +166,16 @@ export function estimateCosts(
   }
 
   return results;
+}
+
+function applyErrorContextForUsage(
+  results: Map<TokenMetrics, CostContext>,
+  usage: UsageStats,
+  errorContext: CostContext,
+): void {
+  for (const sample of getTokenMetricSamples(usage)) {
+    results.set(sample.name, errorContext);
+  }
 }
 
 function estimateCostForMeter(args: {

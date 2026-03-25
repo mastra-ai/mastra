@@ -951,6 +951,11 @@ describe('DefaultExporter', () => {
             name: 'mastra_agent_duration_ms',
             value: 1,
             labels: {
+              entity_type: EntityType.WORKFLOW_RUN,
+              entity_name: 'legacy-agent-name',
+              parent_type: EntityType.AGENT,
+              parent_name: 'legacy-parent-name',
+              service_name: 'legacy-service',
               other_label: 'kept',
             },
             correlationContext: {
@@ -969,12 +974,15 @@ describe('DefaultExporter', () => {
               estimatedCost: 0.00123,
               costUnit: 'usd',
               costMetadata: {
-                estimationStatus: 'ok',
-                pricingRowId: 'openai-gpt-4o-mini',
-                matchedTierIndex: 0,
+                pricing_id: 'openai-gpt-4o-mini',
+                tier_index: 0,
               },
             },
             metadata: {
+              provider: 'legacy-provider',
+              model: 'legacy-model',
+              estimatedCost: 999,
+              costUnit: 'legacy-unit',
               metadata_only: 'kept',
             },
           },
@@ -983,35 +991,41 @@ describe('DefaultExporter', () => {
         await exporter.onMetricEvent(event);
         await exporter.flush();
 
-        expect(mockObservabilityStore.batchCreateMetrics).toHaveBeenCalledWith({
-          metrics: [
-            expect.objectContaining({
-              name: 'mastra_agent_duration_ms',
-              value: 1,
-              entityType: EntityType.AGENT,
-              entityName: 'my-agent',
-              parentEntityType: EntityType.WORKFLOW_RUN,
-              parentEntityName: 'my-workflow',
-              traceId: 'trace-1',
-              spanId: 'span-1',
-              provider: 'openai',
-              model: 'gpt-4o-mini',
-              estimatedCost: 0.00123,
-              costUnit: 'usd',
-              environment: 'production',
-              serviceName: 'api-server',
-              costMetadata: {
-                estimationStatus: 'ok',
-                pricingRowId: 'openai-gpt-4o-mini',
-                matchedTierIndex: 0,
-              },
-              metadata: { metadata_only: 'kept' },
-              labels: {
-                other_label: 'kept',
-              },
-            }),
-          ],
-        });
+        const storedMetric = mockObservabilityStore.batchCreateMetrics.mock.calls[0][0].metrics[0];
+        expect(storedMetric).toEqual(
+          expect.objectContaining({
+            name: 'mastra_agent_duration_ms',
+            value: 1,
+            entityType: EntityType.AGENT,
+            entityName: 'my-agent',
+            parentEntityType: EntityType.WORKFLOW_RUN,
+            parentEntityName: 'my-workflow',
+            traceId: 'trace-1',
+            spanId: 'span-1',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            estimatedCost: 0.00123,
+            costUnit: 'usd',
+            environment: 'production',
+            serviceName: 'api-server',
+            costMetadata: {
+              pricing_id: 'openai-gpt-4o-mini',
+              tier_index: 0,
+            },
+            labels: {
+              other_label: 'kept',
+            },
+          }),
+        );
+        expect(storedMetric.metadata).toEqual(
+          expect.objectContaining({
+            metadata_only: 'kept',
+            provider: 'legacy-provider',
+            model: 'legacy-model',
+            estimatedCost: 999,
+            costUnit: 'legacy-unit',
+          }),
+        );
 
         await exporter.shutdown();
       });

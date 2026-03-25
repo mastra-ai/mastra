@@ -109,5 +109,8 @@ The intended v0 runtime behavior is:
 - use the default tier unless a prompt-threshold condition matches
 - compute cost on the existing token-related metric rows
 - persist `estimatedCost`, `costUnit`, and optional costing metadata on those rows
+- when pricing lookup fails, attach the same costing error metadata to the token
+  metric rows that will actually be emitted for the reported usage payload
+- preserve explicitly reported zero-value total token rows with `estimatedCost: 0`
 
 This file is optimized for shipping size, not readability. If a human-readable data or provenance-oriented lineage file is needed, use the upstream costing pipeline outputs instead of editing or expanding the embedded snapshot here.
