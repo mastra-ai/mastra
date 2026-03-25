@@ -145,6 +145,13 @@ export class ObservationalMemory {
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
+  private onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<void>;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
@@ -236,6 +243,7 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.onIndexObservations = config.onIndexObservations;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -3144,6 +3152,21 @@ ${formattedMessages}
    */
   getObscureThreadIds(): boolean {
     return this.shouldObscureThreadIds;
+  }
+
+  /**
+   * Get the observation-group indexing callback.
+   */
+  getOnIndexObservations():
+    | ((observation: {
+        text: string;
+        groupId: string;
+        range: string;
+        threadId: string;
+        resourceId: string;
+      }) => Promise<void>)
+    | undefined {
+    return this.onIndexObservations;
   }
 
   /**
