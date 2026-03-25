@@ -154,7 +154,7 @@ describe('estimateCosts', () => {
     });
   });
 
-  it('suppresses totals when a mode has at least one successful detail cost', () => {
+  it('adds summed detail costs onto totals when a mode has successful detail costs', () => {
     const costs = estimateCosts(
       {
         provider: 'anthropic',
@@ -174,8 +174,8 @@ describe('estimateCosts', () => {
       pricingRegistry,
     );
 
-    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toBeUndefined();
-    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)).toBeUndefined();
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.000372);
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.0006);
     expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00036);
     expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.000012);
     expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0006);
