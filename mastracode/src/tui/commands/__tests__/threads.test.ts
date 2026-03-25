@@ -147,7 +147,9 @@ describe('handleThreadsCommand thread listing', () => {
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
     });
     state.attemptedThreadPreviewIds.add('thread-1');
-    state.harness.getFirstUserMessagesForThreads = vi.fn(async () => new Map([['thread-1', createMessage('message-1', 'slow')]]));
+    state.harness.getFirstUserMessagesForThreads = vi.fn(
+      async () => new Map([['thread-1', createMessage('message-1', 'slow')]]),
+    );
 
     const commandPromise = handleThreadsCommand(ctx);
     await Promise.resolve();
