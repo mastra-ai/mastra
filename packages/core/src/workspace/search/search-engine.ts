@@ -111,7 +111,7 @@ export interface IndexManyOptions {
   /**
    * Maximum number of documents to index concurrently (embedder + vector upsert).
    * Must be a safe integer ≥ 1 (same rule as `p-map`).
-   * @default 4
+   * @default 8
    */
   concurrency?: number;
   /**
@@ -232,7 +232,7 @@ export class SearchEngine {
    * Index multiple documents (up to `concurrency` at a time when async vector work runs).
    *
    * @param docs - Documents to index
-   * @param options - `p-map` options; `concurrency` defaults to 4
+   * @param options - `p-map` options; `concurrency` defaults to 8
    */
   async indexMany(
     docs: IndexDocument[],

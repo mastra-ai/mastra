@@ -392,9 +392,9 @@ export interface WorkspaceInfo {
 
 /**
  * Maximum concurrent `readFile` calls when batch-loading files for search auto-indexing
- * (`batchReadFiles`). Chosen to align with {@link SearchEngine}'s default `indexMany` concurrency.
+ * (`batchReadFiles`).
  */
-const FS_READ_CONCURRENCY = 4;
+const FS_READ_CONCURRENCY = 8;
 
 // =============================================================================
 // Workspace Class
