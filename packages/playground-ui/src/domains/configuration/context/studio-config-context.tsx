@@ -12,6 +12,7 @@ export const StudioConfigContext = createContext<StudioConfigContextType>({
   baseUrl: '',
   headers: {},
   apiPrefix: undefined,
+  telemetryBaseUrl: undefined,
   isLoading: false,
   themeToggleEnabled: false,
   setConfig: () => {},
@@ -26,6 +27,7 @@ export interface StudioConfigProviderProps {
   endpoint?: string;
   defaultApiPrefix?: string;
   themeToggleEnabled?: boolean;
+  telemetryEndpoint?: string;
 }
 
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
@@ -35,19 +37,27 @@ export const StudioConfigProvider = ({
   endpoint = 'http://localhost:4111',
   defaultApiPrefix = '/api',
   themeToggleEnabled = false,
+  telemetryEndpoint,
 }: StudioConfigProviderProps) => {
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
     apiPrefix: undefined,
+    telemetryBaseUrl: telemetryEndpoint || undefined,
     isLoading: true,
   });
 
   useLayoutEffect(() => {
     // Handle error case - stop loading but don't configure
     if (error && !isStatusLoading) {
-      return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
+      return setConfig({
+        baseUrl: '',
+        headers: {},
+        apiPrefix: undefined,
+        telemetryBaseUrl: telemetryEndpoint || undefined,
+        isLoading: false,
+      });
     }
 
     // Don't run the effect during the fetch request
@@ -62,17 +72,30 @@ export const StudioConfigProvider = ({
         const normalizedConfig = {
           ...parsedConfig,
           apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
+          telemetryBaseUrl: telemetryEndpoint || parsedConfig.telemetryBaseUrl,
         };
         return setConfig({ ...normalizedConfig, isLoading: false });
       }
     }
 
     if (instanceStatus.status === 'active') {
-      return setConfig(prev => ({ ...prev, baseUrl: endpoint, apiPrefix: defaultApiPrefix, isLoading: false }));
+      return setConfig(prev => ({
+        ...prev,
+        baseUrl: endpoint,
+        apiPrefix: defaultApiPrefix,
+        telemetryBaseUrl: telemetryEndpoint || undefined,
+        isLoading: false,
+      }));
     }
 
-    return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error]);
+    return setConfig({
+      baseUrl: '',
+      headers: {},
+      apiPrefix: undefined,
+      telemetryBaseUrl: telemetryEndpoint || undefined,
+      isLoading: false,
+    });
+  }, [instanceStatus, endpoint, defaultApiPrefix, telemetryEndpoint, isStatusLoading, error]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {

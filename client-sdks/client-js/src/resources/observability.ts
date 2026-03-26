@@ -99,8 +99,15 @@ export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
 /** Client resource for interacting with the Mastra observability API (traces, logs, scores, feedback, and metrics). */
 export class Observability extends BaseResource {
+  /** Used only for {@link getTrace}, {@link getTraces}, and {@link listTraces} when `telemetryBaseUrl` is set. */
+  private readonly traceReadClient: BaseResource;
+
   constructor(options: ClientOptions) {
-    super(options);
+    super({ ...options, baseUrl: options.baseUrl });
+    this.traceReadClient = new BaseResource({
+      ...options,
+      baseUrl: options.telemetryBaseUrl ?? options.baseUrl,
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -113,7 +120,7 @@ export class Observability extends BaseResource {
    * @returns Promise containing the trace with all its spans
    */
   getTrace(traceId: string): Promise<TraceRecord> {
-    return this.request(`/observability/traces/${traceId}`);
+    return this.traceReadClient.request(`/observability/traces/${traceId}`);
   }
 
   /**
@@ -156,7 +163,7 @@ export class Observability extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+    return this.traceReadClient.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -168,7 +175,7 @@ export class Observability extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
-    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+    return this.traceReadClient.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
