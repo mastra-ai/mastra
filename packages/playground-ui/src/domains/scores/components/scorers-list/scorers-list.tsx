@@ -59,6 +59,8 @@ export function ScorersList({ scorers, isLoading, error, search = '' }: ScorersL
         <EntityList.TopCell className="text-center">Workflows</EntityList.TopCell>
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Scorers match your search" /> : null}
+
       {filteredData.map(scorer => {
         const name = truncateString(scorer.scorer.config?.name ?? scorer.id, 50);
         const description = truncateString(scorer.scorer.config?.description ?? '', 200);

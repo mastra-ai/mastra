@@ -1,4 +1,5 @@
 import { EntityListCell, EntityListTextCell, EntityListNameCell, EntityListDescriptionCell } from './entity-list-cells';
+import { EntityListNoMatch } from './entity-list-no-match';
 import { EntityListRoot } from './entity-list-root';
 import { EntityListRowLink } from './entity-list-row-link';
 import { EntityListRows } from './entity-list-rows';
@@ -16,4 +17,5 @@ export const EntityList = Object.assign(EntityListRoot, {
   TextCell: EntityListTextCell,
   NameCell: EntityListNameCell,
   DescriptionCell: EntityListDescriptionCell,
+  NoMatch: EntityListNoMatch,
 });

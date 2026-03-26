@@ -47,9 +47,8 @@ describe('record-builders', () => {
             estimatedCost: 0.00123,
             costUnit: 'usd',
             costMetadata: {
-              estimationStatus: 'ok',
-              pricingRowId: 'openai-gpt-4o-mini',
-              matchedTierIndex: 0,
+              pricing_id: 'openai-gpt-4o-mini',
+              tier_index: 0,
             },
           },
           metadata: { kept: true },
@@ -92,9 +91,8 @@ describe('record-builders', () => {
         estimatedCost: 0.00123,
         costUnit: 'usd',
         costMetadata: {
-          estimationStatus: 'ok',
-          pricingRowId: 'openai-gpt-4o-mini',
-          matchedTierIndex: 0,
+          pricing_id: 'openai-gpt-4o-mini',
+          tier_index: 0,
         },
         metadata: { kept: true },
       });

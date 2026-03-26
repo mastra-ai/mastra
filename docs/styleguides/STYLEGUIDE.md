@@ -23,6 +23,10 @@ You can check your writing by pasting it into [Hemingway App](https://hemingwaya
 
 Also see tips on how to [write inclusive documentation](https://developers.google.com/style/inclusive-documentation) and [write accessible documentation](https://developers.google.com/style/accessibility).
 
+## Write up-to-date documentation
+
+- Use up-to-date models for providers like OpenAI, Claude, and others. You can check `packages/core/src/llm/model/provider-registry.json` for the latest models supported by Mastra.
+
 ## Content
 
 ### Only document how Mastra works
