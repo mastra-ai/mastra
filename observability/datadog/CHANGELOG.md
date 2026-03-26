@@ -1,5 +1,14 @@
 # @mastra/datadog
 
+## 1.0.10-alpha.1
+
+### Patch Changes
+
+- Fixed Datadog LLM Observability showing `model_name: custom` and missing model provider by correcting the span type mapping. `MODEL_GENERATION` now correctly maps to Datadog kind `llm` (was `workflow`), and `MODEL_STEP` falls back to `task` (was `llm`). This aligns with all other Mastra observability exporters and ensures Datadog receives model name, provider, and accurate cost estimation on the correct span. Fixes #14623. ([#14626](https://github.com/mastra-ai/mastra/pull/14626))
+
+- Updated dependencies [[`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`86e3263`](https://github.com/mastra-ai/mastra/commit/86e326363edd12be5a5b25ccce4a39f66f7c9f50), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.17.0-alpha.2
+
 ## 1.0.10-alpha.0
 
 ### Patch Changes
