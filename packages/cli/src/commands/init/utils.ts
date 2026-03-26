@@ -720,9 +720,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         });
 
         if (keyChoice === 'enter') {
-          return p.text({
+          return p.password({
             message: 'Enter your API key:',
-            placeholder: 'sk-...',
+            mask: '*',
+            clearOnError: true,
             validate: value => {
               if (!value || value.length === 0) return 'API key cannot be empty';
             },
