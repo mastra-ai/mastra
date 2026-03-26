@@ -1,5 +1,54 @@
 # @mastra/duckdb
 
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Adds observability storage using DuckDB for traces, metrics, logs, scores, and feedback. Exports `DuckDBStore`, `ObservabilityStorageDuckDB`, and `DuckDBConnection`. ([#14249](https://github.com/mastra-ai/mastra/pull/14249))
+
+  Older `@mastra/core` versions show an upgrade error when you use the DuckDB observability store.
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { DefaultExporter, Observability } from '@mastra/observability';
+  import { MastraCompositeStore } from '@mastra/core/storage';
+  import { LibSQLStore } from '@mastra/libsql';
+  import { DuckDBStore } from '@mastra/duckdb';
+
+  const duckDBStore = new DuckDBStore();
+  const libSqlStore = new LibSQLStore();
+
+  const storage = new MastraCompositeStore({
+    id: 'composite',
+    domains: {
+      ...libSqlStore.stores,
+      observability: duckDBStore.observability,
+    },
+  });
+
+  export const mastra = new Mastra({
+    agents: {
+      /* your agents here */
+    },
+    observability: new Observability({
+      configs: {
+        default: {
+          serviceName: 'obs-test',
+          exporters: [new DefaultExporter()],
+        },
+      },
+    }),
+    storage,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed 'Cannot create values of type ANY' error when querying metrics endpoints with DuckDB. Parameter binding now uses explicit typed methods instead of relying on DuckDB's type inference, which fails for certain SQL contexts like json_extract_string. ([#14666](https://github.com/mastra-ai/mastra/pull/14666))
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/core@1.16.1-alpha.1
+
 ## 1.0.1
 
 ### Patch Changes

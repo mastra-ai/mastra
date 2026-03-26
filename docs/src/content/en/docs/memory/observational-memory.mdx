@@ -166,17 +166,19 @@ const memory = new Memory({
       observation: {
         model: new ModelByInputTokens({
           upTo: {
-            10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
-            40_000: 'openai/gpt-4o', // Stronger for medium inputs
-            1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
+            // Faster, cheaper models for smaller inputs; stronger models for larger contexts
+            5_000: 'openrouter/mistralai/ministral-8b-2512',
+            20_000: 'openrouter/mistralai/mistral-small-2603',
+            40_000: 'openai/gpt-5.4-mini',
+            1_000_000: 'google/gemini-3.1-flash-lite-preview',
           },
         }),
       },
       reflection: {
         model: new ModelByInputTokens({
           upTo: {
-            20_000: 'google/gemini-2.5-flash',
-            80_000: 'openai/gpt-4o',
+            20_000: 'openai/gpt-5.4-mini',
+            100_000: 'google/gemini-2.5-flash',
           },
         }),
       },
