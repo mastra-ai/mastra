@@ -359,10 +359,8 @@ export async function deployAction(
 
   await rm(zipPath, { force: true });
 
-  t = performance.now();
   p.log.step('Streaming deploy logs...');
   const finalStatus = await pollDeploy(deployResult.id, token, orgId);
-  p.log.step(`Server-side deploy (${elapsed(performance.now() - t)})`);
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);
