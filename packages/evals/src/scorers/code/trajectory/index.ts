@@ -34,19 +34,14 @@ interface TrajectoryAccuracyScorerCodeOptions {
  * Convert a TrajectoryStep to an ExpectedStep, preserving step-specific data.
  */
 function trajectoryStepToExpectedStep(step: TrajectoryStep): ExpectedStep {
-  const result: ExpectedStep = { name: step.name, stepType: step.stepType };
-  const data: Record<string, unknown> = {};
-  if (step.stepType === 'tool_call' || step.stepType === 'mcp_tool_call') {
-    if (step.toolArgs !== undefined) data.input = step.toolArgs;
-    if (step.toolResult !== undefined) data.output = step.toolResult;
-  } else if (step.stepType === 'workflow_step') {
-    if (step.output !== undefined) data.output = step.output;
-  }
-  if (Object.keys(data).length > 0) result.data = data;
+  // Spread all variant-specific fields directly — ExpectedStep mirrors TrajectoryStep
+  // but with all fields optional. Drop runtime-only fields (durationMs, metadata).
+  const { durationMs: _, metadata: _m, children, ...rest } = step;
+  const result: ExpectedStep = rest as ExpectedStep;
   // Recursively convert children so nested hierarchies are preserved
-  if (step.children && step.children.length > 0) {
+  if (children && children.length > 0) {
     result.children = {
-      steps: step.children.map(trajectoryStepToExpectedStep),
+      steps: children.map(trajectoryStepToExpectedStep),
     };
   }
   return result;
@@ -97,10 +92,7 @@ function expectationToExpectedSteps(expectation: TrajectoryExpectation): Expecte
 export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracyScorerCodeOptions = {}) {
   const { expectedTrajectory: staticExpectedTrajectory, comparisonOptions = {} } = options;
 
-  const { ordering, strictOrder, compareStepData = false, allowRepeatedSteps = true } = comparisonOptions;
-
-  // Resolve ordering for display
-  const resolvedOrdering = ordering ?? (strictOrder ? 'strict' : 'relaxed');
+  const { ordering = 'relaxed', allowRepeatedSteps = true } = comparisonOptions;
 
   // Normalize the static expected trajectory into ExpectedStep[]
   const staticExpectedSteps: ExpectedStep[] | undefined = staticExpectedTrajectory
@@ -116,9 +108,9 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
   const getDescription = () => {
     if (staticExpectedSteps) {
       const expectedStepNames = staticExpectedSteps.map((s: ExpectedStep) => s.name).join(' → ');
-      return `Evaluates whether the trajectory matches the expected path: [${expectedStepNames}] (${resolvedOrdering} ordering)`;
+      return `Evaluates whether the trajectory matches the expected path: [${expectedStepNames}] (${ordering} ordering)`;
     }
-    return `Evaluates trajectory accuracy against expected trajectory from dataset items (${resolvedOrdering} ordering)`;
+    return `Evaluates trajectory accuracy against expected trajectory from dataset items (${ordering} ordering)`;
   };
 
   return createScorer({
@@ -151,8 +143,7 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
 
       // Merge comparison options: dataset item ordering overrides constructor if present
       const itemExpectation = run.expectedTrajectory as TrajectoryExpectation | undefined;
-      const effectiveOrdering = itemExpectation?.ordering ?? resolvedOrdering;
-      const effectiveCompareData = itemExpectation?.compareStepData ?? compareStepData;
+      const effectiveOrdering = itemExpectation?.ordering ?? ordering;
       const effectiveAllowRepeated = itemExpectation?.allowRepeatedSteps ?? allowRepeatedSteps;
 
       const comparison = compareTrajectories(
@@ -160,7 +151,6 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
         { steps: resolvedExpectedSteps },
         {
           ordering: effectiveOrdering,
-          compareStepData: effectiveCompareData,
           allowRepeatedSteps: effectiveAllowRepeated,
         },
       );
@@ -266,7 +256,6 @@ function evaluateNestedExpectations(
         { steps: childConfig.steps },
         {
           ordering: childConfig.ordering ?? 'relaxed',
-          compareStepData: childConfig.compareStepData ?? false,
           allowRepeatedSteps: childConfig.allowRepeatedSteps ?? true,
         },
       );
@@ -465,7 +454,6 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
           { steps: config.steps },
           {
             ordering: config.ordering ?? 'relaxed',
-            compareStepData: config.compareStepData ?? false,
             allowRepeatedSteps: config.allowRepeatedSteps ?? true,
           },
         );

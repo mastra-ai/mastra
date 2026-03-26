@@ -402,10 +402,11 @@ The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{
 import { compareTrajectories } from '@mastra/evals/scorers/utils'
 
 // Using ExpectedStep[] (recommended for expectations)
+// Data fields (e.g. toolArgs) are auto-compared when present on expected steps
 const result = compareTrajectories(
   actualTrajectory,
   { steps: [{ name: 'search' }, { name: 'summarize', stepType: 'tool_call' }] },
-  { compareStepData: false, allowRepeatedSteps: true },
+  { allowRepeatedSteps: true },
 )
 // result.score — 0.0 to 1.0
 // result.missingSteps — step names not found

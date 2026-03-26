@@ -112,7 +112,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should return 1 for exact match', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }])));
 
@@ -122,7 +122,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should penalize extra steps with calculated penalty', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(
         makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }, { name: 'format' }])),
@@ -136,7 +136,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should return 0 when steps are reversed', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'summarize' }, { name: 'search' }])));
 
@@ -146,7 +146,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should identify missing steps', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }])));
 
@@ -157,6 +157,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
 
   describe('step data comparison', () => {
     test('should match when step data is identical', async () => {
+      // Expected trajectory has toolArgs set → auto-compared
       const expected: Trajectory = {
         steps: [
           { stepType: 'tool_call', name: 'search', toolArgs: { query: 'test' } },
@@ -165,7 +166,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(
         makeRun(
@@ -185,7 +185,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolArgs: { query: 'different' } }])));
 
@@ -198,7 +197,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolResult: { count: 5 } }])));
 
@@ -211,7 +209,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       // actual step has same name but different stepType
       const actual: Trajectory = {
@@ -496,11 +493,11 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(0);
     });
 
-    test('should match ExpectedStep with data comparison', async () => {
+    test('should auto-compare ExpectedStep data when fields are present', async () => {
       const scorer = createTrajectoryScorerCode({
         defaults: {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
-          compareStepData: true,
+          // toolArgs specified → auto-compared
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         },
       });
 
@@ -509,11 +506,10 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(1);
     });
 
-    test('should fail ExpectedStep data mismatch', async () => {
+    test('should fail when ExpectedStep data fields do not match', async () => {
       const scorer = createTrajectoryScorerCode({
         defaults: {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
-          compareStepData: true,
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         },
       });
 
