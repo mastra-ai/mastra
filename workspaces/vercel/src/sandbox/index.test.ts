@@ -9,12 +9,7 @@ vi.stubGlobal('fetch', mockFetch);
 // Mock crypto.randomUUID
 vi.stubGlobal('crypto', { randomUUID: () => 'test-secret-uuid' });
 
-function createDeploymentResponse(
-  id: string,
-  url: string,
-  readyState = 'BUILDING',
-  projectId?: string,
-) {
+function createDeploymentResponse(id: string, url: string, readyState = 'BUILDING', projectId?: string) {
   return {
     ok: true,
     json: async () => ({ id, url, readyState, ...(projectId ? { projectId } : {}) }),
@@ -497,9 +492,7 @@ describe('VercelSandbox', () => {
       mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
       await sandbox._destroy();
 
-      const deleteCalls = mockFetch.mock.calls.filter(
-        (call: [string, RequestInit?]) => call[1]?.method === 'DELETE',
-      );
+      const deleteCalls = mockFetch.mock.calls.filter((call: [string, RequestInit?]) => call[1]?.method === 'DELETE');
       expect(deleteCalls.length).toBe(1);
       expect(deleteCalls[0]![0]).toContain('/v13/deployments/dep-123');
     });
@@ -525,9 +518,7 @@ describe('VercelSandbox', () => {
 
       await startWithTimers(sandbox);
 
-      const deleteCalls = mockFetch.mock.calls.filter(
-        (call: [string, RequestInit?]) => call[1]?.method === 'DELETE',
-      );
+      const deleteCalls = mockFetch.mock.calls.filter((call: [string, RequestInit?]) => call[1]?.method === 'DELETE');
       expect(deleteCalls.length).toBe(1);
       expect(deleteCalls[0]![0]).toContain('/v13/deployments/dep-old');
     });
@@ -548,9 +539,7 @@ describe('VercelSandbox', () => {
       expect(sandbox.status).toBe('destroyed');
 
       // Verify DELETE was called
-      const deleteCalls = mockFetch.mock.calls.filter(
-        (call: [string, RequestInit?]) => call[1]?.method === 'DELETE',
-      );
+      const deleteCalls = mockFetch.mock.calls.filter((call: [string, RequestInit?]) => call[1]?.method === 'DELETE');
       expect(deleteCalls.length).toBe(1);
       expect(deleteCalls[0]![0]).toContain('/v13/deployments/dep-123');
     });
@@ -561,9 +550,7 @@ describe('VercelSandbox', () => {
       await freshSandbox._destroy();
 
       // No DELETE calls should have been made
-      const deleteCalls = mockFetch.mock.calls.filter(
-        (call: [string, RequestInit?]) => call[1]?.method === 'DELETE',
-      );
+      const deleteCalls = mockFetch.mock.calls.filter((call: [string, RequestInit?]) => call[1]?.method === 'DELETE');
       expect(deleteCalls.length).toBe(0);
     });
   });
