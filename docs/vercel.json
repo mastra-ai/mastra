@@ -422,7 +422,7 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/studio/cloud",
+      "destination": "/docs/mastra-cloud/overview",
       "permanent": true
     },
     {
@@ -677,7 +677,17 @@
     },
     {
       "source": "/docs/mastra-cloud/studio",
-      "destination": "/docs/studio/cloud",
+      "destination": "/docs/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/overview",
+      "destination": "/docs/evals/datasets/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/running-experiments",
+      "destination": "/docs/evals/datasets/running-experiments",
       "permanent": true
     }
   ]

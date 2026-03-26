@@ -63,8 +63,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'studio/cloud',
-          label: 'Cloud',
+          id: 'studio/observability',
+          label: 'Observability',
         },
       ],
     },
@@ -452,35 +452,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
-      customProps: {
-        tags: ['beta'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-cloud/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Observability',
       items: [
         {
@@ -591,17 +562,12 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Datasets',
+          label: 'Metrics',
           items: [
             {
               type: 'doc',
-              id: 'observability/datasets/overview',
+              id: 'observability/metrics/overview',
               label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'observability/datasets/running-experiments',
-              label: 'Running Experiments',
             },
           ],
         },
@@ -630,6 +596,51 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'evals/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'evals/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Cloud',
+      customProps: {
+        tags: ['beta'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-cloud/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/setup',
+          label: 'Setup',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/observability',
+          label: 'Observability',
         },
       ],
     },
@@ -690,7 +701,6 @@ const sidebars = {
         },
       ],
     },
-
     {
       type: 'category',
       label: 'Build with AI',
