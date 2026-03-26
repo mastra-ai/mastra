@@ -309,6 +309,7 @@ export async function deployAction(
 
   // Step 6: Build + Zip + Upload + Poll
   const s = p.spinner();
+  const tTotal = performance.now();
 
   let t: number;
 
@@ -362,7 +363,7 @@ export async function deployAction(
   const finalStatus = await pollDeploy(deployResult.id, token, orgId);
 
   if (finalStatus.status === 'running') {
-    p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);
+    p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);
