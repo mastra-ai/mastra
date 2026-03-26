@@ -11,6 +11,7 @@ export * from './domains/templates/index';
 export * from './domains/metrics/index';
 export * from './domains/observability/index';
 export * from './domains/datasets/index';
+export * from './domains/logs/index';
 export * from './ds/components/Threads';
 export * from './types';
 
@@ -88,7 +89,9 @@ export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
 export * from './ds/components/Chip';
 export * from './ds/components/Tree';
+export * from './ds/components/DataList';
 export * from './ds/components/EntityList';
+export * from './ds/components/LogsDataList';
 export * from './ds/components/EntityListPageLayout';
 export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorState';

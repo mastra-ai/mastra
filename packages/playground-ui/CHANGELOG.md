@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 19.0.1-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#14584](https://github.com/mastra-ai/mastra/pull/14584))
+  - Updated dependency [`@assistant-ui/react@^0.12.19` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.19) (from `^0.12.17`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.6` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.6) (from `^0.12.5`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.7` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.7) (from `^0.12.6`, in `dependencies`)
+
+- Added 'Create Agent' and 'Edit Agent' buttons to the playground, gated behind the MASTRA_EXPERIMENTAL_UI environment variable. When enabled, a 'Create Agent' button appears on the agents list page and an 'Edit' button appears on the agent detail header for stored agents. ([#14694](https://github.com/mastra-ai/mastra/pull/14694))
+
+- Updated dependencies [[`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`197daf0`](https://github.com/mastra-ai/mastra/commit/197daf03a33e4650bd90391eef0ec7d0392a6c9c), [`86e3263`](https://github.com/mastra-ai/mastra/commit/86e326363edd12be5a5b25ccce4a39f66f7c9f50), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.17.0-alpha.2
+  - @mastra/client-js@1.10.1-alpha.2
+  - @mastra/react@0.2.18-alpha.2
+
 ## 19.0.1-alpha.1
 
 ### Patch Changes

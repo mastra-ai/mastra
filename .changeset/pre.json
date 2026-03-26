@@ -122,14 +122,27 @@
     "@mastra/s3": "0.3.0"
   },
   "changesets": [
+    "@mastra_playground-ui-14584-dependencies",
     "automated-provider-registry-20260325-004943",
+    "bumpy-dryers-do",
+    "dirty-carrots-punch",
+    "disable-builtin-tools-option",
+    "eighty-parents-sort",
     "fancy-fans-fly",
+    "four-toys-dig",
+    "fuzzy-facts-burn",
     "green-birds-knock",
     "jolly-kiwis-vanish",
     "large-yaks-shout",
     "lemon-donuts-serve",
     "quick-llamas-accept",
+    "ready-dingos-raise",
+    "ripe-olives-stick",
+    "salty-wombats-know",
+    "shaky-ears-dance",
+    "shy-mugs-retire",
     "spicy-cobras-own",
+    "violet-zoos-stop",
     "wild-coats-dream"
   ]
 }

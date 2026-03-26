@@ -20,7 +20,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
   const { pathname } = useLocation();
-  const isMetricsDashboardPage = pathname === '/metrics';
+  const isMetricsDashboardPage = pathname === '/metrics' || pathname === '/logs';
   const { variant } = useExperimentalUI('entity-list-page');
 
   const agentListExperiment = UI_EXPERIMENTS.find(e => e.key === 'entity-list-page');
