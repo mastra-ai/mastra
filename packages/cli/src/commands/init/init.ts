@@ -80,6 +80,10 @@ export const init = async ({
       if (needsLibsql) {
         await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
       }
+      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
+      if (needsDuckDB) {
+        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
+      }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
       if (needsMemory) {
