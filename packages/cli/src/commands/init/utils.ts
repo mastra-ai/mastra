@@ -508,7 +508,6 @@ export const mastra = new Mastra({
     id: 'composite-storage',
     default: new LibSQLStore({
       id: "mastra-storage",
-      // stores observability, scores, ... into persistent file storage
       url: "file:./mastra.db",
     }),
     domains: {
