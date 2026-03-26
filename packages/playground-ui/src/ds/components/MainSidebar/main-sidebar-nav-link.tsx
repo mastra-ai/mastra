@@ -14,6 +14,7 @@ export type NavLink = {
   tooltipMsg?: string;
   isOnMastraPlatform: boolean;
   isExperimental?: boolean;
+  indent?: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
@@ -64,6 +65,8 @@ export function MainSidebarNavLink({
             isFeatured,
           '[&_svg]:text-accent1 [&>a:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black':
             isFeatured,
+          // Indented sub-link
+          '[&>a]:pl-7 [&>a]:text-ui-sm': link?.indent && !isCollapsed,
         },
         className,
       )}

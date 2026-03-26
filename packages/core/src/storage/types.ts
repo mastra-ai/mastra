@@ -2409,3 +2409,11 @@ export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
 }
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
+}
