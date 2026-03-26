@@ -37,6 +37,7 @@ export * from './ds/components/Combobox';
 export * from './ds/components/Command';
 export * from './ds/components/CopyButton';
 export * from './ds/components/Dialog';
+export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/Input';
