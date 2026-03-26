@@ -884,7 +884,7 @@ export class Workspace<
     // Install skill via npx skills CLI
     // Note: This installs to multiple agent folders (.claude/, .agents/, etc.)
     // Future improvement: Use skills API directly like the studio does to only install to .agents/skills/
-    console.info(`[Workspace "${this.name}"] Installing browser skill: ${skillInfo.repo}/${skillInfo.skill}`);
+    console.info(`[Workspace "${this.name}"] Installing browser skill "${skillInfo.skill}" from ${skillInfo.repo}`);
     try {
       await this._sandbox.executeCommand('npx', ['skills', 'add', skillInfo.repo, '--skill', skillInfo.skill, '-y'], {
         timeout: 60000, // 60s timeout for npm install

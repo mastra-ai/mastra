@@ -1,6 +1,11 @@
 import { Mastra } from '@mastra/core/mastra';
-import { agentBrowserAgent, stagehandAgent, workspaceBrowserAgent } from './agents/index.js';
+import {
+  agentBrowserAgent,
+  stagehandAgent,
+  workspaceAgentBrowserAgent,
+  workspaceBrowserUseAgent,
+} from './agents/index.js';
 
 export const mastra = new Mastra({
-  agents: { agentBrowserAgent, stagehandAgent, workspaceBrowserAgent },
+  agents: { agentBrowserAgent, stagehandAgent, workspaceAgentBrowserAgent, workspaceBrowserUseAgent },
 });
