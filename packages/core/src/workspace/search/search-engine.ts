@@ -234,11 +234,10 @@ export class SearchEngine {
    * @param docs - Documents to index
    * @param options - `p-map` options; `concurrency` defaults to 8
    */
-  async indexMany(
-    docs: IndexDocument[],
-    options: IndexManyOptions = { concurrency: DEFAULT_INDEX_MANY_CONCURRENCY },
-  ): Promise<void> {
-    await pMap(docs, doc => this.index(doc), options);
+  async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
+    const stopOnError = options?.stopOnError;
+    const concurrency = options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY;
+    await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
   }
 
   /**
