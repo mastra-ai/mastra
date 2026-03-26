@@ -115,10 +115,9 @@ export interface HarnessSubagent {
 }
 
 /**
- * Schema type for harness state.
- * Accepts any PublicSchema variant: Zod v4, JSON Schema, AI SDK Schema, or Standard Schema.
+ * State data type for the Harness generic parameter.
  */
-export type HarnessStateSchema<T> = PublicSchema<T>;
+export type HarnessStateSchema<T> = T;
 
 /**
  * Configuration for creating a Harness instance.
@@ -142,7 +141,7 @@ export interface HarnessConfig<TState = {}> {
   storage?: MastraCompositeStore;
 
   /** Schema defining the shape of harness state (Zod, JSON Schema, Standard Schema, etc.) */
-  stateSchema?: TState;
+  stateSchema?: PublicSchema<TState, any>;
 
   /** Initial state values (must conform to schema) */
   initialState?: Partial<TState>;
@@ -831,6 +830,7 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | { type: 'system_reminder'; message: string; reminderType?: string; path?: string }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
