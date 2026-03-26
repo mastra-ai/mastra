@@ -1,5 +1,21 @@
 # @mastra/agent-builder
 
+## 1.0.19-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/memory@1.10.1-alpha.1
+  - @mastra/core@1.16.1-alpha.1
+
+## 1.0.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`d657856`](https://github.com/mastra-ai/mastra/commit/d6578561c104fecfeb3caa17dc07d1acbeeffff7)]:
+  - @mastra/core@1.16.1-alpha.0
+  - @mastra/memory@1.10.1-alpha.0
+
 ## 1.0.18
 
 ### Patch Changes

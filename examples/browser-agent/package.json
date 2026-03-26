@@ -12,7 +12,6 @@
     "@mastra/stagehand": "latest",
     "agent-browser": "^0.22.2",
     "mastra": "latest",
-    "ws": "^8.17.0",
     "zod": "^4.3.6"
   },
   "pnpm": {
