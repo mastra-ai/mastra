@@ -624,6 +624,9 @@ describe('Long session: observation and reflection lifecycle', () => {
     // but reflection should have occurred at some point)
 
     // ── Message persistence ──
+    await om.waitForBuffering(threadId, resourceId);
+    await waitForAsyncOps();
+
     const { messages: allMessages } = await storage.listMessages({
       threadId,
       perPage: false,
