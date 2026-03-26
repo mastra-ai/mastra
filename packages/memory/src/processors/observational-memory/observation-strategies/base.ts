@@ -44,6 +44,7 @@ export interface StrategyDeps {
     range: string;
     threadId: string;
     resourceId: string;
+    observedAt?: Date;
   }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
@@ -275,7 +276,12 @@ export abstract class ObservationStrategy {
     return `${existingObservations}${boundary}${newThreadSection}`;
   }
 
-  protected async indexObservationGroups(observations: string, threadId: string, resourceId?: string): Promise<void> {
+  protected async indexObservationGroups(
+    observations: string,
+    threadId: string,
+    resourceId?: string,
+    observedAt?: Date,
+  ): Promise<void> {
     if (!resourceId || !this.deps.onIndexObservations) {
       return;
     }
@@ -293,6 +299,7 @@ export abstract class ObservationStrategy {
           range: group.range,
           threadId,
           resourceId,
+          observedAt,
         }),
       ),
     );
@@ -302,8 +309,9 @@ export abstract class ObservationStrategy {
     observations: string,
     threadId: string,
     resourceId: string | undefined,
+    observedAt?: Date,
   ): Promise<void> {
-    await this.indexObservationGroups(observations, threadId, resourceId);
+    await this.indexObservationGroups(observations, threadId, resourceId, observedAt);
   }
 
   // ── Marker persistence ──────────────────────────────────────

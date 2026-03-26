@@ -151,6 +151,7 @@ export class ObservationalMemory {
     range: string;
     threadId: string;
     resourceId: string;
+    observedAt?: Date;
   }) => Promise<void>;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */

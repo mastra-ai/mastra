@@ -388,8 +388,13 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     if (resourceId) {
       await Promise.all(
-        this.observationResults.map(({ threadId, result }) =>
-          this.indexObservationGroup(result.observations, threadId, resourceId),
+        this.observationResults.map(({ threadId, threadMessages, result }) =>
+          this.indexObservationGroup(
+            result.observations,
+            threadId,
+            resourceId,
+            this.getMaxMessageTimestamp(threadMessages),
+          ),
         ),
       );
     }

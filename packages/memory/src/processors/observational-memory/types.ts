@@ -782,6 +782,7 @@ export interface ObservationalMemoryConfig {
     range: string;
     threadId: string;
     resourceId: string;
+    observedAt?: Date;
   }) => Promise<void>;
 
   /**

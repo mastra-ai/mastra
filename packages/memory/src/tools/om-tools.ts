@@ -34,6 +34,7 @@ type RecallSearchResult = {
   groupId?: string;
   range?: string;
   text?: string;
+  observedAt?: Date;
 };
 
 type RecallMemory = {
@@ -65,6 +66,11 @@ type RecallMemory = {
     query: string;
     resourceId: string;
     topK?: number;
+    filter?: {
+      threadId?: string;
+      observedAfter?: Date;
+      observedBefore?: Date;
+    };
   }) => Promise<{ results: RecallSearchResult[] }>;
   getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
@@ -269,7 +275,19 @@ export async function searchMessagesForResource({
   const effectiveTopK = threadScope || before || after ? Math.max(clampedTopK * 3, clampedTopK + 10) : clampedTopK;
   const searchTopK = Math.min(MAX_TOPK, effectiveTopK);
 
-  const { results } = await memory.searchMessages({ query, resourceId, topK: searchTopK });
+  const beforeDate = before ? new Date(before) : undefined;
+  const afterDate = after ? new Date(after) : undefined;
+
+  const { results } = await memory.searchMessages({
+    query,
+    resourceId,
+    topK: searchTopK,
+    filter: {
+      ...(threadScope ? { threadId: threadScope } : {}),
+      ...(afterDate ? { observedAfter: afterDate } : {}),
+      ...(beforeDate ? { observedBefore: beforeDate } : {}),
+    },
+  });
 
   if (results.length === 0) {
     return {
@@ -289,18 +307,10 @@ export async function searchMessagesForResource({
     );
   }
 
-  const beforeDate = before ? new Date(before) : undefined;
-  const afterDate = after ? new Date(after) : undefined;
-
   const filteredMatches = results.filter(match => {
     if (threadScope && match.threadId !== threadScope) return false;
-
-    const thread = threadMap.get(match.threadId);
-    if (!thread) return true;
-
-    const created = new Date(thread.createdAt);
-    if (beforeDate && created >= beforeDate) return false;
-    if (afterDate && created <= afterDate) return false;
+    if (beforeDate && match.observedAt && match.observedAt >= beforeDate) return false;
+    if (afterDate && match.observedAt && match.observedAt <= afterDate) return false;
     return true;
   });
 

@@ -36,6 +36,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -1295,7 +1296,14 @@ ${workingMemory}`;
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
     const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
-      ? async (observation: { text: string; groupId: string; range: string; threadId: string; resourceId: string }) => {
+      ? async (observation: {
+          text: string;
+          groupId: string;
+          range: string;
+          threadId: string;
+          resourceId: string;
+          observedAt?: Date;
+        }) => {
           await this.indexObservation(observation);
         }
       : undefined;
@@ -1516,10 +1524,16 @@ Notes:
     query,
     resourceId,
     topK = 10,
+    filter,
   }: {
     query: string;
     resourceId: string;
     topK?: number;
+    filter?: {
+      threadId?: string;
+      observedAfter?: Date;
+      observedBefore?: Date;
+    };
   }): Promise<{
     results: Array<{
       threadId: string;
@@ -1527,6 +1541,7 @@ Notes:
       groupId?: string;
       range?: string;
       text?: string;
+      observedAt?: Date;
     }>;
   }> {
     if (!this.vector) {
@@ -1536,12 +1551,24 @@ Notes:
     const { embeddings, dimension } = await this.embedMessageContent(query);
     const { indexName } = await this.createObservationEmbeddingIndex(dimension);
 
+    const vectorFilter: VectorFilter = { resource_id: resourceId };
+    if (filter?.threadId) {
+      vectorFilter.thread_id = filter.threadId;
+    }
+    if (filter?.observedAfter || filter?.observedBefore) {
+      vectorFilter.observed_at = {
+        ...(filter.observedAfter ? { $gt: filter.observedAfter.toISOString() } : {}),
+        ...(filter.observedBefore ? { $lt: filter.observedBefore.toISOString() } : {}),
+      };
+    }
+
     const queryResults: Array<{
       threadId: string;
       score: number;
       groupId?: string;
       range?: string;
       text?: string;
+      observedAt?: Date;
     }> = [];
 
     await Promise.all(
@@ -1550,7 +1577,7 @@ Notes:
           indexName,
           queryVector: embedding,
           topK,
-          filter: { resource_id: resourceId },
+          filter: vectorFilter,
         });
         for (const r of results) {
           if (!r.metadata?.thread_id) {
@@ -1568,6 +1595,10 @@ Notes:
             groupId,
             range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
             text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
+            observedAt:
+              typeof r.metadata.observed_at === 'string' || r.metadata.observed_at instanceof Date
+                ? new Date(r.metadata.observed_at)
+                : undefined,
           });
         }
       }),
@@ -1599,12 +1630,14 @@ Notes:
     range,
     threadId,
     resourceId,
+    observedAt,
   }: {
     text: string;
     groupId: string;
     range: string;
     threadId: string;
     resourceId: string;
+    observedAt?: Date;
   }): Promise<void> {
     if (!this.vector || !this.embedder) return;
 
@@ -1623,6 +1656,7 @@ Notes:
         range,
         thread_id: threadId,
         resource_id: resourceId,
+        observed_at: observedAt?.toISOString(),
         text: chunk,
       })),
     });

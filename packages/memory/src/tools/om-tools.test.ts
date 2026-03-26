@@ -1405,8 +1405,22 @@ describe('om-tools', () => {
 
       const searchMessages = vi.fn().mockResolvedValue({
         results: [
-          { threadId: 'thread-a', groupId: 'group-a', range: 'msg-1:msg-2', score: 0.99, text: 'Current thread hit' },
-          { threadId: 'thread-b', groupId: 'group-b', range: 'msg-3:msg-4', score: 0.88, text: 'Older thread hit' },
+          {
+            threadId: 'thread-a',
+            groupId: 'group-a',
+            range: 'msg-1:msg-2',
+            score: 0.99,
+            text: 'Current thread hit',
+            observedAt: new Date('2024-01-10T00:00:00.000Z'),
+          },
+          {
+            threadId: 'thread-b',
+            groupId: 'group-b',
+            range: 'msg-3:msg-4',
+            score: 0.88,
+            text: 'Older thread hit',
+            observedAt: new Date('2024-01-20T00:00:00.000Z'),
+          },
         ],
       });
 
@@ -1425,7 +1439,12 @@ describe('om-tools', () => {
         after: '2024-01-15',
       });
 
-      expect(searchMessages).toHaveBeenCalledWith({ query: 'older thread', resourceId: 'res', topK: 11 });
+      expect(searchMessages).toHaveBeenCalledWith({
+        query: 'older thread',
+        resourceId: 'res',
+        topK: 11,
+        filter: { observedAfter: new Date('2024-01-15T00:00:00.000Z') },
+      });
       expect(result.count).toBe(1);
       expect(result.results).toContain('Older Thread');
       expect(result.results).not.toContain('Current Thread');
@@ -1442,6 +1461,7 @@ describe('om-tools', () => {
         groupId?: string;
         range?: string;
         text?: string;
+        observedAt?: Date;
       }>;
       messages?: MastraDBMessage[];
       threads?: Array<{ id: string; title?: string; resourceId: string; createdAt: Date; updatedAt: Date }>;
@@ -1594,9 +1614,30 @@ describe('om-tools', () => {
 
       const memory = makeMockMemory({
         searchResults: [
-          { threadId: 'thread-c', groupId: 'group-1', range: 'msg-1:msg-2', score: 0.99, text: 'out' },
-          { threadId: 'thread-c', groupId: 'group-2', range: 'msg-3:msg-4', score: 0.98, text: 'out' },
-          { threadId: 'thread-b', groupId: 'group-3', range: 'msg-5:msg-6', score: 0.97, text: 'in' },
+          {
+            threadId: 'thread-c',
+            groupId: 'group-1',
+            range: 'msg-1:msg-2',
+            score: 0.99,
+            text: 'out',
+            observedAt: new Date('2024-01-04T00:00:00Z'),
+          },
+          {
+            threadId: 'thread-c',
+            groupId: 'group-2',
+            range: 'msg-3:msg-4',
+            score: 0.98,
+            text: 'out',
+            observedAt: new Date('2024-01-04T00:00:00Z'),
+          },
+          {
+            threadId: 'thread-b',
+            groupId: 'group-3',
+            range: 'msg-5:msg-6',
+            score: 0.97,
+            text: 'in',
+            observedAt: new Date('2024-01-02T00:00:00Z'),
+          },
         ],
         threads,
       });
