@@ -3,7 +3,7 @@ import type { ChunkType, MastraAgentNetworkStream } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
 import { toAISdkV5Stream } from '../convert-streams';
-import { WorkflowStreamToAISDKTransformer } from '../transformers';
+import { AgentStreamToAISDKTransformer, WorkflowStreamToAISDKTransformer } from '../transformers';
 
 describe('WorkflowStreamToAISDKTransformer', () => {
   describe('basic workflow stream', () => {
@@ -1421,5 +1421,259 @@ describe('Network stream - fallback (no text events from core)', () => {
     expect(textDeltaChunks.length).toBeGreaterThan(0);
     const textContent = textDeltaChunks.map(c => c.delta || '').join('');
     expect(textContent).toContain('Here are the search results');
+  });
+});
+
+describe('AgentStreamToAISDKTransformer - intermediate data-tool-* suppression', () => {
+  it('should not emit intermediate data-tool-agent events, only the final one', async () => {
+    const mockStream = new ReadableStream<ChunkType>({
+      async start(controller) {
+        const runId = 'agent-run-1';
+        const nestedRunId = 'nested-agent-run';
+
+        // Agent start (outer)
+        controller.enqueue({
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'msg-1' },
+        });
+
+        // Nested agent starts via tool-output
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'start',
+              from: ChunkFrom.AGENT,
+              runId: nestedRunId,
+              payload: { id: 'nested-msg-1' },
+            },
+          },
+        });
+
+        // Nested agent streams text (each would normally emit data-tool-agent with full state)
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'text-delta',
+              from: ChunkFrom.AGENT,
+              runId: nestedRunId,
+              payload: { text: 'Hello ' },
+            },
+          },
+        });
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'text-delta',
+              from: ChunkFrom.AGENT,
+              runId: nestedRunId,
+              payload: { text: 'World' },
+            },
+          },
+        });
+
+        // Nested agent finishes
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'finish',
+              from: ChunkFrom.AGENT,
+              runId: nestedRunId,
+              payload: {
+                stepResult: { reason: 'stop', warnings: [] },
+                output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              },
+            },
+          },
+        });
+
+        // Outer agent finishes
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop', warnings: [] },
+            output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          },
+        });
+
+        controller.close();
+      },
+    });
+
+    const transformedStream = mockStream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: true, sendFinish: true }),
+    );
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    // data-tool-agent events should only appear for the final (finished) state
+    const agentDataChunks = chunks.filter(c => c.type === 'data-tool-agent');
+    expect(agentDataChunks.length).toBe(1);
+    expect(agentDataChunks[0].data.status).toBe('finished');
+  });
+
+  it('should not emit intermediate data-tool-workflow events, only on completion', async () => {
+    const mockStream = new ReadableStream<ChunkType>({
+      async start(controller) {
+        const runId = 'agent-run-1';
+
+        controller.enqueue({
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'msg-1' },
+        });
+
+        // Workflow events flowing through as tool-output
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { workflowId: 'test-workflow' },
+            },
+          },
+        });
+
+        // Step 1 starts with large input
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-1', status: 'running', payload: { data: 'x'.repeat(1000) } },
+            },
+          },
+        });
+
+        // Step 2 starts with large input
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-2', status: 'running', payload: { data: 'y'.repeat(1000) } },
+            },
+          },
+        });
+
+        // Step 1 completes
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-result',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-1', status: 'success', output: { result: 'done' } },
+            },
+          },
+        });
+
+        // Step 2 completes
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-result',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-2', status: 'success', output: { result: 'done' } },
+            },
+          },
+        });
+
+        // Workflow finishes
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-finish',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: {
+                workflowStatus: 'success',
+                output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop', warnings: [] },
+            output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          },
+        });
+
+        controller.close();
+      },
+    });
+
+    const transformedStream = mockStream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: true, sendFinish: true }),
+    );
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    // Only the workflow-finish event should produce a data-tool-workflow chunk
+    const workflowDataChunks = chunks.filter(c => c.type === 'data-tool-workflow');
+    expect(workflowDataChunks.length).toBe(1);
+    expect(workflowDataChunks[0].data.status).toBe('success');
+    // The final event should still include all steps with full data
+    expect(workflowDataChunks[0].data.steps['step-1']).toBeDefined();
+    expect(workflowDataChunks[0].data.steps['step-2']).toBeDefined();
   });
 });

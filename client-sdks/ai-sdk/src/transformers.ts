@@ -292,10 +292,15 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
       });
 
       if (transformedChunk) {
+        // data-tool-* events accumulate full state and re-broadcast it on every chunk,
+        // causing O(N²) payload growth that overwhelms HTTP/2 connections.
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
           const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-          if (agentTransformed) controller.enqueue(agentTransformed);
+          if (agentTransformed?.data?.status === 'finished') {
+            controller.enqueue(agentTransformed);
+            bufferedSteps.delete(payload.runId!);
+          }
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
           const workflowChunk = transformWorkflow(
@@ -305,12 +310,20 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
             undefined,
             undefined,
             convertMastraChunkToAISDK,
-          );
-          if (workflowChunk) controller.enqueue(workflowChunk);
+          ) as WorkflowDataPart | null;
+          if (workflowChunk && workflowChunk.data?.status !== 'running') {
+            controller.enqueue(workflowChunk);
+            if (workflowChunk.data?.status !== 'suspended') {
+              bufferedSteps.delete(payload.runId!);
+            }
+          }
         } else if (transformedChunk.type === 'tool-network') {
           const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps, true);
-          if (networkChunk) controller.enqueue(networkChunk);
+          const networkChunk = transformNetwork(payload, bufferedSteps, true) as NetworkDataPart | null;
+          if (networkChunk?.data?.status === 'finished') {
+            controller.enqueue(networkChunk);
+            bufferedSteps.delete(payload.runId!);
+          }
         } else {
           controller.enqueue(transformedChunk as any);
         }
