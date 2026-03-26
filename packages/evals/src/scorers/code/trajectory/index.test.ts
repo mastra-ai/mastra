@@ -822,4 +822,163 @@ describe('createTrajectoryScorerCode', () => {
       expect(nested?.[1]?.accuracy?.matchedSteps).toBe(1);
     });
   });
+
+  describe('reason generation', () => {
+    test('should include accuracy details in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            { stepType: 'tool_call', name: 'search' },
+            { stepType: 'tool_call', name: 'summarize' },
+          ],
+          maxSteps: 5,
+          noRedundantCalls: true,
+        },
+      });
+
+      const actual = makeTrajectory([
+        { name: 'search', success: true },
+        { name: 'summarize', success: true },
+      ]);
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.reason).toBeDefined();
+      expect(result.reason).toContain('Score:');
+      expect(result.reason).toContain('Accuracy');
+      expect(result.reason).toContain('2/2 expected steps matched');
+      expect(result.reason).toContain('Efficiency');
+    });
+
+    test('should report missing steps in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            { stepType: 'tool_call', name: 'search' },
+            { stepType: 'tool_call', name: 'summarize' },
+          ],
+        },
+      });
+
+      const actual = makeTrajectory([{ name: 'search', success: true }]);
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.reason).toContain('missing: summarize');
+    });
+
+    test('should report blacklist violation in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          blacklistedTools: ['deleteAll'],
+        },
+      });
+
+      const actual = makeTrajectory([{ name: 'deleteAll', success: true }]);
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('Blacklist violation');
+      expect(result.reason).toContain('deleteAll');
+    });
+
+    test('should report efficiency issues in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          maxSteps: 2,
+          noRedundantCalls: true,
+        },
+      });
+
+      const actual = makeTrajectory([
+        { name: 'search', success: true },
+        { name: 'search', success: true },
+        { name: 'summarize', success: true },
+      ]);
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.reason).toContain('Efficiency');
+      expect(result.reason).toContain('over step budget');
+      expect(result.reason).toContain('redundant calls: search');
+    });
+
+    test('should report tool failure details in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          maxRetriesPerTool: 1,
+        },
+      });
+
+      const actual = makeTrajectory([
+        { name: 'search', success: false },
+        { name: 'search', success: false },
+        { name: 'search', success: true },
+      ]);
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.reason).toContain('Tool failures');
+      expect(result.reason).toContain('retries');
+    });
+
+    test('should report nested scores in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                steps: [{ name: 'inner-tool', stepType: 'tool_call' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            agentId: 'agent-1',
+            children: [{ stepType: 'tool_call', name: 'inner-tool' }],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.reason).toContain('Nested scores');
+      expect(result.reason).toContain('agent');
+    });
+
+    test('should report nested blacklist violation in reason', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                blacklistedTools: ['forbidden'],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            agentId: 'agent-1',
+            children: [{ stepType: 'tool_call', name: 'forbidden' }],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('Nested blacklist violation');
+      expect(result.reason).toContain('agent');
+    });
+  });
 });

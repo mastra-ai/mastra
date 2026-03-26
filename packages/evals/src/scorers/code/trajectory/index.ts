@@ -542,5 +542,88 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       }
 
       return Math.round(levelScore * 100) / 100;
+    })
+    .generateReason(({ results, score }) => {
+      const { accuracy, efficiency, blacklist, toolFailures, nested } = results.preprocessStepResult ?? {};
+      const parts: string[] = [];
+
+      parts.push(`Score: ${score}`);
+
+      // Blacklist hard fail
+      if (blacklist && blacklist.score === 0) {
+        const violations: string[] = [];
+        if (blacklist.violatedTools.length > 0) {
+          violations.push(`forbidden tools used: ${blacklist.violatedTools.join(', ')}`);
+        }
+        if (blacklist.violatedSequences.length > 0) {
+          violations.push(`forbidden sequences: ${blacklist.violatedSequences.map(s => s.join(' → ')).join('; ')}`);
+        }
+        parts.push(`Blacklist violation: ${violations.join('. ')}.`);
+        return parts.join('\n');
+      }
+
+      // Check nested blacklist hard fail
+      if (nested && nested.some(r => r.blacklist && r.blacklist.score === 0)) {
+        const violating = nested.filter(r => r.blacklist && r.blacklist.score === 0).map(r => r.stepName);
+        parts.push(`Nested blacklist violation in: ${violating.join(', ')}.`);
+        return parts.join('\n');
+      }
+
+      // Accuracy
+      if (accuracy) {
+        const details: string[] = [`${accuracy.matchedSteps}/${accuracy.totalExpectedSteps} expected steps matched`];
+        if (accuracy.missingSteps.length > 0) {
+          details.push(`missing: ${accuracy.missingSteps.join(', ')}`);
+        }
+        if (accuracy.extraSteps.length > 0) {
+          details.push(`extra: ${accuracy.extraSteps.join(', ')}`);
+        }
+        if (accuracy.outOfOrderSteps.length > 0) {
+          details.push(`out of order: ${accuracy.outOfOrderSteps.join(', ')}`);
+        }
+        parts.push(`Accuracy (${accuracy.score}): ${details.join('. ')}.`);
+      }
+
+      // Efficiency
+      if (efficiency) {
+        const details: string[] = [];
+        if (efficiency.overStepBudget) {
+          details.push(`over step budget (${efficiency.totalSteps} steps)`);
+        }
+        if (efficiency.overTokenBudget) {
+          details.push(`over token budget (${efficiency.totalTokens} tokens)`);
+        }
+        if (efficiency.overDurationBudget) {
+          details.push(`over duration budget (${efficiency.totalDurationMs}ms)`);
+        }
+        if (efficiency.redundantCalls.length > 0) {
+          details.push(`redundant calls: ${efficiency.redundantCalls.map(c => c.name).join(', ')}`);
+        }
+        if (details.length > 0) {
+          parts.push(`Efficiency (${efficiency.score}): ${details.join('. ')}.`);
+        } else {
+          parts.push(`Efficiency (${efficiency.score}): all budgets met, no redundant calls.`);
+        }
+      }
+
+      // Tool failures
+      if (toolFailures && toolFailures.patterns.length > 0) {
+        const details: string[] = [];
+        if (toolFailures.totalRetries > 0) {
+          details.push(`${toolFailures.totalRetries} total retries`);
+        }
+        if (toolFailures.excessiveRetryTools.length > 0) {
+          details.push(`excessive retries: ${toolFailures.excessiveRetryTools.join(', ')}`);
+        }
+        parts.push(`Tool failures (${toolFailures.score}): ${details.join('. ')}.`);
+      }
+
+      // Nested
+      if (nested && nested.length > 0) {
+        const nestedSummary = nested.map(r => `${r.stepName}: ${r.score}`).join(', ');
+        parts.push(`Nested scores: ${nestedSummary}.`);
+      }
+
+      return parts.join('\n');
     });
 }
