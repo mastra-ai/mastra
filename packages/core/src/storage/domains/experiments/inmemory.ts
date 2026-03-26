@@ -2,6 +2,7 @@ import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -191,5 +192,23 @@ export class ExperimentsInMemory extends ExperimentsStorage {
         this.db.experimentResults.delete(resultId);
       }
     }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    const counts = new Map<string, ExperimentReviewCounts>();
+
+    for (const result of this.db.experimentResults.values()) {
+      let entry = counts.get(result.experimentId);
+      if (!entry) {
+        entry = { experimentId: result.experimentId, total: 0, needsReview: 0, reviewed: 0, complete: 0 };
+        counts.set(result.experimentId, entry);
+      }
+      entry.total++;
+      if (result.status === 'needs-review') entry.needsReview++;
+      else if (result.status === 'reviewed') entry.reviewed++;
+      else if (result.status === 'complete') entry.complete++;
+    }
+
+    return Array.from(counts.values());
   }
 }

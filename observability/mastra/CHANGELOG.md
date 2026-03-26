@@ -1,5 +1,25 @@
 # @mastra/observability
 
+## 1.6.0-alpha.1
+
+### Minor Changes
+
+- Added cost estimation for observability metrics. ([#14609](https://github.com/mastra-ai/mastra/pull/14609))
+  - Added embedded pricing data and runtime cost estimation for auto-extracted model token metrics.
+  - Added cost context propagation through observability metrics and exporters.
+
+  **Breaking / Upgrade Notes**
+  - This version adds metric cost estimation and requires the newer observability fields and hooks provided by `@mastra/core >=1.17.0-0`.
+
+### Patch Changes
+
+- Fixed cost estimation matching for AI SDK providers by normalizing provider names (e.g. 'openai.chat' → 'openai') to match pricing data keys. ([#14716](https://github.com/mastra-ai/mastra/pull/14716))
+
+- Improved model usage normalization and total cost reporting. Model generation spans now populate input and output text detail buckets from the reported totals when providers do not supply a full breakdown, and `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens` now include estimated cost based on the successfully priced detail buckets for those totals. ([#14674](https://github.com/mastra-ai/mastra/pull/14674))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
 ## 1.6.0-alpha.0
 
 ### Minor Changes
