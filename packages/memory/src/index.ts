@@ -1308,14 +1308,10 @@ ${workingMemory}`;
         }
       : undefined;
 
-    const retrievalScope =
-      typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
-
     return new OMClass({
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
-      retrievalScope,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       onIndexObservations,

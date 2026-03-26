@@ -768,12 +768,6 @@ export interface ObservationalMemoryConfig {
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
   /**
-   * Controls which recall scope is described in observer instructions.
-   * Defaults to `resource` when retrieval is enabled.
-   */
-  retrievalScope?: 'thread' | 'resource';
-
-  /**
    * Optional callback used to index emitted observation groups for semantic retrieval.
    */
   onIndexObservations?: (observation: {
