@@ -164,9 +164,20 @@ function getPackageRoot(): string {
 }
 
 function makePricingKey(args: { provider: string; model: string }): string {
-  return `${normalizeKeyPart(args.provider)}::${normalizeKeyPart(args.model)}`;
+  return `${normalizeProvider(args.provider)}::${normalizeKeyPart(args.model)}`;
 }
 
 function normalizeKeyPart(value: string): string {
   return value.trim().toLowerCase();
+}
+
+/**
+ * Normalize a provider string by stripping AI SDK capability suffixes
+ * (e.g. "openai.chat" → "openai", "anthropic.messages" → "anthropic").
+ * The pricing data uses bare provider names without these suffixes.
+ */
+function normalizeProvider(provider: string): string {
+  const normalized = provider.trim().toLowerCase();
+  const dotIndex = normalized.indexOf('.');
+  return dotIndex !== -1 ? normalized.substring(0, dotIndex) : normalized;
 }
