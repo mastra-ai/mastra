@@ -1,12 +1,14 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it } from 'vitest';
 import { analyzeBundle } from './analyze';
 import { slash } from './utils';
 
 const tempDirs: string[] = [];
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const tempRoot = join(packageRoot, '.tmp');
 
 afterEach(async () => {
   await Promise.all(
@@ -31,7 +33,8 @@ describe('workspace path normalization (issue #13022)', () => {
 
 describe('protocol imports', () => {
   it('should exclude protocol imports from externalDependencies', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-protocol-imports-'));
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-protocol-imports-'));
     tempDirs.push(tempDir);
 
     const entryFile = join(tempDir, 'index.ts');
