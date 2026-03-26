@@ -16,10 +16,10 @@ import {
   useMCPServers,
   HeaderTitle,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useExperimentalUI } from '@/domains/experimental-ui/use-experimental-ui';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();

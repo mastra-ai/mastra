@@ -1,8 +1,5 @@
 import React from 'react';
 
-import { ExperimentalUIContext } from './experimental-ui-context-base';
-import type { ExperimentalUIContextValue } from './experimental-ui-context-base';
-
 const STORAGE_PREFIX = 'experimental-ui:';
 const DEFAULT_VARIANT = 'current';
 
@@ -14,6 +11,29 @@ export type UIExperimentConfig = {
   path?: string | string[];
   variants: UIExperimentVariantOption[];
 };
+
+type ExperimentalUIContextValue = {
+  experiments: UIExperimentConfig[];
+  getVariant: (key: string) => string;
+  setVariant: (key: string, variant: string) => void;
+};
+
+const ExperimentalUIContext = React.createContext<ExperimentalUIContextValue | null>(null);
+
+export function useExperimentalUI(key: string) {
+  const context = React.useContext(ExperimentalUIContext);
+  if (!context) {
+    throw new Error('useExperimentalUI must be used within an ExperimentalUIProvider.');
+  }
+  return {
+    variant: context.getVariant(key),
+    setVariant: (variant: string) => context.setVariant(key, variant),
+  };
+}
+
+export function useMaybeExperimentalUI(): ExperimentalUIContextValue | null {
+  return React.useContext(ExperimentalUIContext);
+}
 
 function readStoredVariant(key: string, validValues: Set<string>): string {
   const stored = window.localStorage.getItem(STORAGE_PREFIX + key);

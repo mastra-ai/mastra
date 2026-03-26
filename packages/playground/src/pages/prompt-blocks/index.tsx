@@ -17,10 +17,10 @@ import {
   MainHeader,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, FileTextIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useExperimentalUI } from '@/domains/experimental-ui/use-experimental-ui';
 
 export default function PromptBlocks() {
   const { Link: FrameworkLink, paths } = useLinkComponent();
