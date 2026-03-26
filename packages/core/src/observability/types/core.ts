@@ -226,6 +226,14 @@ export interface ObservabilityInstance {
    * @param span - Optional span to derive metric tags from
    */
   getMetricsContext?(span?: AnySpan): MetricsContext;
+
+  /**
+   * Register an additional exporter to this instance at runtime.
+   * Duplicate registrations (same instance) are silently ignored.
+   *
+   * @param exporter - The exporter to register
+   */
+  registerExporter?(exporter: ObservabilityExporter): void;
 }
 
 // ============================================================================
