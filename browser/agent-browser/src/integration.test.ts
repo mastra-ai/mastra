@@ -6,16 +6,15 @@
  *
  * Skip when Playwright/Chromium is not available (CI without browsers).
  */
+import { BrowserManager } from 'agent-browser';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentBrowser } from './agent-browser';
-import { loadBrowserManager } from './browser-types';
 
 // Check if we can actually launch a browser
 let canLaunchBrowser = true;
 try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
-  const BrowserManager = await loadBrowserManager();
   const mgr = new BrowserManager();
   await mgr.launch({ headless: true });
   await mgr.close();

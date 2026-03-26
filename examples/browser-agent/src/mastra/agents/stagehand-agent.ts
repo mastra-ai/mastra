@@ -8,7 +8,7 @@ const memory = new Memory();
 
 export const stagehandBrowserToolset = new StagehandBrowser({
   env: 'LOCAL',
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.2',
   headless: false,
   verbose: 1,
 });

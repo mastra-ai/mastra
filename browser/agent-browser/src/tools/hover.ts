@@ -10,7 +10,8 @@ export function createHoverTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.HOVER,
     description: 'Hover over an element to trigger hover states (dropdowns, tooltips).',
     inputSchema: hoverInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.hover(input);
     },

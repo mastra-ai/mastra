@@ -8,7 +8,7 @@
  */
 
 import type { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserToolError,
   ScreencastOptions,
@@ -18,14 +18,22 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
+import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
+
+// Type for Stagehand v3 Page
+type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
 
 /**
  * StagehandBrowser - AI-powered browser using Stagehand v3
  *
  * Unlike AgentBrowser which uses refs ([ref=e1]), StagehandBrowser uses
  * natural language instructions for all interactions.
+ *
+ * Supports thread isolation via the threadIsolation config:
+ * - 'none': All threads share the same page (default)
+ * - 'context': Each thread gets its own page/tab
  */
 export class StagehandBrowser extends MastraBrowser {
   override readonly id: string;
@@ -34,11 +42,34 @@ export class StagehandBrowser extends MastraBrowser {
 
   private stagehand: Stagehand | null = null;
   private stagehandConfig: StagehandBrowserConfig;
+  private threadManager: StagehandThreadManager;
+  private currentThreadId: string = DEFAULT_THREAD_ID;
 
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
+
+    // Initialize thread manager
+    this.threadManager = new StagehandThreadManager({
+      isolation: config.threadIsolation ?? 'none',
+      logger: this.logger,
+    });
+  }
+
+  /**
+   * Set the current thread ID for subsequent operations.
+   * Tools should call this before executing browser actions.
+   */
+  setCurrentThread(threadId?: string): void {
+    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Get the current thread ID.
+   */
+  getCurrentThreadId(): string {
+    return this.currentThreadId;
   }
 
   // ---------------------------------------------------------------------------
@@ -86,6 +117,9 @@ export class StagehandBrowser extends MastraBrowser {
     this.stagehand = new Stagehand(stagehandOptions);
     await this.stagehand.init();
 
+    // Register the Stagehand instance with the thread manager
+    this.threadManager.setStagehand(this.stagehand as any);
+
     // Listen for browser/context close events to detect external closure
     // Cast to access Playwright's BrowserContext.on() which Stagehand wraps
     const context = this.stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
@@ -98,10 +132,16 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
+    // Clean up all thread pages first
+    await this.threadManager.destroyAll();
+
     if (this.stagehand) {
       await this.stagehand.close();
       this.stagehand = null;
     }
+
+    // Reset thread state
+    this.currentThreadId = DEFAULT_THREAD_ID;
   }
 
   /**
@@ -177,18 +217,37 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Get the current page from Stagehand v3.
+   * Get the current page from Stagehand v3, respecting thread isolation.
    * In v3, pages are accessed via stagehand.context.pages()
    */
-  private getPage(): any {
+  private getPage(): V3Page | null {
     if (!this.stagehand) return null;
 
+    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+
+    // If using thread isolation, get the page for the current thread
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      const threadPage = this.threadManager.getPageForThread(this.currentThreadId);
+      if (threadPage) {
+        return threadPage as V3Page;
+      }
+    }
+
+    // Fall back to the active page
     try {
       const context = this.stagehand.context;
       if (context) {
+        // Try activePage() if available (Stagehand v3)
+        if (typeof context.activePage === 'function') {
+          const activePage = context.activePage();
+          if (activePage) {
+            return activePage as V3Page;
+          }
+        }
+        // Fall back to first page if no active page
         const pages = context.pages();
         if (pages && pages.length > 0) {
-          return pages[0];
+          return pages[0] as V3Page;
         }
       }
     } catch {
@@ -196,6 +255,33 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     return null;
+  }
+
+  /**
+   * Get the page for a specific thread, creating it if needed.
+   * This is an async version that ensures the thread session exists.
+   */
+  async getPageForThread(threadId: string): Promise<V3Page | null> {
+    if (!this.stagehand) return null;
+
+    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+
+    if (isolation === 'none') {
+      return this.getPage();
+    }
+
+    // Get the manager for the thread (creates session if needed)
+    const result = await this.threadManager.getManagerForThread(threadId);
+    if (result) {
+      // Result is either a V3Page (for context mode) or the Stagehand instance
+      // Check if it's a page by looking for page-specific methods
+      if (typeof (result as any).url === 'function') {
+        return result as V3Page;
+      }
+    }
+
+    // Fall back to the active page
+    return this.getPage();
   }
 
   /**
@@ -243,9 +329,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.act(instruction, options?)
+      // Pass page for thread isolation support
       const result = await stagehand.act(input.instruction, {
         variables: input.variables,
         timeout: input.timeout,
+        page: page ?? undefined,
       });
 
       return {
@@ -272,7 +360,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.extract(instruction, schema?, options?)
-      const result = await stagehand.extract(input.instruction, input.schema);
+      // Pass page for thread isolation support
+      const options: any = { page: page ?? undefined };
+      const result = input.schema
+        ? await stagehand.extract(input.instruction, input.schema as any, options)
+        : await stagehand.extract(input.instruction, options);
 
       return {
         success: true,
@@ -297,7 +389,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.observe() or stagehand.observe(instruction, options?)
-      const actions = input.instruction ? await stagehand.observe(input.instruction) : await stagehand.observe();
+      // Pass page for thread isolation support
+      const options: any = { page: page ?? undefined };
+      const actions = input.instruction
+        ? await stagehand.observe(input.instruction, options)
+        : await stagehand.observe(options);
 
       return {
         success: true,
@@ -401,7 +497,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       await page.goto(url, {
-        timeout: this.config.timeout ?? 30000,
+        timeoutMs: this.config.timeout ?? 30000,
         waitUntil: 'domcontentloaded',
       });
     } catch {

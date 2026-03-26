@@ -12,7 +12,8 @@ export function createScreenshotTool(browser: StagehandBrowser) {
     id: STAGEHAND_TOOLS.SCREENSHOT,
     description: 'Take a screenshot of the current page.',
     inputSchema: screenshotInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return await browser.screenshot(input);
     },

@@ -17,6 +17,13 @@ export type {
 } from './browser';
 
 // ============================================================================
+// Thread Manager
+// ============================================================================
+
+export { ThreadManager, DEFAULT_THREAD_ID } from './thread-manager';
+export type { ThreadIsolationMode, ThreadSession, ThreadManagerConfig } from './thread-manager';
+
+// ============================================================================
 // Screencast
 // ============================================================================
 

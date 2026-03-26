@@ -12,7 +12,8 @@ export function createNavigateTool(browser: StagehandBrowser) {
     id: STAGEHAND_TOOLS.NAVIGATE,
     description: 'Navigate the browser to a URL.',
     inputSchema: navigateInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return await browser.navigate(input);
     },

@@ -10,7 +10,8 @@ export function createScrollTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.SCROLL,
     description: 'Scroll the page or a specific element.',
     inputSchema: scrollInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.scroll(input);
     },

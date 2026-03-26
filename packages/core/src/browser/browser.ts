@@ -26,9 +26,10 @@ import { RegisteredLogger } from '../logger/constants';
 import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
+import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
+import type { ThreadIsolationMode } from './thread-manager';
 
 // Re-export screencast types from the screencast module
-import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
 
 // Alias for internal use
@@ -62,6 +63,8 @@ export type CdpUrlProvider = string | (() => string | Promise<string>);
  * Base configuration shared by all browser providers.
  * Provider packages extend this with their own options.
  */
+// ThreadIsolationMode is imported from ./thread-manager
+
 export interface BrowserConfig {
   /**
    * Whether to run the browser in headless mode (no visible UI).
@@ -81,6 +84,13 @@ export interface BrowserConfig {
    * Useful for cloud providers (Browserbase, Browserless, Kernel, etc.).
    */
   cdpUrl?: CdpUrlProvider;
+
+  /**
+   * How to isolate browser sessions across threads.
+   * @see ThreadIsolationMode for details on each mode.
+   * @default 'none'
+   */
+  threadIsolation?: ThreadIsolationMode;
 
   /**
    * Called after the browser reaches 'ready' status.

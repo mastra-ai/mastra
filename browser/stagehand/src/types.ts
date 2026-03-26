@@ -2,7 +2,7 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig } from '@mastra/core/browser';
+import type { BrowserConfig, ThreadIsolationMode } from '@mastra/core/browser';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -79,6 +79,17 @@ export interface StagehandBrowserConfig extends BrowserConfig {
    * Custom system prompt for AI operations
    */
   systemPrompt?: string;
+
+  /**
+   * Thread isolation mode for browser sessions.
+   * - 'none': All threads share the same page (default)
+   * - 'context': Each thread gets its own page/tab within the browser
+   *
+   * Note: 'browser' mode is not supported for Stagehand and will fall back to 'context'.
+   *
+   * @default 'none'
+   */
+  threadIsolation?: ThreadIsolationMode;
 }
 
 /**

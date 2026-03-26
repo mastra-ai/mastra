@@ -12,7 +12,8 @@ export function createCloseTool(browser: StagehandBrowser) {
     id: STAGEHAND_TOOLS.CLOSE,
     description: 'Close the browser. Only use when done with all browsing.',
     inputSchema: closeInputSchema,
-    execute: async () => {
+    execute: async (_input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.close();
       return {
         success: true,
