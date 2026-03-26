@@ -274,9 +274,15 @@ describe('ModelsDevGateway', () => {
     });
 
     it('should throw when a required URL template variable is missing', () => {
-      expect(() => gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {})).toThrow(
-        'Missing environment variable CLOUDFLARE_ACCOUNT_ID required to build provider URL',
-      );
+      const previous = process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      try {
+        expect(() => gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {})).toThrow(
+          'Missing environment variable CLOUDFLARE_ACCOUNT_ID required to build provider URL',
+        );
+      } finally {
+        if (previous !== undefined) process.env.CLOUDFLARE_ACCOUNT_ID = previous;
+      }
     });
 
     it('should return false for invalid model ID format', () => {
