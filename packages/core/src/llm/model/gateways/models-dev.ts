@@ -31,6 +31,20 @@ interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
 }
 
+function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; providerId: string }): string {
+  const fallbackEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+  if (!envVars?.length) return fallbackEnvVar;
+
+  const suffixPreferences = ['_API_TOKEN', '_API_KEY', '_TOKEN', '_KEY', '_PAT'];
+
+  for (const suffix of suffixPreferences) {
+    const preferredEnvVar = envVars.find(envVar => envVar.endsWith(suffix));
+    if (preferredEnvVar) return preferredEnvVar;
+  }
+
+  return envVars[0] || fallbackEnvVar;
+}
+
 // Provider-specific overrides for URL, npm package, and other config.
 // These take priority over what models.dev returns (e.g. correct base URLs, SDK packages).
 // This constant is ONLY used during generation in fetchProviders() to determine
@@ -42,11 +56,6 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
   groq: {
     url: 'https://api.groq.com/openai/v1',
-  },
-  'cloudflare-workers-ai': {
-    // models.dev lists CLOUDFLARE_ACCOUNT_ID first, but that belongs in the URL path.
-    // Cloudflare Workers AI auth should use the API token env var instead.
-    apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
   },
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
@@ -118,12 +127,13 @@ export class ModelsDevGateway extends MastraModelGateway {
           continue;
         }
 
-        // Get the API key env var from the provider info
-        // Convert hyphens to underscores for env var naming convention
+        // Prefer auth-like env vars over identifiers already consumed by the URL template.
         const apiKeyEnvVar =
           PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
-          providerInfo.env?.[0] ||
-          `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+          selectApiKeyEnvVar({
+            envVars: providerInfo.env,
+            providerId: normalizedId,
+          });
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage

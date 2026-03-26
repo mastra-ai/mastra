@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed Cloudflare Workers AI provider auth to use the API token instead of the account ID.
+Fixed models.dev auth env selection to prefer auth credentials over URL path identifiers, so Cloudflare Workers AI no longer uses the account ID for authentication.
