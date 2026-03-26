@@ -710,13 +710,20 @@ To fix this you have three different options:
 
   /**
    * Registers {@link MCPClient.disconnect} to run when the agent request finishes (after tools have
-   * executed). Use this when you create an `MCPClient` inside a dynamic `Agent` `tools` resolver so
-   * connections are released without calling `disconnect()` before returning tools.
+   * executed), via {@link RequestContext.registerDispose} on the provided `requestContext`. Use this
+   * when you create an `MCPClient` inside a dynamic `Agent` `tools` resolver so connections are
+   * released without calling `disconnect()` before returning tools.
+   *
+   * **Shared instance warning:** Do not call this on a single long-lived or reused `MCPClient` that
+   * serves concurrent agent runs. The first run whose request disposes will invoke
+   * {@link MCPClient.disconnect}, tearing down connections for every other run still using that
+   * client. Prefer a dedicated `MCPClient` per run or per user/session (as in the example), or
+   * omit this method and manage lifecycle explicitly when the client is shared.
    *
    * @example
    * ```typescript
    * tools: async ({ requestContext }) => {
-   *   const mcp = new MCPClient({ id: `profile:${userId}`, servers: { ... } });
+   *   const mcp = new MCPClient({ servers: { ... } });
    *   mcp.registerDisconnectOnRunEnd(requestContext);
    *   return { ...(await mcp.listTools()), weatherTool };
    * }
