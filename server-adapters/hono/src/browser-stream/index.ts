@@ -1,9 +1,6 @@
-import { createNodeWebSocket } from '@hono/node-ws';
+import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
+import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
 import type { Env, Hono, Schema } from 'hono';
-
-import { handleInputMessage } from './input-handler.js';
-import type { BrowserStreamConfig } from './types.js';
-import { ViewerRegistry } from './viewer-registry.js';
 
 /**
  * Set up WebSocket-based browser stream endpoint for real-time screencast viewing.
@@ -14,26 +11,45 @@ import { ViewerRegistry } from './viewer-registry.js';
  * - Broadcasts frames to all connected viewers
  * - Stops screencast when last viewer disconnects
  *
+ * **Note**: Requires `ws` package to be installed. If not available, returns null
+ * and logs a warning. Browser streaming will be disabled but everything else works.
+ *
  * @param app - The Hono application instance
  * @param config - Configuration for browser stream
- * @returns Object containing injectWebSocket function and registry instance
+ * @returns Object containing injectWebSocket function and registry instance, or null if ws is not available
  *
  * @example
  * ```typescript
+ * import { Hono } from 'hono';
+ * import { serve } from '@hono/node-server';
+ * import { setupBrowserStream } from '@mastra/hono';
+ *
  * const app = new Hono();
- * const { injectWebSocket, registry } = setupBrowserStream(app, {
+ * const browserStream = await setupBrowserStream(app, {
  *   getToolset: (agentId) => browserToolsets.get(agentId),
  * });
  *
  * const server = serve({ fetch: app.fetch, port: 4111 });
- * injectWebSocket(server);
+ * browserStream?.injectWebSocket(server);
  * ```
  */
-
-export function setupBrowserStream<E extends Env, S extends Schema, B extends string>(
+export async function setupBrowserStream<E extends Env, S extends Schema, B extends string>(
   app: Hono<E, S, B>,
   config: BrowserStreamConfig,
-) {
+): Promise<BrowserStreamResult | null> {
+  // Dynamic import to avoid bundling ws into user code
+  let createNodeWebSocket;
+  try {
+    const honoNodeWs = await import('@hono/node-ws');
+    createNodeWebSocket = honoNodeWs.createNodeWebSocket;
+  } catch {
+    console.warn(
+      '[Browser Streaming] Disabled - @hono/node-ws not available. ' +
+        'Install ws package to enable browser streaming in Studio.',
+    );
+    return null;
+  }
+
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   const registry = new ViewerRegistry();
 
@@ -100,5 +116,5 @@ export function setupBrowserStream<E extends Env, S extends Schema, B extends st
     }
   });
 
-  return { injectWebSocket, registry };
+  return { injectWebSocket: injectWebSocket as (server: unknown) => void, registry };
 }

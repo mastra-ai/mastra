@@ -94,3 +94,34 @@ export interface ViewportMessage {
     height: number;
   };
 }
+
+/**
+ * Framework-agnostic WebSocket interface for browser streaming.
+ * Server adapters implement this to wrap their framework's WebSocket.
+ */
+export interface BrowserStreamWebSocket {
+  /** Send a string message to the client */
+  send(data: string): void;
+}
+
+/**
+ * Result from setting up browser streaming.
+ */
+export interface BrowserStreamResult {
+  /** The viewer registry managing connections */
+  registry: ViewerRegistryLike;
+  /**
+   * Function to inject WebSocket support into the server.
+   * Called after server.listen() for frameworks that require it (e.g., @hono/node-ws).
+   */
+  injectWebSocket?: (server: unknown) => void;
+}
+
+/**
+ * Minimal interface for ViewerRegistry that adapters interact with.
+ */
+export interface ViewerRegistryLike {
+  addViewer(agentId: string, ws: BrowserStreamWebSocket, getToolset: BrowserStreamConfig['getToolset']): Promise<void>;
+  removeViewer(agentId: string, ws: BrowserStreamWebSocket): Promise<void>;
+  closeBrowserSession(agentId: string): Promise<void>;
+}
