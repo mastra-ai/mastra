@@ -12,6 +12,7 @@ import {
   sortThreadsByOldestMessage,
   combineObservationsForBuffering,
 } from '../message-utils';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -1096,6 +1097,61 @@ describe('Observer Agent Helpers', () => {
           filename: 'floorplan.pdf',
         }),
       );
+    });
+  });
+
+  describe('ModelByInputTokens runtime routing', () => {
+    it('resolves observer and reflector models at call time from token tiers', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: {
+          model: new ModelByInputTokens({
+            upTo: {
+              10: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+          messageTokens: 1,
+          bufferTokens: false,
+        },
+        reflection: {
+          model: new ModelByInputTokens({
+            upTo: {
+              1: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+        },
+      });
+
+      const observerResolveSpy = vi.spyOn(om as any, 'resolveObservationModel');
+      const reflectorResolveSpy = vi.spyOn(om as any, 'resolveReflectionModel');
+
+      const observerCreateAgentSpy = vi.spyOn((om as any).observer, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<observations>obs</observations>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      const reflectorCreateAgentSpy = vi.spyOn((om as any).reflector, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<reflections>ref</reflections>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      await om.observer.call(undefined, [createTestMessage('01234567890', 'user')]);
+      await (om as any).reflector.call('01234567890');
+
+      expect(observerResolveSpy).toHaveBeenCalledWith(11);
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
     });
   });
 

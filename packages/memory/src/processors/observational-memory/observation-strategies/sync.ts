@@ -98,6 +98,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
+      observabilityContext: this.opts.observabilityContext,
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,

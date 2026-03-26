@@ -1,4 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -50,6 +51,9 @@ export class ObservationTurn {
 
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
+
+  /** Optional observability context for nested OM spans. */
+  observabilityContext?: ObservabilityContext;
 
   constructor(
     readonly om: ObservationalMemory,
@@ -164,6 +168,7 @@ export class ObservationTurn {
         messages: this.messageList.get.all.db(),
         requestContext: this.requestContext,
         writer: this.writer,
+        observabilityContext: this.observabilityContext,
       });
     }
 

@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
@@ -14,9 +14,44 @@ import {
   parseObserverOutput,
   parseMultiThreadObserverOutput,
 } from './observer-agent';
+import { withOmTracingSpan } from './tracing';
 import type { ResolvedObservationConfig } from './types';
 
 type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
+
+type ObservationModelResolver = (inputTokens: number) => {
+  model: ConcreteObservationModel;
+  selectedThreshold?: number;
+  routingStrategy?: 'model-by-input-tokens';
+  routingThresholds?: string;
+};
+
+function estimateObserverInputTokens(content: unknown): number {
+  if (typeof content === 'string') {
+    return content.length;
+  }
+
+  if (!content || typeof content !== 'object') {
+    return 0;
+  }
+
+  if ('parts' in content && Array.isArray((content as { parts?: unknown[] }).parts)) {
+    return (content as { parts: unknown[] }).parts.reduce<number>((total, part) => {
+      if (!part || typeof part !== 'object') {
+        return total;
+      }
+
+      return (
+        total +
+        ('text' in part && typeof (part as { text?: unknown }).text === 'string'
+          ? (part as { text: string }).text.length
+          : 0)
+      );
+    }, 0);
+  }
+
+  return 0;
+}
 
 /**
  * Runs the Observer agent for extracting observations from messages.
@@ -25,45 +60,17 @@ type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], Mode
 export class ObserverRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
+  private readonly resolveModel: ObservationModelResolver;
   private observerAgent?: Agent;
 
-  private async withOmTracingSpan<T>({
-    phase,
-    model,
-    inputTokens,
-    requestContext,
-    metadata,
-    callback,
-  }: {
-    phase: 'observer' | 'observer-multi-thread';
-    model: ConcreteObservationModel;
-    inputTokens: number;
-    requestContext?: RequestContext;
-    metadata?: Record<string, unknown>;
-    callback: () => Promise<T>;
-  }): Promise<T> {
-    const span = getOrCreateSpan({
-      type: SpanType.GENERIC,
-      name: phase === 'observer' ? 'om.observer' : 'om.observer.multi-thread',
-      entityType: EntityType.PROCESSOR,
-      entityName: phase === 'observer' ? 'Observer' : 'MultiThreadObserver',
-      attributes: {
-        metadata: {
-          omPhase: phase,
-          omInputTokens: inputTokens,
-          omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
-          ...metadata,
-        },
-      },
-      requestContext,
-    });
-
-    return executeWithContext({ span, fn: callback });
-  }
-
-  constructor(opts: { observationConfig: ResolvedObservationConfig; observedMessageIds: Set<string> }) {
+  constructor(opts: {
+    observationConfig: ResolvedObservationConfig;
+    observedMessageIds: Set<string>;
+    resolveModel: ObservationModelResolver;
+  }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
+    this.resolveModel = opts.resolveModel;
   }
 
   private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
@@ -105,6 +112,7 @@ export class ObserverRunner {
     options?: {
       skipContinuationHints?: boolean;
       requestContext?: RequestContext;
+      observabilityContext?: ObservabilityContext;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
       priorThreadTitle?: string;
@@ -118,9 +126,12 @@ export class ObserverRunner {
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = options?.model
-      ? this.createAgent(options.model)
-      : this.getAgent(this.observationConfig.model as ConcreteObservationModel);
+    const inputTokens = messagesToObserve.reduce(
+      (total, message) => total + estimateObserverInputTokens(message.content),
+      0,
+    );
+    const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
+    const agent = options?.model ? this.createAgent(options.model) : this.getAgent(resolvedModel.model);
 
     const observerMessages = [
       {
@@ -134,24 +145,31 @@ export class ObserverRunner {
     ];
 
     const doGenerate = async () => {
-      return this.withOmTracingSpan({
+      return withOmTracingSpan({
         phase: 'observer',
-        model: options?.model ?? (this.observationConfig.model as ConcreteObservationModel),
-        inputTokens: messagesToObserve.reduce((total, message) => total + (message.content?.length ?? 0), 0),
+        model: resolvedModel.model,
+        inputTokens,
         requestContext: options?.requestContext,
+        observabilityContext: options?.observabilityContext,
         metadata: {
           omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
           omThreadTitleEnabled: this.observationConfig.threadTitle,
           omSkipContinuationHints: options?.skipContinuationHints ?? false,
           omWasTruncated: options?.wasTruncated ?? false,
+          ...(resolvedModel.selectedThreshold !== undefined
+            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
+            : {}),
+          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
         },
-        callback: () =>
+        callback: childObservabilityContext =>
           this.withAbortCheck(async () => {
             const streamResult = await agent.stream(observerMessages, {
               modelSettings: { ...this.observationConfig.modelSettings },
               providerOptions: this.observationConfig.providerOptions as any,
               ...(abortSignal ? { abortSignal } : {}),
               ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+              ...childObservabilityContext,
             });
             return streamResult.getFullOutput();
           }, abortSignal),
@@ -194,6 +212,7 @@ export class ObserverRunner {
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
     priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+    observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
   ): Promise<{
     results: Map<
@@ -202,7 +221,13 @@ export class ObserverRunner {
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.createAgent(model ?? (this.observationConfig.model as ConcreteObservationModel), true);
+    const inputTokens = Array.from(messagesByThread.values()).reduce(
+      (total, messages) =>
+        total + messages.reduce((sum, message) => sum + estimateObserverInputTokens(message.content), 0),
+      0,
+    );
+    const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
+    const agent = this.createAgent(resolvedModel.model, true);
 
     const observerMessages = [
       {
@@ -226,26 +251,30 @@ export class ObserverRunner {
     }
 
     const doGenerate = async () => {
-      return this.withOmTracingSpan({
+      return withOmTracingSpan({
         phase: 'observer-multi-thread',
-        model: model ?? (this.observationConfig.model as ConcreteObservationModel),
-        inputTokens: Array.from(messagesByThread.values()).reduce(
-          (total, messages) => total + messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
-          0,
-        ),
+        model: resolvedModel.model,
+        inputTokens,
         requestContext,
+        observabilityContext,
         metadata: {
           omThreadCount: threadOrder.length,
           omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
           omThreadTitleEnabled: this.observationConfig.threadTitle,
+          ...(resolvedModel.selectedThreshold !== undefined
+            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
+            : {}),
+          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
         },
-        callback: () =>
+        callback: childObservabilityContext =>
           this.withAbortCheck(async () => {
             const streamResult = await agent.stream(observerMessages, {
               modelSettings: { ...this.observationConfig.modelSettings },
               providerOptions: this.observationConfig.providerOptions as any,
               ...(abortSignal ? { abortSignal } : {}),
               ...(requestContext ? { requestContext } : {}),
+              ...childObservabilityContext,
             });
             return streamResult.getFullOutput();
           }, abortSignal),

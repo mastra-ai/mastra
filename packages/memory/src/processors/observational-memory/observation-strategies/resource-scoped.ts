@@ -240,6 +240,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.abortSignal,
           this.opts.requestContext,
           this.priorMetadataByThread,
+          this.opts.observabilityContext,
         );
       }),
     );
