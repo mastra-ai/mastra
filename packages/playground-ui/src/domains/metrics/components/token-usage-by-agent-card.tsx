@@ -11,9 +11,12 @@ export function TokenUsageByAgentCard() {
 
   const hasData = !!data && data.length > 0;
   const totalTokens = data?.reduce((s, d) => s + d.total, 0) ?? 0;
-  const totalCost = data?.reduce((s, d) => s + (d.cost ?? 0), 0) ?? 0;
-  const costUnit = data?.find(d => d.costUnit)?.costUnit ?? null;
-  const hasCostData = totalCost > 0;
+  const costRows = data?.filter(d => d.cost != null && d.cost > 0) ?? [];
+  const uniqueCostUnits = new Set(costRows.map(d => d.costUnit ?? 'usd'));
+  const hasSingleCostUnit = uniqueCostUnits.size <= 1;
+  const costUnit = hasSingleCostUnit ? (costRows[0]?.costUnit ?? null) : null;
+  const totalCost = hasSingleCostUnit ? costRows.reduce((s, d) => s + (d.cost ?? 0), 0) : 0;
+  const hasCostData = hasSingleCostUnit && totalCost > 0;
 
   return (
     <MetricsCard>
