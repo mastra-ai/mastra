@@ -704,8 +704,22 @@ export async function recallMessages({
 
   const anchor = resolved;
 
-  // Use the thread the cursor actually belongs to — the caller may be browsing a different thread
-  const resolvedThreadId = anchor.threadId || threadId;
+  if (anchor.threadId && anchor.threadId !== threadId) {
+    return {
+      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}".`,
+      count: 0,
+      cursor,
+      page: normalizedPage,
+      limit: normalizedLimit,
+      detail,
+      hasNextPage: false,
+      hasPrevPage: false,
+      truncated: false,
+      tokenOffset: 0,
+    };
+  }
+
+  const resolvedThreadId = threadId;
 
   const isForward = normalizedPage > 0;
   const pageIndex = Math.max(Math.abs(normalizedPage), 1) - 1;
@@ -911,7 +925,7 @@ export const recallTool = (
   const isResourceScope = retrievalScope === 'resource';
 
   const description = isResourceScope
-    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to page through messages near a cursor. Pass threadId to browse a different thread. Use mode="search" to find messages by content across all threads.'
+    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
     : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
 
   return createTool({
@@ -962,7 +976,7 @@ export const recallTool = (
         .min(1)
         .optional()
         .describe(
-          'A message ID to use as the pagination cursor. Required for mode="messages". Extract it from the start or end of an observation group range.',
+          'A message ID to use as the pagination cursor. For mode="messages", provide either cursor or threadId. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
         ),
       page: z
         .number()
@@ -1081,23 +1095,53 @@ export const recallTool = (
         });
       }
 
-      // Use explicit threadId if provided, otherwise fall back to current thread
-      // Thread scope: ignore explicit threadId — always use current thread
-      const targetThreadId = isResourceScope ? explicitThreadId || currentThreadId : currentThreadId;
+      const hasExplicitThreadId = typeof explicitThreadId === 'string' && explicitThreadId.length > 0;
+      const hasCursor = typeof cursor === 'string' && cursor.length > 0;
+
+      if (!hasExplicitThreadId && !hasCursor) {
+        throw new Error('Either cursor or threadId is required for mode="messages"');
+      }
+
+      let targetThreadId: string | undefined;
+      let threadScope: string | undefined;
+
+      if (!isResourceScope) {
+        targetThreadId = currentThreadId;
+        threadScope = currentThreadId || undefined;
+      } else if (hasExplicitThreadId) {
+        if (!resourceId) {
+          throw new Error('Resource ID is required for recall');
+        }
+        if (!memory.getThreadById) {
+          throw new Error('Memory instance cannot verify thread access for recall');
+        }
+
+        const thread = await memory.getThreadById({ threadId: explicitThreadId! });
+        if (!thread || thread.resourceId !== resourceId) {
+          throw new Error('Thread does not belong to the active resource');
+        }
+
+        targetThreadId = thread.id;
+        threadScope = thread.id;
+      } else {
+        targetThreadId = currentThreadId;
+        threadScope = currentThreadId || undefined;
+      }
+
+      if (hasCursor && !hasExplicitThreadId && !currentThreadId) {
+        throw new Error('Current thread is required when browsing by cursor');
+      }
+
       if (!targetThreadId) {
         throw new Error('Thread ID is required for recall');
       }
-
-      // In thread scope, the cursor must belong to the current thread.
-      // In resource scope, the cursor must belong to the current resource.
-      const threadScope = !isResourceScope ? currentThreadId || undefined : undefined;
 
       // No cursor — read from the start of the thread
       if (!cursor) {
         return recallThreadFromStart({
           memory,
           threadId: targetThreadId,
-          resourceId,
+          resourceId: isResourceScope ? resourceId : undefined,
           page: page ?? 1,
           limit: limit ?? 20,
           detail: detail ?? 'low',
@@ -1109,7 +1153,7 @@ export const recallTool = (
         return recallPart({
           memory,
           threadId: targetThreadId,
-          resourceId,
+          resourceId: isResourceScope ? resourceId : undefined,
           cursor,
           partIndex,
           threadScope,
@@ -1119,7 +1163,7 @@ export const recallTool = (
       return recallMessages({
         memory,
         threadId: targetThreadId,
-        resourceId,
+        resourceId: isResourceScope ? resourceId : undefined,
         cursor,
         page,
         limit,

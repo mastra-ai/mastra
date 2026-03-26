@@ -167,7 +167,6 @@ describe('om-tools', () => {
         ],
       });
 
-      // Cross-thread browsing is now allowed — cursor resolves to its own thread
       const result = await recallMessages({
         memory: memory as any,
         threadId,
@@ -175,9 +174,9 @@ describe('om-tools', () => {
         cursor: 'other-1',
       });
 
-      // Should resolve successfully (no messages forward from the only message in that thread)
       expect(result.count).toBe(0);
-      expect(result.cursor).toBe('other-1');
+      expect(result.messages).toContain('Cursor does not belong to the active thread');
+      expect(result.messages).toContain('other-thread');
     });
 
     it('should return a hint when cursor is a colon-delimited range', async () => {
@@ -1660,6 +1659,46 @@ describe('om-tools', () => {
       expect(result.count).toBe(0);
       expect(result.results).toContain('Search is not configured');
       expect(result.results).toContain('retrieval: { vector: true }');
+    });
+  });
+
+  describe('recallTool message scoping', () => {
+    it('should require cursor or threadId for mode="messages"', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+
+      await expect(
+        tool.execute?.({ mode: 'messages' }, {
+          memory: {},
+          agent: { threadId: 'thread-a', resourceId: 'res-a' },
+        } as any),
+      ).rejects.toThrow('Either cursor or threadId is required for mode="messages"');
+    });
+
+    it('should require an active thread when browsing by cursor only', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+
+      await expect(
+        tool.execute?.({ mode: 'messages', cursor: 'msg-1' }, { memory: {}, agent: { resourceId: 'res-a' } } as any),
+      ).rejects.toThrow('Current thread is required when browsing by cursor');
+    });
+
+    it('should reject threadId values outside the active resource', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const memory = {
+        getThreadById: async ({ threadId }: { threadId: string }) => ({
+          id: threadId,
+          resourceId: 'other-resource',
+          createdAt: new Date('2024-01-01'),
+          updatedAt: new Date('2024-01-02'),
+        }),
+      };
+
+      await expect(
+        tool.execute?.(
+          { mode: 'messages', threadId: 'thread-b' } as any,
+          { memory, agent: { threadId: 'thread-a', resourceId: 'res-a' } } as any,
+        ),
+      ).rejects.toThrow('Thread does not belong to the active resource');
     });
   });
 
