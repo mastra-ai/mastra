@@ -1,5 +1,84 @@
 # mastracode
 
+## 0.9.3-alpha.3
+
+### Patch Changes
+
+- Improved Mastra Code prompt guidance so responses stay concise and terminal-friendly. ([#14688](https://github.com/mastra-ai/mastra/pull/14688))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed the thread selector so it shows all threads consistently and opens faster. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`d657856`](https://github.com/mastra-ai/mastra/commit/d6578561c104fecfeb3caa17dc07d1acbeeffff7)]:
+  - @mastra/core@1.18.0-alpha.0
+  - @mastra/memory@1.10.1-alpha.2
+  - @mastra/pg@1.8.4-alpha.1
+  - @mastra/libsql@1.7.3-alpha.1
+
+## 0.9.3-alpha.2
+
+### Patch Changes
+
+- Improved Mastra Code prompt guidance so responses stay concise and terminal-friendly. ([#14688](https://github.com/mastra-ai/mastra/pull/14688))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed the thread selector so it shows all threads consistently and opens faster. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Updated dependencies [[`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`86e3263`](https://github.com/mastra-ai/mastra/commit/86e326363edd12be5a5b25ccce4a39f66f7c9f50), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.17.0-alpha.2
+
+## 0.9.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/memory@1.10.1-alpha.1
+  - @mastra/core@1.16.1-alpha.1
+  - @mastra/pg@1.8.4-alpha.0
+  - @mastra/libsql@1.7.3-alpha.0
+
+## 0.9.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`d657856`](https://github.com/mastra-ai/mastra/commit/d6578561c104fecfeb3caa17dc07d1acbeeffff7)]:
+  - @mastra/core@1.16.1-alpha.0
+  - @mastra/memory@1.10.1-alpha.0
+
+## 0.9.2
+
+### Patch Changes
+
+- Added macOS sleep prevention while Mastra Code is actively running. ([#14586](https://github.com/mastra-ai/mastra/pull/14586))
+
+  Mastra Code now starts the built-in caffeinate utility only while an agent run is in progress, then releases it after completion, aborts, errors, or app shutdown.
+
+  To opt out, set MASTRACODE_DISABLE_CAFFEINATE=1 before launching Mastra Code.
+
+- Removed the Anthropic OAuth warning flow from Mastra Code. ([#14605](https://github.com/mastra-ai/mastra/pull/14605))
+
+  `/login`, startup, and the setup wizard no longer interrupt Anthropic OAuth with the Claude Max warning prompt, and the related onboarding setting has been removed. Anthropic has confirmed that users do not get banned for using Claude max oauth. https://x.com/trq212/status/2035076299774206228?s=20
+
+- Mastra Code now defaults the OpenAI mode pack to use `openai/gpt-5.4` for build and plan, and `openai/gpt-5.4-mini` for fast mode. The OpenAI OM pack selected during setup now defaults to `openai/gpt-5.4-mini`. ([#14604](https://github.com/mastra-ai/mastra/pull/14604))
+
+- Improved Mastra Code autonomy prompts by expanding the default guidance around assumptions, persistence, and when to ask questions. Also applied GPT-5.4-specific prompt instructions consistently during prompt assembly. ([#14587](https://github.com/mastra-ai/mastra/pull/14587))
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`f14604c`](https://github.com/mastra-ai/mastra/commit/f14604c7ef01ba794e1a8d5c7bae5415852aacec), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`423aa6f`](https://github.com/mastra-ai/mastra/commit/423aa6fd12406de6a1cc6b68e463d30af1d790fb), [`f21c626`](https://github.com/mastra-ai/mastra/commit/f21c6263789903ab9720b4d11373093298e97f15), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124), [`e06b520`](https://github.com/mastra-ai/mastra/commit/e06b520bdd5fdef844760c5e692c7852cbc5c240), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777), [`dd9c4e0`](https://github.com/mastra-ai/mastra/commit/dd9c4e0a47962f1413e9b72114fcad912e19a0a6), [`23bd359`](https://github.com/mastra-ai/mastra/commit/23bd359c50898c3b28b9ee25ce47c12614da5a36)]:
+  - @mastra/core@1.16.0
+  - @mastra/libsql@1.7.2
+  - @mastra/pg@1.8.3
+  - @mastra/memory@1.10.0
+  - @mastra/mcp@1.3.1
+
+## 0.9.2-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`f21c626`](https://github.com/mastra-ai/mastra/commit/f21c6263789903ab9720b4d11373093298e97f15)]:
+  - @mastra/core@1.16.0-alpha.5
+
 ## 0.9.2-alpha.5
 
 ### Patch Changes

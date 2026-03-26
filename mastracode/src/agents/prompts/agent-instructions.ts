@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 
 // Filenames to check, in order of preference
@@ -20,7 +20,7 @@ const PROJECT_LOCATIONS = [
 
 const GLOBAL_LOCATIONS = ['.claude', '.mastracode', '.config/claude', '.config/mastracode'];
 
-interface InstructionSource {
+export interface InstructionSource {
   path: string;
   content: string;
   scope: 'global' | 'project';
@@ -91,6 +91,10 @@ export function loadAgentInstructions(projectPath: string, configDirName = DEFAU
   }
 
   return sources;
+}
+
+export function getStaticallyLoadedInstructionPaths(projectPath: string): string[] {
+  return loadAgentInstructions(projectPath).map(source => normalize(source.path));
 }
 
 /**
