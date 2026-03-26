@@ -296,6 +296,20 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
+   * Register an additional exporter at runtime.
+   * Adds to both the bus (for event routing) and the config (for getExporters).
+   */
+  registerExporter(exporter: ObservabilityExporter): void {
+    this.observabilityBus.registerExporter(exporter);
+    if (!this.config.exporters) {
+      this.config.exporters = [];
+    }
+    if (!this.config.exporters.includes(exporter)) {
+      this.config.exporters.push(exporter);
+    }
+  }
+
+  /**
    * Get all span output processors
    */
   getSpanOutputProcessors(): readonly SpanOutputProcessor[] {
