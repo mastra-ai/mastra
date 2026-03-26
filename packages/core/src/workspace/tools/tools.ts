@@ -181,17 +181,20 @@ function wrapWithReadTracker(
         try {
           const stat = await workspace.filesystem!.stat(input.path);
 
-          // Policy gate: require the agent to have read the file first
-          // Resolve dynamic value if it's a function (safe default: true = enforce)
-          const shouldRequireRead = await resolveDynamicValue(
-            config.requireReadBeforeWrite,
-            { args: input, requestContext: context.requestContext ?? {}, workspace },
-            true,
-          );
-          if (shouldRequireRead) {
-            const check = readTracker.needsReRead(input.path, stat.modifiedAt);
-            if (check.needsReRead) {
-              throw new FileReadRequiredError(input.path, check.reason!);
+          // Policy gate: require the agent to have read the file first.
+          // Only evaluate when explicitly configured (opt-in policy).
+          // Safe default true = fail-closed if a dynamic function throws.
+          if (config.requireReadBeforeWrite !== undefined) {
+            const shouldRequireRead = await resolveDynamicValue(
+              config.requireReadBeforeWrite,
+              { args: input, requestContext: context.requestContext ?? {}, workspace },
+              true,
+            );
+            if (shouldRequireRead) {
+              const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+              if (check.needsReRead) {
+                throw new FileReadRequiredError(input.path, check.reason!);
+              }
             }
           }
         } catch (error) {
@@ -390,7 +393,7 @@ export async function createWorkspaceTools(
   }
 
   // LSP tools — always available (tool handles case when LSP not configured)
-  addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool);
+  await addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool);
 
   return tools;
 }
