@@ -146,9 +146,6 @@ export class ObservationTurn {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
     }
 
-    // Fetch final record state
-    await this.refreshRecord();
-
     return { record: this._record! };
   }
 
