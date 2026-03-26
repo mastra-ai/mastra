@@ -4,11 +4,54 @@ import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
-import { omDebug } from './debug';
+import { omDebug, omError } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import type { TokenCounterModelContext } from './token-counter';
+
+// ── Circuit breaker for OM observation failures ──────────────────────────────
+// After consecutive failures (e.g. rate limits), temporarily skip OM to avoid
+// spamming a broken API and blocking the user experience.
+const OM_CIRCUIT_BREAKER_THRESHOLD = 3; // failures before opening the circuit
+const OM_CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 seconds cooldown
+
+class ObservationCircuitBreaker {
+  private consecutiveFailures = 0;
+  private openedAt: number | null = null;
+
+  /** Record a failure. Returns true if the circuit just opened. */
+  recordFailure(): boolean {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= OM_CIRCUIT_BREAKER_THRESHOLD && !this.openedAt) {
+      this.openedAt = Date.now();
+      return true;
+    }
+    return false;
+  }
+
+  /** Record a success — resets the breaker. */
+  recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.openedAt = null;
+  }
+
+  /** Returns true if the circuit is open (should skip OM). */
+  isOpen(): boolean {
+    if (!this.openedAt) return false;
+    if (Date.now() - this.openedAt > OM_CIRCUIT_BREAKER_COOLDOWN_MS) {
+      // Cooldown expired — move to half-open (allow one attempt)
+      this.openedAt = null;
+      this.consecutiveFailures = OM_CIRCUIT_BREAKER_THRESHOLD - 1; // one more failure re-opens
+      return false;
+    }
+    return true;
+  }
+
+  get failures(): number {
+    return this.consecutiveFailures;
+  }
+}
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
 export interface MemoryContextProvider {
@@ -48,6 +91,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
   /** Active turn — created on first processInputStep, ended on processOutputResult. */
   private turn?: ObservationTurn;
+
+  /** Circuit breaker to skip OM after consecutive failures. */
+  private circuitBreaker = new ObservationCircuitBreaker();
 
   constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
     this.engine = engine;
@@ -105,6 +151,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         return messageList;
       }
 
+      // ── Circuit breaker: skip OM if it has been failing repeatedly ──
+      if (this.circuitBreaker.isOpen()) {
+        omDebug(
+          `[OM:processInputStep:CIRCUIT-OPEN] Skipping OM — circuit breaker open after ${this.circuitBreaker.failures} consecutive failures. Will retry after cooldown.`,
+        );
+        return messageList;
+      }
+
       // ── Create turn on first step (or when state is reset) ──
       // The turn is stashed in customState so that the output processor instance
       // (which is a separate ObservationalMemoryProcessor) can retrieve it in
@@ -137,16 +191,52 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         try {
           ctx = await step.prepare();
         } catch (error) {
-          // Map observation errors through abort (processor-specific concern)
-          const err = error instanceof Error ? error : new Error(String(error));
-          const abortMessage = abortSignal?.aborted
-            ? 'Agent execution was aborted'
-            : `Encountered error during memory observation: ${err.message}`;
-          if (typeof abort === 'function') {
-            abort(abortMessage);
+          // If the agent was explicitly aborted, propagate as before.
+          if (abortSignal?.aborted) {
+            const err = error instanceof Error ? error : new Error(String(error));
+            if (typeof abort === 'function') {
+              abort('Agent execution was aborted');
+            }
+            throw err;
           }
-          throw err;
+
+          // For all other OM errors (rate limits, model failures, network issues):
+          // degrade gracefully — log the error, emit a warning via the stream
+          // writer, and let the agent continue without observations.
+          // This prevents a failing OM model from blocking the main agent response.
+          const err = error instanceof Error ? error : new Error(String(error));
+          omError(`[OM] Observation failed during step preparation, continuing without observations: ${err.message}`);
+
+          // Track failure in circuit breaker
+          const circuitJustOpened = this.circuitBreaker.recordFailure();
+
+          // Emit a non-blocking warning event so the UI can display it
+          if (writer) {
+            const warningMessage = circuitJustOpened
+              ? `${err.message} (memory temporarily disabled after ${this.circuitBreaker.failures} failures, will retry in ${OM_CIRCUIT_BREAKER_COOLDOWN_MS / 1000}s)`
+              : err.message;
+            void writer
+              .custom({
+                type: 'data-om-observation-failed',
+                data: {
+                  cycleId: `processor-error-${Date.now()}`,
+                  operationType: 'observation',
+                  startedAt: new Date().toISOString(),
+                  error: warningMessage,
+                  recordId: '',
+                  threadId,
+                  nonBlocking: true,
+                },
+              })
+              .catch(() => {});
+          }
+
+          // Return messageList as-is — the agent proceeds without OM context
+          return messageList;
         }
+
+        // OM step preparation succeeded — reset circuit breaker
+        this.circuitBreaker.recordSuccess();
 
         // Inject system messages (one per cache-stable chunk) + continuation
         if (ctx.systemMessage) {

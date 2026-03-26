@@ -105,6 +105,10 @@ function formatMarker(data: OMMarkerData): string {
     }
     case 'om_observation_failed': {
       const tokens = data.tokensAttempted ? ` (${formatTokens(data.tokensAttempted)} tokens)` : '';
+      // Non-blocking failures show as warnings — the agent continues without memory
+      if ((data as any).nonBlocking) {
+        return theme.fg('warning', `  ⚠ Memory temporarily unavailable: ${data.error}`);
+      }
       return theme.fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
     }
     case 'om_buffering_start': {
@@ -126,7 +130,8 @@ function formatMarker(data: OMMarkerData): string {
       return theme.fg('success', `  ✓ Buffered ${label.toLowerCase()}: ${input} → ${output} tokens${ratio}`);
     }
     case 'om_buffering_failed': {
-      return theme.fg('error', `  ✗ Buffering ${label.toLowerCase()} failed: ${data.error}`);
+      // Buffering failures are always non-blocking (fire-and-forget) — show as warning
+      return theme.fg('warning', `  ⚠ Buffering ${label.toLowerCase()} skipped: ${data.error}`);
     }
     case 'om_activation': {
       const kind = data.operationType === 'reflection' ? 'reflection' : 'observations';

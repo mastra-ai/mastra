@@ -11834,7 +11834,7 @@ describe('Processor behavioral regressions', () => {
   // was replaced with message-level flag checking (metadata.mastra.sealed). Storage adapters
   // handle dedup via upserts (INSERT ON CONFLICT DO UPDATE).
 
-  it('should map threshold observation errors through abort instead of bubbling raw errors', async () => {
+  it('should gracefully degrade on threshold observation errors instead of aborting', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -11906,27 +11906,27 @@ describe('Processor behavioral regressions', () => {
       throw new Error(`abort-called:${message}`);
     }) as any;
 
-    try {
-      await processor.processInputStep({
-        messageList,
-        messages: [],
-        requestContext: ctx,
-        stepNumber: 1,
-        state,
-        steps: [],
-        systemMessages: [],
-        model: mockModel as any,
-        retryCount: 0,
-        abort,
-      });
-      throw new Error('expected abort to throw');
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      expect(msg).toContain('abort-called:');
-      expect(abortCalled).toBe(true);
-    } finally {
-      engine.observe = originalObserve;
-    }
+    // With graceful degradation, observation errors no longer trigger abort.
+    // The processor returns the messageList as-is, without observations.
+    const result = await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 1,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    // abort should NOT be called — errors are handled gracefully
+    expect(abortCalled).toBe(false);
+    // messageList is returned as-is
+    expect(result).toBe(messageList);
+
+    engine.observe = originalObserve;
   });
 });
 
