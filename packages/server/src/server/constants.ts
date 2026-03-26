@@ -73,8 +73,8 @@ export function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
 ): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean } {
-  let enabled = true;
-  let requireApproval = false;
+  let enabled = false;
+  let requireApproval = true;
   let requireReadBeforeWrite: boolean | undefined;
 
   if (toolsConfig) {
