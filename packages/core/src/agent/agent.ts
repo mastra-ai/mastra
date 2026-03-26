@@ -1,3 +1,4 @@
+//test
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
