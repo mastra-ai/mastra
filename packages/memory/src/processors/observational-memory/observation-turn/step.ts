@@ -139,7 +139,15 @@ export class ObservationStep {
             }
 
             om.sealMessagesForBuffering(candidates);
-            await this.turn.hooks?.onBufferChunkSealed?.();
+
+            try {
+              await this.turn.hooks?.onBufferChunkSealed?.();
+            } catch (error) {
+              omDebug(
+                `[OM:buffer] onBufferChunkSealed hook failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+
             if (this.turn.memory) {
               await this.turn.memory.persistMessages(candidates);
             }

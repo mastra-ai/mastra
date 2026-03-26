@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Rotate the active response message ID when observational memory seals a buffered chunk so post-boundary assistant output persists into a fresh message slot.
+Fixed observational memory response ID rotation at buffered chunk boundaries so assistant output continues in a fresh message slot.
