@@ -484,11 +484,16 @@ export async function createHonoServer(
     );
   }
 
-  return { app, injectWebSocket: browserStreamSetup?.injectWebSocket };
+  // Attach injectWebSocket to app for backwards compatibility
+  // Consumers can use app directly, and optionally call app.injectWebSocket(server) for browser streaming
+  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket;
+
+  return app;
 }
 
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
-  const { app, injectWebSocket } = await createHonoServer(mastra, options);
+  const app = await createHonoServer(mastra, options);
+  const injectWebSocket = (app as any).injectWebSocket;
   const serverOptions = mastra.getServer();
   const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
