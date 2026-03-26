@@ -19,7 +19,7 @@ export function useTokenUsageByAgentMetrics() {
   return useQuery({
     queryKey: ['metrics', 'token-usage-by-agent', datePreset, customRange],
     queryFn: async (): Promise<TokenUsageByAgentRow[]> => {
-      const [inputRes, outputRes] = await Promise.all([
+      const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all([
         client.getMetricBreakdown({
           name: ['mastra_model_total_input_tokens'],
           groupBy: ['entityName'],
@@ -28,6 +28,18 @@ export function useTokenUsageByAgentMetrics() {
         }),
         client.getMetricBreakdown({
           name: ['mastra_model_total_output_tokens'],
+          groupBy: ['entityName'],
+          aggregation: 'sum',
+          filters: { timestamp },
+        }),
+        client.getMetricBreakdown({
+          name: ['mastra_model_input_cache_read_tokens'],
+          groupBy: ['entityName'],
+          aggregation: 'sum',
+          filters: { timestamp },
+        }),
+        client.getMetricBreakdown({
+          name: ['mastra_model_input_cache_write_tokens'],
           groupBy: ['entityName'],
           aggregation: 'sum',
           filters: { timestamp },
@@ -62,6 +74,16 @@ export function useTokenUsageByAgentMetrics() {
         const name = group.dimensions.entityName ?? 'unknown';
         const entry = ensure(name);
         entry.output = group.value;
+        addCost(entry, group);
+      }
+      for (const group of cacheReadRes.groups) {
+        const name = group.dimensions.entityName ?? 'unknown';
+        const entry = ensure(name);
+        addCost(entry, group);
+      }
+      for (const group of cacheWriteRes.groups) {
+        const name = group.dimensions.entityName ?? 'unknown';
+        const entry = ensure(name);
         addCost(entry, group);
       }
 
