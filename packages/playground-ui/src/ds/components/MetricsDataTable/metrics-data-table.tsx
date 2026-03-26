@@ -20,13 +20,13 @@ export function MetricsDataTable<T extends { key: string }>({
   if (columns.length === 0) return null;
 
   return (
-    <ScrollArea className={cn('w-full h-full', className)} maxHeight="20rem">
+    <ScrollArea className={cn('w-full h-full', className)} maxHeight="20rem" orientation="both">
       <div
         className="grid items-center"
         style={{
           gridTemplateColumns: `auto ${columns
             .slice(1)
-            .map(() => '1fr')
+            .map(() => 'auto')
             .join(' ')}`,
         }}
       >
