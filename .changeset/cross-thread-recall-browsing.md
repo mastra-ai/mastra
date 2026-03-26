@@ -50,5 +50,5 @@ const result = await tools.recall.execute({
 **Implementation details:**
 - tool schemas and descriptions adapt to thread vs resource scope
 - thread-scoped recall can list the current thread without requiring a resource ID
-- search overfetches before applying thread/date filters so filtered results still return relevant matches
+- search narrows recall results by thread and date filters, including prefiltering indexed observations by timestamp before semantic lookup when observation timestamps are available
 - observational-memory instructions now cover thread browsing, search, date filtering, and cross-thread navigation
