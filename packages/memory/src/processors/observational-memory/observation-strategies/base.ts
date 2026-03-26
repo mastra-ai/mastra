@@ -305,15 +305,6 @@ export abstract class ObservationStrategy {
     );
   }
 
-  protected async indexObservationGroup(
-    observations: string,
-    threadId: string,
-    resourceId: string | undefined,
-    observedAt?: Date,
-  ): Promise<void> {
-    await this.indexObservationGroups(observations, threadId, resourceId, observedAt);
-  }
-
   // ── Marker persistence ──────────────────────────────────────
 
   /**

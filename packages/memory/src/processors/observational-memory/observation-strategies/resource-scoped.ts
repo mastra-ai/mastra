@@ -389,7 +389,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     if (resourceId) {
       await Promise.all(
         this.observationResults.map(({ threadId, threadMessages, result }) =>
-          this.indexObservationGroup(
+          this.indexObservationGroups(
             result.observations,
             threadId,
             resourceId,

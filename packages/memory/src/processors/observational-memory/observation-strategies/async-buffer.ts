@@ -113,7 +113,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       lastBufferedAtTime: processed.lastObservedAt,
     });
 
-    await this.indexObservationGroup(processed.observations, threadId, resourceId, processed.lastObservedAt);
+    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
