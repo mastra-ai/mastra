@@ -15,6 +15,7 @@ describe('ModelsDevGateway', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('fetchProviders', () => {
@@ -271,6 +272,16 @@ describe('ModelsDevGateway', () => {
       });
 
       expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1');
+    });
+
+    it('should not fall back to process.env when env vars explicitly provide an empty string', () => {
+      vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'account-123');
+
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: '',
+      });
+
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts//ai/v1');
     });
 
     it('should throw when a required URL template variable is missing', () => {

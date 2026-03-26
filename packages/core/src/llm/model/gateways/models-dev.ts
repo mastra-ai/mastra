@@ -33,9 +33,9 @@ interface ModelsDevResponse {
 
 function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
   return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
-    const value = envVars?.[envVarName] || process.env[envVarName];
+    const value = envVars?.[envVarName] ?? process.env[envVarName];
 
-    if (!value) {
+    if (value === undefined || value === null) {
       throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
     }
 
