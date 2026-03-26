@@ -492,20 +492,8 @@ export class MastraLLMV1 extends MastraBase {
     const model = this.#model;
     const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug('Streaming text', {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      maxSteps,
-      tools: Object.keys(tools || {}),
-    });
-
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
     if (experimental_output) {
-      this.logger.debug('Using experimental output', {
-        runId,
-      });
       if (typeof (experimental_output as any).parse === 'function') {
         schema = experimental_output as z.ZodType<Z>;
         if (isZodArray(schema)) {
@@ -542,6 +530,21 @@ export class MastraLLMV1 extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
+
+    if (llmSpan) {
+      executeWithContextSync({
+        span: llmSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            maxSteps,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
 
     // make json schema a ai sdk schema
     if (tools && Object.keys(tools).length > 0) {

@@ -2025,7 +2025,6 @@ export class Agent<
     const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
-      this.logger.debug('Adding memory tools', { agent: this.name, tools: Object.keys(memoryTools || {}), runId });
       for (const [toolName, tool] of Object.entries(memoryTools)) {
         const toolObj = tool;
         const options: ToolOptions = {
@@ -2232,6 +2231,12 @@ export class Agent<
             metadata: error.options?.metadata,
             processorId: error.processorId,
           };
+          this.logger.warn('Input processor tripwire triggered', {
+            agent: this.name,
+            reason: error.message,
+            processorId: error.processorId,
+            retry: error.options?.retry,
+          });
         } else {
           throw new MastraError(
             {
@@ -2306,6 +2311,12 @@ export class Agent<
             metadata: error.options?.metadata,
             processorId: error.processorId,
           };
+          this.logger.warn('Input step processor tripwire triggered', {
+            agent: this.name,
+            reason: error.message,
+            processorId: error.processorId,
+            retry: error.options?.retry,
+          });
         } else {
           throw new MastraError(
             {
@@ -2366,7 +2377,12 @@ export class Agent<
             metadata: e.options?.metadata,
             processorId: e.processorId,
           };
-          this.logger.debug('Output processor tripwire triggered', { agent: this.name, message: e.message });
+          this.logger.warn('Output processor tripwire triggered', {
+            agent: this.name,
+            reason: e.message,
+            processorId: e.processorId,
+            retry: e.options?.retry,
+          });
         } else {
           throw e;
         }
@@ -2443,8 +2459,6 @@ export class Agent<
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
-
-    this.logger.debug('Assembling assigned tools', { agent: this.name, runId, threadId, resourceId });
 
     const memory = await this.getMemory({ requestContext });
 
@@ -2909,6 +2923,14 @@ export class Agent<
                 // Continue with original values on hook error
               }
             }
+
+            this.logger.debug('Delegation accepted', {
+              agent: this.name,
+              targetAgent: agentName,
+              modifiedPrompt: effectivePrompt !== inputData.prompt,
+              modifiedInstructions: effectiveInstructions !== inputData.instructions,
+              modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
+            });
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
@@ -4203,10 +4225,6 @@ export class Agent<
       logger: this.logger,
       memory,
     });
-
-    if (process.env.NODE_ENV !== 'test') {
-      this.logger.debug('Starting generation', { agent: this.name, runId });
-    }
 
     // Create a capabilities object with bound methods
     const capabilities = {

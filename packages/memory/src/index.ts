@@ -746,7 +746,10 @@ ${workingMemory}`;
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
     const cached = this.embeddingCache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
+      return cached;
+    }
     const chunks = this.chunkText(content);
 
     if (typeof this.embedder === `undefined`) {

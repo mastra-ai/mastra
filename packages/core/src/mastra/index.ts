@@ -890,8 +890,6 @@ export class Mastra<
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      const logger = this.getLogger();
-      logger.debug('Agent already exists, skipping', { key: agentKey });
       return;
     }
 
@@ -1163,8 +1161,6 @@ export class Mastra<
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
-      const logger = this.getLogger();
-      logger.debug('Vector already exists, skipping', { key: vectorKey });
       return;
     }
 
@@ -1305,8 +1301,6 @@ export class Mastra<
     }
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
-      const logger = this.getLogger();
-      logger.debug('Workspace already exists, skipping', { key: workspaceKey });
       return;
     }
 
@@ -1574,8 +1568,6 @@ export class Mastra<
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
-      const logger = this.getLogger();
-      logger.debug('Scorer already exists, skipping', { key: scorerKey });
       return;
     }
 
@@ -1741,8 +1733,6 @@ export class Mastra<
   public addPromptBlock(promptBlock: StorageResolvedPromptBlockType, key?: string): void {
     const blockKey = key || promptBlock.id;
     if (this.#promptBlocks[blockKey]) {
-      const logger = this.getLogger();
-      logger.debug('Prompt block already exists, skipping', { key: blockKey });
       return;
     }
     this.#promptBlocks[blockKey] = promptBlock;
@@ -1947,8 +1937,6 @@ export class Mastra<
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
-      const logger = this.getLogger();
-      logger.debug('Tool already exists, skipping', { key: toolKey });
       return;
     }
 
@@ -2098,8 +2086,6 @@ export class Mastra<
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
-      const logger = this.getLogger();
-      logger.debug('Processor already exists, skipping', { key: processorKey });
       return;
     }
 
@@ -2282,8 +2268,6 @@ export class Mastra<
     const memoryKey = key || memory.id;
     const memoryRegistry = this.#memory as Record<string, MastraMemory>;
     if (memoryRegistry[memoryKey]) {
-      const logger = this.getLogger();
-      logger.debug('Memory already exists, skipping', { key: memoryKey });
       return;
     }
 
@@ -2352,8 +2336,6 @@ export class Mastra<
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
-      const logger = this.getLogger();
-      logger.debug('Workflow already exists, skipping', { key: workflowKey });
       return;
     }
 
@@ -2843,8 +2825,6 @@ export class Mastra<
     const serverKey = key ?? resolvedId;
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
-      const logger = this.getLogger();
-      logger.debug('MCP server already exists, skipping', { key: serverKey });
       return;
     }
 
@@ -3170,8 +3150,6 @@ export class Mastra<
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {
-      const logger = this.getLogger();
-      logger.debug('Gateway already exists, skipping', { key: gatewayKey });
       return;
     }
 

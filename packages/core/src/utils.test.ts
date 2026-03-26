@@ -224,7 +224,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
-    const errorSpy = vi.spyOn(ConsoleLogger.prototype, 'error');
+    const trackExceptionSpy = vi.spyOn(ConsoleLogger.prototype, 'trackException');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -242,9 +242,9 @@ describe('makeCoreTool', () => {
       await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
         MastraError,
       );
-      expect(errorSpy).toHaveBeenCalled();
+      expect(trackExceptionSpy).toHaveBeenCalled();
     }
-    errorSpy.mockRestore();
+    trackExceptionSpy.mockRestore();
   });
 
   it('should handle undefined execute function', () => {
@@ -346,7 +346,10 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Executing tool',
+    expect.objectContaining({ agent: 'testAgent', tool: 'testTool' }),
+  );
 
   debugSpy.mockRestore();
 });

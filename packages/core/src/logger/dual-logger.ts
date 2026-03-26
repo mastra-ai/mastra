@@ -56,8 +56,8 @@ export class DualLogger implements IMastraLogger {
     this.#forwardToVNext('error', message, args);
   }
 
-  trackException(error: MastraError): void {
-    this.#inner.trackException(error);
+  trackException(error: MastraError, metadata?: Record<string, unknown>): void {
+    this.#inner.trackException(error, metadata);
     try {
       const loggerVNext = this.#resolveLoggerVNext();
       loggerVNext?.error(error.message, {
@@ -66,6 +66,7 @@ export class DualLogger implements IMastraLogger {
         category: error.category,
         details: error.details,
         cause: error.cause?.message,
+        ...metadata,
       });
     } catch {
       // Never let loggerVNext errors break the primary logger

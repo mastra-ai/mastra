@@ -245,10 +245,6 @@ export class AgentLegacyHandler {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
       before: async () => {
-        if (process.env.NODE_ENV !== 'test') {
-          this.capabilities.logger.debug('Starting generation', { agentName: this.capabilities.name, runId });
-        }
-
         const agentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
@@ -280,27 +276,6 @@ export class AgentLegacyHandler {
         const innerObservabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
         const memory = await this.capabilities.getMemory({ requestContext });
-
-        const toolEnhancements = [
-          // toolsets
-          toolsets && Object.keys(toolsets || {}).length > 0
-            ? `toolsets present (${Object.keys(toolsets || {}).length} tools)`
-            : undefined,
-
-          // memory tools
-          memory && resourceId ? 'memory and resourceId available' : undefined,
-        ]
-          .filter(Boolean)
-          .join(', ');
-        this.capabilities.logger.debug('Enhancing tools', {
-          agentName: this.capabilities.name,
-          toolEnhancements,
-          runId,
-          toolsets: toolsets ? Object.keys(toolsets) : undefined,
-          clientTools: clientTools ? Object.keys(clientTools) : undefined,
-          hasMemory: !!memory,
-          hasResourceId: !!resourceId,
-        });
 
         const threadId = thread?.id;
 
@@ -380,16 +355,6 @@ export class AgentLegacyHandler {
           agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
-        const store = memory.constructor.name;
-        this.capabilities.logger.debug(
-          `[Agent:${this.capabilities.name}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-          {
-            runId,
-            resourceId,
-            threadId,
-            memoryStore: store,
-          },
-        );
 
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId });
@@ -773,9 +738,9 @@ export class AgentLegacyHandler {
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {
-      this.capabilities.logger.warn(
-        `[Agent:${this.capabilities.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
-      );
+      this.capabilities.logger.warn('No memory configured but resourceId and threadId were passed in args', {
+        agent: this.capabilities.name,
+      });
     }
     const runId =
       args.runId ||
@@ -1380,11 +1345,6 @@ export class AgentLegacyHandler {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     if (!output || experimental_output) {
-      this.capabilities.logger.debug('Starting LLM stream call', {
-        agent: this.capabilities.name,
-        runId,
-      });
-
       const streamResult = llm.__stream({
         ...llmOptions,
         experimental_output,

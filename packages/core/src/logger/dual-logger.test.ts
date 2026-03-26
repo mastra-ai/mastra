@@ -128,7 +128,7 @@ describe('DualLogger', () => {
       } as any;
       dual.trackException(error);
 
-      expect(inner.trackException).toHaveBeenCalledWith(error);
+      expect(inner.trackException).toHaveBeenCalledWith(error, undefined);
       expect(vnext.error).toHaveBeenCalledWith('Something failed', {
         errorId: 'AGENT_GENERATE_FAILED',
         domain: 'AGENT',
@@ -264,7 +264,7 @@ describe('DualLogger', () => {
       } as any;
       dual.trackException(error);
 
-      expect(inner.trackException).toHaveBeenCalledWith(error);
+      expect(inner.trackException).toHaveBeenCalledWith(error, undefined);
       expect(correlatedVnext.error).toHaveBeenCalledWith(
         'Something failed',
         expect.objectContaining({

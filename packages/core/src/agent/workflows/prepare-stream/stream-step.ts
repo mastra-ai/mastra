@@ -36,7 +36,7 @@ interface StreamStepOptions {
 
 export function createStreamStep<OUTPUT = undefined>({
   capabilities,
-  runId,
+  runId: _runId,
   returnScorerData,
   requireToolApproval,
   toolCallConcurrency,
@@ -59,11 +59,6 @@ export function createStreamStep<OUTPUT = undefined>({
     execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
-
-      capabilities.logger.debug('Starting LLM stream call', {
-        agent: capabilities.agentName,
-        runId,
-      });
 
       const processors =
         validatedInputData.outputProcessors ||

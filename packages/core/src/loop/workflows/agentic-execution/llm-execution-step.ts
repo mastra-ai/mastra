@@ -785,6 +785,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
+              logger?.warn('Streaming input processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
               // Emit tripwire chunk to the stream
               safeEnqueue(controller, {
                 type: 'tripwire',
@@ -1210,6 +1215,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         } catch (error) {
           if (error instanceof TripWire) {
             processOutputStepTripwire = error;
+            logger?.warn('Output step processor tripwire triggered', {
+              reason: error.message,
+              processorId: error.processorId,
+              retry: error.options?.retry,
+            });
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {
