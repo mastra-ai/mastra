@@ -226,18 +226,10 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
   content={[
   {
     name: 'expectedTrajectory',
-    type: 'TrajectoryExpectation',
+    type: 'Trajectory | ExpectedStep[]',
     description:
-      'Static expected trajectory to compare against. When provided, all dataset items use this trajectory. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
+      'Static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
     isOptional: true,
-    properties: [
-      {
-        name: 'steps',
-        type: 'ExpectedStep[]',
-        description: 'Ordered list of expected steps. See [Expected steps](#expected-steps) for the type definition.',
-        isOptional: true,
-      },
-    ],
   },
   {
     name: 'comparisonOptions',
@@ -475,9 +467,9 @@ The `createTrajectoryAccuracyScorerLLM()` function from `@mastra/evals/scorers/p
   },
   {
     name: 'expectedTrajectory',
-    type: 'TrajectoryExpectation',
+    type: 'Trajectory | ExpectedStep[]',
     description:
-      'Optional static expected trajectory to compare against. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
+      'Optional static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
     isOptional: true,
   },
 ]}
@@ -640,36 +632,43 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
         type: 'number',
         description: 'Maximum retries per tool before flagging as a failure pattern.',
         isOptional: true,
-        defaultValue: '3',
+        defaultValue: '2',
       },
     ],
   },
   {
     name: 'weights',
-    type: 'object',
-    description: 'Weights for combining dimension scores into the final score.',
+    type: 'TrajectoryScoreWeights',
+    description: 'Custom weights for combining dimension scores. Weights are normalized to sum to 1.0.',
     isOptional: true,
     properties: [
       {
         name: 'accuracy',
         type: 'number',
-        description: 'Weight for accuracy dimension.',
+        description: 'Weight for accuracy scoring.',
         isOptional: true,
         defaultValue: '0.4',
       },
       {
         name: 'efficiency',
         type: 'number',
-        description: 'Weight for efficiency dimension.',
+        description: 'Weight for efficiency scoring.',
         isOptional: true,
         defaultValue: '0.3',
       },
       {
         name: 'toolFailures',
         type: 'number',
-        description: 'Weight for tool failures dimension.',
+        description: 'Weight for tool failure analysis.',
         isOptional: true,
-        defaultValue: '0.3',
+        defaultValue: '0.2',
+      },
+      {
+        name: 'blacklist',
+        type: 'number',
+        description: 'Weight for blacklist scoring (when no violations occur).',
+        isOptional: true,
+        defaultValue: '0.1',
       },
     ],
   },
@@ -685,7 +684,7 @@ The unified scorer evaluates four dimensions:
 1. **Blacklist** — Checks for forbidden tools or sequences. Any violation immediately results in a score of **0.0** regardless of other dimensions.
 1. **Tool failures** — Detects retry patterns, fallback patterns, and argument correction patterns.
 
-The final score is a weighted average of accuracy, efficiency, and tool failures. Blacklist violations override everything to 0.
+The final score is a weighted combination of active dimensions, normalized by which dimensions are active. Default weights are accuracy 0.4, efficiency 0.3, tool failures 0.2, blacklist 0.1, but you can customize them via the `weights` option. Blacklist violations override everything to 0. When nested evaluations are present, the score is 70% top-level and 30% nested average.
 
 ### Unified scorer results
 
@@ -694,11 +693,13 @@ The final score is a weighted average of accuracy, efficiency, and tool failures
   runId: string,
   preprocessStepResult: {
     accuracy?: TrajectoryComparisonResult,
-    efficiency: TrajectoryEfficiencyResult,
-    blacklist: TrajectoryBlacklistResult,
-    toolFailures: ToolFailureAnalysisResult,
+    efficiency?: TrajectoryEfficiencyResult,
+    blacklist?: TrajectoryBlacklistResult,
+    toolFailures?: ToolFailureAnalysisResult,
+    nested?: NestedEvaluationResult[],
   },
-  score: number
+  score: number,
+  reason: string
 }
 ```
 
@@ -754,6 +755,13 @@ const scorer = createTrajectoryScorerCode({
     maxSteps: 10,
     noRedundantCalls: true,
     maxRetriesPerTool: 2,
+  },
+  // Customize how dimensions contribute to the final score
+  weights: {
+    accuracy: 0.5, // prioritize step accuracy
+    efficiency: 0.3,
+    toolFailures: 0.1,
+    blacklist: 0.1,
   },
 })
 ```

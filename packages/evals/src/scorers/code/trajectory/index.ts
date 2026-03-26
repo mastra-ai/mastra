@@ -373,12 +373,29 @@ export type TrajectoryScoreResult = {
   nested?: NestedEvaluationResult[];
 };
 
-interface TrajectoryScorerCodeOptions {
+export interface TrajectoryScoreWeights {
+  /** Weight for accuracy dimension (default: 0.4) */
+  accuracy?: number;
+  /** Weight for efficiency dimension (default: 0.3) */
+  efficiency?: number;
+  /** Weight for tool failures dimension (default: 0.2) */
+  toolFailures?: number;
+  /** Weight for blacklist dimension (default: 0.1) */
+  blacklist?: number;
+}
+
+export interface TrajectoryScorerCodeOptions {
   /**
    * Default expectation config for all runs.
    * Per-item `run.expectedTrajectory` values override these defaults.
    */
   defaults?: TrajectoryExpectation;
+  /**
+   * Weights for combining dimension scores into the final score.
+   * Only active dimensions are used — weights are normalized to sum to 1.0.
+   * Blacklist violations always override to 0 regardless of weight.
+   */
+  weights?: TrajectoryScoreWeights;
 }
 
 /**
@@ -410,11 +427,18 @@ interface TrajectoryScorerCodeOptions {
  *     noRedundantCalls: true,
  *     blacklistedTools: ['deleteAll'],
  *   },
+ *   weights: { accuracy: 0.5, efficiency: 0.3, toolFailures: 0.1, blacklist: 0.1 },
  * });
  * ```
  */
 export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions = {}) {
-  const { defaults = {} } = options;
+  const { defaults = {}, weights: userWeights = {} } = options;
+  const w = {
+    accuracy: userWeights.accuracy ?? 0.4,
+    efficiency: userWeights.efficiency ?? 0.3,
+    toolFailures: userWeights.toolFailures ?? 0.2,
+    blacklist: userWeights.blacklist ?? 0.1,
+  };
 
   return createScorer({
     id: 'code-trajectory-scorer',
@@ -505,16 +529,16 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       const scores: Array<{ weight: number; value: number }> = [];
 
       if (accuracy) {
-        scores.push({ weight: 0.4, value: accuracy.score });
+        scores.push({ weight: w.accuracy, value: accuracy.score });
       }
       if (efficiency) {
-        scores.push({ weight: 0.3, value: efficiency.score });
+        scores.push({ weight: w.efficiency, value: efficiency.score });
       }
       if (toolFailures && toolFailures.patterns.length > 0) {
-        scores.push({ weight: 0.2, value: toolFailures.score });
+        scores.push({ weight: w.toolFailures, value: toolFailures.score });
       }
       if (blacklist) {
-        scores.push({ weight: 0.1, value: blacklist.score });
+        scores.push({ weight: w.blacklist, value: blacklist.score });
       }
 
       if (scores.length === 0 && !nested) {

@@ -981,4 +981,80 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.reason).toContain('agent');
     });
   });
+
+  describe('configurable weights', () => {
+    test('should use custom weights for scoring', async () => {
+      // Create two scorers with opposite weights to verify they produce different scores
+      const accuracyHeavy = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 1, // over budget → efficiency penalty
+        },
+        weights: { accuracy: 0.9, efficiency: 0.1, toolFailures: 0, blacklist: 0 },
+      });
+
+      const efficiencyHeavy = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 1, // over budget → efficiency penalty
+        },
+        weights: { accuracy: 0.1, efficiency: 0.9, toolFailures: 0, blacklist: 0 },
+      });
+
+      // 2 steps, both matched (accuracy = 1.0), but over maxSteps of 1 (efficiency < 1.0)
+      const actual = makeTrajectory([
+        { name: 'search', success: true },
+        { name: 'summarize', success: true },
+      ]);
+
+      const accuracyResult = await accuracyHeavy.run(makeRun(actual));
+      const efficiencyResult = await efficiencyHeavy.run(makeRun(actual));
+
+      // Accuracy-heavy should score higher since accuracy is perfect
+      expect(accuracyResult.score).toBeGreaterThan(efficiencyResult.score);
+    });
+
+    test('should use default weights when not specified', async () => {
+      const withDefaults = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }],
+          maxSteps: 5,
+        },
+      });
+
+      const withExplicitDefaults = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }],
+          maxSteps: 5,
+        },
+        weights: { accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 },
+      });
+
+      const actual = makeTrajectory([{ name: 'search', success: true }]);
+      const run = makeRun(actual);
+
+      const defaultResult = await withDefaults.run(run);
+      const explicitResult = await withExplicitDefaults.run(run);
+
+      expect(defaultResult.score).toBe(explicitResult.score);
+    });
+
+    test('should allow zeroing out a dimension', async () => {
+      // Zero out accuracy weight — missing steps should not affect score
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 5,
+        },
+        weights: { accuracy: 0, efficiency: 1, toolFailures: 0, blacklist: 0 },
+      });
+
+      // Only 1 of 2 expected steps — accuracy is low, but weight is 0
+      const actual = makeTrajectory([{ name: 'search', success: true }]);
+      const result = await scorer.run(makeRun(actual));
+
+      // Score should be based entirely on efficiency (1 step, max 5 = good)
+      expect(result.score).toBe(1);
+    });
+  });
 });
