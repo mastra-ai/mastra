@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import yaml from 'js-yaml';
+import { parse as parseYaml } from 'yaml';
 
 /**
  * Metadata for a slash command
@@ -51,7 +51,7 @@ export async function parseCommandFile(filePath: string, baseDir?: string): Prom
     const template = parts.slice(2).join('---').trim();
 
     // Parse YAML frontmatter
-    const metadata = yaml.load(frontmatter) as Record<string, string>;
+    const metadata = parseYaml(frontmatter) as Record<string, string>;
 
     // Derive name from file path if not specified in frontmatter
     let name: string;
