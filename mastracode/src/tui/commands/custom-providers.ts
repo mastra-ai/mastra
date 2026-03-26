@@ -18,8 +18,27 @@ function normalizeProvider(input: CustomProviderSetting): CustomProviderSetting 
     name: input.name.trim(),
     url: input.url.trim(),
     apiKey: input.apiKey?.trim() || undefined,
+    headers: input.headers && Object.keys(input.headers).length > 0 ? input.headers : undefined,
     models: [...new Set(input.models.map(model => model.trim()).filter(Boolean))],
   };
+}
+
+function parseHeadersJson(raw: string): Record<string, string> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof k !== 'string' || typeof v !== 'string') return null;
+    }
+    return parsed as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+function headersToJsonString(headers?: Record<string, string>): string | undefined {
+  if (!headers || Object.keys(headers).length === 0) return undefined;
+  return JSON.stringify(headers);
 }
 
 export function upsertCustomProviderInSettings(
@@ -164,7 +183,19 @@ async function createProviderFlow(ctx: SlashCommandContext): Promise<void> {
   }
 
   const apiKey = await askOptionalText(ctx, 'API key');
-  upsertCustomProviderInSettings(settings, { name, url, apiKey, models: [] });
+
+  let headers: Record<string, string> | undefined;
+  const headersRaw = await askOptionalText(ctx, 'Custom headers (JSON, e.g. {"X-Key":"val"})');
+  if (headersRaw) {
+    const parsed = parseHeadersJson(headersRaw);
+    if (!parsed) {
+      ctx.showError('Invalid JSON. Headers must be a JSON object of string key-value pairs.');
+      return;
+    }
+    headers = parsed;
+  }
+
+  upsertCustomProviderInSettings(settings, { name, url, apiKey, headers, models: [] });
   saveSettings(settings);
   ctx.showInfo(`Added custom provider: ${name}`);
 
@@ -198,6 +229,25 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
   }
 
   const apiKey = await askOptionalText(ctx, 'API key', provider.apiKey);
+
+  let headers: Record<string, string> | undefined = provider.headers;
+  const headersRaw = await askOptionalText(
+    ctx,
+    'Custom headers (JSON, e.g. {"X-Key":"val"})',
+    headersToJsonString(provider.headers),
+  );
+  if (headersRaw) {
+    const parsed = parseHeadersJson(headersRaw);
+    if (!parsed) {
+      ctx.showError('Invalid JSON. Headers must be a JSON object of string key-value pairs.');
+      return;
+    }
+    headers = parsed;
+  } else if (headersRaw === undefined) {
+    // User explicitly cleared → remove headers
+    headers = undefined;
+  }
+
   upsertCustomProviderInSettings(
     settings,
     {
@@ -205,6 +255,7 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
       name,
       url,
       apiKey,
+      headers,
     },
     providerId,
   );

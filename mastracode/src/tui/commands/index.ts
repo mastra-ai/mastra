@@ -20,6 +20,7 @@ export { handleThreadTagDirCommand } from './thread-tag-dir.js';
 export { handleSandboxCommand } from './sandbox.js';
 export { handleModelsPackCommand } from './models-pack.js';
 export { handleCustomProvidersCommand } from './custom-providers.js';
+export { handleGatewayCommand } from './gateway.js';
 export { handleSubagentsCommand } from './subagents.js';
 export { handleOMCommand } from './om.js';
 export { handleSettingsCommand } from './settings.js';

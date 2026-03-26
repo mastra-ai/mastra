@@ -86,6 +86,7 @@ vi.mock('../../onboarding/settings.js', () => ({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
+  GATEWAY_DEFAULTS: { baseUrl: null, headers: {} },
 }));
 
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';

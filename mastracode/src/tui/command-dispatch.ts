@@ -23,6 +23,7 @@ import {
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
   handleCustomProvidersCommand,
+  handleGatewayCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
@@ -94,6 +95,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'custom-providers':
       await handleCustomProvidersCommand(buildCtx());
+      return true;
+    case 'gateway':
+      await handleGatewayCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());

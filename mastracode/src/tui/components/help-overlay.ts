@@ -30,6 +30,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/skills', description: 'List available skills' },
     { key: '/models', description: 'Switch model pack' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
+    { key: '/gateway', description: 'Configure LLM gateway (base URL & headers)' },
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },

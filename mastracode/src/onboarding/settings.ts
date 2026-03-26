@@ -21,6 +21,7 @@ export interface CustomProviderSetting {
   name: string;
   url: string;
   apiKey?: string;
+  headers?: Record<string, string>;
   models: string[];
 }
 
@@ -55,6 +56,19 @@ export interface StorageSettings {
   /** PostgreSQL-specific config (used when backend is 'pg'). */
   pg: PgStorageSettings;
 }
+
+/** Global gateway configuration for routing LLM calls through a proxy. */
+export interface GatewaySettings {
+  /** Base URL override — when set, all model router calls go through this URL. */
+  baseUrl: string | null;
+  /** Custom headers sent with every LLM request through the gateway. */
+  headers: Record<string, string>;
+}
+
+export const GATEWAY_DEFAULTS: GatewaySettings = {
+  baseUrl: null,
+  headers: {},
+};
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -103,6 +117,8 @@ export interface GlobalSettings {
   };
   // Storage backend configuration
   storage: StorageSettings;
+  // Global gateway configuration for LLM proxy routing
+  gateway: GatewaySettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
   // User-created custom providers with custom models
@@ -143,6 +159,7 @@ const DEFAULTS: GlobalSettings = {
     quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
+  gateway: { ...GATEWAY_DEFAULTS },
   customModelPacks: [],
   customProviders: [],
   modelUseCounts: {},
@@ -224,15 +241,38 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     const apiKey =
       typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
 
+    const headers = parseHeaders(candidate.headers);
+
     parsedProviders.push({
       name,
       url,
       ...(apiKey ? { apiKey } : {}),
+      ...(headers ? { headers } : {}),
       models,
     });
   }
 
   return parsedProviders;
+}
+
+function parseHeaders(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string') {
+      result[key] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseGateway(raw: unknown): GatewaySettings {
+  if (!raw || typeof raw !== 'object') return { ...GATEWAY_DEFAULTS };
+  const candidate = raw as Record<string, unknown>;
+  return {
+    baseUrl: typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
+    headers: parseHeaders(candidate.headers) ?? {},
+  };
 }
 
 /**
@@ -270,6 +310,7 @@ function migrateFromAuth(settingsPath: string): boolean {
           libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
           pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
         },
+        gateway: parseGateway(raw.gateway),
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
@@ -386,6 +427,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
         pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
       },
+      gateway: parseGateway(raw.gateway),
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},

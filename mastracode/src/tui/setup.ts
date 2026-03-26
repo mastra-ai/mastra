@@ -254,6 +254,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
+    { name: 'gateway', description: 'Configure LLM gateway (base URL & headers)' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },

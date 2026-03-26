@@ -1,12 +1,13 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
-import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
+import { GATEWAY_DEFAULTS, getCustomProviderId, loadSettings } from '../onboarding/settings.js';
+import type { GatewaySettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -24,6 +25,7 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
 };
 
 type ResolvedModel =
+  | MastraModelConfig
   | ReturnType<typeof openaiCodexProvider>
   | ReturnType<typeof opencodeClaudeMaxProvider>
   | ModelRouterLanguageModel
@@ -91,8 +93,13 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
-  const anthropic = createAnthropic({ apiKey, headers });
+function anthropicApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  baseURL?: string,
+): MastraModelConfig {
+  const anthropic = createAnthropic({ apiKey, headers, ...(baseURL ? { baseURL } : {}) });
   return wrapLanguageModel({
     model: anthropic(modelId),
     middleware: [promptCacheMiddleware],
@@ -102,8 +109,13 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: Mode
 /**
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
-  const openai = createOpenAI({ apiKey, headers });
+function openaiApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  baseURL?: string,
+): MastraModelConfig {
+  const openai = createOpenAI({ apiKey, headers, ...(baseURL ? { baseURL } : {}) });
   return wrapLanguageModel({
     model: openai.responses(modelId),
     middleware: [],
@@ -124,9 +136,17 @@ export function resolveModel(
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
 ): ResolvedModel {
   authStorage.reload();
-  const headers = getHarnessHeaders(options?.requestContext);
+  const harnessHeaders = getHarnessHeaders(options?.requestContext);
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
+  const gw: GatewaySettings = settings.gateway ?? GATEWAY_DEFAULTS;
+  const gwHeaders = Object.keys(gw.headers).length > 0 ? gw.headers : undefined;
+  const gwBaseUrl = gw.baseUrl ?? undefined;
+
+  // Merge gateway headers → harness headers (harness wins on conflict)
+  const headers: ModelRequestHeaders | undefined =
+    gwHeaders || harnessHeaders ? { ...gwHeaders, ...harnessHeaders } : undefined;
+
   const customProvider =
     providerId && modelName
       ? settings.customProviders.find(provider => {
@@ -139,7 +159,7 @@ export function resolveModel(
       id: modelId as `${string}/${string}`,
       url: customProvider.url,
       apiKey: customProvider.apiKey,
-      headers,
+      headers: { ...customProvider.headers, ...headers },
     });
   }
 
@@ -153,7 +173,7 @@ export function resolveModel(
     }
     return createAnthropic({
       apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: 'https://api.moonshot.ai/anthropic/v1',
+      baseURL: gwBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
       headers,
     })(modelId.substring('moonshotai/'.length));
@@ -161,23 +181,23 @@ export function resolveModel(
     const bareModelId = modelId.substring('anthropic/'.length);
     const storedCred = authStorage.get('anthropic');
 
-    // Primary path: explicit OAuth credential
+    // Primary path: explicit OAuth credential (handles its own auth — no headers/baseURL override)
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers });
+      return opencodeClaudeMaxProvider(bareModelId);
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, gwBaseUrl);
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
+      return anthropicApiKeyProvider(bareModelId, apiKey, headers, gwBaseUrl);
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { headers });
+    return opencodeClaudeMaxProvider(bareModelId);
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
@@ -186,18 +206,25 @@ export function resolveModel(
       const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
-        headers,
       });
     }
 
     const apiKey = getOpenAIApiKey();
     if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers);
+      return openaiApiKeyProvider(bareModelId, apiKey, headers, gwBaseUrl);
     }
 
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
+    return new ModelRouterLanguageModel({
+      id: modelId as `${string}/${string}`,
+      ...(gwBaseUrl ? { url: gwBaseUrl } : {}),
+      headers,
+    });
   } else {
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
+    return new ModelRouterLanguageModel({
+      id: modelId as `${string}/${string}`,
+      ...(gwBaseUrl ? { url: gwBaseUrl } : {}),
+      headers,
+    });
   }
 }
 
