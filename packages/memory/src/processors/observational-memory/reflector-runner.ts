@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
+import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -52,6 +53,38 @@ export class ReflectorRunner {
   private readonly reflectionConfig: ResolvedReflectionConfig;
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly tokenCounter: TokenCounter;
+
+  private async withOmTracingSpan<T>({
+    model,
+    inputTokens,
+    requestContext,
+    metadata,
+    callback,
+  }: {
+    model: ConcreteReflectionModel;
+    inputTokens: number;
+    requestContext?: RequestContext;
+    metadata?: Record<string, unknown>;
+    callback: () => Promise<T>;
+  }): Promise<T> {
+    const span = getOrCreateSpan({
+      type: SpanType.GENERIC,
+      name: 'om.reflector',
+      entityType: EntityType.PROCESSOR,
+      entityName: 'Reflector',
+      attributes: {
+        metadata: {
+          omPhase: 'reflector',
+          omInputTokens: inputTokens,
+          omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
+          ...metadata,
+        },
+      },
+      requestContext,
+    });
+
+    return executeWithContext({ span, fn: callback });
+  }
   private readonly storage: MemoryStorage;
   private readonly scope: 'thread' | 'resource';
   private readonly buffering: BufferingCoordinator;
@@ -167,45 +200,57 @@ export class ReflectorRunner {
       );
 
       let chunkCount = 0;
-      const result = await withAbortCheck(async () => {
-        const streamResult = await agent.stream(prompt, {
-          modelSettings: {
-            ...this.reflectionConfig.modelSettings,
-          },
-          providerOptions: this.reflectionConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-          ...(attemptNumber === 1
-            ? {
-                onChunk(chunk: any) {
-                  chunkCount++;
-                  if (chunkCount === 1 || chunkCount % 50 === 0) {
-                    const preview =
-                      chunk.type === 'text-delta'
-                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                        : chunk.type === 'tool-call'
-                          ? ` tool=${chunk.toolName}`
-                          : '';
-                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+      const result = await this.withOmTracingSpan({
+        model: model ?? (this.reflectionConfig.model as ConcreteReflectionModel),
+        inputTokens: originalTokens,
+        requestContext,
+        metadata: {
+          omCompressionLevel: currentLevel,
+          omCompressionAttempt: attemptNumber,
+          omTargetThreshold: targetThreshold,
+          omSkipContinuationHints: skipContinuationHints ?? false,
+        },
+        callback: () =>
+          withAbortCheck(async () => {
+            const streamResult = await agent.stream(prompt, {
+              modelSettings: {
+                ...this.reflectionConfig.modelSettings,
+              },
+              providerOptions: this.reflectionConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+              ...(attemptNumber === 1
+                ? {
+                    onChunk(chunk: any) {
+                      chunkCount++;
+                      if (chunkCount === 1 || chunkCount % 50 === 0) {
+                        const preview =
+                          chunk.type === 'text-delta'
+                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                            : chunk.type === 'tool-call'
+                              ? ` tool=${chunk.toolName}`
+                              : '';
+                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                      }
+                    },
+                    onFinish(event: any) {
+                      omDebug(
+                        `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                      );
+                    },
+                    onAbort(event: any) {
+                      omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                    },
+                    onError({ error }: { error: unknown }) {
+                      omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                    },
                   }
-                },
-                onFinish(event: any) {
-                  omDebug(
-                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                  );
-                },
-                onAbort(event: any) {
-                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                },
-                onError({ error }: { error: unknown }) {
-                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                },
-              }
-            : {}),
-        });
+                : {}),
+            });
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,

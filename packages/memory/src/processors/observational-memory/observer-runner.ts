@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
@@ -25,6 +26,40 @@ export class ObserverRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
   private observerAgent?: Agent;
+
+  private async withOmTracingSpan<T>({
+    phase,
+    model,
+    inputTokens,
+    requestContext,
+    metadata,
+    callback,
+  }: {
+    phase: 'observer' | 'observer-multi-thread';
+    model: ConcreteObservationModel;
+    inputTokens: number;
+    requestContext?: RequestContext;
+    metadata?: Record<string, unknown>;
+    callback: () => Promise<T>;
+  }): Promise<T> {
+    const span = getOrCreateSpan({
+      type: SpanType.GENERIC,
+      name: phase === 'observer' ? 'om.observer' : 'om.observer.multi-thread',
+      entityType: EntityType.PROCESSOR,
+      entityName: phase === 'observer' ? 'Observer' : 'MultiThreadObserver',
+      attributes: {
+        metadata: {
+          omPhase: phase,
+          omInputTokens: inputTokens,
+          omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
+          ...metadata,
+        },
+      },
+      requestContext,
+    });
+
+    return executeWithContext({ span, fn: callback });
+  }
 
   constructor(opts: { observationConfig: ResolvedObservationConfig; observedMessageIds: Set<string> }) {
     this.observationConfig = opts.observationConfig;
@@ -99,15 +134,28 @@ export class ObserverRunner {
     ];
 
     const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: { ...this.observationConfig.modelSettings },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-        });
-        return streamResult.getFullOutput();
-      }, abortSignal);
+      return this.withOmTracingSpan({
+        phase: 'observer',
+        model: options?.model ?? (this.observationConfig.model as ConcreteObservationModel),
+        inputTokens: messagesToObserve.reduce((total, message) => total + (message.content?.length ?? 0), 0),
+        requestContext: options?.requestContext,
+        metadata: {
+          omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+          omThreadTitleEnabled: this.observationConfig.threadTitle,
+          omSkipContinuationHints: options?.skipContinuationHints ?? false,
+          omWasTruncated: options?.wasTruncated ?? false,
+        },
+        callback: () =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              modelSettings: { ...this.observationConfig.modelSettings },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+            });
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
     };
 
     let result = await doGenerate();
@@ -178,15 +226,30 @@ export class ObserverRunner {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: { ...this.observationConfig.modelSettings },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-        });
-        return streamResult.getFullOutput();
-      }, abortSignal);
+      return this.withOmTracingSpan({
+        phase: 'observer-multi-thread',
+        model: model ?? (this.observationConfig.model as ConcreteObservationModel),
+        inputTokens: Array.from(messagesByThread.values()).reduce(
+          (total, messages) => total + messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+          0,
+        ),
+        requestContext,
+        metadata: {
+          omThreadCount: threadOrder.length,
+          omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+          omThreadTitleEnabled: this.observationConfig.threadTitle,
+        },
+        callback: () =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              modelSettings: { ...this.observationConfig.modelSettings },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+            });
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
     };
 
     let result = await doGenerate();
