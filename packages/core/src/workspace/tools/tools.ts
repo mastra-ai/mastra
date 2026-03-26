@@ -23,6 +23,7 @@ import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
+import { lspInspectTool } from './lsp-inspect';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
@@ -387,6 +388,9 @@ export async function createWorkspaceTools(
       await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }
+
+  // LSP tools — always available (tool handles case when LSP not configured)
+  addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool);
 
   return tools;
 }

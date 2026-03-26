@@ -23,6 +23,7 @@ export {
 export { getProcessOutputTool } from './get-process-output';
 export { killProcessTool } from './kill-process';
 export { grepTool } from './grep';
+export { lspInspectTool } from './lsp-inspect';
 
 // Helpers
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';
