@@ -1145,10 +1145,12 @@ describe('Observer Agent Helpers', () => {
         }),
       } as any);
 
-      await om.observer.call(undefined, [createTestMessage('01234567890', 'user')]);
+      const observerMessages = [createTestMessage('01234567890', 'user')];
+
+      await om.observer.call(undefined, observerMessages);
       await (om as any).reflector.call('01234567890');
 
-      expect(observerResolveSpy).toHaveBeenCalledWith(11);
+      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
       expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
       expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');

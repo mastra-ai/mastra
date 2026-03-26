@@ -14,6 +14,7 @@ import {
   parseObserverOutput,
   parseMultiThreadObserverOutput,
 } from './observer-agent';
+import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import type { ResolvedObservationConfig } from './types';
 
@@ -26,33 +27,6 @@ type ObservationModelResolver = (inputTokens: number) => {
   routingThresholds?: string;
 };
 
-function estimateObserverInputTokens(content: unknown): number {
-  if (typeof content === 'string') {
-    return content.length;
-  }
-
-  if (!content || typeof content !== 'object') {
-    return 0;
-  }
-
-  if ('parts' in content && Array.isArray((content as { parts?: unknown[] }).parts)) {
-    return (content as { parts: unknown[] }).parts.reduce<number>((total, part) => {
-      if (!part || typeof part !== 'object') {
-        return total;
-      }
-
-      return (
-        total +
-        ('text' in part && typeof (part as { text?: unknown }).text === 'string'
-          ? (part as { text: string }).text.length
-          : 0)
-      );
-    }, 0);
-  }
-
-  return 0;
-}
-
 /**
  * Runs the Observer agent for extracting observations from messages.
  * Handles single-thread and multi-thread modes, degenerate detection, and retry logic.
@@ -61,16 +35,19 @@ export class ObserverRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
+  private readonly tokenCounter: TokenCounter;
   private observerAgent?: Agent;
 
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
     observedMessageIds: Set<string>;
     resolveModel: ObservationModelResolver;
+    tokenCounter: TokenCounter;
   }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
     this.resolveModel = opts.resolveModel;
+    this.tokenCounter = opts.tokenCounter;
   }
 
   private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
@@ -126,10 +103,7 @@ export class ObserverRunner {
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const inputTokens = messagesToObserve.reduce(
-      (total, message) => total + estimateObserverInputTokens(message.content),
-      0,
-    );
+    const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = options?.model ? this.createAgent(options.model) : this.getAgent(resolvedModel.model);
 
@@ -222,8 +196,7 @@ export class ObserverRunner {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const inputTokens = Array.from(messagesByThread.values()).reduce(
-      (total, messages) =>
-        total + messages.reduce((sum, message) => sum + estimateObserverInputTokens(message.content), 0),
+      (total, messages) => total + this.tokenCounter.countMessages(messages),
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);

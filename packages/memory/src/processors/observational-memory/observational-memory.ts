@@ -403,6 +403,7 @@ export class ObservationalMemory {
       observationConfig: this.observationConfig,
       observedMessageIds: this.observedMessageIds,
       resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
+      tokenCounter: this.tokenCounter,
     });
 
     this.buffering = new BufferingCoordinator({
