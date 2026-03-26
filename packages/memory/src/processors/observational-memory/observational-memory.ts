@@ -3255,8 +3255,6 @@ ${formattedMessages}
     messageList: MessageList;
     observabilityContext?: ObservabilityContext;
   }): ObservationTurn {
-    const turn = new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList);
-    turn.observabilityContext = opts.observabilityContext;
-    return turn;
+    return new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList, opts.observabilityContext);
   }
 }

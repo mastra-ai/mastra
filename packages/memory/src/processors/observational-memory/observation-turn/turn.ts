@@ -60,7 +60,10 @@ export class ObservationTurn {
     readonly threadId: string,
     readonly resourceId: string | undefined,
     readonly messageList: MessageList,
-  ) {}
+    observabilityContext?: ObservabilityContext,
+  ) {
+    this.observabilityContext = observabilityContext;
+  }
 
   /** The current cached record. Refreshed after mutations (activate/observe/reflect). */
   get record(): ObservationalMemoryRecord {
