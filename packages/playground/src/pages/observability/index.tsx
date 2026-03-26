@@ -309,6 +309,7 @@ export default function Observability() {
               <MainHeader.Title>
                 <EyeIcon /> Observability
               </MainHeader.Title>
+              <MainHeader.Description>Explore observability traces for your entities</MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column className="flex justify-end gap-2">
               <ButtonWithTooltip
@@ -316,6 +317,7 @@ export default function Observability() {
                 href="https://mastra.ai/en/docs/observability/tracing/overview"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Observability documentation"
                 tooltipContent="Go to Observability documentation"
               >
                 <BookIcon />
@@ -360,6 +362,7 @@ export default function Observability() {
               <MainHeader.Title isLoading={isTracesLoading}>
                 <EyeIcon /> Observability
               </MainHeader.Title>
+              <MainHeader.Description>Explore observability traces for your entities</MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column className="flex justify-end gap-2">
               <ButtonWithTooltip
@@ -367,6 +370,7 @@ export default function Observability() {
                 href="https://mastra.ai/en/docs/observability/tracing/overview"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Observability documentation"
                 tooltipContent="Go to Observability documentation"
               >
                 <BookIcon />
