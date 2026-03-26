@@ -43,6 +43,12 @@ function trajectoryStepToExpectedStep(step: TrajectoryStep): ExpectedStep {
     if (step.output !== undefined) data.output = step.output;
   }
   if (Object.keys(data).length > 0) result.data = data;
+  // Recursively convert children so nested hierarchies are preserved
+  if (step.children && step.children.length > 0) {
+    result.children = {
+      steps: step.children.map(trajectoryStepToExpectedStep),
+    };
+  }
   return result;
 }
 
@@ -208,30 +214,40 @@ function evaluateNestedExpectations(
   actualSteps: TrajectoryStep[],
 ): NestedEvaluationResult[] {
   const results: NestedEvaluationResult[] = [];
+  const matchedIndices = new Set<number>();
 
   for (const expectedStep of expectedSteps) {
-    if (!expectedStep.children?.steps || expectedStep.children.steps.length === 0) continue;
+    if (!expectedStep.children) continue;
 
-    // Find the matching actual step
-    const actualStep = actualSteps.find(
-      s => s.name === expectedStep.name && (!expectedStep.stepType || s.stepType === expectedStep.stepType),
+    // Find the first unmatched actual step that satisfies name/type
+    const matchIndex = actualSteps.findIndex(
+      (s, i) =>
+        !matchedIndices.has(i) &&
+        s.name === expectedStep.name &&
+        (!expectedStep.stepType || s.stepType === expectedStep.stepType),
     );
+    const actualStep = matchIndex >= 0 ? actualSteps[matchIndex] : undefined;
+    if (matchIndex >= 0) matchedIndices.add(matchIndex);
 
     if (!actualStep?.children || actualStep.children.length === 0) {
       // Matched step has no children — nested evaluation fails
+      const expectedStepCount = expectedStep.children.steps?.length ?? 0;
       results.push({
         stepName: expectedStep.name,
         score: 0,
-        accuracy: {
-          score: 0,
-          matchedSteps: 0,
-          totalExpectedSteps: expectedStep.children.steps.length,
-          totalActualSteps: 0,
-          missingSteps: expectedStep.children.steps.map(s => s.name),
-          extraSteps: [],
-          outOfOrderSteps: [],
-          repeatedSteps: [],
-        },
+        accuracy:
+          expectedStepCount > 0
+            ? {
+                score: 0,
+                matchedSteps: 0,
+                totalExpectedSteps: expectedStepCount,
+                totalActualSteps: 0,
+                missingSteps: expectedStep.children.steps!.map(s => s.name),
+                extraSteps: [],
+                outOfOrderSteps: [],
+                repeatedSteps: [],
+              }
+            : undefined,
       });
       continue;
     }
@@ -313,6 +329,13 @@ function evaluateNestedExpectations(
     // Average with nested scores if any
     let finalScore = levelScore;
     if (nested.length > 0) {
+      // Hard fail if any nested level has a blacklist violation
+      const hasNestedBlacklistViolation = nested.some(r => r.blacklist && r.blacklist.score === 0);
+      if (hasNestedBlacklistViolation) {
+        results.push({ stepName: expectedStep.name, score: 0, accuracy, efficiency, blacklist, toolFailures, nested });
+        continue;
+      }
+
       const nestedAvg = nested.reduce((sum, r) => sum + r.score, 0) / nested.length;
       // 70% this level, 30% nested levels
       finalScore = 0.7 * levelScore + 0.3 * nestedAvg;
@@ -507,6 +530,12 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
 
       // Factor in nested scores
       if (nested && nested.length > 0) {
+        // Hard fail if any nested level has a blacklist violation
+        const hasNestedBlacklistViolation = nested.some(r => r.blacklist && r.blacklist.score === 0);
+        if (hasNestedBlacklistViolation) {
+          return 0;
+        }
+
         const nestedAvg = nested.reduce((sum, r) => sum + r.score, 0) / nested.length;
         // 70% top-level, 30% nested
         levelScore = 0.7 * levelScore + 0.3 * nestedAvg;

@@ -370,6 +370,54 @@ describe('extractTrajectoryFromTrace', () => {
     expect(result.steps[0]!.name).toBe('real-tool');
   });
 
+  it('promotes children of skipped spans rather than dropping them', () => {
+    const root = createSpan({
+      spanId: 'agent-root',
+      spanType: SpanType.AGENT_RUN,
+      name: 'agent',
+      startedAt: new Date('2025-01-01T00:00:00Z'),
+      endedAt: new Date('2025-01-01T00:01:00Z'),
+    });
+
+    // model_step is skipped, but its child (model_generation) should be promoted
+    const modelStep = createSpan({
+      spanId: 'model-step',
+      parentSpanId: 'agent-root',
+      spanType: SpanType.MODEL_STEP,
+      name: 'model-step',
+      startedAt: new Date('2025-01-01T00:00:01Z'),
+      endedAt: new Date('2025-01-01T00:00:03Z'),
+    });
+
+    const modelGeneration = createSpan({
+      spanId: 'model-gen',
+      parentSpanId: 'model-step',
+      spanType: SpanType.MODEL_GENERATION,
+      name: 'gpt-4-call',
+      startedAt: new Date('2025-01-01T00:00:01Z'),
+      endedAt: new Date('2025-01-01T00:00:02Z'),
+      attributes: { model: 'gpt-4' },
+    });
+
+    const toolCall = createSpan({
+      spanId: 'tool-1',
+      parentSpanId: 'agent-root',
+      spanType: SpanType.TOOL_CALL,
+      name: 'search',
+      startedAt: new Date('2025-01-01T00:00:04Z'),
+      endedAt: new Date('2025-01-01T00:00:05Z'),
+    });
+
+    const result = extractTrajectoryFromTrace([root, modelStep, modelGeneration, toolCall]);
+
+    // model_generation should be promoted from the skipped model_step
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]!.stepType).toBe('model_generation');
+    expect(result.steps[0]!.name).toBe('gpt-4-call');
+    expect(result.steps[1]!.stepType).toBe('tool_call');
+    expect(result.steps[1]!.name).toBe('search');
+  });
+
   it('uses rootSpanId to scope the trajectory', () => {
     const spans: SpanRecord[] = [
       createSpan({

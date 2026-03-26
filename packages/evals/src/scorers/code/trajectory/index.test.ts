@@ -713,5 +713,113 @@ describe('createTrajectoryScorerCode', () => {
       expect(level1?.nested?.[0]?.stepName).toBe('sub-agent');
       expect(level1?.nested?.[0]?.accuracy?.matchedSteps).toBe(1);
     });
+
+    test('should hard-fail when nested blacklist is violated', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                blacklistedTools: ['forbidden-tool'],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            children: [
+              { stepType: 'tool_call', name: 'allowed-tool' },
+              { stepType: 'tool_call', name: 'forbidden-tool' },
+            ],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      expect(result.score).toBe(0);
+    });
+
+    test('should evaluate nested config without steps (blacklist only)', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                blacklistedTools: ['bad-tool'],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            children: [{ stepType: 'tool_call', name: 'good-tool' }],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      // No blacklist violation, should pass
+      expect(result.score).toBeGreaterThan(0);
+    });
+
+    test('should not bind nested scoring to first duplicate step', async () => {
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                steps: [{ name: 'tool-a' }],
+              },
+            },
+            {
+              name: 'agent',
+              stepType: 'agent_run',
+              children: {
+                steps: [{ name: 'tool-b' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const actual: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            children: [{ stepType: 'tool_call', name: 'tool-a' }],
+          },
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            children: [{ stepType: 'tool_call', name: 'tool-b' }],
+          },
+        ],
+      };
+
+      const result = await scorer.run(makeRun(actual));
+      const nested = result.preprocessStepResult?.nested;
+      expect(nested).toHaveLength(2);
+      // First expected step matches first actual step
+      expect(nested?.[0]?.accuracy?.matchedSteps).toBe(1);
+      // Second expected step matches second actual step (not first)
+      expect(nested?.[1]?.accuracy?.matchedSteps).toBe(1);
+    });
   });
 });

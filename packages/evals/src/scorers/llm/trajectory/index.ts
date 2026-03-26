@@ -44,20 +44,30 @@ function formatStepDetails(step: TrajectoryStep): string {
   }
 }
 
-function formatTrajectory(trajectory: Trajectory): string {
+function formatTrajectory(trajectory: Trajectory, indent: number = 0): string {
+  const prefix = '  '.repeat(indent);
   return trajectory.steps
     .map((step: TrajectoryStep, i: number) => {
-      return `${i + 1}. [${step.stepType}] ${step.name}${formatStepDetails(step)}`;
+      let line = `${prefix}${i + 1}. [${step.stepType}] ${step.name}${formatStepDetails(step)}`;
+      if (step.children && step.children.length > 0) {
+        line += `\n${formatTrajectory({ steps: step.children } as Trajectory, indent + 1)}`;
+      }
+      return line;
     })
     .join('\n');
 }
 
-function formatExpectedSteps(steps: ExpectedStep[]): string {
+function formatExpectedSteps(steps: ExpectedStep[], indent: number = 0): string {
+  const prefix = '  '.repeat(indent);
   return steps
     .map((step: ExpectedStep, i: number) => {
       const typeStr = step.stepType ? `[${step.stepType}] ` : '';
       const dataStr = step.data ? ` (data: ${JSON.stringify(step.data)})` : '';
-      return `${i + 1}. ${typeStr}${step.name}${dataStr}`;
+      let line = `${prefix}${i + 1}. ${typeStr}${step.name}${dataStr}`;
+      if (step.children?.steps && step.children.steps.length > 0) {
+        line += `\n${formatExpectedSteps(step.children.steps, indent + 1)}`;
+      }
+      return line;
     })
     .join('\n');
 }
@@ -118,9 +128,27 @@ export function createTrajectoryAccuracyScorerLLM({
       // Resolve expected steps: prefer constructor option, fallback to dataset item
       let expectedSteps: ExpectedStep[] | undefined;
       if (staticExpectedTrajectory) {
-        expectedSteps = Array.isArray(staticExpectedTrajectory)
-          ? staticExpectedTrajectory
-          : staticExpectedTrajectory.steps.map((s: TrajectoryStep) => ({ name: s.name, stepType: s.stepType }));
+        if (Array.isArray(staticExpectedTrajectory)) {
+          expectedSteps = staticExpectedTrajectory;
+        } else {
+          // Preserve full step data from Trajectory steps
+          expectedSteps = staticExpectedTrajectory.steps.map((s: TrajectoryStep): ExpectedStep => {
+            const result: ExpectedStep = { name: s.name, stepType: s.stepType };
+            const data: Record<string, unknown> = {};
+            if ((s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call') && s.toolArgs !== undefined)
+              data.input = s.toolArgs;
+            if ((s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call') && s.toolResult !== undefined)
+              data.output = s.toolResult;
+            if (s.stepType === 'workflow_step' && s.output !== undefined) data.output = s.output;
+            if (Object.keys(data).length > 0) result.data = data;
+            if (s.children && s.children.length > 0) {
+              result.children = {
+                steps: s.children.map((c: TrajectoryStep): ExpectedStep => ({ name: c.name, stepType: c.stepType })),
+              };
+            }
+            return result;
+          });
+        }
       } else if (run.expectedTrajectory) {
         const expectation = run.expectedTrajectory as TrajectoryExpectation;
         expectedSteps = expectation.steps && expectation.steps.length > 0 ? expectation.steps : undefined;
@@ -154,7 +182,10 @@ export function createTrajectoryAccuracyScorerLLM({
 
       if (stepEvaluations.length === 0) {
         const missingSteps = results.analyzeStepResult?.missingSteps || [];
-        return missingSteps.length > 0 ? 0.0 : 1.0;
+        const extraSteps = results.analyzeStepResult?.extraSteps || [];
+        if (missingSteps.length > 0) return 0.0;
+        if (extraSteps.length > 0) return 0.5;
+        return 1.0;
       }
 
       const necessarySteps = stepEvaluations.filter(e => e.wasNecessary).length;

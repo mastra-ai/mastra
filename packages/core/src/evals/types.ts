@@ -699,20 +699,23 @@ type SpanTreeNode = {
 };
 
 /**
- * Converts a `SpanRecord` to the appropriate `TrajectoryStep` discriminated
- * union type, including recursively-converted children.
+ * Converts a `SpanTreeNode` to `TrajectoryStep` entries.
+ *
+ * Returns an array because a skipped span promotes its children into the
+ * parent's list rather than dropping them entirely.
  */
-function spanToTrajectoryStep(node: SpanTreeNode): TrajectoryStep | null {
+function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
   const { span, children: childNodes } = node;
 
   if (SKIPPED_SPAN_TYPES.has(span.spanType)) {
-    return null;
+    // Promote children of skipped spans so their subtree is preserved
+    return childNodes.flatMap(spanToTrajectorySteps);
   }
 
   const durationMs =
     span.endedAt != null && span.startedAt != null ? span.endedAt.getTime() - span.startedAt.getTime() : undefined;
 
-  const childSteps = childNodes.map(spanToTrajectoryStep).filter((s): s is TrajectoryStep => s !== null);
+  const childSteps = childNodes.flatMap(spanToTrajectorySteps);
 
   const base: TrajectoryStepBase = {
     name: span.name,
@@ -727,102 +730,78 @@ function spanToTrajectoryStep(node: SpanTreeNode): TrajectoryStep | null {
     case SpanType.TOOL_CALL: {
       const toolArgs = toRecordOrUndefined(span.input);
       const toolResult = toRecordOrUndefined(span.output);
-      return {
-        ...base,
-        stepType: 'tool_call',
-        toolArgs,
-        toolResult,
-        success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
-      };
+      return [
+        {
+          ...base,
+          stepType: 'tool_call' as const,
+          toolArgs,
+          toolResult,
+          success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
+        },
+      ];
     }
 
     case SpanType.MCP_TOOL_CALL: {
       const toolArgs = toRecordOrUndefined(span.input);
       const toolResult = toRecordOrUndefined(span.output);
-      return {
-        ...base,
-        stepType: 'mcp_tool_call',
-        toolArgs,
-        toolResult,
-        mcpServer: typeof attrs.mcpServer === 'string' ? attrs.mcpServer : undefined,
-        success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
-      };
+      return [
+        {
+          ...base,
+          stepType: 'mcp_tool_call' as const,
+          toolArgs,
+          toolResult,
+          mcpServer: typeof attrs.mcpServer === 'string' ? attrs.mcpServer : undefined,
+          success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
+        },
+      ];
     }
 
     case SpanType.MODEL_GENERATION: {
       const usage = attrs.usage as { inputTokens?: number; outputTokens?: number } | undefined;
-      return {
-        ...base,
-        stepType: 'model_generation',
-        modelId: typeof attrs.model === 'string' ? attrs.model : undefined,
-        promptTokens: usage?.inputTokens,
-        completionTokens: usage?.outputTokens,
-        finishReason: typeof attrs.finishReason === 'string' ? attrs.finishReason : undefined,
-      };
+      return [
+        {
+          ...base,
+          stepType: 'model_generation' as const,
+          modelId: typeof attrs.model === 'string' ? attrs.model : undefined,
+          promptTokens: usage?.inputTokens,
+          completionTokens: usage?.outputTokens,
+          finishReason: typeof attrs.finishReason === 'string' ? attrs.finishReason : undefined,
+        },
+      ];
     }
 
     case SpanType.AGENT_RUN:
-      return {
-        ...base,
-        stepType: 'agent_run',
-        agentId: span.entityId ?? undefined,
-      };
+      return [{ ...base, stepType: 'agent_run' as const, agentId: span.entityId ?? undefined }];
 
     case SpanType.WORKFLOW_RUN:
-      return {
-        ...base,
-        stepType: 'workflow_run',
-        workflowId: span.entityId ?? undefined,
-      };
+      return [{ ...base, stepType: 'workflow_run' as const, workflowId: span.entityId ?? undefined }];
 
     case SpanType.WORKFLOW_STEP: {
       const output = toRecordOrUndefined(span.output);
-      return {
-        ...base,
-        stepType: 'workflow_step',
-        stepId: span.name,
-        output,
-      };
+      return [{ ...base, stepType: 'workflow_step' as const, stepId: span.name, output }];
     }
 
     case SpanType.WORKFLOW_CONDITIONAL:
-      return {
-        ...base,
-        stepType: 'workflow_conditional',
-      };
+      return [{ ...base, stepType: 'workflow_conditional' as const }];
 
     case SpanType.WORKFLOW_PARALLEL:
-      return {
-        ...base,
-        stepType: 'workflow_parallel',
-      };
+      return [{ ...base, stepType: 'workflow_parallel' as const }];
 
     case SpanType.WORKFLOW_LOOP:
-      return {
-        ...base,
-        stepType: 'workflow_loop',
-      };
+      return [{ ...base, stepType: 'workflow_loop' as const }];
 
     case SpanType.WORKFLOW_SLEEP:
-      return {
-        ...base,
-        stepType: 'workflow_sleep',
-      };
+      return [{ ...base, stepType: 'workflow_sleep' as const }];
 
     case SpanType.WORKFLOW_WAIT_EVENT:
-      return {
-        ...base,
-        stepType: 'workflow_wait_event',
-      };
+      return [{ ...base, stepType: 'workflow_wait_event' as const }];
 
     case SpanType.PROCESSOR_RUN:
-      return {
-        ...base,
-        stepType: 'processor_run',
-      };
+      return [{ ...base, stepType: 'processor_run' as const }];
 
     default:
-      return null;
+      // Unknown span type — promote children if any
+      return childSteps;
   }
 }
 
@@ -916,7 +895,7 @@ export function extractTrajectoryFromTrace(spans: SpanRecord[], rootSpanId?: str
     stepsToConvert = targetRoots;
   }
 
-  const steps = stepsToConvert.map(spanToTrajectoryStep).filter((s): s is TrajectoryStep => s !== null);
+  const steps = stepsToConvert.flatMap(spanToTrajectorySteps);
 
   // Calculate total duration from the root span(s)
   let totalDurationMs: number | undefined;
