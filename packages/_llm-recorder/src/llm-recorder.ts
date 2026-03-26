@@ -279,6 +279,11 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * When true, only accept exact hash matches during replay.
+   * Disables fuzzy/similarity matching.
+   */
+  exactMatch?: boolean;
+  /**
    * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
    * Useful for tests that must always replay regardless of environment.
    */
@@ -592,14 +597,16 @@ function findRecording(
   url: string,
   body: unknown,
   usedHashes?: Set<string>,
-): LLMRecording | undefined {
   // 1. Exact hash match (fast path) — always valid regardless of used set
+  exactMatch?: boolean,
+): LLMRecording | undefined {
+  // 1. Exact hash match (fast path)
   const exact = recordings.find(r => r.hash === hash);
   if (exact) {
     return exact;
   }
 
-  if (recordings.length === 0) {
+  if (exactMatch || recordings.length === 0) {
     return undefined;
   }
 
@@ -925,7 +932,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           console.log(`[llm-recorder]   Available hashes: ${savedRecordings.map(r => r.hash).join(', ')}`);
         }
 
-        const recording = findRecording(savedRecordings, hash, url, body, fuzzyUsedHashes);
+        const recording = findRecording(savedRecordings, hash, url, body, fuzzyUsedHashes, options.exactMatch);
 
         if (!recording) {
           console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
