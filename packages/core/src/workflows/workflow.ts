@@ -151,7 +151,7 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
 
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
-    if ((entry as any)?.step?.id === stepId) return entry;
+    if ('step' in entry && entry.step?.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
       if (found) return found;
