@@ -2,7 +2,7 @@ import type { ParsedField } from '@autoform/core';
 import { getLabel } from '@autoform/core';
 import type { AutoFormFieldProps } from '@autoform/react';
 import { getPathInObject, useAutoForm } from '@autoform/react';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { CustomArrayField } from './custom-array-field';
 import { CustomObjectField } from './custom-object-field';
@@ -14,13 +14,28 @@ export const CustomAutoFormField: React.FC<{
   const { formComponents, uiComponents } = useAutoForm();
   const {
     register,
-    formState: { errors },
+    formState: { errors, defaultValues },
     getValues,
   } = useFormContext();
 
   const fullPath = path.join('.');
   const error = getPathInObject(errors, path)?.message as string | undefined;
   const value = getValues(fullPath);
+
+  const fieldDefault = useMemo(() => {
+    if (!defaultValues) return field.default;
+    const firstPath = path[0];
+    let current = defaultValues[firstPath];
+    for (let i = 1; i < path.length; i++) {
+      const key = path[i];
+      if (current[key] !== undefined) {
+        current = current[key];
+      } else {
+        return field.default;
+      }
+    }
+    return current;
+  }, [defaultValues, path, field.default]);
 
   const FieldWrapper = field.fieldConfig?.fieldWrapper || uiComponents.FieldWrapper;
 
@@ -40,11 +55,13 @@ export const CustomAutoFormField: React.FC<{
     FieldComponent = formComponents.fallback;
   }
 
+  const fieldWithDefault = { ...field, default: fieldDefault };
+
   return (
-    <FieldWrapper label={getLabel(field)} error={error} id={fullPath} field={field}>
+    <FieldWrapper label={getLabel(field)} error={error} id={fullPath} field={fieldWithDefault}>
       <FieldComponent
         label={getLabel(field)}
-        field={field}
+        field={fieldWithDefault}
         value={value}
         error={error}
         id={fullPath}
