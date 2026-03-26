@@ -754,27 +754,33 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             Object.assign(currentStep, processInputStepResult);
 
-            // Update MODEL_GENERATION span if processor changed model or modelSettings
-            if (modelSpanTracker && (processInputStepResult.model || processInputStepResult.modelSettings)) {
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
               modelSpanTracker.updateGeneration({
-                ...(processInputStepResult.model ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
                 attributes: {
-                  ...(processInputStepResult.model
+                  ...(modelChanged
                     ? {
                         model: currentStep.model.modelId,
                         provider: currentStep.model.provider,
                       }
                     : {}),
-                  ...(processInputStepResult.modelSettings ? { parameters: currentStep.modelSettings } : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
                 },
               });
             }
 
-            // Update AGENT_RUN span if processor changed available tools
-            if (processInputStepResult.tools || processInputStepResult.activeTools) {
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
               const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
               if (agentSpan) {
-                const toolNames = processInputStepResult.activeTools
+                const toolNames = activeToolsChanged
                   ? (processInputStepResult.activeTools as string[])
                   : currentStep.tools
                     ? Object.keys(currentStep.tools)
