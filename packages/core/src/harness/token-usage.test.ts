@@ -175,6 +175,18 @@ describe('step-finish token usage extraction', () => {
     expect(tokenUsage.cachedInputTokens).toBe(160);
   });
 
+  it('extracts cacheCreationInputTokens from usage', async () => {
+    const usage = { inputTokens: 500, outputTokens: 100, totalTokens: 600, cacheCreationInputTokens: 200 };
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    const tokenUsage = harness.getTokenUsage();
+    expect(tokenUsage.promptTokens).toBe(500);
+    expect(tokenUsage.completionTokens).toBe(100);
+    expect(tokenUsage.totalTokens).toBe(600);
+    expect(tokenUsage.cacheCreationInputTokens).toBe(200);
+  });
+
   it('defaults cachedInputTokens to 0 when not present in usage', async () => {
     const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
 

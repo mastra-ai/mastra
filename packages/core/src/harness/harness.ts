@@ -1759,11 +1759,15 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
             const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
             const cachedInputTokens = (usage as { cachedInputTokens?: number }).cachedInputTokens ?? 0;
+            const cacheCreationInputTokens =
+              (usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens ?? 0;
 
             this.tokenUsage.promptTokens += promptTokens;
             this.tokenUsage.completionTokens += completionTokens;
             this.tokenUsage.totalTokens += totalTokens;
             this.tokenUsage.cachedInputTokens = (this.tokenUsage.cachedInputTokens ?? 0) + cachedInputTokens;
+            this.tokenUsage.cacheCreationInputTokens =
+              (this.tokenUsage.cacheCreationInputTokens ?? 0) + cacheCreationInputTokens;
 
             this.persistTokenUsage().catch(() => {});
             this.emit({
@@ -1773,6 +1777,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
                 completionTokens,
                 totalTokens,
                 cachedInputTokens,
+                cacheCreationInputTokens,
               },
             });
           }
