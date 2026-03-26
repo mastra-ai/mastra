@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Show right defualt value in form fields
+Fixed form fields to show default values from form defaults.
