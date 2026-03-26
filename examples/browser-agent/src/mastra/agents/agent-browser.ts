@@ -2,6 +2,9 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { BrowserContextProcessor } from '@mastra/core/browser';
 import { AgentBrowser } from '@mastra/agent-browser';
+import { Memory } from '@mastra/memory';
+
+const memory = new Memory();
 
 export const agentBrowserToolset = new AgentBrowser({
   headless: false, // Changed to true for testing screencast in headless mode
@@ -21,5 +24,6 @@ Use these refs with tools like browser_click, browser_type, etc. to interact wit
 IMPORTANT: After any interaction that changes the page, take a new snapshot since refs become stale when the page changes.`,
   model: openai('gpt-4o'),
   browser: agentBrowserToolset,
+  memory,
   inputProcessors: [new BrowserContextProcessor()],
 });

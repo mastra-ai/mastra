@@ -10,6 +10,7 @@
     "@mastra/agent-browser": "latest",
     "@mastra/stagehand": "latest",
     "@mastra/memory": "latest",
+    "@mastra/libsql": "latest",
     "zod": "^4.3.6",
     "mastra": "latest"
   },
@@ -19,6 +20,7 @@
       "@mastra/agent-browser": "link:../../browser/agent-browser",
       "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/memory": "link:../../packages/memory",
+      "@mastra/libsql": "link:../../stores/libsql",
       "mastra": "link:../../packages/cli"
     }
   },
