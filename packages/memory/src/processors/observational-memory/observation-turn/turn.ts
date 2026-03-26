@@ -7,7 +7,7 @@ import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 
 import { ObservationStep } from './step';
-import type { TurnContext, TurnResult } from './types';
+import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
 /**
  * Represents a single turn in the agent conversation — one user message → agent response cycle.
@@ -51,12 +51,27 @@ export class ObservationTurn {
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
 
-  constructor(
-    readonly om: ObservationalMemory,
-    readonly threadId: string,
-    readonly resourceId: string | undefined,
-    readonly messageList: MessageList,
-  ) {}
+  /** Optional processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks?: ObservationTurnHooks;
+
+  constructor(opts: {
+    om: ObservationalMemory;
+    threadId: string;
+    resourceId?: string;
+    messageList: MessageList;
+    hooks?: ObservationTurnHooks;
+  }) {
+    this.om = opts.om;
+    this.threadId = opts.threadId;
+    this.resourceId = opts.resourceId;
+    this.messageList = opts.messageList;
+    this.hooks = opts.hooks;
+  }
+
+  readonly om: ObservationalMemory;
+  readonly threadId: string;
+  readonly resourceId: string | undefined;
+  readonly messageList: MessageList;
 
   /** The current cached record. Refreshed after mutations (activate/observe/reflect). */
   get record(): ObservationalMemoryRecord {
