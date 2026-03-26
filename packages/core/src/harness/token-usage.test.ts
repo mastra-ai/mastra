@@ -117,4 +117,71 @@ describe('step-finish token usage extraction', () => {
     expect(tokenUsage.completionTokens).toBe(120);
     expect(tokenUsage.totalTokens).toBe(370);
   });
+
+  it('extracts cachedInputTokens from usage', async () => {
+    const usage = { inputTokens: 500, outputTokens: 100, totalTokens: 600, cachedInputTokens: 300 };
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    const tokenUsage = harness.getTokenUsage();
+    expect(tokenUsage.promptTokens).toBe(500);
+    expect(tokenUsage.completionTokens).toBe(100);
+    expect(tokenUsage.totalTokens).toBe(600);
+    expect(tokenUsage.cachedInputTokens).toBe(300);
+  });
+
+  it('accumulates cachedInputTokens across multiple steps', async () => {
+    const usage1 = { inputTokens: 100, outputTokens: 50, cachedInputTokens: 40 };
+    const usage2 = { inputTokens: 200, outputTokens: 80, cachedInputTokens: 120 };
+
+    async function* multiStepStream() {
+      yield {
+        type: 'step-finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          output: { usage: usage1 },
+          stepResult: { reason: 'tool-calls' },
+          metadata: {},
+        },
+      };
+      yield {
+        type: 'step-finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          output: { usage: usage2 },
+          stepResult: { reason: 'stop' },
+          metadata: {},
+        },
+      };
+      yield {
+        type: 'finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: usage2 },
+          metadata: {},
+        },
+      };
+    }
+
+    await (harness as any).processStream({ fullStream: multiStepStream() });
+
+    const tokenUsage = harness.getTokenUsage();
+    expect(tokenUsage.promptTokens).toBe(300);
+    expect(tokenUsage.completionTokens).toBe(130);
+    expect(tokenUsage.cachedInputTokens).toBe(160);
+  });
+
+  it('defaults cachedInputTokens to 0 when not present in usage', async () => {
+    const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    const tokenUsage = harness.getTokenUsage();
+    expect(tokenUsage.cachedInputTokens).toBe(0);
+    expect(tokenUsage.cacheCreationInputTokens).toBe(0);
+  });
 });

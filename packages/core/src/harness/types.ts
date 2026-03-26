@@ -378,6 +378,8 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
 }
 
 // =============================================================================
@@ -556,7 +558,13 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+    },
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
