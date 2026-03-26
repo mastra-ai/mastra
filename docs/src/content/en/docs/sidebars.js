@@ -302,6 +302,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'workspace/lsp',
+          label: 'LSP Inspection',
+        },
+        {
+          type: 'doc',
           id: 'workspace/skills',
           label: 'Skills',
         },

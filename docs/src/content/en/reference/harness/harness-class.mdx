@@ -238,6 +238,13 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+    isOptional: true,
+  },
+  {
     name: 'heartbeatHandlers',
     type: 'HeartbeatHandler[]',
     description:
