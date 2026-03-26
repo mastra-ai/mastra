@@ -387,19 +387,49 @@ export class SearchEngine {
   }
 
   /**
-   * Ensure vector index is built (for lazy mode)
+   * Collapse duplicate document ids so a single deterministic upsert runs per id (last queue entry wins).
+   */
+  #dedupePendingVectorDocsLastWins(docs: readonly IndexDocument[]): IndexDocument[] {
+    const byId = new Map<string, IndexDocument>();
+    for (const doc of docs) {
+      byId.set(doc.id, doc);
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * Ensure vector index is built (for lazy mode).
+   *
+   * Drains the pending queue into a local batch before awaiting upserts so concurrent `index()` calls
+   * append to a fresh queue and are not wiped by a blanket clear. Loops until the queue is empty so
+   * documents added mid-flush are indexed before search runs. Re-queues the batch on flush failure.
    */
   async #ensureVectorIndex(): Promise<void> {
-    if (!this.#lazyVectorIndex || this.#vectorIndexBuilt || this.#pendingVectorDocs.length === 0) {
+    if (!this.#lazyVectorIndex) {
       return;
     }
 
-    const docs = [...this.#pendingVectorDocs];
-    await pMap(docs, doc => this.#indexVector(doc), {
-      concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
-    });
+    if (this.#pendingVectorDocs.length === 0) {
+      this.#vectorIndexBuilt = true;
+      return;
+    }
 
-    this.#pendingVectorDocs = [];
+    while (this.#pendingVectorDocs.length > 0) {
+      const batch = this.#pendingVectorDocs;
+      this.#pendingVectorDocs = [];
+
+      const uniqueDocs = this.#dedupePendingVectorDocsLastWins(batch);
+
+      try {
+        await pMap(uniqueDocs, doc => this.#indexVector(doc), {
+          concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+        });
+      } catch (error) {
+        this.#pendingVectorDocs = [...uniqueDocs, ...this.#pendingVectorDocs];
+        throw error;
+      }
+    }
+
     this.#vectorIndexBuilt = true;
   }
 

@@ -290,6 +290,18 @@ Line 3`;
       // Should not have indexed the removed document
       expect(mockVectorStore.upsert).not.toHaveBeenCalled();
     });
+
+    it('should dedupe pending vector docs by id so last content wins', async () => {
+      await engine.index({ id: 'doc1', content: 'first' });
+      await engine.index({ id: 'doc1', content: 'second' });
+
+      mockVectorStore.query.mockResolvedValue([]);
+
+      await engine.search('hello');
+
+      expect(mockVectorStore.upsert).toHaveBeenCalledTimes(1);
+      expect(mockEmbedder).toHaveBeenCalledWith('second');
+    });
   });
 
   describe('Hybrid mode', () => {
