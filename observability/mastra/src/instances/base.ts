@@ -301,11 +301,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   registerExporter(exporter: ObservabilityExporter): void {
     this.observabilityBus.registerExporter(exporter);
-    if (!this.config.exporters) {
-      this.config.exporters = [];
+    this.config.exporters ??= [];
+    if (this.config.exporters.includes(exporter)) {
+      return;
     }
-    if (!this.config.exporters.includes(exporter)) {
-      this.config.exporters.push(exporter);
+    this.config.exporters.push(exporter);
+
+    if (typeof exporter.__setLogger === 'function') {
+      exporter.__setLogger(this.logger);
     }
   }
 
