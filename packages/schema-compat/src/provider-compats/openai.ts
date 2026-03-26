@@ -259,11 +259,37 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             schema.required?.push(key);
             if (prop.type) {
               if (Array.isArray(prop.type)) {
-                if (!prop.type.includes('null')) {
-                  prop.type.push('null');
+                const types = [...prop.type];
+                if (!types.includes('null')) {
+                  types.push('null');
                 }
+
+                const propSchema = { ...prop } as JSONSchema7;
+                delete propSchema.anyOf;
+                delete propSchema.type;
+                delete prop.type;
+
+                prop.anyOf = types.map(type =>
+                  type === 'null'
+                    ? { type: 'null' }
+                    : {
+                        ...propSchema,
+                        type,
+                      },
+                );
               } else if (prop.type !== 'null') {
-                prop.type = ['null', prop.type];
+                const originalType = prop.type;
+                const propSchema = { ...prop } as JSONSchema7;
+                delete propSchema.anyOf;
+                delete propSchema.type;
+                delete prop.type;
+                prop.anyOf = [
+                  {
+                    ...propSchema,
+                    type: originalType,
+                  },
+                  { type: 'null' },
+                ];
               }
             }
           }

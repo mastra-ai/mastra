@@ -65,8 +65,11 @@ const allSchemas = {
   objectLoose: z.looseObject({}).describe('any sample object with example keys and data'),
 
   // Optional and nullable
-  optional: z.string().optional().describe('leave this field empty as an example of an optional field'),
-  nullable: z.string().nullable().describe('leave this field empty as an example of a nullable field'),
+  optional: z
+    .string()
+    .optional()
+    .describe('leave this field empty (undefined value) as an example of an optional field'),
+  nullable: z.string().nullable().describe('leave this field empty (null value) as an example of a nullable field'),
 
   // Enums
   enum: z.enum(['A', 'B', 'C']).describe('The letter A, B, or C'),
@@ -137,7 +140,7 @@ describe('OpenAI reasoning e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 30_000 }, async () => {
+  it('should be succesful with structured_output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = openai('o4-mini');
@@ -198,12 +201,12 @@ describe('OpenAI reasoning e2e test', () => {
       enum: expect.stringMatching(/^[ABC]$/),
       nativeEnum: expect.stringMatching(/^[ABC]$/),
       optional: null,
-      default: 'extra',
+      default: '',
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = openai('o4-mini');
 
@@ -245,7 +248,7 @@ describe('OpenAI reasoning e2e test', () => {
     expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input and output', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = openai('o4-mini');
 

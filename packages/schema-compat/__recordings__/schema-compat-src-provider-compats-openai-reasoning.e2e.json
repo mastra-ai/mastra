@@ -5,11 +5,11 @@
     "testName": "OpenAI reasoning e2e test",
     "model": "o4-mini",
     "createdAt": "2026-03-24T13:48:10.128Z",
-    "updatedAt": "2026-03-25T22:25:00.558Z"
+    "updatedAt": "2026-03-26T09:09:39.230Z"
   },
   "recordings": [
     {
-      "hash": "d8b294b970d50820",
+      "hash": "fb48017f28d78358",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -192,8 +192,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -204,7 +212,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -309,7 +317,7 @@
             }
           }
         },
-        "timestamp": 1774477433667
+        "timestamp": 1774516120563
       },
       "response": {
         "status": 200,
@@ -317,12 +325,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e215298fd463d1a-BRU",
+          "cf-ray": "9e25031abfe868b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 25 Mar 2026 22:24:19 GMT",
+          "date": "Thu, 26 Mar 2026 09:08:55 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "25317",
+          "openai-processing-ms": "14455",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -331,21 +339,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "198814",
+          "x-ratelimit-remaining-tokens": "198781",
           "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "355ms",
-          "x-request-id": "req_88405efad3c14afaaa24196f93227bee"
+          "x-ratelimit-reset-tokens": "365ms",
+          "x-request-id": "req_4ee5a02a9da04a6cb1050e3afebb5147"
         },
         "body": {
-          "id": "resp_03b0cac443dc691c0069c4607a472c81908e6ff4e8264b5aec",
+          "id": "resp_0de4d3f760eff2b60069c4f798dac481959b29b8fba75ee31d",
           "object": "response",
-          "created_at": 1774477434,
+          "created_at": 1774516120,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774477459,
+          "completed_at": 1774516135,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -355,12 +363,12 @@
           "model": "o4-mini-2025-04-16",
           "output": [
             {
-              "id": "rs_03b0cac443dc691c0069c4607aeab48190abc6238e6bf85115",
+              "id": "rs_0de4d3f760eff2b60069c4f7993ce8819588f7ed2255ee44ab",
               "type": "reasoning",
               "summary": []
             },
             {
-              "id": "msg_03b0cac443dc691c0069c46090fe148190bbe7c810431c63c9",
+              "id": "msg_0de4d3f760eff2b60069c4f7a4cc848195ac9b4c6234fb6e42",
               "type": "message",
               "status": "completed",
               "content": [
@@ -368,7 +376,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"MaxString\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ck3jk6o3h0001s6gl6njutznr\",\"stringRegex\":\"test-value\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-12-25T00:00:00Z\",\"dateAfter\":\"2024-06-01T00:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2026-03-25T12:34:56Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Jo\",\"age\":18}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":123,\"unionObjects\":{\"type\":\"admin\",\"permissions\":[\"read\",\"write\"]},\"default\":\"extra\"}"
+                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortOne\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-value\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"a\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2023-05-20T12:34:56Z\",\"dateAfter\":\"2024-06-15T10:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2022-01-01T00:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":123,\"unionObjects\":{\"amount\":10.5,\"inventoryItemName\":\"Widget\"},\"default\":\"\"}"
                 }
               ],
               "role": "assistant"
@@ -552,8 +560,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -564,7 +580,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -676,15 +692,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 979,
+            "input_tokens": 1012,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 2858,
+            "output_tokens": 1799,
             "output_tokens_details": {
-              "reasoning_tokens": 2496
+              "reasoning_tokens": 1472
             },
-            "total_tokens": 3837
+            "total_tokens": 2811
           },
           "user": null,
           "metadata": {}
@@ -693,7 +709,7 @@
       }
     },
     {
-      "hash": "9a94e83c03007547",
+      "hash": "4da02db22db38f85",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -876,8 +892,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -888,7 +912,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -994,7 +1018,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1774477459701
+        "timestamp": 1774516135464
       },
       "response": {
         "status": 200,
@@ -1002,12 +1026,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e21533b1ff73d1a-BRU",
+          "cf-ray": "9e250376cbe968b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 25 Mar 2026 22:24:37 GMT",
+          "date": "Thu, 26 Mar 2026 09:09:16 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "16760",
+          "openai-processing-ms": "20748",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1016,21 +1040,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "198961",
+          "x-ratelimit-remaining-tokens": "198962",
           "x-ratelimit-reset-requests": "120ms",
           "x-ratelimit-reset-tokens": "311ms",
-          "x-request-id": "req_af484b549ffa4663957c6815fd9c755b"
+          "x-request-id": "req_08dd6ffb9a56418c90395766b77b10b4"
         },
         "body": {
-          "id": "resp_00d20152cea5f7950069c46094a1bc81979d0a896b860446ba",
+          "id": "resp_0ad659fd5ac5b9d50069c4f7a798608197b3f4c466cfc3250b",
           "object": "response",
-          "created_at": 1774477460,
+          "created_at": 1774516135,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774477477,
+          "completed_at": 1774516156,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1040,16 +1064,16 @@
           "model": "o4-mini-2025-04-16",
           "output": [
             {
-              "id": "rs_00d20152cea5f7950069c460955e1481978e43087da12e479e",
+              "id": "rs_0ad659fd5ac5b9d50069c4f7a87de48197ac1e77131d46d367",
               "type": "reasoning",
               "summary": []
             },
             {
-              "id": "fc_00d20152cea5f7950069c460a279008197b0103465dce2b88c",
+              "id": "fc_0ad659fd5ac5b9d50069c4f7b8feb88197bab2a37f85f9e136",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"TenChars\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckbgg6g2u0001mrm9n8q3c1o6\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2025-01-01T00:00:00Z\",\"dateAfter\":\"2024-06-15T12:00:00Z\",\"dateBefore\":\"2022-12-31T23:59:59Z\",\"actualData\":\"2023-05-20T10:30:00Z\",\"object\":{\"foo\":\"foo\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}",
-              "call_id": "call_Nh11MddK2fOGeVHjEusR0IV6",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2025-06-15T12:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2025-11-01T08:45:00Z\",\"object\":{\"foo\":\"foobar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"stringUnion\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"widget\"},\"default\":\"test\"}",
+              "call_id": "call_vRjWacWFdkdrBvDSQfiFpMtX",
               "name": "manySchemasTool"
             }
           ],
@@ -1238,8 +1262,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -1250,7 +1282,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -1359,15 +1391,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 776,
+            "input_tokens": 775,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 2035,
+            "output_tokens": 2084,
             "output_tokens_details": {
-              "reasoning_tokens": 1664
+              "reasoning_tokens": 1728
             },
-            "total_tokens": 2811
+            "total_tokens": 2859
           },
           "user": null,
           "metadata": {}
@@ -1376,7 +1408,7 @@
       }
     },
     {
-      "hash": "f3dd0d0886fde6d3",
+      "hash": "3b55586300dc25f3",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1394,16 +1426,16 @@
             },
             {
               "type": "item_reference",
-              "id": "rs_00d20152cea5f7950069c460955e1481978e43087da12e479e"
+              "id": "rs_0ad659fd5ac5b9d50069c4f7a87de48197ac1e77131d46d367"
             },
             {
               "type": "item_reference",
-              "id": "fc_00d20152cea5f7950069c460a279008197b0103465dce2b88c"
+              "id": "fc_0ad659fd5ac5b9d50069c4f7b8feb88197bab2a37f85f9e136"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Nh11MddK2fOGeVHjEusR0IV6",
-              "output": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"TenChars\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckbgg6g2u0001mrm9n8q3c1o6\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2025-01-01T00:00:00Z\",\"dateAfter\":\"2024-06-15T12:00:00Z\",\"dateBefore\":\"2022-12-31T23:59:59Z\",\"actualData\":\"2023-05-20T10:30:00Z\",\"object\":{\"foo\":\"foo\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "call_id": "call_vRjWacWFdkdrBvDSQfiFpMtX",
+              "output": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2025-06-15T12:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2025-11-01T08:45:00Z\",\"object\":{\"foo\":\"foobar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"stringUnion\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"widget\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -1572,8 +1604,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -1584,7 +1624,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -1690,7 +1730,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1774477477493
+        "timestamp": 1774516156400
       },
       "response": {
         "status": 200,
@@ -1698,12 +1738,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2153aa5b463d1a-BRU",
+          "cf-ray": "9e2503f9aa5f68b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 25 Mar 2026 22:24:41 GMT",
+          "date": "Thu, 26 Mar 2026 09:09:19 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "3885",
+          "openai-processing-ms": "2839",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1712,21 +1752,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "196612",
+          "x-ratelimit-remaining-tokens": "196567",
           "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "1.016s",
-          "x-request-id": "req_27e04bbfa3ea4f8393388cfd529b73f5"
+          "x-ratelimit-reset-tokens": "1.029s",
+          "x-request-id": "req_bea75093bba248469bb8a9b0963311ee"
         },
         "body": {
-          "id": "resp_00d20152cea5f7950069c460a5fb908197b715ee5a48158176",
+          "id": "resp_0ad659fd5ac5b9d50069c4f7bc8ac08197990c6319b51056cd",
           "object": "response",
-          "created_at": 1774477478,
+          "created_at": 1774516156,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774477481,
+          "completed_at": 1774516159,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1736,7 +1776,7 @@
           "model": "o4-mini-2025-04-16",
           "output": [
             {
-              "id": "msg_00d20152cea5f7950069c460a94ee08197b15e242501b22b67",
+              "id": "msg_0ad659fd5ac5b9d50069c4f7bd795c81978bae5481735c76df",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1744,7 +1784,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The tool has been called with valid sample data."
+                  "text": "The `manySchemasTool` has been called with valid sample data. Let me know if you need anything else!"
                 }
               ],
               "role": "assistant"
@@ -1935,8 +1975,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -1947,7 +1995,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -2056,15 +2104,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 3125,
+            "input_tokens": 3170,
             "input_tokens_details": {
-              "cached_tokens": 0
+              "cached_tokens": 2688
             },
-            "output_tokens": 14,
+            "output_tokens": 27,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 3139
+            "total_tokens": 3197
           },
           "user": null,
           "metadata": {}
@@ -2073,7 +2121,7 @@
       }
     },
     {
-      "hash": "827e44dbfee61d67",
+      "hash": "c113f3a4ce22d218",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2091,16 +2139,16 @@
             },
             {
               "type": "item_reference",
-              "id": "rs_01f69892b7b9330f0069c460aab6a081949808eedd8df5c749"
+              "id": "rs_04861b0c870996a90069c4f7bff6a08193a1609c94469a9dc2"
             },
             {
               "type": "item_reference",
-              "id": "fc_01f69892b7b9330f0069c460b5fe408194b0cacd251f34b2fd"
+              "id": "fc_04861b0c870996a90069c4f7ccfa088193a38ccf3195019edb"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_IKd8yJv9zeR3MSdWPRFE7IWM",
-              "output": "{\"string\":\"Hello World\",\"stringMin\":\"Hello\",\"stringMax\":\"MaxTenLen\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-example\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"example1\",\"example2\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2023-12-31T12:00:00.000Z\",\"dateAfter\":\"2024-05-15T10:00:00.000Z\",\"dateBefore\":\"2025-01-01T09:30:00.000Z\",\"actualData\":\"2023-06-01T08:00:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"item\"},\"default\":\"test\"}"
+              "call_id": "call_oJlPxvXAwbPrYvv0F0L3DF7U",
+              "output": "{\"string\":\"Hello world\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ck6xh6n4t0003vmn06v2f9yfp\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"example1\",\"example2\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2025-01-01T00:00:00.000Z\",\"dateAfter\":\"2024-06-01T12:00:00.000Z\",\"dateBefore\":\"2023-12-31T23:59:59.000Z\",\"actualData\":\"2025-05-05T05:05:05.000Z\",\"object\":{\"foo\":\"fooValue\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"unionText\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"widget\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -2269,8 +2317,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -2281,7 +2337,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -2387,7 +2443,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1774477498197
+        "timestamp": 1774516177918
       },
       "response": {
         "status": 200,
@@ -2395,12 +2451,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e21542bbf993d1a-BRU",
+          "cf-ray": "9e2504801d5b68b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 25 Mar 2026 22:25:00 GMT",
+          "date": "Thu, 26 Mar 2026 09:09:39 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1750",
+          "openai-processing-ms": "1141",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2409,21 +2465,21 @@
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "197046",
+          "x-ratelimit-remaining-tokens": "196995",
           "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "886ms",
-          "x-request-id": "req_eb010d3f97b94e90b4109fb18cee2eea"
+          "x-ratelimit-reset-tokens": "901ms",
+          "x-request-id": "req_1bbf3d1f05f24d0b842d4c0176c27be3"
         },
         "body": {
-          "id": "resp_01f69892b7b9330f0069c460babcd4819492e47cd1cf83584b",
+          "id": "resp_04861b0c870996a90069c4f7d20da88193ad01bccd1b167412",
           "object": "response",
-          "created_at": 1774477498,
+          "created_at": 1774516178,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774477500,
+          "completed_at": 1774516179,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2433,7 +2489,7 @@
           "model": "o4-mini-2025-04-16",
           "output": [
             {
-              "id": "msg_01f69892b7b9330f0069c460bbddb08194bcd2e145de732174",
+              "id": "msg_04861b0c870996a90069c4f7d296a08193af0e17be878e1025",
               "type": "message",
               "status": "completed",
               "content": [
@@ -2441,7 +2497,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The tool was called successfully with valid sample data. Let me know if you need anything else!"
+                  "text": "I’ve provided valid sample data for all fields in the schema. Let me know if you need any adjustments!"
                 }
               ],
               "role": "assistant"
@@ -2632,8 +2688,16 @@
                     "required": []
                   },
                   "optional": {
-                    "description": "leave this field empty as an example of an optional field",
-                    "type": ["null", "string"]
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "nullable": {
                     "anyOf": [
@@ -2644,7 +2708,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "leave this field empty as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field"
                   },
                   "enum": {
                     "type": "string",
@@ -2753,15 +2817,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 2691,
+            "input_tokens": 2742,
             "input_tokens_details": {
-              "cached_tokens": 0
+              "cached_tokens": 1664
             },
-            "output_tokens": 23,
+            "output_tokens": 26,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 2714
+            "total_tokens": 2768
           },
           "user": null,
           "metadata": {}

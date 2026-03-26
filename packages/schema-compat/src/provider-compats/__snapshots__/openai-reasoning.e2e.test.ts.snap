@@ -84,7 +84,7 @@ constraints: a valid date-time",
           "type": "null",
         },
       ],
-      "description": "leave this field empty as an example of a nullable field",
+      "description": "leave this field empty (null value) as an example of a nullable field",
     },
     "number": {
       "description": "any valid sample number",
@@ -179,11 +179,16 @@ constraints: multiple of 2",
       "type": "object",
     },
     "optional": {
-      "description": "leave this field empty as an example of an optional field",
-      "type": [
-        "null",
-        "string",
+      "anyOf": [
+        {
+          "description": "leave this field empty (undefined value) as an example of an optional field",
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
       ],
+      "description": "leave this field empty (undefined value) as an example of an optional field",
     },
     "string": {
       "description": "Sample text",
@@ -324,26 +329,28 @@ constraints: a valid uuid",
 exports[`OpenAI reasoning e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2026-03-25T12:34:56.000Z,
+    "actualData": 2022-01-01T00:00:00.000Z,
     "arrayMax": [
       "a",
       "b",
       "c",
+      "d",
+      "e",
     ],
     "arrayMin": [
-      "min",
+      "a",
     ],
-    "date": 2025-12-25T00:00:00.000Z,
-    "dateAfter": 2024-06-01T00:00:00.000Z,
-    "dateBefore": 2023-12-31T23:59:59.000Z,
-    "default": "extra",
-    "enum": "A",
+    "date": 2023-05-20T12:34:56.000Z,
+    "dateAfter": 2024-06-15T10:00:00.000Z,
+    "dateBefore": 2025-12-31T23:59:59.000Z,
+    "default": "",
+    "enum": "B",
     "exampleArray": [
       "one",
       "two",
       "three",
     ],
-    "nativeEnum": "B",
+    "nativeEnum": "C",
     "nullable": null,
     "number": 42.5,
     "numberGt": 4,
@@ -359,27 +366,24 @@ exports[`OpenAI reasoning e2e test > should be succesful with structured_output 
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 18,
-        "name": "Jo",
+        "age": 30,
+        "name": "John",
       },
     },
     "objectPassthrough": {},
     "optional": undefined,
     "string": "Sample text",
-    "stringCuid": "ck3jk6o3h0001s6gl6njutznr",
+    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
     "stringEmail": "user@example.com",
     "stringEmoji": "😊",
-    "stringMax": "MaxString",
+    "stringMax": "ShortOne",
     "stringMin": "Hello",
     "stringRegex": "test-value",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "permissions": [
-        "read",
-        "write",
-      ],
-      "type": "admin",
+      "amount": 10.5,
+      "inventoryItemName": "Widget",
     },
     "unionPrimitives": 123,
   },
@@ -389,7 +393,7 @@ exports[`OpenAI reasoning e2e test > should be succesful with structured_output 
 exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2023-05-20T10:30:00.000Z,
+    "actualData": 2025-11-01T08:45:00.000Z,
     "arrayMax": [
       "a",
       "b",
@@ -400,9 +404,9 @@ exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas in
     "arrayMin": [
       "item",
     ],
-    "date": 2025-01-01T00:00:00.000Z,
-    "dateAfter": 2024-06-15T12:00:00.000Z,
-    "dateBefore": 2022-12-31T23:59:59.000Z,
+    "date": 2025-06-15T12:00:00.000Z,
+    "dateAfter": 2024-02-01T00:00:00.000Z,
+    "dateBefore": 2025-12-31T23:59:59.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
@@ -418,10 +422,10 @@ exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas in
     "numberInt": 7,
     "numberLt": 5,
     "numberLte": 1,
-    "numberMultipleOf": 10,
+    "numberMultipleOf": 4,
     "object": {
       "bar": 123,
-      "foo": "foo",
+      "foo": "foobar",
     },
     "objectLoose": {},
     "objectNested": {
@@ -433,21 +437,21 @@ exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas in
     "objectPassthrough": {},
     "optional": undefined,
     "string": "Sample text",
-    "stringCuid": "ckbgg6g2u0001mrm9n8q3c1o6",
+    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
     "stringEmail": "user@example.com",
     "stringEmoji": "😊",
-    "stringMax": "TenChars",
+    "stringMax": "ShortTxt",
     "stringMin": "Hello",
-    "stringRegex": "test-value",
+    "stringRegex": "test-sample",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 5,
-      "inventoryItemName": "Widget",
+      "amount": 10,
+      "inventoryItemName": "widget",
     },
-    "unionPrimitives": "union",
+    "unionPrimitives": "stringUnion",
   },
 }
 `;
 
-exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input and output 1`] = `"The tool has been called with valid sample data."`;
+exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input and output 1`] = `"The \`manySchemasTool\` has been called with valid sample data. Let me know if you need anything else!"`;

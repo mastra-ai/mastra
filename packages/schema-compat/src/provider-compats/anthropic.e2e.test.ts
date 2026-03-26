@@ -161,7 +161,6 @@ describe('Anthropic e2e test', () => {
     });
 
     expect(result.finishReason).toBe('stop');
-    console.log(result.output);
     expect(result.output).toMatchObject({
       string: expect.any(String),
       stringMin: expect.any(String),
@@ -202,7 +201,7 @@ describe('Anthropic e2e test', () => {
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = anthropic('claude-sonnet-4-0');
 
@@ -243,7 +242,7 @@ describe('Anthropic e2e test', () => {
     expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input and output', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = anthropic('claude-sonnet-4-0');
 

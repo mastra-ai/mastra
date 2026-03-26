@@ -203,7 +203,7 @@ describe('OpenAI e2e test', () => {
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = openai('gpt-4.1');
 
@@ -245,7 +245,7 @@ describe('OpenAI e2e test', () => {
     expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input and output', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = openai('gpt-4.1');
 

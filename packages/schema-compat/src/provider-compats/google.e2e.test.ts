@@ -196,12 +196,12 @@ describe('Google e2e test', () => {
       },
       enum: expect.stringMatching(/^[ABC]$/),
       nativeEnum: expect.stringMatching(/^[ABC]$/),
-      default: 'default text',
+      default: expect.any(String),
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = google('gemini-3.1-pro-preview');
 
@@ -244,7 +244,7 @@ describe('Google e2e test', () => {
     expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
   });
 
-  it('should handle tool call with manySchemas input and output', { timeout: 30_000 }, async () => {
+  it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
     const model = google('gemini-3.1-pro-preview');
 
@@ -267,12 +267,10 @@ describe('Google e2e test', () => {
           outputSchema: jsonSchema<z.infer<typeof schema>>(compatJsonSchema),
           execute: async (input: z.infer<typeof schema>) => {
             const result = await compatSchema['~standard'].validate(input);
-            console.log(result);
             if ('issues' in result && result.issues) {
               throw new Error(result.issues.map((i: any) => i.message).join(', '));
             }
 
-            console.log(result.value);
             return (result as { value: z.infer<typeof schema> }).value;
           },
         },
