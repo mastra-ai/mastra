@@ -1,6 +1,7 @@
 import { google } from '@ai-sdk/google';
 import { generateText, Output, jsonSchema, stepCountIs } from '@internal/ai-v6';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { standardSchemaToJSONSchema } from '../schema';
@@ -84,6 +85,9 @@ const allSchemas = {
   // Default values
   default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['google']);
 
 const expectedOutput = {
   string: expect.any(String),
@@ -229,14 +233,14 @@ describe('Google e2e test', () => {
       prompt: 'Call the manySchemasTool tool with valid sample data.',
     });
 
-    const expectation = {
+    const { optional: _optional, ...expectation } = {
       ...expectedOutput,
       date: expect.any(String),
       dateAfter: expect.any(String),
       dateBefore: expect.any(String),
       actualData: expect.any(String),
+      optional: expect.any(String),
     };
-    delete expectation.optional;
     const toolCall = result.steps[0].toolCalls[0];
     expect(toolCall).toBeDefined();
     expect(toolCall.toolName).toBe('manySchemasTool');

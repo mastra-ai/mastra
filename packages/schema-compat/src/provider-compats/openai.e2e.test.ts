@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText, Output, jsonSchema, stepCountIs } from '@internal/ai-v6';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { standardSchemaToJSONSchema } from '../schema';
@@ -84,6 +85,9 @@ const allSchemas = {
   // Default values
   default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const expectedOutput = {
   string: expect.any(String),

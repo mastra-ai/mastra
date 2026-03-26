@@ -113,6 +113,7 @@
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
