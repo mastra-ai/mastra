@@ -16,8 +16,7 @@ export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | '
  */
 export const SPAN_TYPE_TO_KIND: Partial<Record<SpanType, DatadogSpanKind>> = {
   [SpanType.AGENT_RUN]: 'agent',
-  [SpanType.MODEL_GENERATION]: 'workflow',
-  [SpanType.MODEL_STEP]: 'llm',
+  [SpanType.MODEL_GENERATION]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_RUN]: 'workflow',

@@ -32,6 +32,7 @@ export type ProviderModelsMap = {
     'glm-4.6v',
     'glm-4.7',
     'glm-4.7-flash',
+    'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
   ];
@@ -802,6 +803,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-codex',
     'openai/gpt-5.3-instant',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-image-1',
     'openai/gpt-image-1-mini',
@@ -1142,6 +1145,7 @@ export type ProviderModelsMap = {
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M2.1',
+    'MiniMaxAI/MiniMax-M2.5',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -1263,6 +1267,8 @@ export type ProviderModelsMap = {
     'glm-4.6v',
     'glm-4.6v-flash',
     'glm-4.7',
+    'glm-4.7-flash',
+    'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
   ];
@@ -1338,6 +1344,7 @@ export type ProviderModelsMap = {
     'mistralai/devstral-small-2507',
     'mistralai/mistral-medium-3',
     'mistralai/mistral-medium-3.1',
+    'mistralai/mistral-small-2603',
     'mistralai/mistral-small-3.1-24b-instruct',
     'mistralai/mistral-small-3.2-24b-instruct',
     'moonshotai/kimi-k2',
@@ -1632,6 +1639,7 @@ export type ProviderModelsMap = {
     'glm-4.6v',
     'glm-4.7',
     'glm-4.7-flash',
+    'glm-4.7-flashx',
     'glm-5',
   ];
   readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
