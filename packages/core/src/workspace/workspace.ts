@@ -31,6 +31,7 @@
  */
 
 import * as path from 'node:path';
+import pMap, { pMapSkip } from 'p-map';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
@@ -388,6 +389,12 @@ export interface WorkspaceInfo {
     };
   };
 }
+
+/**
+ * Maximum concurrent `readFile` calls when batch-loading files for search auto-indexing
+ * (`batchReadFiles`). Chosen to align with {@link SearchEngine}'s default `indexMany` concurrency.
+ */
+const FS_READ_CONCURRENCY = 4;
 
 // =============================================================================
 // Workspace Class
@@ -763,20 +770,16 @@ export class Workspace<
           if (!alreadyCovered) directoryRoots.push(entry.path);
         }
         // Index direct file matches first so they aren't lost if a directory scan fails
-        for (const filePath of filesToIndex) {
-          if (indexedPaths.has(filePath)) continue;
-          await this.indexFileForSearch(filePath);
-          indexedPaths.add(filePath);
-        }
+        const indexed = await this.indexFilesForSearch(
+          Array.from(filesToIndex).filter(filePath => !indexedPaths.has(filePath)),
+        );
+        for (const filePath of indexed) indexedPaths.add(filePath);
+
         for (const dir of directoryRoots) {
           try {
-            const files = await this.getAllFiles(dir);
-            for (const filePath of files) {
-              if (!indexedPaths.has(filePath)) {
-                await this.indexFileForSearch(filePath);
-                indexedPaths.add(filePath);
-              }
-            }
+            const files = (await this.getAllFiles(dir)).filter(filePath => !indexedPaths.has(filePath));
+            const indexed = await this.indexFilesForSearch(files);
+            for (const filePath of indexed) indexedPaths.add(filePath);
           } catch {
             // Skip directories that can't be read
           }
@@ -788,15 +791,65 @@ export class Workspace<
   }
 
   /**
-   * Index a single file for search. Skips files that can't be read as text.
+   * Load file contents for search indexing in parallel (bounded by {@link FS_READ_CONCURRENCY}).
+   * Paths that cannot be read as UTF-8 text are omitted (same behavior as {@link indexFileForSearch}).
    */
-  private async indexFileForSearch(filePath: string): Promise<void> {
+  private async batchReadFiles(files: string[]): Promise<IndexDocument[]> {
+    if (!this._fs || files.length === 0) {
+      return [];
+    }
+
+    const fs = this._fs;
+    return pMap(
+      files,
+      async (filePath): Promise<IndexDocument | typeof pMapSkip> => {
+        try {
+          const content = await fs.readFile(filePath, { encoding: 'utf-8' });
+          return { id: filePath, content: content as string };
+        } catch {
+          return pMapSkip;
+        }
+      },
+      { stopOnError: false, concurrency: FS_READ_CONCURRENCY },
+    );
+  }
+
+  /**
+   * Batch-read paths and {@link SearchEngine.indexMany}
+   *
+   * @returns paths that were indexed successfully.
+   * @remarks Falls back to one-at-a-time indexing on failure of {@link SearchEngine.indexMany}
+   */
+  private async indexFilesForSearch(paths: string[]): Promise<string[]> {
+    try {
+      const docs = await this.batchReadFiles(paths);
+      await this._searchEngine?.indexMany(docs);
+      return docs.map(({ id }) => id);
+    } catch {
+      const indexed: string[] = [];
+      for (const filePath of paths) {
+        const id = await this.indexFileForSearch(filePath);
+        if (id !== undefined) {
+          indexed.push(id);
+        }
+      }
+      return indexed;
+    }
+  }
+
+  /**
+   * Index a single file for search. Skips files that can't be read as text.
+   *
+   * @returns `filePath` when indexed, or `undefined` if read/index failed.
+   */
+  private async indexFileForSearch(filePath: string): Promise<string | undefined> {
     try {
       const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
       await this._searchEngine!.index({
         id: filePath,
         content: content as string,
       });
+      return filePath;
     } catch {
       // Skip files that can't be read as text
     }
