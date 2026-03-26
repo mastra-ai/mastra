@@ -270,7 +270,8 @@ function parseGateway(raw: unknown): GatewaySettings {
   if (!raw || typeof raw !== 'object') return { ...GATEWAY_DEFAULTS };
   const candidate = raw as Record<string, unknown>;
   return {
-    baseUrl: typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
+    baseUrl:
+      typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
     headers: parseHeaders(candidate.headers) ?? {},
   };
 }

@@ -110,7 +110,11 @@ export async function handleGatewayCommand(ctx: SlashCommandContext): Promise<vo
 
   const action = await askSelect(ctx, `Gateway: ${status}`, [
     { label: 'Set base URL', value: 'url', description: gw.baseUrl ?? 'Route LLM calls through a proxy' },
-    { label: 'Set headers', value: 'headers', description: headerCount > 0 ? `${headerCount} configured` : 'Custom headers for gateway requests' },
+    {
+      label: 'Set headers',
+      value: 'headers',
+      description: headerCount > 0 ? `${headerCount} configured` : 'Custom headers for gateway requests',
+    },
     { label: 'Clear gateway', value: 'clear', description: 'Remove gateway configuration' },
   ]);
 
