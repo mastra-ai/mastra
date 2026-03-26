@@ -608,6 +608,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Start a transaction
     const client = await this.pool.connect();
     try {
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       await client.query('BEGIN');
 
       // Step 1: If deleteFilter is provided, delete matching vectors first
@@ -922,9 +925,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
               },
             });
           }
-
-          // Set search path so vector types and operators resolve correctly
-          await this.ensureSearchPath(client);
 
           // Use the properly qualified vector type (vector or halfvec)
           const qualifiedVectorType = this.getVectorTypeName(vectorType);
@@ -1544,6 +1544,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       client = await this.pool.connect();
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index

@@ -317,6 +317,91 @@ describe('PgVector custom schema sets search_path before index creation and quer
 
     expect(searchPathBeforeQuery).toBe(true);
   });
+
+  it('should NOT set search_path before CREATE TABLE in createIndex to avoid table placement regression', async () => {
+    // When schemaName is unset, the table name is unqualified. Calling ensureSearchPath()
+    // before CREATE TABLE would put the extension schema first in search_path, causing
+    // PostgreSQL to create the table in the extension schema instead of the expected schema.
+    // The vector type in CREATE TABLE is already fully qualified by getVectorTypeName().
+
+    await vectorStore.createIndex({
+      indexName: 'noSearchPathTest',
+      dimension: 1536,
+      buildIndex: false,
+    });
+
+    const createTableIdx = queryHistory.findIndex(call => call.text.includes('CREATE TABLE'));
+    expect(createTableIdx).toBeGreaterThan(-1);
+
+    // There must NOT be a SET search_path call immediately before CREATE TABLE
+    // (search_path should only be set before index creation and queries, not table creation)
+    const searchPathBeforeTable = queryHistory
+      .slice(0, createTableIdx)
+      .some(call => call.text.includes('SET search_path'));
+
+    expect(searchPathBeforeTable).toBe(false);
+  });
+
+  it('should set search_path before upsert when extension is in custom schema', async () => {
+    // On a fresh process, upsert() calls getVectorTypeName() which emits
+    // ::vector or ::halfvec casts that fail without proper search_path.
+
+    // First create the index
+    await vectorStore.createIndex({
+      indexName: 'upsertTest',
+      dimension: 1536,
+      buildIndex: false,
+    });
+
+    queryHistory.length = 0; // Reset to track only upsert calls
+
+    await vectorStore.upsert({
+      indexName: 'upsertTest',
+      vectors: [new Array(1536).fill(0.1)],
+      metadata: [{ key: 'value' }],
+    });
+
+    const insertIdx = queryHistory.findIndex(call => call.text.includes('INSERT INTO'));
+    expect(insertIdx).toBeGreaterThan(-1);
+
+    // There must be a SET search_path call BEFORE the INSERT
+    const searchPathBeforeInsert = queryHistory
+      .slice(0, insertIdx)
+      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
+
+    expect(searchPathBeforeInsert).toBe(true);
+  });
+
+  it('should set search_path before updateVector when extension is in custom schema', async () => {
+    // updateVector() also uses getVectorTypeName() for ::vector/::halfvec casts.
+
+    // First create the index
+    await vectorStore.createIndex({
+      indexName: 'updateTest',
+      dimension: 1536,
+      buildIndex: false,
+    });
+
+    queryHistory.length = 0; // Reset to track only update calls
+
+    await vectorStore.updateVector({
+      indexName: 'updateTest',
+      id: 'test-id',
+      update: {
+        vector: new Array(1536).fill(0.2),
+      },
+    });
+
+    const updateIdx = queryHistory.findIndex(call => call.text.includes('UPDATE'));
+    expect(updateIdx).toBeGreaterThan(-1);
+
+    // There must be a SET search_path call BEFORE the UPDATE
+    const searchPathBeforeUpdate = queryHistory
+      .slice(0, updateIdx)
+      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
+
+    expect(searchPathBeforeUpdate).toBe(true);
+  });
 });
 
 describe('PgVector buildIndex uses correct operator class for halfvec', () => {
