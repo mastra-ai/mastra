@@ -71,6 +71,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
+import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
 import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
@@ -3254,7 +3255,15 @@ ${formattedMessages}
     resourceId?: string;
     messageList: MessageList;
     observabilityContext?: ObservabilityContext;
+    hooks?: ObservationTurnHooks;
   }): ObservationTurn {
-    return new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList, opts.observabilityContext);
+    return new ObservationTurn({
+      om: this,
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      messageList: opts.messageList,
+      observabilityContext: opts.observabilityContext,
+      hooks: opts.hooks,
+    });
   }
 }

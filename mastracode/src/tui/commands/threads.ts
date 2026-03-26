@@ -1,23 +1,9 @@
 import { Spacer } from '@mariozechner/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
 import { ThreadLockError } from '../../utils/thread-lock.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
-
-function extractTextContent(message: HarnessMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
-    .join(' ')
-    .trim();
-}
-
-function truncatePreview(text: string, maxLength = 50): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 3) + '...';
-}
 
 export function showThreadLockPrompt(
   ctx: SlashCommandContext,
@@ -126,38 +112,6 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.attemptedThreadPreviewIds = attemptedThreadIds;
       },
       getMessagePreviews: async (threadIds: string[]) => {
-        const uncachedThreadIds = threadIds.filter(
-          threadId => !state.threadPreviewCache.has(threadId) && !state.attemptedThreadPreviewIds.has(threadId),
-        );
-
-        if (uncachedThreadIds.length > 0) {
-          const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({
-            threadIds: uncachedThreadIds,
-          });
-
-          for (const threadId of uncachedThreadIds) {
-            state.attemptedThreadPreviewIds.add(threadId);
-          }
-
-          for (const [threadId, message] of firstUserMessages.entries()) {
-            const text = extractTextContent(message);
-            if (!text) {
-              continue;
-            }
-
-            const thread = threadById.get(threadId);
-            if (!thread) {
-              continue;
-            }
-
-            const preview = truncatePreview(text);
-            state.threadPreviewCache.set(threadId, {
-              preview,
-              updatedAt: thread.updatedAt.getTime(),
-            });
-          }
-        }
-
         return new Map(
           threadIds.flatMap(threadId => {
             const preview = state.threadPreviewCache.get(threadId)?.preview;
@@ -191,6 +145,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
 
         state.chatContainer.clear();
         state.allToolComponents = [];
+        state.allSystemReminderComponents = [];
         state.pendingTools.clear();
         await ctx.renderExistingMessages();
 

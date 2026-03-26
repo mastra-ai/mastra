@@ -42,6 +42,8 @@ export {
 
 export { ToolCallFilter } from './tool-call-filter';
 
+export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
+
 export { ToolSearchProcessor, type ToolSearchProcessorOptions } from './tool-search';
 export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';

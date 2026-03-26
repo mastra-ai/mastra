@@ -73,7 +73,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, model, abortSignal, abort } = args;
+    const {
+      messageList,
+      requestContext,
+      stepNumber,
+      state: _state,
+      writer,
+      model,
+      abortSignal,
+      abort,
+      rotateResponseMessageId,
+    } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -127,6 +137,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           messageList,
           observabilityContext: getOmObservabilityContext(args),
+          hooks: {
+            onBufferChunkSealed: rotateResponseMessageId,
+          },
         });
         this.turn.writer = writer;
         this.turn.requestContext = requestContext;

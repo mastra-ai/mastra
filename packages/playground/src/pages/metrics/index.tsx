@@ -5,7 +5,6 @@ import {
   MainHeader,
   isValidPreset,
   ButtonWithTooltip,
-  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 import type { DatePreset } from '@mastra/playground-ui';
 import { BarChart3Icon, BookIcon } from 'lucide-react';
@@ -15,9 +14,7 @@ import { useSearchParams } from 'react-router';
 const PERIOD_PARAM = 'period';
 
 export default function Metrics() {
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const [searchParams, setSearchParams] = useSearchParams();
-
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const initialPreset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
 
@@ -38,10 +35,6 @@ export default function Metrics() {
     },
     [setSearchParams],
   );
-
-  if (!experimentalFeaturesEnabled) {
-    return null;
-  }
 
   return (
     <MetricsProvider initialPreset={initialPreset} onPresetChange={handlePresetChange}>
