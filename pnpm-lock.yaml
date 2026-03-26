@@ -3161,9 +3161,6 @@ importers:
       '@babel/traverse':
         specifier: ^7.29.0
         version: 7.29.0
-      '@hono/node-ws':
-        specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.11(hono@4.12.8))(bufferutil@4.1.0)(hono@4.12.8)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -3233,9 +3230,6 @@ importers:
       typescript-paths:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.9.3)
-      ws:
-        specifier: ^8.17.0
-        version: 8.19.0(bufferutil@4.1.0)
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
@@ -4631,12 +4625,18 @@ importers:
 
   server-adapters/hono:
     dependencies:
+      '@hono/node-ws':
+        specifier: ^1.2.3
+        version: 1.3.0(@hono/node-server@1.19.11(hono@4.12.8))(bufferutil@4.1.0)(hono@4.12.8)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
       fetch-to-node:
         specifier: ^2.1.0
         version: 2.1.0(patch_hash=42949ba7834aab28b47574e6989b8f3203c3ef91ee1ca866baf4dc8b151d34ae)
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0(bufferutil@4.1.0)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.99
@@ -4674,6 +4674,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)

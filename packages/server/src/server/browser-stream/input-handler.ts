@@ -179,53 +179,16 @@ async function relaunchBrowser(toolset: MastraBrowser): Promise<void> {
   await toolset.ensureReady();
 
   // Restore the last URL if available
-  if (lastUrl && lastUrl !== 'about:blank') {
-    try {
-      await toolset.navigateTo(lastUrl);
-      console.info(`[InputHandler] Restored previous URL: ${lastUrl}`);
-    } catch {
-      // Silently ignore navigation errors
-    }
+  if (lastUrl) {
+    await toolset.navigateTo(lastUrl);
   }
-
-  console.info('[InputHandler] Browser relaunched successfully');
 }
 
-// --- Validation ---
+// --- Input injection ---
 
-function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
-  if (typeof msg !== 'object' || msg === null) return false;
-  const obj = msg as Record<string, unknown>;
-
-  if (obj.type === 'mouse') return isValidMouseMessage(obj);
-  if (obj.type === 'keyboard') return isValidKeyboardMessage(obj);
-  if (obj.type === 'relaunch') return true;
-  return false;
-}
-
-const VALID_MOUSE_EVENTS = new Set(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel']);
-
-function isValidMouseMessage(obj: Record<string, unknown>): boolean {
-  return (
-    typeof obj.eventType === 'string' &&
-    VALID_MOUSE_EVENTS.has(obj.eventType) &&
-    typeof obj.x === 'number' &&
-    typeof obj.y === 'number' &&
-    isFinite(obj.x) &&
-    isFinite(obj.y) &&
-    obj.x >= 0 &&
-    obj.y >= 0
-  );
-}
-
-const VALID_KEYBOARD_EVENTS = new Set(['keyDown', 'keyUp', 'char']);
-
-function isValidKeyboardMessage(obj: Record<string, unknown>): boolean {
-  return typeof obj.eventType === 'string' && VALID_KEYBOARD_EVENTS.has(obj.eventType);
-}
-
-// --- Injection ---
-
+/**
+ * Inject a mouse event into the browser.
+ */
 async function injectMouse(toolset: MastraBrowser, msg: MouseInputMessage): Promise<void> {
   await toolset.injectMouseEvent({
     type: msg.eventType,
@@ -239,13 +202,45 @@ async function injectMouse(toolset: MastraBrowser, msg: MouseInputMessage): Prom
   });
 }
 
+/**
+ * Inject a keyboard event into the browser.
+ */
 async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage): Promise<void> {
+  const windowsVirtualKeyCode = getVirtualKeyCode(msg.key);
+
   await toolset.injectKeyboardEvent({
     type: msg.eventType,
     key: msg.key,
     code: msg.code,
     text: msg.text,
     modifiers: msg.modifiers,
-    windowsVirtualKeyCode: getVirtualKeyCode(msg.key),
+    windowsVirtualKeyCode,
   });
+}
+
+// --- Validation ---
+
+/**
+ * Type guard to validate incoming messages.
+ */
+function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
+  if (typeof msg !== 'object' || msg === null) {
+    return false;
+  }
+
+  const typed = msg as Record<string, unknown>;
+
+  if (typed.type === 'mouse') {
+    return typeof typed.eventType === 'string' && typeof typed.x === 'number' && typeof typed.y === 'number';
+  }
+
+  if (typed.type === 'keyboard') {
+    return typeof typed.eventType === 'string';
+  }
+
+  if (typed.type === 'relaunch') {
+    return true;
+  }
+
+  return false;
 }

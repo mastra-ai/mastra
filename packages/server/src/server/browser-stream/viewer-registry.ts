@@ -1,6 +1,10 @@
-import type { WSContext } from 'hono/ws';
-
-import type { StatusMessage, BrowserStreamConfig, ViewportMessage } from './types.js';
+import type {
+  StatusMessage,
+  BrowserStreamConfig,
+  ViewportMessage,
+  BrowserStreamWebSocket,
+  ViewerRegistryLike,
+} from './types.js';
 
 /** Minimal screencast stream interface matching BrowserToolsetLike.startScreencast return type */
 interface ScreencastStreamLike {
@@ -33,9 +37,9 @@ interface ScreencastStreamLike {
  * registry.removeViewer('agent-123', ws);
  * ```
  */
-export class ViewerRegistry {
+export class ViewerRegistry implements ViewerRegistryLike {
   /** Map of agentId to set of connected WebSocket contexts */
-  private viewers = new Map<string, Set<WSContext>>();
+  private viewers = new Map<string, Set<BrowserStreamWebSocket>>();
 
   /** Map of agentId to active screencast stream */
   private screencasts = new Map<string, ScreencastStreamLike>();
@@ -59,7 +63,11 @@ export class ViewerRegistry {
    * @param ws - The WebSocket context for this viewer
    * @param getToolset - Function to retrieve the BrowserToolset for this agent
    */
-  async addViewer(agentId: string, ws: WSContext, getToolset: BrowserStreamConfig['getToolset']): Promise<void> {
+  async addViewer(
+    agentId: string,
+    ws: BrowserStreamWebSocket,
+    getToolset: BrowserStreamConfig['getToolset'],
+  ): Promise<void> {
     // Get or create the viewer set for this agent
     let viewerSet = this.viewers.get(agentId);
     if (!viewerSet) {
@@ -82,7 +90,7 @@ export class ViewerRegistry {
    * @param agentId - The agent ID
    * @param ws - The WebSocket context to remove
    */
-  async removeViewer(agentId: string, ws: WSContext): Promise<void> {
+  async removeViewer(agentId: string, ws: BrowserStreamWebSocket): Promise<void> {
     const viewerSet = this.viewers.get(agentId);
     if (!viewerSet) {
       return;
