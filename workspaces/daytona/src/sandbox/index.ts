@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
