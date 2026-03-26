@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, normalize } from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
@@ -43,12 +44,20 @@ function findInstructionFile(basePath: string): string | null {
  * Load all agent instruction files from global and project locations.
  * Returns an array of instruction sources, with global ones first.
  */
-export function loadAgentInstructions(projectPath: string): InstructionSource[] {
+export function loadAgentInstructions(projectPath: string, configDirName = DEFAULT_CONFIG_DIR): InstructionSource[] {
   const sources: InstructionSource[] = [];
   const home = homedir();
 
+  // Derive location arrays from the base constants, substituting the config dir name
+  const projectLocations = PROJECT_LOCATIONS.map(loc => (loc === '.mastracode' ? configDirName : loc));
+  const globalLocations = GLOBAL_LOCATIONS.map(loc => {
+    if (loc === '.mastracode') return configDirName;
+    if (loc === '.config/mastracode') return '.config/' + configDirName.replace(/^\./, '');
+    return loc;
+  });
+
   // Load global instructions first
-  for (const location of GLOBAL_LOCATIONS) {
+  for (const location of globalLocations) {
     const basePath = join(home, location);
     const filePath = findInstructionFile(basePath);
     if (filePath) {
@@ -65,7 +74,7 @@ export function loadAgentInstructions(projectPath: string): InstructionSource[] 
   }
 
   // Load project instructions
-  for (const location of PROJECT_LOCATIONS) {
+  for (const location of projectLocations) {
     const basePath = location ? join(projectPath, location) : projectPath;
     const filePath = findInstructionFile(basePath);
     if (filePath) {

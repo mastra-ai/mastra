@@ -119,6 +119,24 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ## Configuration
 
+### Custom config directory
+
+By default, Mastra Code reads and writes project config from `.mastracode/` and global config from `~/.mastracode/` plus `~/.config/mastracode/`.
+
+If you embed Mastra Code programmatically, you can override that directory name with `createMastraCode({ configDir: '.your-config-dir' })`.
+
+This remaps the project-level and global config locations that Mastra Code uses for MCP server configs, hooks, slash commands, agent instructions, skills, and the legacy `database.json` lookup.
+
+```ts
+import { createMastraCode } from 'mastracode';
+
+const mastraCode = await createMastraCode({
+  configDir: '.acme-code',
+});
+```
+
+`configDir` must be a single directory name. Absolute paths, `.` / `..`, and names containing `/` or `\` are rejected.
+
 ### Project-based threads
 
 Threads are automatically scoped to your project based on:
