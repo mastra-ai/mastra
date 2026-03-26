@@ -39,7 +39,14 @@ export function useModelUsageCostMetrics() {
         ),
       );
 
-      type ModelEntry = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number | null; costUnit: string | null };
+      type ModelEntry = {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheWrite: number;
+        cost: number | null;
+        costUnit: string | null;
+      };
 
       const modelMap = new Map<string, ModelEntry>();
 

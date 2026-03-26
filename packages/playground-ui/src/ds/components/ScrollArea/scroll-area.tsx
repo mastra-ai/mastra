@@ -12,7 +12,10 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
 };
 
 const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.Root>, ScrollAreaProps>(
-  ({ className, children, viewPortClassName, maxHeight, autoScroll = false, orientation = 'vertical', ...props }, ref) => {
+  (
+    { className, children, viewPortClassName, maxHeight, autoScroll = false, orientation = 'vertical', ...props },
+    ref,
+  ) => {
     const areaRef = React.useRef<HTMLDivElement>(null);
     useAutoscroll(areaRef, { enabled: autoScroll });
 

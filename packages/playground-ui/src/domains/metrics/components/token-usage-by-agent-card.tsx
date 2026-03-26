@@ -22,11 +22,12 @@ export function TokenUsageByAgentCard() {
           title="Token Usage by Agent"
           description="Token consumption grouped by agent."
         />
-        {hasData && (
-          activeTab === 'cost' && hasCostData
-            ? <MetricsCard.Summary value={formatCost(totalCost, costUnit)} label="Total cost" />
-            : <MetricsCard.Summary value={formatCompact(totalTokens)} label="Total tokens" />
-        )}
+        {hasData &&
+          (activeTab === 'cost' && hasCostData ? (
+            <MetricsCard.Summary value={formatCost(totalCost, costUnit)} label="Total cost" />
+          ) : (
+            <MetricsCard.Summary value={formatCompact(totalTokens)} label="Total tokens" />
+          ))}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -37,7 +38,12 @@ export function TokenUsageByAgentCard() {
           {!hasData ? (
             <MetricsCard.NoData message="No token usage data yet" />
           ) : (
-            <Tabs defaultTab="tokens" value={activeTab} onValueChange={v => setActiveTab(v as 'tokens' | 'cost')} className="grid grid-rows-[auto_1fr] overflow-y-auto h-full">
+            <Tabs
+              defaultTab="tokens"
+              value={activeTab}
+              onValueChange={v => setActiveTab(v as 'tokens' | 'cost')}
+              className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+            >
               <TabList>
                 <Tab value="tokens">Tokens</Tab>
                 <Tab value="cost">Cost</Tab>
