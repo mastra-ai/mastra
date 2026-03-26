@@ -1,69 +1,65 @@
 # AGENTS.md
 
-This file provides guidance to coding agents when working with code in this repository.
+This file provides guidance to coding agents when working in this repository.
 
 ## Scope guidelines
 
-**IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Only include examples when the user specifically asks about them.
+- Unless the user explicitly asks for it, do not inspect, reference, or modify files in `examples/`.
+- Prefer the most specific `AGENTS.md` file available for the directory you are changing.
+- For work in `packages/*`, read the package-local `packages/<name>/AGENTS.md` before making changes.
 
 ## Monorepo structure
 
-- This directory is a Git monorepo containing a `pnpm` workspace. pnpm is used for package management, and Turborepo is used for build orchestration.
-- The monorepo spans multiple folders:
-  - `@auth/`
-  - `@client-sdks/`
-  - `@deployers/`
-  - `@docs/`
-  - `@integrations/`
-  - `@observability/`
-  - `@packages/`
-  - `@pubsub/`
-  - `@server-adapters/`
-  - `@stores/`
-  - `@voice/`
-  - `@workflows/`
-  - `@workspaces/`
-- The `@docs/` folder contains the documentation and needs specific instructions which are covered in `@docs/AGENTS.md`
-- All packages use TypeScript with strict type checking
-- Vitest is used for testing, with test files co-located with source code
+- This repository is a `pnpm` workspace orchestrated with Turborepo.
+- Major areas include `auth/`, `client-sdks/`, `deployers/`, `docs/`, `integrations/`, `observability/`, `packages/`, `pubsub/`, `server-adapters/`, `stores/`, `voice/`, `workflows/`, and `workspaces/`.
+- The `docs/` area has its own instructions in `docs/AGENTS.md`.
+- All packages use TypeScript with strict type checking.
+- Vitest is the default test runner, with tests usually co-located with source files.
 
-## Development commands
+## Development guidance
+
+- Prefer the narrowest relevant build, test, and typecheck commands for the code you changed.
+- For `packages/*` work, start with the package's own scripts from inside the package directory.
+- If you need to work from the repository root, prefer package-specific root scripts such as `pnpm build:core` or filtered commands such as `pnpm --filter ./packages/<name> <script>`.
+- Do not default to `pnpm run setup`, `pnpm build`, `pnpm build:packages`, or repo-wide test runs when a package-local or filtered command is sufficient.
+- Building the entire monorepo is slow and should be a last resort, not the default verification path.
+- Use broader verification only when changes cross package boundaries, affect shared exports/contracts, or touch shared build tooling.
+- Integration tests may require `pnpm dev:services:up` / `pnpm dev:services:down` and, in some integration-test folders, `pnpm i --ignore-workspace`.
+
+## Shared repository commands
 
 ### Build
 
-- `pnpm run setup` - Install dependencies and build all packages (required first step)
-- `pnpm build` - Build all packages (excludes examples and docs)
-- `pnpm build:packages` - Build only `packages/` directory
-- `pnpm build:core`, `pnpm build:memory`, `pnpm build:rag`, `pnpm build:evals` - Build individual packages
-- `pnpm build:cli` - Build CLI package
-- `pnpm build:combined-stores` - Build all storage adapters
-- `pnpm build:deployers` - Build deployment adapters
+- Avoid repo-wide builds unless the change truly spans multiple packages or shared build tooling.
+- `pnpm build` - Build the repository except docs and examples.
+- `pnpm build:packages` - Build all packages under `packages/`.
+- `pnpm build:deployers` - Build deployment adapters.
+- `pnpm build:combined-stores` - Build storage adapters.
 
-### Testing
+### Test
 
-- `pnpm dev:services:up` / `pnpm dev:services:down` - Start/stop Docker services (required for integration tests)
-- Integration test folders and `/examples` folders need to run `pnpm i --ignore-workspace`
-- Package-specific tests: `pnpm test:core`, `pnpm test:cli`, `pnpm test:memory`, `pnpm test:rag`, etc.
-- For faster iteration: build from root first, then `cd` into a package and run `pnpm test` there
-- Core tests take a long time to run, for targeted changes, run the appropriate individual test suites.
+- `pnpm test:core`, `pnpm test:memory`, `pnpm test:rag`, `pnpm test:cli`, `pnpm test:auth`, `pnpm test:server-adapters` - Targeted root test entry points for common packages.
+- When a package splits unit, integration, or E2E coverage, run the narrowest relevant suite first.
+- `pnpm dev:services:up` / `pnpm dev:services:down` - Start or stop Docker-backed services required by some integration suites.
 
-### Linting and formatting
+### Lint and format
 
-- `pnpm typecheck` - TypeScript checks across all packages
-- `pnpm prettier:format` - Format code with Prettier
-- `pnpm format` - Lint all packages with auto-fix (excludes examples, docs, playground)
+- Prefer package-local lint or typecheck scripts when they exist.
+- `pnpm typecheck` - TypeScript checks across the workspace.
+- `pnpm prettier:format` - Format code with Prettier.
+- `pnpm format` - Run linting with auto-fixes across packages.
 
 ## Documentation
 
-The `@docs/` directory contains the source code and contents of the documentation site.
-
-Whenever you change or add code, you MUST update/add related documentation for those changes. You always need to follow `@docs/styleguides/DOC.md` when writing documentation. The `@docs/styleguides/` folder also contains styleguides for specific types of documentation. Read `@docs/AGENTS.md` to learn more about how to work with documentation.
+- Code changes must include related documentation updates when needed.
+- Follow `docs/AGENTS.md` and the styleguides under `docs/styleguides/` when editing docs.
 
 **Important:** If you add a new package, you also MUST add new documentation for that package in `@docs/`.
 
 ## Changelogs
 
-After making changes to the codebase, you MUST create a changeset. Follow `@.claude/commands/changeset.md` for guidelines on how to create a changeset and write effective changelog messages.
+- After code changes, create a changeset.
+- Follow `@.mastracode/commands/changeset.md` for changeset guidance.
 
 ## Architecture overview
 
@@ -71,26 +67,17 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 
 ### Core components (`packages/core/src/`)
 
-- **Mastra Class** (`mastra/`) - Central configuration hub with dependency injection
-- **Agents** (`agent/`) - AI interaction abstraction with tools, memory, and voice
-- **Tools** (`tools/`) - Dynamic tool composition from multiple sources (assigned, memory, toolsets, MCP)
-- **Memory** (`memory/`) - Thread-based conversation persistence with semantic recall and working memory
-- **Workflows** (`workflows/`) - Step-based execution with suspend/resume
-- **Storage** (`storage/`) - Pluggable backends with standardized interfaces
+- **Mastra Class** (`mastra/`) - Central configuration hub with dependency injection.
+- **Agents** (`agent/`) - AI interaction abstraction with tools, memory, and voice.
+- **Tools** (`tools/`) - Dynamic tool composition from multiple sources.
+- **Memory** (`memory/`) - Thread-based persistence with semantic recall and working memory.
+- **Workflows** (`workflows/`) - Step-based execution with suspend/resume.
+- **Storage** (`storage/`) - Pluggable backends with shared interfaces.
 
 ## Enterprise Edition (EE) licensing
 
-Some code in this repository is licensed under the Mastra Enterprise License instead of Apache-2.0. EE code lives in directories named `ee/` within existing packages.
-
-- **EE directories**: Any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is under the Mastra Enterprise License (see `ee/LICENSE`)
-- **Everything else**: Apache-2.0
-- **Import convention**: EE code is accessed via subpath exports like `@mastra/core/auth/ee`
-- **When adding EE features**: Place them in an `ee/` subdirectory within the relevant package
-- **License file**: The root `LICENSE.md` maps directories to their licenses
-
-### Key patterns
-
-1. **Dependency Injection** - Components register with central Mastra instance
-2. **Plugin Architecture** - Pluggable storage, vectors, memory, deployers
-3. **Request Context** - Request-scoped context propagation for dynamic configuration
-4. **Message List Abstraction** - Unified message handling across formats
+- Any directory named `ee/` is licensed under the Mastra Enterprise License.
+- Everything else is Apache-2.0 unless noted otherwise.
+- EE code is imported through subpath exports such as `@mastra/core/auth/ee`.
+- New EE features should live in an `ee/` subdirectory within the relevant package.
+- `LICENSE.md` maps directories to their licenses.

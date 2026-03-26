@@ -15,16 +15,22 @@ import {
   ListSearch,
   MainHeader,
   EntityListPageLayout,
+  useCanCreateAgent,
+  useLinkComponent,
 } from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
+  const { canCreateAgent } = useCanCreateAgent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
   if (variant === 'new-proposal') {
     return (
@@ -37,6 +43,11 @@ function Agents() {
               </MainHeader.Title>
             </MainHeader.Column>
             <MainHeader.Column className="flex justify-end gap-2">
+              {showCreateCta && (
+                <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
+                  <Plus />
+                </ButtonWithTooltip>
+              )}
               <ButtonWithTooltip
                 as="a"
                 href="https://mastra.ai/en/docs/agents/overview"
@@ -69,6 +80,14 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
+          {showCreateCta && (
+            <Button variant="light" as={FrameworkLink} to={createAgentPath}>
+              <Icon>
+                <Plus />
+              </Icon>
+              Create an agent
+            </Button>
+          )}
           <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
             <DocsIcon />
             Agents documentation

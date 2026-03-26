@@ -25,6 +25,7 @@ import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
+import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
@@ -102,10 +103,14 @@ export interface TUIState {
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
   subagentToolCallIds: Set<string>;
+  /** Track streamed system reminders for the active assistant run */
+  currentRunSystemReminderKeys: Set<string>;
   /** Track all tools for expand/collapse */
   allToolComponents: IToolExecutionComponent[];
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
+  /** Track inline system reminders for expand/collapse */
+  allSystemReminderComponents: SystemReminderComponent[];
   /** Track active subagent tasks */
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
@@ -223,8 +228,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     taskWriteInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
+    currentRunSystemReminderKeys: new Set(),
     allToolComponents: [],
     allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,

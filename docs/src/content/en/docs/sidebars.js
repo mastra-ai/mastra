@@ -292,6 +292,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'workspace/lsp',
+          label: 'LSP Inspection',
+        },
+        {
+          type: 'doc',
           id: 'workspace/skills',
           label: 'Skills',
         },
@@ -352,13 +357,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'server/auth/simple-auth',
-              label: 'Simple Auth',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/jwt',
-              label: 'JSON Web Token',
+              id: 'server/auth/auth0',
+              label: 'Auth0',
             },
             {
               type: 'doc',
@@ -372,8 +372,13 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'server/auth/supabase',
-              label: 'Supabase',
+              id: 'server/auth/composite-auth',
+              label: 'Composite Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/custom-auth-provider',
+              label: 'Custom Auth Provider',
             },
             {
               type: 'doc',
@@ -382,23 +387,28 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/jwt',
+              label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/okta',
+              label: 'Okta',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/supabase',
+              label: 'Supabase',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/workos',
               label: 'WorkOS',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/auth0',
-              label: 'Auth0',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/composite-auth',
-              label: 'Composite Auth',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/custom-auth-provider',
-              label: 'Custom Auth Provider',
             },
           ],
         },

@@ -8,6 +8,7 @@ import {
   createBufferingEndMarker,
   createBufferingFailedMarker,
   createActivationMarker,
+  createThreadUpdateMarker,
 } from '../markers';
 import type { ObservationMarkerConfig } from '../types';
 
@@ -126,6 +127,28 @@ describe('markers', () => {
       expect(marker.data.currentTask).toBeUndefined();
       expect(marker.data.suggestedResponse).toBeUndefined();
       expect(marker.data.durationMs).toBe(0);
+    });
+  });
+
+  describe('createThreadUpdateMarker', () => {
+    it('returns a data-om-thread-update part with title change fields', () => {
+      const marker = createThreadUpdateMarker({
+        cycleId: 'cycle-1',
+        threadId: 'thread-1',
+        oldTitle: 'Old Title',
+        newTitle: 'New Title',
+      });
+
+      expect(marker).toEqual({
+        type: 'data-om-thread-update',
+        data: {
+          cycleId: 'cycle-1',
+          threadId: 'thread-1',
+          oldTitle: 'Old Title',
+          newTitle: 'New Title',
+          timestamp: '2025-06-15T12:00:00.000Z',
+        },
+      });
     });
   });
 
