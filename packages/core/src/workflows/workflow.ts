@@ -149,6 +149,17 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
   );
 }
 
+function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
+  for (const entry of graph) {
+    if ((entry as any)?.step?.id === stepId) return entry;
+    if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
+      const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
 // ============================================
 // Overloads (Public API - clean types for consumers)
 // ============================================
@@ -2474,7 +2485,7 @@ export class Workflow<
     let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
     for (const step of Object.keys(steps)) {
-      const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
+      const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
         // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
