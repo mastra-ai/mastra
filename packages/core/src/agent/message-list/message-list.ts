@@ -80,6 +80,7 @@ export class MessageList {
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
+  private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
 
   // Event recording for observability
@@ -99,6 +100,7 @@ export class MessageList {
     resourceId,
     generateMessageId,
     logger,
+    filterIncompleteToolCalls,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: {
@@ -106,12 +108,14 @@ export class MessageList {
     resourceId?: string;
     generateMessageId?: (context?: IdGeneratorContext) => string;
     logger?: IMastraLogger;
+    filterIncompleteToolCalls?: boolean;
   } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
     this.generateMessageId = generateMessageId;
     this.logger = logger;
+    this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -362,8 +366,11 @@ export class MessageList {
           this.createAdapterContext(),
           this.messages,
         );
-        // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          this.filterIncompleteToolCalls,
+        );
 
         const messages = [...systemMessages, ...modelMessages];
 
@@ -381,8 +388,11 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          this.filterIncompleteToolCalls,
+        );
 
         const storedModelOutputs = new Map<string, unknown>();
         for (const dbMsg of this.messages) {
@@ -419,7 +429,6 @@ export class MessageList {
             }
           }
         }
-
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
