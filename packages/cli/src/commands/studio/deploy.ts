@@ -11,6 +11,38 @@ import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platfo
 import { loadProjectConfig, saveProjectConfig } from './project-config.js';
 
 /* ------------------------------------------------------------------ */
+/*  Timing helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+const timers: { label: string; ms: number }[] = [];
+let _timerStart = 0;
+
+function timerStart() {
+  _timerStart = performance.now();
+}
+
+function timerEnd(label: string) {
+  const ms = performance.now() - _timerStart;
+  timers.push({ label, ms });
+  return ms;
+}
+
+function elapsed(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function printTimingSummary() {
+  const total = timers.reduce((sum, t) => sum + t.ms, 0);
+  p.log.info('');
+  p.log.info('⏱  Timing breakdown:');
+  for (const t of timers) {
+    const pct = total > 0 ? Math.round((t.ms / total) * 100) : 0;
+    p.log.info(`   ${t.label.padEnd(24)} ${elapsed(t.ms).padStart(8)}  (${pct}%)`);
+  }
+  p.log.info(`   ${'Total'.padEnd(24)} ${elapsed(total).padStart(8)}`);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -306,7 +338,9 @@ export async function deployAction(
   // Step 6: Build + Zip + Upload + Poll
   const s = p.spinner();
 
+  timerStart();
   runBuild(targetDir);
+  timerEnd('Build');
 
   // Verify build output exists
   const outputEntry = join(targetDir, '.mastra', 'output', 'index.mjs');
@@ -316,13 +350,16 @@ export async function deployAction(
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
+  timerStart();
   s.start('Zipping build artifact...');
   const zipPath = await zipOutput(targetDir);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive`);
+  timerEnd('Zip');
 
+  timerStart();
   s.start('Reading environment variables...');
   const envVars = await readEnvVars(targetDir);
   const envCount = Object.keys(envVars).length;
@@ -331,7 +368,9 @@ export async function deployAction(
   } else {
     s.stop('No .env file found');
   }
+  timerEnd('Read env vars');
 
+  timerStart();
   s.start('Uploading...');
   const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadDeploy(token, orgId, projectId, zipBuffer, {
@@ -341,11 +380,16 @@ export async function deployAction(
     mastraVersion: mastraVersion ?? undefined,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
+  timerEnd('Upload');
 
   await rm(zipPath, { force: true });
 
+  timerStart();
   p.log.step('Streaming deploy logs...');
   const finalStatus = await pollDeploy(deployResult.id, token, orgId);
+  timerEnd('Server-side deploy');
+
+  printTimingSummary();
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);
