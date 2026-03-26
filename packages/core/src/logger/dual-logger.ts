@@ -1,5 +1,6 @@
 import type { MastraError } from '../error';
 import type { LoggerContext } from '../observability/types/logging';
+import { getCurrentSpan } from '../observability/utils';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';
@@ -10,6 +11,10 @@ import type { BaseLogMessage, LoggerTransport } from './transport';
  *
  * All existing `this.logger.info(...)` call sites automatically get
  * dual-write when this wrapper is injected via `__setLogger()`.
+ *
+ * Span-aware: when called inside an executeWithContext() scope, forwards to
+ * a span-correlated loggerVNext (with traceId/spanId). Otherwise falls back
+ * to the global loggerVNext (no correlation, still persisted to storage).
  *
  * Uses a lazy getter function for loggerVNext so it always resolves the
  * current LoggerContext at call time (observability may initialize after the logger).
@@ -53,15 +58,18 @@ export class DualLogger implements IMastraLogger {
 
   trackException(error: MastraError): void {
     this.#inner.trackException(error);
-    this.#forwardToVNext('error', error.message, [
-      {
+    try {
+      const loggerVNext = this.#resolveLoggerVNext();
+      loggerVNext?.error(error.message, {
         errorId: error.id,
         domain: error.domain,
         category: error.category,
         details: error.details,
         cause: error.cause?.message,
-      },
-    ]);
+      });
+    } catch {
+      // Never let loggerVNext errors break the primary logger
+    }
   }
 
   getTransports(): Map<string, LoggerTransport> {
@@ -96,14 +104,29 @@ export class DualLogger implements IMastraLogger {
   }
 
   /**
+   * Resolve the best available LoggerContext:
+   * 1. Span-correlated loggerVNext from AsyncLocalStorage (has traceId/spanId)
+   * 2. Global loggerVNext from the lazy getter (no correlation, still persisted)
+   */
+  #resolveLoggerVNext(): LoggerContext | undefined {
+    // Check for a span in async context (set by executeWithContext)
+    const span = getCurrentSpan();
+    if (span) {
+      const correlated = span.observabilityInstance?.getLoggerContext?.(span);
+      if (correlated) return correlated;
+    }
+
+    // Fall back to global loggerVNext (no trace correlation)
+    return this.#getLoggerVNext?.();
+  }
+
+  /**
    * Adapt IMastraLogger's variadic args to LoggerContext's structured data param.
    * The first object arg becomes `data`. If no object arg, forward with no data.
    */
   #forwardToVNext(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: any[]): void {
-    if (!this.#getLoggerVNext) return;
-
     try {
-      const loggerVNext = this.#getLoggerVNext();
+      const loggerVNext = this.#resolveLoggerVNext();
       if (!loggerVNext) return;
 
       const data = args.find(

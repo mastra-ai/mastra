@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LoggerContext } from '../observability/types/logging';
+import * as utils from '../observability/utils';
 import { DualLogger } from './dual-logger';
 import type { IMastraLogger } from './logger';
 
@@ -192,6 +193,88 @@ describe('DualLogger', () => {
       // Should not throw
       expect(() => dual.info('test')).not.toThrow();
       expect(inner.info).toHaveBeenCalledWith('test');
+    });
+  });
+
+  describe('span-aware forwarding', () => {
+    it('uses span-correlated loggerVNext when span is in async context', () => {
+      const correlatedVnext = createMockLoggerVNext();
+      const mockSpan = {
+        observabilityInstance: {
+          getLoggerContext: vi.fn(() => correlatedVnext),
+        },
+      };
+
+      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('inside span', { key: 'value' });
+
+      // Should use span-correlated loggerVNext, NOT the global one
+      expect(correlatedVnext.info).toHaveBeenCalledWith('inside span', { key: 'value' });
+      expect(vnext.info).not.toHaveBeenCalled();
+      // Inner logger always fires
+      expect(inner.info).toHaveBeenCalledWith('inside span', { key: 'value' });
+
+      vi.restoreAllMocks();
+    });
+
+    it('falls back to global loggerVNext when no span in context', () => {
+      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(undefined);
+
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('no span', { key: 'value' });
+
+      expect(vnext.info).toHaveBeenCalledWith('no span', { key: 'value' });
+      expect(inner.info).toHaveBeenCalledWith('no span', { key: 'value' });
+
+      vi.restoreAllMocks();
+    });
+
+    it('falls back to global loggerVNext when span has no observabilityInstance', () => {
+      const mockSpan = { observabilityInstance: undefined };
+      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+
+      const dual = new DualLogger(inner, () => vnext);
+      dual.info('no instance', { key: 'value' });
+
+      expect(vnext.info).toHaveBeenCalledWith('no instance', { key: 'value' });
+
+      vi.restoreAllMocks();
+    });
+
+    it('trackException uses span-correlated loggerVNext when available', () => {
+      const correlatedVnext = createMockLoggerVNext();
+      const mockSpan = {
+        observabilityInstance: {
+          getLoggerContext: vi.fn(() => correlatedVnext),
+        },
+      };
+
+      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+
+      const dual = new DualLogger(inner, () => vnext);
+      const error = {
+        message: 'Something failed',
+        id: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        details: {},
+        cause: { message: 'root cause' },
+      } as any;
+      dual.trackException(error);
+
+      expect(inner.trackException).toHaveBeenCalledWith(error);
+      expect(correlatedVnext.error).toHaveBeenCalledWith(
+        'Something failed',
+        expect.objectContaining({
+          errorId: 'ERR_1',
+          domain: 'AGENT',
+        }),
+      );
+      expect(vnext.error).not.toHaveBeenCalled();
+
+      vi.restoreAllMocks();
     });
   });
 });

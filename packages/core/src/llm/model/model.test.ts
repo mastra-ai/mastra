@@ -499,7 +499,7 @@ describe('MastraLLM', () => {
       expect(streamSpy).toHaveBeenCalled();
 
       expect(mockMastra.logger.debug).toHaveBeenCalledWith(
-        '[LLM] - Streaming text',
+        'Streaming text',
         expect.objectContaining({
           runId,
           messages: expect.any(Array),
