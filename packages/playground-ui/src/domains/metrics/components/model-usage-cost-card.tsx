@@ -10,12 +10,13 @@ export function ModelUsageCostCard() {
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Model Usage" description="Token consumption by model." />
-        {hasData && (() => {
-          const totalCost = rows.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-          const unit = rows.find(r => r.costUnit)?.costUnit;
-          return <MetricsCard.Summary value={totalCost > 0 ? formatCost(totalCost, unit) : '—'} label="Total cost" />;
-        })()}
+        <MetricsCard.TitleAndDescription title="Model Usage & Cost" description="Token consumption by model." />
+        {hasData &&
+          (() => {
+            const totalCost = rows.reduce((sum, r) => sum + (r.cost ?? 0), 0);
+            const unit = rows.find(r => r.costUnit)?.costUnit;
+            return <MetricsCard.Summary value={totalCost > 0 ? formatCost(totalCost, unit) : '—'} label="Total cost" />;
+          })()}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -33,7 +34,11 @@ export function ModelUsageCostCard() {
                 { label: 'Output', value: row => row.output },
                 { label: 'Cache Read', value: row => row.cacheRead },
                 { label: 'Cache Write', value: row => row.cacheWrite },
-                { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—'), highlight: true },
+                {
+                  label: 'Cost',
+                  value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—'),
+                  highlight: true,
+                },
               ]}
               data={rows.map(row => ({ ...row, key: row.model }))}
             />

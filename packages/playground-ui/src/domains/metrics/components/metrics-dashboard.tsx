@@ -1,6 +1,6 @@
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { LatencyCard } from './latency-card';
-import { AgentRunsKpiCard, TotalTokensKpiCard, AvgScoreKpiCard, ModelCostKpiCard } from './metrics-kpi-cards';
+import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
 import { ModelUsageCostCard } from './model-usage-cost-card';
 import { ScoresCard } from './scores-card';
 import { TokenUsageByAgentCard } from './token-usage-by-agent-card';
