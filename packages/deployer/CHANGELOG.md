@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.17.0
+
+### Patch Changes
+
+- Fixed a deployer server regression where leaving `server.host` unset could bind the Node server to `localhost` instead of preserving the runtime default host. Explicit `server.host` and `MASTRA_HOST` values continue to work as before. ([#14682](https://github.com/mastra-ai/mastra/pull/14682))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`86e3263`](https://github.com/mastra-ai/mastra/commit/86e326363edd12be5a5b25ccce4a39f66f7c9f50), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`8ce9c21`](https://github.com/mastra-ai/mastra/commit/8ce9c2178179aa9b256b5335132f50a334fdc3fe)]:
+  - @mastra/core@1.17.0
+  - @mastra/server@1.17.0
+
 ## 1.17.0-alpha.2
 
 ### Patch Changes

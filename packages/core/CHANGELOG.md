@@ -1,5 +1,51 @@
 # @mastra/core
 
+## 1.17.0
+
+### Minor Changes
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
 ## 1.17.0-alpha.2
 
 ### Minor Changes

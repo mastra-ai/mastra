@@ -1,6 +1,5 @@
 ---
 '@mastra/memory': patch
-'@mastra/core': patch
 '@mastra/pg': patch
 '@mastra/libsql': patch
 '@mastra/mongodb': patch
