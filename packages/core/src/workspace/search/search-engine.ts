@@ -5,6 +5,8 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
+import pMap from 'p-map';
+
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -103,6 +105,24 @@ export interface SearchOptions {
   /** Filter for vector search */
   filter?: Record<string, unknown>;
 }
+
+/** Options for batch indexing */
+export interface IndexManyOptions {
+  /**
+   * Maximum number of documents to index concurrently (embedder + vector upsert).
+   * Must be a safe integer ≥ 1 (same rule as `p-map`).
+   * @default 4
+   */
+  concurrency?: number;
+  /**
+   * When `true` (default), the first rejected `index` rejects the whole `indexMany` call.
+   * When `false`, all documents are processed; if any failed, the promise rejects with an `AggregateError`.
+   */
+  stopOnError?: boolean;
+}
+
+/** Default `indexMany` / lazy-vector flush concurrency (embedder + upsert). */
+const DEFAULT_INDEX_MANY_CONCURRENCY = 4;
 
 /**
  * Configuration for SearchEngine
@@ -209,12 +229,17 @@ export class SearchEngine {
   }
 
   /**
-   * Index multiple documents
+   * Index multiple documents (up to `concurrency` at a time when async vector work runs).
+   *
+   * @param docs - Documents to index
+   * @param options - `p-map` options; `concurrency` defaults to 4
    */
-  async indexMany(docs: IndexDocument[]): Promise<void> {
-    for (const doc of docs) {
-      await this.index(doc);
-    }
+  async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
+    const concurrency = Math.max(1, options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY);
+    await pMap(docs, doc => this.index(doc), {
+      concurrency,
+      stopOnError: options?.stopOnError,
+    });
   }
 
   /**
@@ -371,9 +396,10 @@ export class SearchEngine {
       return;
     }
 
-    for (const doc of this.#pendingVectorDocs) {
-      await this.#indexVector(doc);
-    }
+    const docs = [...this.#pendingVectorDocs];
+    await pMap(docs, doc => this.#indexVector(doc), {
+      concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+    });
 
     this.#pendingVectorDocs = [];
     this.#vectorIndexBuilt = true;
