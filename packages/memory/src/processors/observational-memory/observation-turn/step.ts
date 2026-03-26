@@ -134,7 +134,12 @@ export class ObservationStep {
           writer: this.turn.writer,
           requestContext: this.turn.requestContext,
           beforeBuffer: async (candidates: MastraDBMessage[]) => {
+            if (candidates.length === 0) {
+              return;
+            }
+
             om.sealMessagesForBuffering(candidates);
+            await this.turn.hooks?.onBufferChunkSealed?.();
             if (this.turn.memory) {
               await this.turn.memory.persistMessages(candidates);
             }
