@@ -24,17 +24,8 @@ export const CustomAutoFormField: React.FC<{
 
   const fieldDefault = useMemo(() => {
     if (!defaultValues) return field.default;
-    const firstPath = path[0];
-    let current = defaultValues[firstPath];
-    for (let i = 1; i < path.length; i++) {
-      const key = path[i];
-      if (current[key] !== undefined) {
-        current = current[key];
-      } else {
-        return field.default;
-      }
-    }
-    return current;
+    const resolved = getPathInObject(defaultValues, path);
+    return resolved === undefined ? field.default : resolved;
   }, [defaultValues, path, field.default]);
 
   const FieldWrapper = field.fieldConfig?.fieldWrapper || uiComponents.FieldWrapper;
