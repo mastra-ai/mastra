@@ -3,9 +3,9 @@
 '@mastra/core': patch
 ---
 
-feat(memory): add cross-thread recall browsing and observation search
+feat(memory): add recall-tool history retrieval for agents using observational memory
 
-You can now browse recall history across a resource, list available threads, and semantically search observation groups instead of raw message chunks.
+Agents that use observational memory can now use the `recall` tool to retrieve history from past conversations, including raw messages, thread listings, and indexed observation-group memories. Retrieval can be scoped in multiple ways, including current-thread browsing, resource-wide thread browsing, and semantic search over indexed observation groups.
 
 ```ts
 const memory = new Memory({
@@ -36,16 +36,19 @@ const result = await tools.recall.execute({
 ```
 
 **What changed:**
+- agents using observational memory can use the `recall` tool to browse threads, browse messages, and search indexed observation groups
+- `recall` search now returns indexed observation-group memories with source ranges
 - `retrieval` now supports `true`, `{ vector: true }`, `{ scope: 'resource' }`, and `{ vector: true, scope: 'resource' }`
 - `mode: "threads"` lists threads for the current resource
 - `mode: "search"` searches indexed observation groups in the current thread or across the resource
 - `threadId`, `before`, and `after` help narrow browsing and search results
-- Search results render richer observation context, including source message ranges and whether the match came from the current thread or older memory
+- search results render richer observation context, including source message ranges and whether the match came from the current thread or older memory
 
 **Indexing behavior:**
 - observation groups are indexed automatically when retrieval search is enabled and a vector store + embedder are configured
 - historical observation groups can be backfilled into the vector store for existing threads
 - observation indexing keeps source ranges so recall can point back to the original raw messages
+- the MastraCode observation backfill path more reliably indexes XML observation groups and older plain-text observation generations while skipping per-thread OM history read failures during rebuilds
 
 **Implementation details:**
 - tool schemas and descriptions adapt to thread vs resource scope
