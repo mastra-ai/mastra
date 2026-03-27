@@ -249,6 +249,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
   const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
+  const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -286,6 +288,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveOmModel) {
     globalInitialState.observerModelId = effectiveOmModel;
     globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (effectiveObservationThreshold !== undefined) {
+    globalInitialState.observationThreshold = effectiveObservationThreshold;
+  }
+  if (effectiveReflectionThreshold !== undefined) {
+    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
