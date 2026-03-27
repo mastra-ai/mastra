@@ -351,7 +351,7 @@ export function DatasetDetailView({
               ) : (
                 <div className="divide-y divide-border1">
                   {attachedScorerEntries.map(([id, scorer]) => {
-                    const name = (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id;
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
                     return (
                       <div
                         key={id}
@@ -520,11 +520,11 @@ export function DatasetDetailView({
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {
                     if (!attachScorerSearch) return true;
-                    const name = (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id;
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
                     return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
                   })
                   .map(([id, scorer]) => {
-                    const name = (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id;
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
                     return (
                       <button
                         key={id}
