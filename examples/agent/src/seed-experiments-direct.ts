@@ -89,30 +89,66 @@ const DATASET_DEFS = [
     name: 'Customer Support QA',
     description: 'Customer support Q&A test cases',
     items: [
-      { input: { messages: [{ role: 'user', content: 'How do I reset my password?' }] }, groundTruth: { expected: 'Go to settings and click Reset Password.' } },
-      { input: { messages: [{ role: 'user', content: 'What are your business hours?' }] }, groundTruth: { expected: 'We are open Mon-Fri 9am-5pm.' } },
-      { input: { messages: [{ role: 'user', content: 'Can I get a refund?' }] }, groundTruth: { expected: 'Refunds available within 30 days.' } },
-      { input: { messages: [{ role: 'user', content: 'How to contact support?' }] }, groundTruth: { expected: 'Email us at support@example.com.' } },
-      { input: { messages: [{ role: 'user', content: 'Where is my order?' }] }, groundTruth: { expected: 'Check your email for tracking info.' } },
+      {
+        input: { messages: [{ role: 'user', content: 'How do I reset my password?' }] },
+        groundTruth: { expected: 'Go to settings and click Reset Password.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'What are your business hours?' }] },
+        groundTruth: { expected: 'We are open Mon-Fri 9am-5pm.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'Can I get a refund?' }] },
+        groundTruth: { expected: 'Refunds available within 30 days.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'How to contact support?' }] },
+        groundTruth: { expected: 'Email us at support@example.com.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'Where is my order?' }] },
+        groundTruth: { expected: 'Check your email for tracking info.' },
+      },
     ],
   },
   {
     name: 'Recipe Generation',
     description: 'Test recipe generation quality',
     items: [
-      { input: { messages: [{ role: 'user', content: 'Give me a pasta recipe with chicken.' }] }, groundTruth: { expected: 'A chicken pasta recipe with ingredients and steps.' } },
-      { input: { messages: [{ role: 'user', content: 'What can I make with eggs and cheese?' }] }, groundTruth: { expected: 'An omelette or frittata recipe.' } },
-      { input: { messages: [{ role: 'user', content: 'Suggest a quick dessert.' }] }, groundTruth: { expected: 'A simple dessert recipe.' } },
-      { input: { messages: [{ role: 'user', content: 'How to make sourdough bread?' }] }, groundTruth: { expected: 'Sourdough bread recipe with starter instructions.' } },
+      {
+        input: { messages: [{ role: 'user', content: 'Give me a pasta recipe with chicken.' }] },
+        groundTruth: { expected: 'A chicken pasta recipe with ingredients and steps.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'What can I make with eggs and cheese?' }] },
+        groundTruth: { expected: 'An omelette or frittata recipe.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'Suggest a quick dessert.' }] },
+        groundTruth: { expected: 'A simple dessert recipe.' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'How to make sourdough bread?' }] },
+        groundTruth: { expected: 'Sourdough bread recipe with starter instructions.' },
+      },
     ],
   },
   {
     name: 'Sentiment Analysis',
     description: 'Test sentiment classification accuracy',
     items: [
-      { input: { messages: [{ role: 'user', content: 'This product is amazing!' }] }, groundTruth: { sentiment: 'positive' } },
-      { input: { messages: [{ role: 'user', content: 'Terrible experience, never again.' }] }, groundTruth: { sentiment: 'negative' } },
-      { input: { messages: [{ role: 'user', content: 'It was okay, nothing special.' }] }, groundTruth: { sentiment: 'neutral' } },
+      {
+        input: { messages: [{ role: 'user', content: 'This product is amazing!' }] },
+        groundTruth: { sentiment: 'positive' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'Terrible experience, never again.' }] },
+        groundTruth: { sentiment: 'negative' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'It was okay, nothing special.' }] },
+        groundTruth: { sentiment: 'neutral' },
+      },
     ],
   },
   {
@@ -121,23 +157,42 @@ const DATASET_DEFS = [
     items: [
       { input: { messages: [{ role: 'user', content: 'What is 15% of 200?' }] }, groundTruth: { answer: '30' } },
       { input: { messages: [{ role: 'user', content: 'Solve: 2x + 5 = 15' }] }, groundTruth: { answer: 'x = 5' } },
-      { input: { messages: [{ role: 'user', content: 'What is the area of a circle with radius 7?' }] }, groundTruth: { answer: '153.94' } },
+      {
+        input: { messages: [{ role: 'user', content: 'What is the area of a circle with radius 7?' }] },
+        groundTruth: { answer: '153.94' },
+      },
     ],
   },
   {
     name: 'Translation Quality',
     description: 'Test translation accuracy',
     items: [
-      { input: { messages: [{ role: 'user', content: 'Translate "Hello world" to Spanish.' }] }, groundTruth: { expected: 'Hola mundo' } },
-      { input: { messages: [{ role: 'user', content: 'Translate "Thank you" to Japanese.' }] }, groundTruth: { expected: 'ありがとう' } },
+      {
+        input: { messages: [{ role: 'user', content: 'Translate "Hello world" to Spanish.' }] },
+        groundTruth: { expected: 'Hola mundo' },
+      },
+      {
+        input: { messages: [{ role: 'user', content: 'Translate "Thank you" to Japanese.' }] },
+        groundTruth: { expected: 'ありがとう' },
+      },
     ],
   },
   {
     name: 'Code Review',
     description: 'Test code review quality',
     items: [
-      { input: { messages: [{ role: 'user', content: 'Review this function: function add(a,b) { return a+b }' }] }, groundTruth: { expected: 'Missing types, no error handling.' } },
-      { input: { messages: [{ role: 'user', content: 'Is this SQL safe? SELECT * FROM users WHERE id = ' + "'" + '${userId}' + "'" }] }, groundTruth: { expected: 'SQL injection vulnerability.' } },
+      {
+        input: { messages: [{ role: 'user', content: 'Review this function: function add(a,b) { return a+b }' }] },
+        groundTruth: { expected: 'Missing types, no error handling.' },
+      },
+      {
+        input: {
+          messages: [
+            { role: 'user', content: 'Is this SQL safe? SELECT * FROM users WHERE id = ' + "'" + '${userId}' + "'" },
+          ],
+        },
+        groundTruth: { expected: 'SQL injection vulnerability.' },
+      },
     ],
   },
 ];
@@ -256,12 +311,7 @@ async function seed() {
             input: JSON.stringify({ query: `Test query ${i}` }),
             output: JSON.stringify({ response: `Response ${i}` }),
             score,
-            reason:
-              score > 0.8
-                ? 'High quality response'
-                : score > 0.5
-                  ? 'Acceptable response'
-                  : 'Needs improvement',
+            reason: score > 0.8 ? 'High quality response' : score > 0.5 ? 'Acceptable response' : 'Needs improvement',
             source: Math.random() > 0.3 ? 'LIVE' : 'TEST',
             scorer: { id: scorerId, name: scorerId },
             entity: { id: entityId, name: entityId },
