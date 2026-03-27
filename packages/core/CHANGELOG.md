@@ -1,5 +1,124 @@
 # @mastra/core
 
+## 1.18.0-alpha.2
+
+### Patch Changes
+
+- Fixed title generation blocking stream completion. The `generateTitle` LLM call now runs in the background instead of blocking the stream from closing, removing the 2-3 second post-response delay in the UI when memory is enabled. ([#14757](https://github.com/mastra-ai/mastra/pull/14757))
+
+## 1.18.0-alpha.1
+
+### Minor Changes
+
+- **Trajectory evaluation**: Added trajectory types and trace-based extraction for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+
+  `TrajectoryStep` models each step in an execution as a typed object — tool calls, model generations, agent runs, workflow steps, and control flow nodes each have their own variant with relevant properties (e.g., `toolArgs`/`toolResult` for tool calls, `modelId`/`promptTokens` for model generations). Steps can be nested via `children` to represent hierarchical execution.
+
+  `TrajectoryExpectation` lets you define what a good trajectory looks like — expected steps, ordering, step/token/duration budgets, blacklisted tools, and retry thresholds. `ExpectedStep` provides a simple way to define expected steps by name and optional stepType, with support for nested expectations via `children` to set different evaluation rules at each level of the hierarchy.
+
+  **Trace-based extraction:** `extractTrajectoryFromTrace()` builds hierarchical trajectories from observability trace spans. The `runEvals` pipeline automatically uses this when storage is configured, capturing the full execution tree including nested agent runs and tool calls. Falls back to `extractTrajectory` (agents) or `extractWorkflowTrajectory` (workflows) when storage is unavailable.
+
+  **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
+
+### Patch Changes
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
+## 1.18.0-alpha.0
+
+### Minor Changes
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
+## 1.17.0
+
+### Minor Changes
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
 ## 1.17.0-alpha.2
 
 ### Minor Changes

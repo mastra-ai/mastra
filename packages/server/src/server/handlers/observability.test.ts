@@ -259,6 +259,134 @@ describe('Observability Handlers', () => {
       });
     });
 
+    it('should pass metadata filter to storage for key-value filtering', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [createSampleSpan({ metadata: { organizationId: 'org_abc', userId: 'user_123' } })],
+      };
+
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      // Handler receives already-parsed objects (query param parsing happens at HTTP layer)
+      const result = await LIST_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        metadata: { organizationId: 'org_abc' },
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            metadata: { organizationId: 'org_abc' },
+          }),
+        }),
+      );
+    });
+
+    it('should pass tags filter to storage for tag-based filtering', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [createSampleSpan({ tags: ['agent:paletteAgent', 'env:production'] })],
+      };
+
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        tags: ['agent:paletteAgent'],
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            tags: ['agent:paletteAgent'],
+          }),
+        }),
+      );
+    });
+
+    it('should pass status filter to storage for error-only filtering', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [createSampleSpan({ error: 'something went wrong' })],
+      };
+
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        status: 'error',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            status: 'error',
+          }),
+        }),
+      );
+    });
+
+    it('should pass hasChildError filter for traces with errored child spans', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [createSampleSpan()],
+      };
+
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        hasChildError: true,
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            hasChildError: true,
+          }),
+        }),
+      );
+    });
+
+    it('should pass combined metadata, tags, and status filters together', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [
+          createSampleSpan({
+            metadata: { organizationId: 'org_abc' },
+            tags: ['agent:paletteAgent'],
+            error: 'timeout',
+          }),
+        ],
+      };
+
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        metadata: { organizationId: 'org_abc' },
+        tags: ['agent:paletteAgent'],
+        status: 'error',
+        entityType: 'agent',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            metadata: { organizationId: 'org_abc' },
+            tags: ['agent:paletteAgent'],
+            status: 'error',
+            entityType: 'agent',
+          }),
+        }),
+      );
+    });
+
     it('should throw 500 when storage is not available', async () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
