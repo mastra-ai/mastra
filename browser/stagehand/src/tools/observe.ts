@@ -13,7 +13,8 @@ export function createObserveTool(browser: StagehandBrowser) {
     description:
       "Discover actionable elements on the page. Returns a list of actions that can be performed. Use this to understand what's on the page before acting.",
     inputSchema: observeInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return await browser.observe(input);
     },

@@ -208,10 +208,13 @@ describe('StagehandBrowser', () => {
       expect(result.message).toBe('Clicked button');
       expect(result.action).toBe('Clicked submit button');
       expect(result.url).toBe('https://example.com');
-      expect(mockStagehand.act).toHaveBeenCalledWith('Click the submit button', {
-        variables: undefined,
-        timeout: undefined,
-      });
+      expect(mockStagehand.act).toHaveBeenCalledWith(
+        'Click the submit button',
+        expect.objectContaining({
+          variables: undefined,
+          timeout: undefined,
+        }),
+      );
     });
 
     it('should pass variables to act', async () => {
@@ -220,10 +223,13 @@ describe('StagehandBrowser', () => {
         variables: { name: 'John' },
       });
 
-      expect(mockStagehand.act).toHaveBeenCalledWith('Fill form with {{name}}', {
-        variables: { name: 'John' },
-        timeout: undefined,
-      });
+      expect(mockStagehand.act).toHaveBeenCalledWith(
+        'Fill form with {{name}}',
+        expect.objectContaining({
+          variables: { name: 'John' },
+          timeout: undefined,
+        }),
+      );
     });
 
     it('should pass timeout to act', async () => {
@@ -232,10 +238,13 @@ describe('StagehandBrowser', () => {
         timeout: 5000,
       });
 
-      expect(mockStagehand.act).toHaveBeenCalledWith('Click button', {
-        variables: undefined,
-        timeout: 5000,
-      });
+      expect(mockStagehand.act).toHaveBeenCalledWith(
+        'Click button',
+        expect.objectContaining({
+          variables: undefined,
+          timeout: 5000,
+        }),
+      );
     });
 
     it('should handle act failure gracefully', async () => {
@@ -296,7 +305,11 @@ describe('StagehandBrowser', () => {
         schema,
       });
 
-      expect(mockStagehand.extract).toHaveBeenCalledWith('Get the title', schema);
+      expect(mockStagehand.extract).toHaveBeenCalledWith(
+        'Get the title',
+        schema,
+        expect.objectContaining({ page: expect.anything() }),
+      );
     });
 
     it('should handle extract failure gracefully', async () => {
@@ -341,14 +354,17 @@ describe('StagehandBrowser', () => {
         method: 'click',
         arguments: undefined,
       });
-      expect(mockStagehand.observe).toHaveBeenCalledWith('Find all buttons');
+      expect(mockStagehand.observe).toHaveBeenCalledWith(
+        'Find all buttons',
+        expect.objectContaining({ page: expect.anything() }),
+      );
     });
 
     it('should observe without instruction', async () => {
       const result = await browser.observe({});
 
       expect(result.success).toBe(true);
-      expect(mockStagehand.observe).toHaveBeenCalledWith();
+      expect(mockStagehand.observe).toHaveBeenCalledWith(expect.objectContaining({ page: expect.anything() }));
     });
 
     it('should handle empty actions', async () => {

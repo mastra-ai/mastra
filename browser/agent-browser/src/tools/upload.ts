@@ -10,7 +10,8 @@ export function createUploadTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.UPLOAD,
     description: 'Upload file(s) to a file input element.',
     inputSchema: uploadInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.upload(input);
     },

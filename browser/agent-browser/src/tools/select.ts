@@ -10,7 +10,8 @@ export function createSelectTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.SELECT,
     description: 'Select an option from a dropdown by value, label, or index.',
     inputSchema: selectInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.select(input);
     },

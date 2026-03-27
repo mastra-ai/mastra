@@ -26,9 +26,10 @@ import { RegisteredLogger } from '../logger/constants';
 import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
+import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
+import type { ThreadIsolationMode, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
-import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
 
 // Alias for internal use
@@ -62,6 +63,8 @@ export type CdpUrlProvider = string | (() => string | Promise<string>);
  * Base configuration shared by all browser providers.
  * Provider packages extend this with their own options.
  */
+// ThreadIsolationMode is imported from ./thread-manager
+
 export interface BrowserConfig {
   /**
    * Whether to run the browser in headless mode (no visible UI).
@@ -81,6 +84,13 @@ export interface BrowserConfig {
    * Useful for cloud providers (Browserbase, Browserless, Kernel, etc.).
    */
   cdpUrl?: CdpUrlProvider;
+
+  /**
+   * How to isolate browser sessions across threads.
+   * @see ThreadIsolationMode for details on each mode.
+   * @default 'none'
+   */
+  threadIsolation?: ThreadIsolationMode;
 
   /**
    * Called after the browser reaches 'ready' status.
@@ -202,6 +212,12 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Configuration */
   protected readonly config: BrowserConfig;
+
+  /**
+   * Thread manager for handling thread-scoped browser sessions.
+   * Set by subclasses that support thread isolation.
+   */
+  protected threadManager?: ThreadManager;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
@@ -494,16 +510,20 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Register a callback to be invoked when the browser becomes ready.
    * If browser is already running, callback is invoked immediately.
+   * The callback is ALWAYS registered (even if invoked immediately) so it will
+   * also fire on future "ready" events (e.g., session creation for thread isolation).
    * @returns Cleanup function to unregister the callback
    */
   onBrowserReady(callback: () => void): () => void {
+    // Always register the callback so it fires on future ready events
+    // (e.g., when a new thread session is created)
+    this._onReadyCallbacks.add(callback);
+
     if (this.isBrowserRunning()) {
-      // Browser already ready - invoke immediately
+      // Browser already ready - also invoke immediately
       callback();
-      return () => {};
     }
 
-    this._onReadyCallbacks.add(callback);
     return () => {
       this._onReadyCallbacks.delete(callback);
     };
@@ -595,16 +615,71 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Check if a thread has an existing browser session.
+   * Used by startScreencastIfBrowserActive to prevent showing another thread's page.
+   *
+   * If threadManager is set, delegates to it. Otherwise returns true (no isolation).
+   * Subclasses can override for custom behavior.
+   *
+   * @returns true if session exists or thread isolation is not used
+   */
+  hasThreadSession(threadId: string): boolean {
+    if (!this.threadManager) {
+      // No thread manager - all threads share the same session
+      return true;
+    }
+
+    const isolation = this.threadManager.getIsolationMode();
+
+    // No isolation - all threads share the same session
+    if (isolation === 'none') {
+      return true;
+    }
+
+    // Check if this thread has an actual session
+    return this.threadManager.hasSession(threadId);
+  }
+
+  /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
    * Uses config.screencast options as defaults if no options provided.
+   *
+   * For thread-isolated browsers:
+   * - Returns null if the thread doesn't have an existing session
+   * - EXCEPT for 'context' mode when no sessions exist yet (first thread uses default page)
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
     if (!this.isBrowserRunning()) {
       return null;
     }
-    // Use provided options, fall back to config screencast options
-    return this.startScreencast(options ?? this.config.screencast);
+
+    // Merge provided options with config screencast options
+    const mergedOptions = options ?? this.config.screencast;
+
+    const threadId = mergedOptions?.threadId;
+    const isolation = this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
+
+    // No isolation - just start the screencast
+    if (isolation === 'none') {
+      return this.startScreencast(mergedOptions);
+    }
+
+    // For 'context' isolation: the FIRST thread should reuse the default page (page 0)
+    // even though hasSession returns false. This is because createSession will
+    // assign page 0 to the first thread that uses a browser tool.
+    if (isolation === 'context' && this.threadManager && this.threadManager.getSessionCount() === 0) {
+      // First thread - use the default page by NOT passing threadId
+      // This ensures the screencast uses page 0 (the default page)
+      return this.startScreencast({ ...mergedOptions, threadId: undefined });
+    }
+
+    // For other threads, only start if they have an existing session
+    if (threadId && !this.hasThreadSession(threadId)) {
+      return null;
+    }
+
+    return this.startScreencast(mergedOptions);
   }
 
   // ---------------------------------------------------------------------------

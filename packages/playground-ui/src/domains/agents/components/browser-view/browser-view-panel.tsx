@@ -12,6 +12,7 @@ type ViewState = 'expanded' | 'minimized' | 'tucked';
 
 interface BrowserViewPanelProps {
   agentId: string;
+  threadId: string;
 }
 
 /**
@@ -27,7 +28,7 @@ interface BrowserViewPanelProps {
  * IMPORTANT: Always mounted to preserve WebSocket connection.
  * BrowserViewFrame is always at the same tree position to avoid remounts.
  */
-export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
+export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
   const { isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
   const [isClosing, setIsClosing] = useState(false);
   const [viewState, setViewState] = useState<ViewState>('minimized');
@@ -134,6 +135,7 @@ export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
           <div className={cn('shrink-0', isMinimized && 'flex-1 min-h-0 p-1')}>
             <BrowserViewFrame
               agentId={agentId}
+              threadId={threadId}
               onStatusChange={handleStatusChange}
               onUrlChange={handleUrlChange}
               onFirstFrame={handleFirstFrame}

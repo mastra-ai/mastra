@@ -11,7 +11,8 @@ export function createEvaluateTool(browser: AgentBrowser) {
     description:
       'Execute JavaScript in the browser. Use for complex interactions not covered by other tools. Returns the script result.',
     inputSchema: evaluateInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.evaluate(input);
     },

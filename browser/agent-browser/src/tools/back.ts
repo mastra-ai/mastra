@@ -10,7 +10,8 @@ export function createBackTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.BACK,
     description: 'Go back to the previous page in browser history.',
     inputSchema: backInputSchema,
-    execute: async () => {
+    execute: async (_input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.back();
     },

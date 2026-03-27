@@ -8,7 +8,7 @@
  */
 
 import type { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserToolError,
   ScreencastOptions,
@@ -18,14 +18,22 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
+import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
+
+// Type for Stagehand v3 Page
+type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
 
 /**
  * StagehandBrowser - AI-powered browser using Stagehand v3
  *
  * Unlike AgentBrowser which uses refs ([ref=e1]), StagehandBrowser uses
  * natural language instructions for all interactions.
+ *
+ * Supports thread isolation via the threadIsolation config:
+ * - 'none': All threads share the same page (default)
+ * - 'context': Each thread gets its own page/tab
  */
 export class StagehandBrowser extends MastraBrowser {
   override readonly id: string;
@@ -35,10 +43,58 @@ export class StagehandBrowser extends MastraBrowser {
   private stagehand: Stagehand | null = null;
   private stagehandConfig: StagehandBrowserConfig;
 
+  /** Thread manager - narrowed type from base class */
+  declare protected threadManager: StagehandThreadManager;
+
+  private currentThreadId: string = DEFAULT_THREAD_ID;
+
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
+
+    // Initialize thread manager
+    // Default to 'context' isolation so each thread gets its own browser page
+    this.threadManager = new StagehandThreadManager({
+      isolation: config.threadIsolation ?? 'context',
+      logger: this.logger,
+      // When a new thread session is created, notify listeners so screencast can start
+      onSessionCreated: () => {
+        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
+        // for threads that just started using the browser
+        this.notifyBrowserReady();
+      },
+    });
+  }
+
+  /**
+   * Set the current thread ID for subsequent operations.
+   * Tools should call this before executing browser actions.
+   */
+  setCurrentThread(threadId?: string): void {
+    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Get the current thread ID.
+   */
+  getCurrentThreadId(): string {
+    return this.currentThreadId;
+  }
+
+  /**
+   * Ensure browser is ready and thread session exists.
+   * Creates a new page for the current thread if needed.
+   */
+  override async ensureReady(): Promise<void> {
+    await super.ensureReady();
+
+    // Ensure thread session exists for the current thread
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      // This will create the session/page if it doesn't exist
+      await this.getPageForThread(this.currentThreadId);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -86,6 +142,9 @@ export class StagehandBrowser extends MastraBrowser {
     this.stagehand = new Stagehand(stagehandOptions);
     await this.stagehand.init();
 
+    // Register the Stagehand instance with the thread manager
+    this.threadManager.setStagehand(this.stagehand as any);
+
     // Listen for browser/context close events to detect external closure
     // Cast to access Playwright's BrowserContext.on() which Stagehand wraps
     const context = this.stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
@@ -98,10 +157,16 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
+    // Clean up all thread pages first
+    await this.threadManager.destroyAll();
+
     if (this.stagehand) {
       await this.stagehand.close();
       this.stagehand = null;
     }
+
+    // Reset thread state
+    this.currentThreadId = DEFAULT_THREAD_ID;
   }
 
   /**
@@ -177,18 +242,37 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Get the current page from Stagehand v3.
+   * Get the current page from Stagehand v3, respecting thread isolation.
    * In v3, pages are accessed via stagehand.context.pages()
    */
-  private getPage(): any {
+  private getPage(): V3Page | null {
     if (!this.stagehand) return null;
 
+    const isolation = this.threadManager.getIsolationMode();
+
+    // If using thread isolation, get the page for the current thread
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      const threadPage = this.threadManager.getPageForThread(this.currentThreadId);
+      if (threadPage) {
+        return threadPage as V3Page;
+      }
+    }
+
+    // Fall back to the active page
     try {
       const context = this.stagehand.context;
       if (context) {
+        // Try activePage() if available (Stagehand v3)
+        if (typeof context.activePage === 'function') {
+          const activePage = context.activePage();
+          if (activePage) {
+            return activePage as V3Page;
+          }
+        }
+        // Fall back to first page if no active page
         const pages = context.pages();
         if (pages && pages.length > 0) {
-          return pages[0];
+          return pages[0] as V3Page;
         }
       }
     } catch {
@@ -199,11 +283,45 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Get the page for a specific thread, creating it if needed.
+   * This is an async version that ensures the thread session exists.
+   */
+  async getPageForThread(threadId: string): Promise<V3Page | null> {
+    if (!this.stagehand) return null;
+
+    const isolation = this.threadManager.getIsolationMode();
+
+    if (isolation === 'none') {
+      return this.getPage();
+    }
+
+    // Get the manager for the thread (creates session if needed)
+    const result = await this.threadManager.getManagerForThread(threadId);
+    if (result) {
+      // Result is either a V3Page (for context mode) or the Stagehand instance
+      // Check if it's a page by looking for page-specific methods
+      if (typeof (result as any).url === 'function') {
+        return result as V3Page;
+      }
+    }
+
+    // Fall back to the active page
+    return this.getPage();
+  }
+
+  /**
    * Get a CDP session for the current page.
    * In Stagehand v3, we access the CDP session via page.getSessionForFrame()
    */
   private getCdpSession(): any {
     const page = this.getPage();
+    return this.getCdpSessionForPage(page);
+  }
+
+  /**
+   * Get a CDP session for a specific page.
+   */
+  private getCdpSessionForPage(page: V3Page | null): any {
     if (!page) return null;
 
     try {
@@ -217,6 +335,14 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     return null;
+  }
+
+  /**
+   * Get a CDP session for a specific thread's page.
+   */
+  private async getCdpSessionForThread(threadId: string): Promise<any> {
+    const page = await this.getPageForThread(threadId);
+    return this.getCdpSessionForPage(page);
   }
 
   // ---------------------------------------------------------------------------
@@ -243,9 +369,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.act(instruction, options?)
+      // Pass page for thread isolation support
       const result = await stagehand.act(input.instruction, {
         variables: input.variables,
         timeout: input.timeout,
+        page: page ?? undefined,
       });
 
       return {
@@ -272,7 +400,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.extract(instruction, schema?, options?)
-      const result = await stagehand.extract(input.instruction, input.schema);
+      // Pass page for thread isolation support
+      const options: any = { page: page ?? undefined };
+      const result = input.schema
+        ? await stagehand.extract(input.instruction, input.schema as any, options)
+        : await stagehand.extract(input.instruction, options);
 
       return {
         success: true,
@@ -297,7 +429,11 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.observe() or stagehand.observe(instruction, options?)
-      const actions = input.instruction ? await stagehand.observe(input.instruction) : await stagehand.observe();
+      // Pass page for thread isolation support
+      const options: any = { page: page ?? undefined };
+      const actions = input.instruction
+        ? await stagehand.observe(input.instruction, options)
+        : await stagehand.observe(options);
 
       return {
         success: true,
@@ -401,7 +537,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       await page.goto(url, {
-        timeout: this.config.timeout ?? 30000,
+        timeoutMs: this.config.timeout ?? 30000,
         waitUntil: 'domcontentloaded',
       });
     } catch {
@@ -415,7 +551,16 @@ export class StagehandBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
-    const cdpSession = this.getCdpSession();
+    const threadId = options?.threadId;
+    const isolation = this.threadManager.getIsolationMode();
+
+    // Only use thread-specific page if thread already has a session
+    const hasExistingSession =
+      isolation !== 'none' && threadId && threadId !== DEFAULT_THREAD_ID && this.threadManager.hasSession(threadId);
+
+    // Get CDP session - use thread-specific page if session exists
+    const cdpSession = hasExistingSession ? await this.getCdpSessionForThread(threadId) : this.getCdpSession();
+
     if (!cdpSession) {
       throw new Error('No CDP session available for screencast');
     }

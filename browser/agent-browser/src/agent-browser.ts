@@ -1,14 +1,19 @@
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserToolError,
   ScreencastOptions,
   ScreencastStream,
+  ThreadIsolationMode,
+  CdpSessionProvider,
+  CdpSessionLike,
   MouseEventParams,
   KeyboardEventParams,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { BrowserManagerLike, BrowserPage, BrowserLocator, LaunchOptions } from './browser-types';
-import { loadBrowserManager } from './browser-types';
+
+import { BrowserManager } from 'agent-browser';
+import type { BrowserLaunchOptions } from 'agent-browser';
+import type { Page, Locator } from 'playwright-core';
 import type {
   GotoInput,
   SnapshotInput,
@@ -26,6 +31,7 @@ import type {
   DragInput,
   EvaluateInput,
 } from './schemas';
+import { AgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 
@@ -39,8 +45,15 @@ export class AgentBrowser extends MastraBrowser {
   override readonly name = 'AgentBrowser';
   override readonly provider = 'vercel-labs/agent-browser';
 
-  private browserManager: BrowserManagerLike | null = null;
+  /** Primary browser manager (for 'none' and 'context' modes) */
+  private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
+
+  /** Thread manager - narrowed type from base class */
+  declare protected threadManager: AgentBrowserThreadManager;
+
+  /** Currently active thread (set by tools before operations) */
+  private currentThreadId: string = DEFAULT_THREAD_ID;
 
   constructor(config: BrowserConfig = {}) {
     super(config);
@@ -48,6 +61,80 @@ export class AgentBrowser extends MastraBrowser {
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
     }
+
+    // Initialize thread manager
+    // Default to 'context' isolation so each thread gets its own browser context
+    this.threadManager = new AgentBrowserThreadManager({
+      isolation: config.threadIsolation ?? 'context',
+      browserConfig: config,
+      resolveCdpUrl: this.resolveCdpUrl.bind(this),
+      logger: this.logger,
+      // When a new thread session is created, notify listeners so screencast can start
+      onSessionCreated: () => {
+        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
+        // for threads that just started using the browser
+        this.notifyBrowserReady();
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Thread Isolation (delegated to ThreadManager)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the current thread ID for subsequent operations.
+   * Called by tools before executing browser actions.
+   */
+  setCurrentThread(threadId?: string): void {
+    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Ensure browser is ready and thread session exists.
+   * Creates a new page/context for the current thread if needed.
+   */
+  override async ensureReady(): Promise<void> {
+    await super.ensureReady();
+
+    // Ensure thread session exists for the current thread
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      // This will create the session if it doesn't exist
+      await this.getManagerForThread(this.currentThreadId);
+    }
+  }
+
+  /**
+   * Get the browser manager for the current thread.
+   * Delegates to ThreadManager for isolation handling.
+   */
+  async getManagerForThread(threadId?: string): Promise<BrowserManager> {
+    return this.threadManager.getManagerForThread(threadId ?? this.currentThreadId);
+  }
+
+  /**
+   * Get the page for a specific thread.
+   * For thread-isolated modes, ensures we're on the correct context/page.
+   */
+  async getPageForThread(threadId?: string): Promise<Page> {
+    const manager = await this.getManagerForThread(threadId);
+    return manager.getPage();
+  }
+
+  /**
+   * Close a specific thread's browser session.
+   * Delegates to ThreadManager.
+   */
+  async closeThreadSession(threadId: string): Promise<void> {
+    await this.threadManager.destroySession(threadId);
+  }
+
+  /**
+   * Get the current thread isolation mode.
+   */
+  getThreadIsolationMode(): ThreadIsolationMode {
+    return this.threadManager.getIsolationMode();
   }
 
   // ---------------------------------------------------------------------------
@@ -55,20 +142,22 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   protected override async doLaunch(): Promise<void> {
-    const BrowserManager = await loadBrowserManager();
     this.browserManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
-    const launchOptions: LaunchOptions = {
+    const launchOptions: BrowserLaunchOptions = {
       headless: localConfig.headless ?? true,
     };
 
     // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
-      launchOptions.cdpEndpoint = await this.resolveCdpUrl(localConfig.cdpUrl);
+      launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
     }
 
     await this.browserManager.launch(launchOptions);
+
+    // Register the shared manager with ThreadManager
+    this.threadManager.setSharedManager(this.browserManager);
 
     // Listen for browser context close events to detect external closure
     // Cast to access Playwright's BrowserContext.on() which the underlying library wraps
@@ -87,6 +176,11 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
+    // Close all thread sessions via ThreadManager
+    await this.threadManager.destroyAllSessions();
+    this.currentThreadId = DEFAULT_THREAD_ID;
+
+    // Close the main browser manager
     if (this.browserManager) {
       await this.browserManager.close();
       this.browserManager = null;
@@ -135,7 +229,22 @@ export class AgentBrowser extends MastraBrowser {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  private getPage(): BrowserPage {
+  /**
+   * Get the current thread ID.
+   */
+  getCurrentThread(): string {
+    return this.currentThreadId;
+  }
+
+  /**
+   * Get the page for the current thread.
+   * Uses thread isolation if enabled, otherwise returns the shared page.
+   */
+  private async getPage(): Promise<Page> {
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      return this.getPageForThread(this.currentThreadId);
+    }
     if (!this.browserManager) throw new Error('Browser not launched');
     return this.browserManager.getPage();
   }
@@ -177,7 +286,7 @@ export class AgentBrowser extends MastraBrowser {
     return super.createErrorFromException(error, context);
   }
 
-  private requireLocator(ref: string): BrowserLocator | null {
+  private requireLocator(ref: string): Locator | null {
     if (!this.browserManager) {
       throw new Error('Browser not launched');
     }
@@ -193,7 +302,7 @@ export class AgentBrowser extends MastraBrowser {
     atBottom: boolean;
     percentDown: number;
   }> {
-    const page = this.getPage();
+    const page = await this.getPage();
     const info = (await page.evaluate(`({
       scrollY: Math.round(window.scrollY),
       scrollHeight: document.documentElement.scrollHeight,
@@ -248,7 +357,7 @@ export class AgentBrowser extends MastraBrowser {
       return;
     }
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       await page.goto(url, {
         timeout: this.defaultTimeout,
         waitUntil: 'domcontentloaded',
@@ -266,7 +375,7 @@ export class AgentBrowser extends MastraBrowser {
     input: GotoInput,
   ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
 
       await page.goto(input.url, {
         timeout: input.timeout ?? this.defaultTimeout,
@@ -303,14 +412,14 @@ export class AgentBrowser extends MastraBrowser {
     try {
       if (!this.browserManager) throw new Error('Browser not launched');
 
-      const page = this.getPage();
+      const page = await this.getPage();
       const rawSnapshot = await this.browserManager.getSnapshot({
         interactive: input.interactiveOnly ?? true,
         compact: true,
       });
 
       // Transform tree refs from [ref=e1] format to @e1 format for consistency
-      const snapshot = (rawSnapshot.snapshot ?? rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
+      const snapshot = (rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
 
       // Get scroll position info
       const scrollInfo = await this.getScrollInfo();
@@ -350,7 +459,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async click(input: ClickInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
@@ -396,7 +505,7 @@ export class AgentBrowser extends MastraBrowser {
     input: TypeInput,
   ): Promise<{ success: true; value: string; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
@@ -456,7 +565,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async press(input: PressInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       await page.keyboard.press(input.key);
 
       return {
@@ -477,7 +586,7 @@ export class AgentBrowser extends MastraBrowser {
     input: SelectInput,
   ): Promise<{ success: true; selected: string[]; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
@@ -516,7 +625,7 @@ export class AgentBrowser extends MastraBrowser {
     input: ScrollInput,
   ): Promise<{ success: true; position: { x: number; y: number }; scroll: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
 
       if (input.ref) {
         const locator = this.requireLocator(input.ref);
@@ -581,9 +690,9 @@ export class AgentBrowser extends MastraBrowser {
 
   async screenshot(input: ScreenshotInput): Promise<{ success: true; base64: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
 
-      const options: { fullPage?: boolean; type?: string } = {
+      const options: { fullPage?: boolean; type?: 'png' | 'jpeg' } = {
         fullPage: input.fullPage ?? false,
       };
 
@@ -610,7 +719,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async hover(input: HoverInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
@@ -639,7 +748,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async back(): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       await page.goBack({ timeout: this.defaultTimeout });
 
       return {
@@ -659,7 +768,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async upload(input: UploadInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const locator = this.requireLocator(input.ref);
 
       if (!locator) {
@@ -690,7 +799,7 @@ export class AgentBrowser extends MastraBrowser {
     input: DialogInput,
   ): Promise<{ success: true; action: 'accept' | 'dismiss'; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -742,7 +851,8 @@ export class AgentBrowser extends MastraBrowser {
           hint: `Element is now ${state}. Take a snapshot to continue.`,
         };
       } else {
-        await this.getPage().waitForTimeout(timeout);
+        const page = await this.getPage();
+        await page.waitForTimeout(timeout);
         return {
           success: true,
           hint: 'Wait complete. Take a snapshot to see current state.',
@@ -804,7 +914,12 @@ export class AgentBrowser extends MastraBrowser {
               'This browser provider does not support tab management.',
             );
           }
-          const result = await browser.newTab(input.url);
+          const result = await browser.newTab();
+          // If URL provided, navigate to it after creating the tab
+          if (input.url) {
+            const page = await this.getPage();
+            await page.goto(input.url);
+          }
           return {
             success: true,
             ...result,
@@ -866,7 +981,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async drag(input: DragInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       const sourceLocator = this.requireLocator(input.sourceRef);
       const targetLocator = this.requireLocator(input.targetRef);
 
@@ -904,7 +1019,7 @@ export class AgentBrowser extends MastraBrowser {
 
   async evaluate(input: EvaluateInput): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
-      const page = this.getPage();
+      const page = await this.getPage();
       // Wrap script in an async function to allow return statements
       const wrappedScript = `(async () => { ${input.script} })()`;
       const result = await page.evaluate(wrappedScript);
@@ -942,10 +1057,29 @@ export class AgentBrowser extends MastraBrowser {
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
     if (!this.browserManager) throw new Error('Browser not launched');
 
-    // Create CDP session provider adapter for BrowserManager
     const browserManager = this.browserManager;
-    const provider = {
-      getCdpSession: async () => browserManager.getCDPSession(),
+    const threadId = _options?.threadId;
+    const isolation = this.threadManager.getIsolationMode();
+
+    // For thread-isolated modes, check if this thread already has a session
+    // Note: For 'context' mode, the first thread reuses the default page (page 0),
+    // so we check hasSession() which will be false until the thread actually uses the browser.
+    // In that case, we fall back to the shared page (which is correct - first thread gets page 0).
+    const hasExistingSession =
+      isolation !== 'none' && threadId && threadId !== DEFAULT_THREAD_ID && this.threadManager.hasSession(threadId);
+
+    // Create CDP session provider adapter
+    const provider: CdpSessionProvider = {
+      getCdpSession: async () => {
+        if (hasExistingSession) {
+          // Thread has an existing session - use its page
+          const page = await this.getPageForThread(threadId);
+          const cdpSession = await page.context().newCDPSession(page);
+          return cdpSession as unknown as CdpSessionLike;
+        }
+        // No thread session yet, or isolation is 'none' - use the shared page
+        return browserManager.getCDPSession() as unknown as CdpSessionLike;
+      },
       isBrowserRunning: () => browserManager.isLaunched(),
     };
 

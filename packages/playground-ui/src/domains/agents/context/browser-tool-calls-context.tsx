@@ -16,6 +16,16 @@ export interface BrowserToolCallEntry {
   timestamp: number;
 }
 
+/**
+ * Checks if a tool result indicates an error.
+ * Browser tools return { success: false, code, message } on failure.
+ */
+export function isBrowserToolError(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const r = result as Record<string, unknown>;
+  return r.success === false && typeof r.code === 'string';
+}
+
 interface BrowserToolCallsContextValue {
   toolCalls: BrowserToolCallEntry[];
   registerToolCall: (entry: BrowserToolCallEntry) => void;

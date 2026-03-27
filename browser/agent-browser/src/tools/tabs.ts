@@ -10,7 +10,8 @@ export function createTabsTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.TABS,
     description: 'Manage browser tabs: list, open new, switch, or close tabs.',
     inputSchema: tabsInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.tabs(input);
     },

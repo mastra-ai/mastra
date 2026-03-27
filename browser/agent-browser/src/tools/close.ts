@@ -10,7 +10,14 @@ export function createCloseTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.CLOSE,
     description: 'Close the browser. Only use when done with all browsing.',
     inputSchema: closeInputSchema,
-    execute: async () => {
+    execute: async (_input, { agent }) => {
+      // For thread isolation, close only the thread's session
+      const threadId = agent?.threadId;
+      if (threadId && browser.getThreadIsolationMode() !== 'none') {
+        await browser.closeThreadSession(threadId);
+        return { success: true, hint: "Thread's browser session closed. A new session will be created on next use." };
+      }
+      // Without isolation, close the entire browser
       await browser.close();
       return { success: true, hint: 'Browser closed. It will be re-launched automatically on next use.' };
     },

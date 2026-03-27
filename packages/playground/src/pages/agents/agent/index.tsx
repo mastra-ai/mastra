@@ -123,8 +123,8 @@ function Agent() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <BrowserToolCallsProvider>
-              <BrowserSessionProvider>
+            <BrowserToolCallsProvider key={`browser-${actualThreadId}`}>
+              <BrowserSessionProvider key={`session-${actualThreadId}`}>
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
@@ -140,7 +140,7 @@ function Agent() {
                             />
                           )
                         }
-                        browserOverlay={<BrowserViewPanel agentId={agentId!} />}
+                        browserOverlay={<BrowserViewPanel agentId={agentId!} threadId={actualThreadId!} />}
                         rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
                       >
                         <AgentChat

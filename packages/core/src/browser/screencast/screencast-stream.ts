@@ -46,8 +46,8 @@ export class ScreencastStream extends EventEmitter {
   /** Whether screencast is currently active */
   private active: boolean = false;
 
-  /** Resolved options with defaults applied */
-  private options: Required<ScreencastOptions>;
+  /** Resolved options with defaults applied (excludes threadId which is only used for page selection) */
+  private options: Required<Omit<ScreencastOptions, 'threadId'>>;
 
   /** CDP session provider */
   private provider: CdpSessionProvider;
@@ -67,7 +67,9 @@ export class ScreencastStream extends EventEmitter {
   constructor(provider: CdpSessionProvider, options?: ScreencastOptions) {
     super();
     this.provider = provider;
-    this.options = { ...SCREENCAST_DEFAULTS, ...options };
+    // Extract threadId (used by caller for page selection) and merge remaining options
+    const { threadId: _, ...cdpOptions } = options ?? {};
+    this.options = { ...SCREENCAST_DEFAULTS, ...cdpOptions };
   }
 
   /**

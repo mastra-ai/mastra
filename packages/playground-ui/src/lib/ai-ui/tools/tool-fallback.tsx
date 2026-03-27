@@ -9,7 +9,11 @@ import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
-import { isBrowserTool, useBrowserToolCallsSafe } from '@/domains/agents/context/browser-tool-calls-context';
+import {
+  isBrowserTool,
+  isBrowserToolError,
+  useBrowserToolCallsSafe,
+} from '@/domains/agents/context/browser-tool-calls-context';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
@@ -33,12 +37,19 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   useEffect(() => {
     if (!isBrowser || !browserCtx) return;
+
+    // Determine status: pending if no result, error if result indicates failure, else complete
+    let status: 'pending' | 'complete' | 'error' = 'pending';
+    if (result !== undefined) {
+      status = isBrowserToolError(result) ? 'error' : 'complete';
+    }
+
     browserCtx.registerToolCall({
       toolCallId,
       toolName,
       args: typeof args === 'object' ? args : {},
       result,
-      status: result !== undefined ? 'complete' : 'pending',
+      status,
       timestamp: Date.now(),
     });
   }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);

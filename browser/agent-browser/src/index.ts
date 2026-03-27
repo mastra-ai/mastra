@@ -3,21 +3,6 @@ export { AgentBrowser } from './agent-browser';
 
 // Type exports
 export type { BrowserConfig } from './types';
-export type {
-  BrowserLocator,
-  BrowserPage,
-  BrowserKeyboard,
-  BrowserContext,
-  BrowserCookie,
-  BrowserManagerLike,
-  ScreencastFrame,
-  BrowserTab,
-  EnhancedSnapshot,
-} from './browser-types';
-
-// Screencast exports (re-exported from core)
-export { ScreencastStreamImpl, SCREENCAST_DEFAULTS } from '@mastra/core/browser';
-export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from '@mastra/core/browser';
 
 // Tool exports
 export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';

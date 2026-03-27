@@ -10,7 +10,8 @@ export function createDialogTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.DIALOG,
     description: 'Handle browser dialogs (alert, confirm, prompt). Accept or dismiss them.',
     inputSchema: dialogInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.dialog(input);
     },

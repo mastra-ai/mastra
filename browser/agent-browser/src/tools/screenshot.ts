@@ -10,7 +10,8 @@ export function createScreenshotTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.SCREENSHOT,
     description: 'Take a screenshot of the page or a specific element.',
     inputSchema: screenshotInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.screenshot(input);
     },

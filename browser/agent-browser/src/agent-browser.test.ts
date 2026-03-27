@@ -96,7 +96,7 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
   return { mockPage, mockLocator, mockManager };
 });
 
-vi.mock('agent-browser/dist/browser.js', () => ({
+vi.mock('agent-browser', () => ({
   BrowserManager: class {
     launch = mockManager.launch;
     close = mockManager.close;
@@ -110,6 +110,11 @@ vi.mock('agent-browser/dist/browser.js', () => ({
     stopScreencast = mockManager.stopScreencast;
     injectMouseEvent = mockManager.injectMouseEvent;
     injectKeyboardEvent = mockManager.injectKeyboardEvent;
+    newTab = vi.fn().mockResolvedValue({ index: 0, total: 1 });
+    newWindow = vi.fn().mockResolvedValue({ index: 0, total: 1 });
+    switchTo = vi.fn().mockResolvedValue({ index: 0, url: 'https://example.com', title: 'Example' });
+    closeTab = vi.fn().mockResolvedValue({ closed: 1, remaining: 0 });
+    listTabs = vi.fn().mockResolvedValue([{ index: 0, url: 'https://example.com', title: 'Example', active: true }]);
   },
 }));
 

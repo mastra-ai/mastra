@@ -11,7 +11,8 @@ export function createSnapshotTool(browser: AgentBrowser) {
     description:
       'Get accessibility tree snapshot of the page. Returns text-based representation with element refs like [ref=e1], [ref=e2] for targeting.',
     inputSchema: snapshotInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.snapshot(input);
     },

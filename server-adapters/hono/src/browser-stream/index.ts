@@ -57,6 +57,9 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     '/browser/:agentId/stream',
     upgradeWebSocket(c => {
       const agentId = c.req.param('agentId')!;
+      const threadId = c.req.query('threadId');
+      // Use composite key for thread-scoped screencasts
+      const viewerKey = threadId ? `${agentId}:${threadId}` : agentId;
 
       return {
         onOpen(_event, ws) {
@@ -65,26 +68,27 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
 
           // Add to registry (starts screencast if first viewer)
           // Fire-and-forget: screencast starts asynchronously
-          void registry.addViewer(agentId, ws, config.getToolset);
+          // Pass agentId for toolset lookup, but viewerKey for registry scoping
+          void registry.addViewer(viewerKey, ws, config.getToolset, agentId, threadId);
         },
 
         onMessage(event, _ws) {
           const data = typeof event.data === 'string' ? event.data : null;
           if (data) {
-            handleInputMessage(data, config.getToolset, agentId);
+            handleInputMessage(data, config.getToolset, agentId, threadId);
           }
         },
 
         onClose(_event, ws) {
           // Remove from registry (stops screencast if last viewer)
           // Fire-and-forget: cleanup is best-effort
-          void registry.removeViewer(agentId, ws);
+          void registry.removeViewer(viewerKey, ws);
         },
 
         onError(event, ws) {
           console.error('[BrowserStream] WebSocket error:', event);
           // Fire-and-forget: cleanup is best-effort
-          void registry.removeViewer(agentId, ws);
+          void registry.removeViewer(viewerKey, ws);
         },
       };
     }),

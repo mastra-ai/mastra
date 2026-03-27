@@ -10,7 +10,8 @@ export function createDragTool(browser: AgentBrowser) {
     id: BROWSER_TOOLS.DRAG,
     description: 'Drag an element to another element.',
     inputSchema: dragInputSchema,
-    execute: async input => {
+    execute: async (input, { agent }) => {
+      browser.setCurrentThread(agent?.threadId);
       await browser.ensureReady();
       return browser.drag(input);
     },
