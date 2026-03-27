@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Fixed OM repro capture so recordings keep writing usable artifacts even when live state contains circular values. ([#14744](https://github.com/mastra-ai/mastra/pull/14744))
+
+- Fixed observational memory response ID rotation at buffered chunk boundaries so assistant output continues in a fresh message slot. ([#14745](https://github.com/mastra-ai/mastra/pull/14745))
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
 ## 1.10.1-alpha.2
 
 ### Patch Changes
