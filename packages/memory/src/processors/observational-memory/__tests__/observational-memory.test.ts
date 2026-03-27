@@ -1784,9 +1784,9 @@ _range: \`ignored-by-reconciler\`_
       expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
         {
           id: 'merged-project',
-          range: 'm1:m2,m3:m4',
+          range: 'm1:m4',
+          kind: 'reflection',
           content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
-          sourceGroupIds: ['group-a', 'group-b'],
         },
       ]);
     });
@@ -1806,7 +1806,7 @@ _range: \`ignored-by-reconciler\`_
 - 🟡 Needs help with auth flow`;
 
       expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
-        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+        .toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -1862,8 +1862,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations)
-        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -1884,8 +1883,65 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" source-group-ids="group-a">
+      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" kind="reflection">
 - 🔴 User is building a React app
+</observation-group>`);
+    });
+
+    it('should compact merged ranges across already-merged source groups', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-c" range="m3:m4" kind="reflection">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+[O2] - 🟡 Needs help with auth flow
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+
+    it('should compact a real reflected group with bloated provenance metadata', () => {
+      const sourceObservations = `<observation-group id="b02a82c879fc7470" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,70ed3b4a-061f-4d54-8d3b-1c647359ea9b:0087f0cd-6ee0-44dc-9b19-90fb2775dbd4,48e1dfec-5db1-488f-a0fd-11d49ac6e185:f90a7382-a022-4f4b-ad62-6993eea9efc5,e783ca03-1e88-4d37-a613-9d3ec0247d3c:2892a09a-351d-4ed0-b875-a05f06320434,98b8a7a1-a81f-4fa2-b573-eff69a0f69db:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,2d7b784d-b638-4aac-9528-95e2ebec7edb:f08cf1f9-93e0-4182-a59b-9e360917a8e8,f8b860b4-67d7-4b9c-b5aa-2943a5ddb84a:9fe9dbe7-1d0b-4cdb-b318-23a1dda318ec,2c35b1b5-f59d-4bb6-8f4a-f8dd9d2ecd9c:cb0a9f1c-f2eb-4e11-af52-faab1be1a5d9,5719cf4a-e597-423d-9715-5f6fc0b7fb9f:ce3ffdf6-7cb1-494d-9271-fe52bbc1c8d1,26114b9d-dafd-4da9-941f-6b2a03f652ae:8f1fda4f-f118-4756-ad69-41d13990500c,f84edc84-cc70-49be-a373-4dbb53a9e73d:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,a15c130d-25fc-4545-87c6-4a86fd6b2e03:b82a6a00-d723-438b-84e4-a8646b74c1ad,75b274fb-6284-47ba-b68f-b9fad548453b:3847b369-5406-47da-9a84-c6776709e74c,b25363d6-dc79-4f72-b3cb-2b6012b0f1ed:69c2b306-3f53-4d1d-aaee-8644a5702952,8c2353e5-53db-475e-8ffd-cde8c4705583:e2c93ad7-922d-49d3-8007-354919b3e790,c70381df-6870-4d60-91ec-74a8f98df96f:ad4f0164-9213-42f8-a1ab-e0597a20e946,abf4e97e-f532-4e9e-87ca-9af97b6aa76e:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,092065a5-351d-4b16-abac-65a1c8440681:79c7804e-b9b7-43ec-9318-fc22e5a662be,b03dbc3b-370a-4636-8cad-5be7cc5f2ccb:cd864363-1621-4567-aaed-e7e646ee9a70,5f2dc707-5d2e-4854-8f86-8ddbc520bc33:acbb10c8-6b57-4868-964a-1671b9b12185,7bf9339b-5eef-41e7-9470-4187ff2b2f13:63b60691-5cd0-47db-a03e-618c733994ca,59db30e7-4759-4ed1-a059-5bbb9cdb5cf4:ce02ea43-359f-44ca-91f2-b5db4074cbf1,8f4ec250-a8a3-4803-ae48-2424979514b9:1ab9ef15-da42-4527-8672-1d3209dd90a5,c156c8a3-3f4a-4f0c-986a-7ae9a9c1b5ed:10ca26ac-10e7-4a47-809e-d0e9e6cd8f3e,2fa74f4a-c8b9-48c8-a8b6-2a129b3c638c:2bac851a-ba93-4dd1-9bfb-96f9e9c26911,97b91de1-922f-4acf-9423-3d8732716b3a:a8329f20-350b-4215-ba8c-df08dcf7b901,15bc318d-ccd1-43bc-8258-55d6b48e6371:96e4311d-a07e-4d37-a885-3354337e010b,ee82cec7-2ef4-437d-b85c-c0dc3ce0c422:2d4a6e84-b92d-4091-84fe-c6d1c6c394d1,cf4e3a6f-da92-4b8f-a34b-ab2fc44fd4c7:9225e7ed-f8b5-421f-a6cc-9d01da6b7617,cd2e29ee-7567-43c4-a6ac-3aed94620e9e:18956442-dc45-4388-b2db-76f4bee7293e,40dca7fa-bdfd-4111-9455-bc5b0671bc8b:85ded820-3c56-453a-9733-c63072249276,ceb18582-13dc-479c-979b-9c9487a217a4:ae7d5315-8bab-49b5-8da7-70c76eab652b,32bf0848-5611-4dbe-a67c-0d903f4aaf31:27f2cb5b-d760-4089-8f01-00bd017046ec,3c4d9e9c-678b-4a8e-9c94-5cdca17d470f:82ef6cc8-9ef5-4834-8867-0b823b1f6627,34f37394-c3ce-43c0-90b2-f9ebeea0e85b:0f7b400b-61a9-46a1-b93e-d90aa880aff3,44991d14-dc65-4958-8df6-16698e08fe86:7eba5066-ca89-451a-8efb-3862a8333825,140178a1-bafe-49e0-89cf-0dd3658b752a:451f2170-7b70-475c-ab64-41d323f91606,6595b5c3-b509-4376-a421-495f894eeee2:f685b009-7033-4d1d-9318-ccdc0ad9bcb4,3a7b5792-5c75-41f0-9e66-f8634a3eeea4:efe5c434-5658-44a3-a0dc-f01faecb168a,11095a53-4036-4dc9-b13d-aff0772e6749:b1acd62a-4a20-4a9b-9f9d-90f9b2d5d148,451f2170-7b70-475c-ab64-41d323f91606:451f2170-7b70-475c-ab64-41d323f91606,00834e29-d8c9-4a3d-bfa1-533bd11eb31d:55cd0283-6ffd-464e-8572-455811a7d61c,ea4f0ef8-351c-4766-a341-9c0dc27c8587:cce1f4fc-4316-4ff6-9030-3016fc6f6d7c,74aba1a1-b27d-4a8c-b8fc-d7ec7d36f879:3fca3703-722f-4ef5-be57-a96b1085af18,23a07ab2-4904-46d9-9132-5fa17f044e49:bbeed355-22fc-4ef9-aead-386d8f46e067,6bbac5fc-337b-4717-8d2c-d1fdc5a07444:299913d7-23c1-4606-9c2c-d5e25247c696,14770d82-6855-441f-9f8d-7a2e9fcbd44c:a60b87a2-f93b-45bb-b153-b9b7b72a38ff,bbeed355-22fc-4ef9-aead-386d8f46e067:bbeed355-22fc-4ef9-aead-386d8f46e067,9025d90c-e274-4fa7-8fa3-378073863d80:0d5fb60c-0d91-46d2-b791-23c651362de2,168a713a-2049-413e-a122-d424f642070d:e1e4f158-eb82-45e5-a40c-f1f82f90d117,32863afc-ade2-4eda-9667-2a24de5e7ce4:26cbe75a-8fe0-4a26-ad21-44da25128f1c,8cd79662-308c-48e0-bfea-3da0f5289ff7:19563f5e-a3c8-44a8-b5c6-5965d0015337,c38f2399-5dad-4fee-be26-f5e34b2ac729:320ceb2c-71df-41d0-a742-3e46867ae5d4,ef6e0468-2982-4d4a-b0d7-b8db28984007:99716983-505f-4bba-981f-4642ddd086d8,6fd34cf6-7867-47d8-83f8-332b3c62495d:f3523cc5-3f60-40de-9de2-5c49ded97b52,9b599436-f4b4-482e-be11-f260e184d2d3:6a792350-3dfd-4cf7-bd99-52da42d7f17b,28387d0a-ef5b-4f83-85e4-22735fde7bd2:b9693350-a964-4e16-9c6b-2a4830fec1fc,be382e37-000b-420a-a184-450834f2ff7e:0d703290-a672-499a-9873-175e845bb2aa,962b3951-db61-4184-ba1d-90edcff6e87e:1a020c21-ff6b-47e6-8f20-ae6d0ab33826,2c774241-b800-4f09-9136-53315749b4ce:46072882-5860-4fe8-a9f4-a3802734f323,0f6402fa-cb17-4c16-801c-6e084d38ebab:922f645b-eff7-4233-bf2a-fff33f74b012,29140929-2ab8-451d-be23-0939afa7b937:5d3e015d-cd1c-4f85-8555-4ff0309986a4,04ee483e-e589-416d-b250-84ff6bbca6fb:b354a453-1074-4e55-95bd-2e7eed1a87af,8455bbac-8015-4017-8d77-daac6d5eccf7:a172fe73-2e02-4d19-9b68-8025a50f1b95">
+Date: Mar 25, 2026
+* 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+* 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+* 🟡 Investigation centered on savePerStep and finish-time assembly.
+</observation-group>`;
+      const output = `
+<observations>
+## Group \
+\`message-saving-debug\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] Date: Mar 25, 2026
+[O2] * 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+[O3] * 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+[O4] * 🟡 Investigation centered on savePerStep and finish-time assembly.
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations)
+        .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
+Date: Mar 25, 2026
+* 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+* 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+* 🟡 Investigation centered on savePerStep and finish-time assembly.
 </observation-group>`);
     });
 
