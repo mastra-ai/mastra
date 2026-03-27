@@ -101,7 +101,6 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       if (this.getSessionCount() === 0) {
         // First thread - reuse page index 0 (the default page)
         session.pageIndex = 0;
-        console.log(`[ThreadManager] createSession: FIRST thread "${threadId}" reusing page 0`);
       } else {
         // Subsequent threads - create a new window
         if (!manager.newWindow) {
@@ -109,16 +108,8 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
         }
         const { index } = await manager.newWindow();
         session.pageIndex = index;
-        console.log(`[ThreadManager] createSession: NEW thread "${threadId}" got page ${index}`);
       }
     }
-
-    console.log(`[ThreadManager] createSession complete:`, {
-      threadId,
-      isolation: this.isolation,
-      sessionCount: this.getSessionCount() + 1, // +1 because session not added yet
-      pageIndex: session.pageIndex,
-    });
 
     return session;
   }

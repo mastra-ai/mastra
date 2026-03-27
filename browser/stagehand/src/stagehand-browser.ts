@@ -42,7 +42,10 @@ export class StagehandBrowser extends MastraBrowser {
 
   private stagehand: Stagehand | null = null;
   private stagehandConfig: StagehandBrowserConfig;
-  private threadManager: StagehandThreadManager;
+
+  /** Thread manager - narrowed type from base class */
+  declare protected threadManager: StagehandThreadManager;
+
   private currentThreadId: string = DEFAULT_THREAD_ID;
 
   constructor(config: StagehandBrowserConfig = {}) {
@@ -56,8 +59,7 @@ export class StagehandBrowser extends MastraBrowser {
       isolation: config.threadIsolation ?? 'context',
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
-      onSessionCreated: session => {
-        console.log(`[StagehandBrowser] onSessionCreated: "${session.threadId}"`);
+      onSessionCreated: () => {
         // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
         // for threads that just started using the browser
         this.notifyBrowserReady();
@@ -78,6 +80,21 @@ export class StagehandBrowser extends MastraBrowser {
    */
   getCurrentThreadId(): string {
     return this.currentThreadId;
+  }
+
+  /**
+   * Ensure browser is ready and thread session exists.
+   * Creates a new page for the current thread if needed.
+   */
+  override async ensureReady(): Promise<void> {
+    await super.ensureReady();
+
+    // Ensure thread session exists for the current thread
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      // This will create the session/page if it doesn't exist
+      await this.getPageForThread(this.currentThreadId);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -533,35 +550,9 @@ export class StagehandBrowser extends MastraBrowser {
   // Uses Stagehand v3's native CDP access
   // ---------------------------------------------------------------------------
 
-  /**
-   * Check if a thread has an existing browser session.
-   * For 'context' isolation, the first thread reuses the default page,
-   * so we return true even if no session exists yet.
-   */
-  override hasThreadSession(threadId: string): boolean {
-    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
-
-    // No isolation - all threads share the same session
-    if (isolation === 'none') {
-      return true;
-    }
-
-    // Check if this thread already has a session
-    if (this.threadManager.hasSession(threadId)) {
-      return true;
-    }
-
-    // For 'context' mode: if no sessions exist, the first thread will reuse the default page
-    if (isolation === 'context' && this.threadManager.getSessionCount() === 0) {
-      return true;
-    }
-
-    return false;
-  }
-
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
     const threadId = options?.threadId;
-    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+    const isolation = this.threadManager.getIsolationMode();
 
     // Only use thread-specific page if thread already has a session
     const hasExistingSession =

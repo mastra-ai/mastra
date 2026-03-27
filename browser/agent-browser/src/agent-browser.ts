@@ -49,8 +49,8 @@ export class AgentBrowser extends MastraBrowser {
   private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
-  /** Thread manager for handling thread-scoped browser sessions */
-  private threadManager: AgentBrowserThreadManager;
+  /** Thread manager - narrowed type from base class */
+  declare protected threadManager: AgentBrowserThreadManager;
 
   /** Currently active thread (set by tools before operations) */
   private currentThreadId: string = DEFAULT_THREAD_ID;
@@ -70,8 +70,7 @@ export class AgentBrowser extends MastraBrowser {
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
-      onSessionCreated: session => {
-        console.log(`[AgentBrowser] onSessionCreated: "${session.threadId}"`);
+      onSessionCreated: () => {
         // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
         // for threads that just started using the browser
         this.notifyBrowserReady();
@@ -88,9 +87,22 @@ export class AgentBrowser extends MastraBrowser {
    * Called by tools before executing browser actions.
    */
   setCurrentThread(threadId?: string): void {
-    const newThreadId = threadId ?? DEFAULT_THREAD_ID;
-    console.log(`[AgentBrowser] setCurrentThread: "${this.currentThreadId}" -> "${newThreadId}"`);
-    this.currentThreadId = newThreadId;
+    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Ensure browser is ready and thread session exists.
+   * Creates a new page/context for the current thread if needed.
+   */
+  override async ensureReady(): Promise<void> {
+    await super.ensureReady();
+
+    // Ensure thread session exists for the current thread
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+      // This will create the session if it doesn't exist
+      await this.getManagerForThread(this.currentThreadId);
+    }
   }
 
   /**
@@ -1041,33 +1053,6 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
   // Screencast (for Studio live view)
   // ---------------------------------------------------------------------------
-
-  /**
-   * Check if a thread has an existing browser session.
-   * For 'context' isolation, the first thread reuses the default page,
-   * so we return true even if no session exists yet (it will be created).
-   */
-  override hasThreadSession(threadId: string): boolean {
-    const isolation = this.threadManager.getIsolationMode();
-
-    // No isolation - all threads share the same session
-    if (isolation === 'none') {
-      return true;
-    }
-
-    // Check if this thread already has a session
-    if (this.threadManager.hasSession(threadId)) {
-      return true;
-    }
-
-    // For 'context' mode: if no sessions exist, the first thread will reuse page 0
-    // So we consider it as "having a session" for screencast purposes
-    if (isolation === 'context' && this.threadManager.getSessionCount() === 0) {
-      return true;
-    }
-
-    return false;
-  }
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
     if (!this.browserManager) throw new Error('Browser not launched');

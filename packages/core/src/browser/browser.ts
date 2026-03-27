@@ -27,7 +27,7 @@ import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
-import type { ThreadIsolationMode } from './thread-manager';
+import type { ThreadIsolationMode, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
@@ -192,6 +192,12 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Configuration */
   protected readonly config: BrowserConfig;
+
+  /**
+   * Thread manager for handling thread-scoped browser sessions.
+   * Set by subclasses that support thread isolation.
+   */
+  protected threadManager?: ThreadManager;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
@@ -591,20 +597,36 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Check if a thread has an existing browser session.
    * Used by startScreencastIfBrowserActive to prevent showing another thread's page.
-   * Override in subclass if thread isolation is supported.
+   *
+   * If threadManager is set, delegates to it. Otherwise returns true (no isolation).
+   * Subclasses can override for custom behavior.
+   *
    * @returns true if session exists or thread isolation is not used
    */
-  hasThreadSession(_threadId: string): boolean {
-    // Default: no thread isolation, all threads share the same session
-    return true;
+  hasThreadSession(threadId: string): boolean {
+    if (!this.threadManager) {
+      // No thread manager - all threads share the same session
+      return true;
+    }
+
+    const isolation = this.threadManager.getIsolationMode();
+
+    // No isolation - all threads share the same session
+    if (isolation === 'none') {
+      return true;
+    }
+
+    // Check if this thread has an actual session
+    return this.threadManager.hasSession(threadId);
   }
 
   /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
    *
-   * For thread-isolated browsers, returns null if the thread doesn't have
-   * an existing session (to prevent showing another thread's page).
+   * For thread-isolated browsers:
+   * - Returns null if the thread doesn't have an existing session
+   * - EXCEPT for 'context' mode when no sessions exist yet (first thread uses default page)
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
     if (!this.isBrowserRunning()) {
@@ -612,14 +634,25 @@ export abstract class MastraBrowser extends MastraBase {
     }
 
     const threadId = options?.threadId;
-    const isolation = this.config.threadIsolation ?? 'none';
+    const isolation = this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
 
-    // For thread-isolated modes, only start screencast if this thread has an existing session
-    // This prevents new threads from showing another thread's page
-    if (isolation !== 'none' && threadId) {
-      if (!this.hasThreadSession(threadId)) {
-        return null;
-      }
+    // No isolation - just start the screencast
+    if (isolation === 'none') {
+      return this.startScreencast(options);
+    }
+
+    // For 'context' isolation: the FIRST thread should reuse the default page (page 0)
+    // even though hasSession returns false. This is because createSession will
+    // assign page 0 to the first thread that uses a browser tool.
+    if (isolation === 'context' && this.threadManager && this.threadManager.getSessionCount() === 0) {
+      // First thread - use the default page by NOT passing threadId
+      // This ensures the screencast uses page 0 (the default page)
+      return this.startScreencast({ ...options, threadId: undefined });
+    }
+
+    // For other threads, only start if they have an existing session
+    if (threadId && !this.hasThreadSession(threadId)) {
+      return null;
     }
 
     return this.startScreencast(options);
