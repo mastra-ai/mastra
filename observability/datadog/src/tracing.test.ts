@@ -214,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'workflow'],
-      [SpanType.MODEL_STEP, 'llm'],
+      [SpanType.MODEL_GENERATION, 'llm'],
+      [SpanType.MODEL_STEP, 'task'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -240,7 +240,7 @@ describe('DatadogExporter', () => {
   });
 
   describe('error handling', () => {
-    it('includes error tags for error spans', async () => {
+    it('includes error tags and error message in metadata for error spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -255,9 +255,11 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something went wrong',
+          }),
           tags: expect.objectContaining({
             error: true,
-            'error.message': 'Something went wrong',
             'error.id': 'err-123',
             'error.category': 'validation',
           }),
@@ -325,7 +327,7 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('merges span.tags with error tags when both present', async () => {
+    it('merges span.tags with error tags when both present, error message in metadata', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         tags: ['production', 'critical'],
@@ -340,11 +342,13 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something failed',
+          }),
           tags: {
             production: true,
             critical: true,
             error: true,
-            'error.message': 'Something failed',
             'error.category': 'runtime',
           },
         }),
@@ -1046,7 +1050,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1220,7 +1224,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)

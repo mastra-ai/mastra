@@ -1,5 +1,128 @@
 # @mastra/playground-ui
 
+## 20.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`eef4a26`](https://github.com/mastra-ai/mastra/commit/eef4a2657cb14343e302e3f310ada86a2013f6cf), [`8812997`](https://github.com/mastra-ai/mastra/commit/8812997791f546ae6c64921bac6f65d3f4b5832e)]:
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/ai-sdk@1.3.0-alpha.0
+  - @mastra/client-js@1.10.1-alpha.5
+  - @mastra/react@0.2.18-alpha.5
+
+## 19.1.0-alpha.4
+
+### Minor Changes
+
+- Redesigned the Agent Traces tab with improved layout and new filtering capabilities: ([#14644](https://github.com/mastra-ai/mastra/pull/14644))
+  - Added sortable columns for Timestamp and Duration
+  - Inline score display when a scorer is selected, with a threshold filter to surface low-scoring traces
+  - Status and date-range filters for narrowing traces
+  - Client-side search across trace inputs and outputs
+  - Bulk checkbox selection with "Add to dataset" action
+  - Improved text truncation to prevent horizontal scrolling
+
+- Redesigned the Evaluation dashboard with new list views, review pipeline, and dataset-level review tab. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  **Evaluation dashboard**
+  - Replaced table-based list views with the new `EntityList` design system for Scorers, Datasets, and Experiments tabs.
+  - Moved charts to an Overview tab and list views to dedicated tabs (Scorers, Datasets, Experiments). Tabs are now driven by sidebar navigation instead of an in-page tab bar.
+  - Added per-tab filter toolbars with search, status filters, and tag filters.
+  - Added "Create Dataset" button to Datasets tab.
+  - Added "Needs Review" KPI card and "Review Pipeline" chart to the Overview tab.
+
+  **Dataset review tab**
+  - New "Review" tab on the dataset detail page for reviewing experiment results across all agents targeting that dataset.
+  - Extracted shared review components (`ReviewItemCard`, `TagPicker`, `BulkTagPicker`, `ProposalTag`) into a reusable `review` domain.
+  - LLM-powered failure clustering and tag proposal integrated into dataset-level review.
+  - Tag-based filtering, bulk operations, ratings, and comments.
+
+  **Other improvements**
+  - Dataset tags displayed in a dedicated column with truncation and hover tooltip.
+  - Experiment result panel now shows review status badge and tags.
+  - Scores-over-time chart uses adaptive time bucketing (minute/hour/day) and shows date labels for multi-day ranges.
+  - Bar chart labels repositioned above bars for better contrast.
+  - Breadcrumbs across dataset and experiment pages updated to use `/evaluation/` prefix.
+
+  **Sidebar design system**
+  - `MainSidebarNavHeader` now supports an optional `href` prop for clickable section headers, and an `isActive` prop for header highlighting.
+  - `MainSidebarNavLink` now supports an optional `indent` prop for sub-link indentation.
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/client-js@1.10.1-alpha.4
+  - @mastra/ai-sdk@1.2.1
+  - @mastra/react@0.2.18-alpha.4
+
+## 19.1.0-alpha.3
+
+### Minor Changes
+
+- Added comprehensive filtering and search to the observability traces view. Traces can now be filtered by entity type, status, tags, metadata key-value pairs, date range (with presets and custom ranges), and context fields (environment, service name, user ID, session ID, and more). Also added full-text search across trace names and metadata, thread grouping with a toggle, and a new traces list with collapsible thread groups. ([#14564](https://github.com/mastra-ai/mastra/pull/14564))
+
+### Patch Changes
+
+- dependencies updates: ([#14584](https://github.com/mastra-ai/mastra/pull/14584))
+  - Updated dependency [`@assistant-ui/react@^0.12.19` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.19) (from `^0.12.17`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.6` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.6) (from `^0.12.5`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.7` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.7) (from `^0.12.6`, in `dependencies`)
+
+- Added `as` prop to `MetricsCardTitle` and `titleAs` prop to `MetricsCardTitleAndDescription` to customize the heading level (h2, h3, h4). Defaults to h2. ([#14718](https://github.com/mastra-ai/mastra/pull/14718))
+
+- Added DuckDB to supported observability storage types for metrics dashboard. Unhid ModelCostKpiCard. Updated empty state description to reflect DuckDB and ClickHouse support status. ([#14670](https://github.com/mastra-ai/mastra/pull/14670))
+
+- Added cost metrics to the Metrics dashboard. ([#14716](https://github.com/mastra-ai/mastra/pull/14716))
+  - Added a **Total Model Cost** KPI card.
+  - Added a **Cost** column in the **Model Usage** table.
+  - Added a **Cost** view in **Token Usage by Agent**.
+  - Improved `ScrollArea` to support horizontal and vertical scrolling together.
+
+  **Example**
+
+  ```tsx
+  <ScrollArea orientation="both" maxHeight="20rem">
+    <MetricsDataTable ... />
+  </ScrollArea>
+  ```
+
+- Added 'Create Agent' and 'Edit Agent' buttons to the playground, gated behind the MASTRA_EXPERIMENTAL_UI environment variable. When enabled, a 'Create Agent' button appears on the agents list page and an 'Edit' button appears on the agent detail header for stored agents. ([#14694](https://github.com/mastra-ai/mastra/pull/14694))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`197daf0`](https://github.com/mastra-ai/mastra/commit/197daf03a33e4650bd90391eef0ec7d0392a6c9c), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+  - @mastra/client-js@1.10.1-alpha.3
+  - @mastra/ai-sdk@1.2.1
+  - @mastra/react@0.2.18-alpha.3
+
+## 19.0.1-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#14584](https://github.com/mastra-ai/mastra/pull/14584))
+  - Updated dependency [`@assistant-ui/react@^0.12.19` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.19) (from `^0.12.17`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.6` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.6) (from `^0.12.5`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.7` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.7) (from `^0.12.6`, in `dependencies`)
+
+- Added 'Create Agent' and 'Edit Agent' buttons to the playground, gated behind the MASTRA_EXPERIMENTAL_UI environment variable. When enabled, a 'Create Agent' button appears on the agents list page and an 'Edit' button appears on the agent detail header for stored agents. ([#14694](https://github.com/mastra-ai/mastra/pull/14694))
+
+- Updated dependencies [[`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`197daf0`](https://github.com/mastra-ai/mastra/commit/197daf03a33e4650bd90391eef0ec7d0392a6c9c), [`86e3263`](https://github.com/mastra-ai/mastra/commit/86e326363edd12be5a5b25ccce4a39f66f7c9f50), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.17.0-alpha.2
+  - @mastra/client-js@1.10.1-alpha.2
+  - @mastra/react@0.2.18-alpha.2
+
+## 19.0.1-alpha.1
+
+### Patch Changes
+
+- Added DuckDB to supported observability storage types for metrics dashboard. Unhid ModelCostKpiCard. Updated empty state description to reflect DuckDB and ClickHouse support status. ([#14670](https://github.com/mastra-ai/mastra/pull/14670))
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/core@1.16.1-alpha.1
+  - @mastra/ai-sdk@1.2.1
+  - @mastra/client-js@1.10.1-alpha.1
+  - @mastra/react@0.2.18-alpha.1
+
 ## 19.0.1-alpha.0
 
 ### Patch Changes
