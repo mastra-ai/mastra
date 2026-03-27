@@ -214,8 +214,9 @@ describe('VercelSandbox', () => {
       const projectCall = mockFetch.mock.calls[2]!;
       expect(projectCall[0]).toContain('/v9/projects/prj-456');
 
-      // Verify warm-up includes the bypass header
+      // Verify warm-up includes the bypass header and per-sandbox bearer secret
       const warmUpCall = mockFetch.mock.calls[3]!;
+      expect(warmUpCall[1]?.headers?.Authorization).toBe('Bearer test-secret-uuid');
       expect(warmUpCall[1]?.headers?.['x-vercel-protection-bypass']).toBe('bypass-secret-123');
     });
 
@@ -243,8 +244,9 @@ describe('VercelSandbox', () => {
       expect(patchCall[0]).toContain('/v1/projects/prj-456/protection-bypass');
       expect(patchCall[1]?.method).toBe('PATCH');
 
-      // Verify warm-up includes the newly created bypass header
+      // Verify warm-up includes the newly created bypass header and per-sandbox bearer secret
       const warmUpCall = mockFetch.mock.calls[4]!;
+      expect(warmUpCall[1]?.headers?.Authorization).toBe('Bearer test-secret-uuid');
       expect(warmUpCall[1]?.headers?.['x-vercel-protection-bypass']).toBe('new-bypass-token');
     });
 
@@ -276,8 +278,9 @@ describe('VercelSandbox', () => {
       const result = await sandbox.executeCommand('echo', ['hello']);
       expect(result.success).toBe(true);
 
-      // Verify the execute call includes the bypass header
+      // Verify the execute call includes the bypass header and per-sandbox bearer secret
       const executeCall = mockFetch.mock.calls[4]!;
+      expect(executeCall[1]?.headers?.Authorization).toBe('Bearer test-secret-uuid');
       expect(executeCall[1]?.headers?.['x-vercel-protection-bypass']).toBe('bypass-token-abc');
     });
 
@@ -295,6 +298,34 @@ describe('VercelSandbox', () => {
   });
 
   describe('executeCommand()', () => {
+    it('should auto-start on the first command', async () => {
+      // Use a fresh sandbox — don't rely on the shared beforeEach start
+      const freshSandbox = new VercelSandbox({ token: 'test-token' });
+
+      mockFetch
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'READY'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // warm-up
+        .mockResolvedValueOnce(
+          createExecuteResponse({
+            success: true,
+            exitCode: 0,
+            stdout: 'ok',
+            stderr: '',
+            executionTimeMs: 5,
+            timedOut: false,
+          }),
+        );
+
+      const promise = freshSandbox.executeCommand('echo', ['ok']);
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('ok');
+      expect(freshSandbox.status).toBe('running');
+    });
+
     beforeEach(async () => {
       mockFetch
         .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
@@ -356,19 +387,17 @@ describe('VercelSandbox', () => {
       expect(result.exitCode).toBe(124);
     });
 
-    it('should retry on 429/502/503', async () => {
-      mockFetch
-        .mockResolvedValueOnce({ ok: false, status: 502, text: async () => 'Bad Gateway' })
-        .mockResolvedValueOnce(
-          createExecuteResponse({
-            success: true,
-            exitCode: 0,
-            stdout: 'ok',
-            stderr: '',
-            executionTimeMs: 10,
-            timedOut: false,
-          }),
-        );
+    it.each([429, 502, 503])('should retry on %i', async status => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status, text: async () => 'retryable' }).mockResolvedValueOnce(
+        createExecuteResponse({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 10,
+          timedOut: false,
+        }),
+      );
 
       const promise = sandbox.executeCommand('echo', ['ok']);
       await vi.runAllTimersAsync();

@@ -416,11 +416,6 @@ export class VercelSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Build headers for requests to the deployed executor function.
-   * Includes the executor secret and, when present, the deployment
-   * protection bypass token.
-   */
-  /**
    * Fetch an existing protection bypass token for the project, or create one
    * if none exists. Returns the token string, or null if acquisition fails.
    */
