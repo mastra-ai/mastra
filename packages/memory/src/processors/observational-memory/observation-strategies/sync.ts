@@ -154,7 +154,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async persist(processed: ProcessedObservation) {
-    const { record, threadId, messages } = this.opts;
+    const { record, threadId, resourceId, messages } = this.opts;
 
     const thread = await this.storage.getThreadById({ threadId });
     let threadUpdateMarker: ReturnType<typeof createThreadUpdateMarker> | undefined;
@@ -196,6 +196,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       lastObservedAt: processed.lastObservedAt,
       observedMessageIds: processed.observedMessageIds,
     });
+
+    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

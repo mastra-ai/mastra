@@ -142,11 +142,19 @@ export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   readonly scope: 'resource' | 'thread';
-  /** Whether retrieval-mode observation groups are enabled (thread scope only). */
+  /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
+  readonly onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
@@ -237,7 +245,8 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.retrieval = this.scope === 'thread' && (config.retrieval ?? false);
+    this.retrieval = Boolean(config.retrieval);
+    this.onIndexObservations = config.onIndexObservations;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>

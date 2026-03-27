@@ -1358,6 +1358,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@mastra/fastembed':
+        specifier: workspace:*
+        version: link:../packages/fastembed
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../stores/libsql

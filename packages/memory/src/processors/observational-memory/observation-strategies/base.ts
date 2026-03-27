@@ -5,7 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
-import { wrapInObservationGroup } from '../observation-groups';
+import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
@@ -38,6 +38,14 @@ export interface StrategyDeps {
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
 
@@ -267,6 +275,35 @@ export abstract class ObservationStrategy {
 
     const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
     return `${existingObservations}${boundary}${newThreadSection}`;
+  }
+
+  protected async indexObservationGroups(
+    observations: string,
+    threadId: string,
+    resourceId?: string,
+    observedAt?: Date,
+  ): Promise<void> {
+    if (!resourceId || !this.deps.onIndexObservations) {
+      return;
+    }
+
+    const groups = parseObservationGroups(observations);
+    if (groups.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      groups.map(group =>
+        this.deps.onIndexObservations!({
+          text: group.content,
+          groupId: group.id,
+          range: group.range,
+          threadId,
+          resourceId,
+          observedAt,
+        }),
+      ),
+    );
   }
 
   // ── Marker persistence ──────────────────────────────────────
