@@ -1,0 +1,85 @@
+import type { SpanRecord } from '@mastra/core/storage';
+import { ListTreeIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTraceSpans } from '../hooks/use-trace-spans';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
+import { getAllSpanIds } from './trace/get-descendant-ids';
+import { TraceTimeline } from './trace/trace-timeline';
+
+
+export interface TraceDetailsProps {
+  traceId: string;
+  onClose: () => void;
+  onSpanSelect?: (span: SpanRecord | undefined) => void;
+  initialSpanId?: string | null;
+}
+
+export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: TraceDetailsProps) {
+  const { data: traceData, isLoading } = useTraceSpans(traceId);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
+
+  // Auto-select span when trace data loads with an initialSpanId
+  useEffect(() => {
+    if (initialSpanId && traceData?.spans) {
+      const span = traceData.spans.find(s => s.spanId === initialSpanId);
+      if (span) {
+        setSelectedSpanId(initialSpanId);
+        onSpanSelect?.(span);
+      }
+    }
+  }, [initialSpanId, traceData?.spans]);
+
+  const hierarchicalSpans = useMemo(
+    () => formatHierarchicalSpans(traceData?.spans ?? []),
+    [traceData?.spans],
+  );
+
+  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (hierarchicalSpans.length > 0) {
+      setExpandedSpanIds(getAllSpanIds(hierarchicalSpans));
+    }
+  }, [hierarchicalSpans]);
+
+  const handleSpanClick = (id: string) => {
+    const newId = selectedSpanId === id ? undefined : id;
+    setSelectedSpanId(newId);
+    const span = newId ? traceData?.spans?.find(s => s.spanId === newId) : undefined;
+    onSpanSelect?.(span);
+  };
+
+  return (
+    <DataDetailsPanel>
+      <DataDetailsPanel.Header>
+        <DataDetailsPanel.Heading>
+          Trace <b>{traceId}</b>
+        </DataDetailsPanel.Heading>
+        <DataDetailsPanel.CloseButton onClick={onClose} />
+      </DataDetailsPanel.Header>
+
+      {isLoading ? (
+        <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>
+      ) : hierarchicalSpans.length === 0 ? (
+        <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>
+      ) : (
+        <DataDetailsPanel.Content>
+          <div className="px-4 py-4">
+            <div className="flex items-center gap-2 mb-3 text-ui-xs uppercase tracking-widest text-neutral2">
+              <ListTreeIcon className="size-3.5" />
+              Timeline
+            </div>
+            <TraceTimeline
+              hierarchicalSpans={hierarchicalSpans}
+              onSpanClick={handleSpanClick}
+              selectedSpanId={selectedSpanId}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
+            />
+          </div>
+        </DataDetailsPanel.Content>
+      )}
+    </DataDetailsPanel>
+  );
+}
