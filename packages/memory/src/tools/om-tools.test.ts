@@ -179,51 +179,30 @@ describe('om-tools', () => {
       expect(result.messages).toContain('other-thread');
     });
 
-    it('should page backward from the end of a colon-delimited range', async () => {
+    it('should return a hint when cursor is a colon-delimited range', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId,
         resourceId,
         cursor: 'msg-1:msg-3',
-        page: -1,
-        limit: 2,
       });
 
-      expect(result.count).toBe(2);
-      expect(result.messages).toContain('Message 1');
-      expect(result.messages).toContain('Message 2');
-      expect(result.messages).not.toContain('Message 3');
+      expect(result.count).toBe(0);
+      expect(result.messages).toContain('start="msg-1"');
+      expect(result.messages).toContain('end="msg-3"');
     });
 
-    it('should page backward from the end of a comma-separated merged range', async () => {
+    it('should return a hint when cursor is a comma-separated merged range', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId,
         resourceId,
         cursor: 'msg-1:msg-2,msg-3:msg-4',
-        page: -1,
-        limit: 2,
-      });
-
-      expect(result.count).toBe(2);
-      expect(result.messages).toContain('Message 2');
-      expect(result.messages).toContain('Message 3');
-      expect(result.messages).not.toContain('Message 4');
-    });
-
-    it('should still return a hint for range cursors in thread-scoped access checks', async () => {
-      const result = await recallMessages({
-        memory: memory as any,
-        threadId,
-        resourceId,
-        cursor: 'msg-1:msg-3',
-        threadScope: threadId,
       });
 
       expect(result.count).toBe(0);
-      expect(result.messages).toContain('looks like an observation-group range');
       expect(result.messages).toContain('start="msg-1"');
-      expect(result.messages).toContain('end="msg-3"');
+      expect(result.messages).toContain('end="msg-4"');
     });
 
     // ── Detail levels ───────────────────────────────────────────────
@@ -822,16 +801,15 @@ describe('om-tools', () => {
       ).rejects.toThrow('Part index 99 not found');
     });
 
-    it('should still throw when a range cursor is used with thread-scoped part lookup', async () => {
+    it('should throw when cursor is a range format', async () => {
       await expect(
         recallPart({
           memory: memory as any,
           threadId,
           cursor: 'msg-1:msg-2',
           partIndex: 0,
-          threadScope: threadId,
         }),
-      ).rejects.toThrow('looks like an observation-group range');
+      ).rejects.toThrow('looks like a range');
     });
 
     it('should throw a helpful message for data-only messages', async () => {

@@ -103,30 +103,6 @@ function parseRangeFormat(cursor: string): { startId: string; endId: string } | 
   return null;
 }
 
-async function resolveMessageById(
-  memory: RecallMemory,
-  messageId: string,
-  access?: { resourceId?: string; threadScope?: string },
-): Promise<MastraDBMessage> {
-  const memoryStore = await memory.getMemoryStore();
-  const result = await memoryStore.listMessagesById({ messageIds: [messageId] });
-  const message = result.messages.find(message => message.id === messageId);
-
-  if (!message) {
-    throw new Error(`Could not resolve cursor message: ${messageId}`);
-  }
-
-  if (access?.resourceId && message.resourceId !== access.resourceId) {
-    throw new Error(`Could not resolve cursor message: ${messageId}`);
-  }
-
-  if (access?.threadScope && message.threadId !== access.threadScope) {
-    throw new Error(`Could not resolve cursor message: ${messageId}`);
-  }
-
-  return message;
-}
-
 async function resolveCursorMessage(
   memory: RecallMemory,
   cursor: string,
@@ -140,17 +116,31 @@ async function resolveCursorMessage(
 
   const rangeIds = parseRangeFormat(normalized);
   if (rangeIds) {
-    if (access?.threadScope) {
-      return {
-        hint: `The cursor "${cursor}" looks like an observation-group range. Browsing uses the range endpoints as message anchors, so try start="${rangeIds.startId}" or end="${rangeIds.endId}" directly if you need a specific boundary message.`,
-        ...rangeIds,
-      };
-    }
-
-    return resolveMessageById(memory, rangeIds.endId, access);
+    return {
+      hint: `The cursor "${cursor}" looks like a range. Use one of the individual message IDs as the cursor instead: start="${rangeIds.startId}" or end="${rangeIds.endId}".`,
+      ...rangeIds,
+    };
   }
 
-  return resolveMessageById(memory, normalized, access);
+  const memoryStore = await memory.getMemoryStore();
+  const result = await memoryStore.listMessagesById({ messageIds: [normalized] });
+  const message = result.messages.find(message => message.id === normalized);
+
+  if (!message) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  // Verify the cursor message belongs to the current resource
+  if (access?.resourceId && message.resourceId !== access.resourceId) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  // In thread scope, verify the cursor belongs to the current thread
+  if (access?.threadScope && message.threadId !== access.threadScope) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  return message;
 }
 
 // ── Thread listing ──────────────────────────────────────────────────
