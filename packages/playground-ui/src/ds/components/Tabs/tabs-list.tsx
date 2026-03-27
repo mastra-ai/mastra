@@ -21,7 +21,7 @@ export const TabList = ({ children, variant = 'default', alignment = 'full-width
             '[&>button]:py-2 [&>button]:px-6 [&>button]:font-normal [&>button]:text-neutral3 [&>button]:border-b [&>button]:border-border1':
               variant === 'default',
             '[&>button]:flex-1': variant === 'default' && alignment === 'full-width',
-            [`[&>button]:${transitions.colors} hover:[&>button]:text-neutral4`]: variant === 'default',
+            [`[&>button]:${transitions.colors} [&>button]:hover:text-neutral4`]: variant === 'default',
             '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:border-white/50':
               variant === 'default',
             // variant: buttons

@@ -94,7 +94,7 @@ html.light {
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;
-  @media (width >= --theme(--breakpoint-3xl)) {
+  @media (width >= theme(--breakpoint-3xl)) {
     max-width: none;
   }
   @media (width >= 1400px) {
@@ -140,6 +140,7 @@ html.light {
   --spacing-2_5: 0.625rem;
   --spacing-3_5: 0.875rem;
 
+  --breakpoint-2xl: 1536px;
   --breakpoint-3xl: 1700px;
   --breakpoint-4xl: 2000px;
 
@@ -270,6 +271,12 @@ html.light {
   --color-border1: var(--border1);
   --color-border2: var(--border2);
 
+  /* Semantic color aliases */
+  --color-text1: var(--neutral6);
+  --color-warning1: var(--accent6);
+  --color-positive1: var(--accent1);
+  --color-negative1: var(--accent2);
+
   --font-serif:
     var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times,
     serif;
@@ -314,6 +321,24 @@ html.light {
 }
 
 /* your custom layer goes AFTER Tailwind imports */
+
+@utility wrap-break-word {
+  overflow-wrap: break-word;
+}
+
+@utility h-form-sm {
+  height: 1.75rem;
+}
+@utility h-form-md {
+  height: 2rem;
+}
+@utility h-form-default {
+  height: 2.25rem;
+}
+@utility h-form-lg {
+  height: 2.5rem;
+}
+
 @utility time-input {
   &::-webkit-calendar-picker-indicator {
     @apply cursor-pointer;

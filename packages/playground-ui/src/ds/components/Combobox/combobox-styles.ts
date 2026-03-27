@@ -28,7 +28,7 @@ export const comboboxStyles = {
   ),
 
   /** Positioner */
-  positioner: 'z-100 pointer-events-auto',
+  positioner: 'z-50 pointer-events-auto',
 
   /** Search input container */
   searchContainer: cn('flex items-center border-b border-border1 px-3 py-2', transitions.colors),
@@ -58,7 +58,7 @@ export const comboboxStyles = {
   ),
 
   /** Option item with selected state (single select) */
-  itemSelected: 'data-[selected]:bg-accent1Dark data-selected:text-accent1',
+  itemSelected: 'data-selected:bg-accent1Dark data-selected:text-accent1',
 
   /** Check indicator container */
   checkContainer: 'mr-2 flex h-4 w-4 shrink-0 items-center justify-center',
