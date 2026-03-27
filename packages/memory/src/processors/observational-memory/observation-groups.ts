@@ -211,5 +211,11 @@ export function reconcileObservationGroupsFromReflection(content: string, source
       .join('\n\n');
   }
 
-  return wrapInObservationGroup(normalizedContent, combineObservationGroupRanges(sourceGroups), generateAnchorId());
+  return wrapInObservationGroup(
+    normalizedContent,
+    combineObservationGroupRanges(sourceGroups),
+    generateAnchorId(),
+    undefined,
+    'reflection',
+  );
 }
