@@ -149,9 +149,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
       const observabilityContext = getOmObservabilityContext(args);
       state.__omObservabilityContext = observabilityContext;
-      if (observabilityContext) {
-        this.turn.observabilityContext = observabilityContext;
-      }
+      this.turn.observabilityContext = observabilityContext;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {

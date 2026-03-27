@@ -1039,7 +1039,7 @@ describe('Observer Agent Helpers', () => {
         reflection: { observationTokens: 1000 },
       });
 
-      (om.observer as any).observerAgent = {
+      vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
         stream: async (prompt: any) => {
           capturedPrompt = prompt;
           return {
@@ -1049,7 +1049,7 @@ describe('Observer Agent Helpers', () => {
             }),
           };
         },
-      };
+      });
 
       const message = createTestMessage('ignored', 'user');
       message.content = {
@@ -3534,7 +3534,7 @@ Ask about favorite vegetarian dishes
       scope: 'thread',
     });
 
-    (om.observer as any).observerAgent = {
+    vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
         return {
@@ -3544,7 +3544,7 @@ Ask about favorite vegetarian dishes
           }),
         };
       },
-    };
+    });
 
     const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
     attachmentMessage.content = {

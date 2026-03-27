@@ -36,7 +36,6 @@ export class ObserverRunner {
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
-  private observerAgent?: Agent;
 
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
@@ -61,11 +60,6 @@ export class ObserverRunner {
       ),
       model,
     });
-  }
-
-  private getAgent(model: ConcreteObservationModel): Agent {
-    this.observerAgent ??= this.createAgent(model);
-    return this.observerAgent;
   }
 
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
@@ -105,7 +99,7 @@ export class ObserverRunner {
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const agent = options?.model ? this.createAgent(options.model) : this.getAgent(resolvedModel.model);
+    const agent = this.createAgent(resolvedModel.model);
 
     const observerMessages = [
       {
