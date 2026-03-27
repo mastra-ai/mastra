@@ -107,8 +107,9 @@ export function DatasetDetailView({
       const newScorerIds = [...(datasetScorerIds ?? []), scorerId];
       try {
         await updateDataset.mutateAsync({ datasetId, scorerIds: newScorerIds });
-      } catch {
+      } catch (error) {
         toast.error('Failed to attach scorer');
+        throw error;
       }
     },
     [datasetId, datasetScorerIds, updateDataset],
@@ -533,9 +534,13 @@ export function DatasetDetailView({
                         type="button"
                         className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
                         onClick={async () => {
-                          await handleAttachScorer(id);
-                          toast.success(`Attached "${name}" to this dataset`);
-                          setShowAttachScorerDialog(false);
+                          try {
+                            await handleAttachScorer(id);
+                            toast.success(`Attached "${name}" to this dataset`);
+                            setShowAttachScorerDialog(false);
+                          } catch {
+                            // error toast already shown by handleAttachScorer
+                          }
                         }}
                       >
                         <Txt variant="ui-sm" className="font-medium">
