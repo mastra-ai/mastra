@@ -4,6 +4,7 @@ description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
+  - "@mastra/react"
 ---
 
 # Mastra client SDK
@@ -132,6 +133,23 @@ export const mastraClient = new MastraClient({
 Visit [MastraClient](/reference/client-js/mastra-client) for more configuration options.
 
 :::
+
+## Credentials and session cookies
+
+**Authenticate Mastra API calls with session cookies** when your UI and Mastra API are not on the same origin—different host, subdomain, or port (for example Mastra Studio on one port and a custom server on another). Add **`credentials: 'include'`** to `MastraClient` so each request carries the cookies the user already has after sign-in. Skip this and you will often get **`401`** responses from Mastra even though login succeeded in the browser.
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+  credentials: 'include',
+})
+```
+
+**Allow credentialed cross-origin requests on your server**—see [CORS: requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#requests_with_credentials). You need a concrete `Access-Control-Allow-Origin` (not `*`) and `Access-Control-Allow-Credentials: true`, or the browser will block the call before it reaches Mastra.
+
+**Using `@mastra/react`?** Wrap your app with `MastraReactProvider`, set `baseUrl` and `apiPrefix` to match your server, and rely on the default `credentials: 'include'`. Change `credentials` only when you deliberately want `same-origin` or `omit` behavior.
 
 ## Adding request cancelling
 
