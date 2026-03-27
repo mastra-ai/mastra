@@ -1,6 +1,6 @@
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { LatencyCard } from './latency-card';
-import { AgentRunsKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
+import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
 import { ModelUsageCostCard } from './model-usage-cost-card';
 import { ScoresCard } from './scores-card';
 import { TokenUsageByAgentCard } from './token-usage-by-agent-card';
@@ -13,7 +13,7 @@ import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
 
 const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   // 'ObservabilityStorageClickhouse',
-  // 'ObservabilityStorageDuckDB',
+  'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
 ]);
 
@@ -33,7 +33,7 @@ export function MetricsDashboard() {
         <EmptyState
           iconSlot={<CircleSlashIcon />}
           titleSlot="Metrics are not available with your current storage"
-          descriptionSlot="Metrics currently require in-memory storage for observability. ClickHouse and DuckDB support is coming soon. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+          descriptionSlot="Metrics require DuckDB or in-memory storage for observability. ClickHouse support is coming soon. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
           actionSlot={
             <Button
               variant="ghost"
@@ -64,10 +64,7 @@ export function MetricsDashboard() {
 
       <MetricsFlexGrid>
         <AgentRunsKpiCard />
-        {/* 
-          hidden for now
-          <ModelCostKpiCard /> 
-        */}
+        <ModelCostKpiCard />
         <TotalTokensKpiCard />
         <AvgScoreKpiCard />
       </MetricsFlexGrid>

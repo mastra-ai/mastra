@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.9.2-alpha.4",
+  "version": "0.9.3-alpha.5",
   "description": "",
   "type": "module",
   "files": [
@@ -73,7 +73,7 @@
     "execa": "^9.6.1",
     "fastest-levenshtein": "^1.0.16",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "^3.14.2",
+    "yaml": "^2.7.1",
     "partial-json": "^0.1.7",
     "strip-ansi": "^7.2.0",
     "tree-kill": "^1.2.2",
@@ -84,7 +84,6 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

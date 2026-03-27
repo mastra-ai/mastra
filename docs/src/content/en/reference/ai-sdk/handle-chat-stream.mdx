@@ -135,6 +135,13 @@ export async function POST(req: Request) {
     defaultValue: 'false',
   },
   {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      'Called when the stream encounters an error. Return the string that will be sent to the client as the error message. Use this to sanitize errors before they reach the client — for example, to prevent internal infrastructure details from leaking to end users.',
+    isOptional: true,
+  },
+  {
     name: 'messageMetadata',
     type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
     description:
