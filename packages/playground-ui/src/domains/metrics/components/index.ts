@@ -13,6 +13,8 @@ export { ModelUsageCostCard } from './model-usage-cost-card';
 export { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 export type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
 export { HorizontalBars } from '@/ds/components/HorizontalBars';
+export { MetricsLineChart, type MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
+export { MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
 export { TracesVolumeCard } from './traces-volume-card';
 export { useTraceVolumeMetrics } from '../hooks/use-trace-volume-metrics';
 export type { VolumeRow } from '../hooks/use-trace-volume-metrics';
