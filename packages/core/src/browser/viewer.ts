@@ -20,6 +20,7 @@ import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import type { Tool } from '../tools/tool';
 import { commandExists } from '../workspace/sandbox/native-sandbox/detect';
+import type { ProcessHandle, SandboxProcessManager } from '../workspace/sandbox/process-manager';
 import { MastraBrowser } from './browser';
 import type { BrowserConfig, MouseEventParams, KeyboardEventParams } from './browser';
 import { ScreencastStream } from './screencast/screencast-stream';
@@ -32,7 +33,7 @@ import type { CdpSessionLike, CdpSessionProvider, ScreencastOptions } from './sc
 /**
  * Built-in CLI providers that BrowserViewer knows how to get CDP URL from.
  */
-export type BuiltInCLIProvider = 'agent-browser' | 'playwright-cli' | 'browser-use';
+export type BuiltInCLIProvider = 'agent-browser' | 'browser-use';
 
 /**
  * Custom CLI provider configuration.
@@ -87,15 +88,6 @@ export const CLI_PROVIDER_COMMANDS: Record<
     checkArgs: ['--version'],
     install: 'npm install -g agent-browser',
   },
-  'playwright-cli': {
-    binary: 'playwright-cli',
-    npxPackage: '@playwright/cli',
-    getCdpUrlArgs: [], // No direct command; uses process discovery fallback
-    openArgs: ['open'],
-    headedArg: '--headed',
-    checkArgs: ['--help'],
-    install: 'npm install -g @playwright/cli',
-  },
   'browser-use': {
     binary: 'browser-use',
     npxPackage: 'browser-use', // Python - npx won't work, but kept for consistency
@@ -115,10 +107,6 @@ export const CLI_SKILL_REPOS: Record<BuiltInCLIProvider, { repo: string; skill: 
   'agent-browser': {
     repo: 'vercel-labs/agent-browser',
     skill: 'agent-browser',
-  },
-  'playwright-cli': {
-    repo: 'microsoft/playwright-cli',
-    skill: 'playwright-cli',
   },
   'browser-use': {
     repo: 'browser-use/browser-use',
@@ -143,6 +131,13 @@ export interface BrowserViewerConfig extends BrowserConfig {
    * Useful for running commands in a sandbox environment.
    */
   execCommand?: (command: string) => Promise<{ stdout: string; stderr: string }>;
+
+  /**
+   * Process manager for spawning and tracking browser processes.
+   * When provided, the browser CLI is spawned as a tracked background process,
+   * enabling proper CDP port discovery and thread isolation.
+   */
+  processManager?: SandboxProcessManager;
 }
 
 export interface BrowserViewerEvents {
@@ -297,6 +292,12 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   private browserPollTimer: ReturnType<typeof setTimeout> | null = null;
   private _isPollingForBrowser = false;
 
+  /**
+   * Handle to the browser process spawned via processManager.
+   * Used for CDP port discovery and cleanup.
+   */
+  private browserProcess: ProcessHandle | null = null;
+
   constructor(config: BrowserViewerConfig = {}) {
     super(config);
     this.viewerConfig = config;
@@ -321,6 +322,9 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   /**
    * Launch the browser using the CLI provider.
    * This runs the CLI's open/launch command.
+   *
+   * When processManager is available, spawns the browser as a tracked background
+   * process, enabling PID-based CDP port discovery and thread isolation.
    */
   private async launchBrowserViaCLI(): Promise<void> {
     const cli = this.viewerConfig.cli;
@@ -329,51 +333,74 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
       return;
     }
 
-    const execCommand = this.viewerConfig.execCommand;
-    if (!execCommand) {
-      // No exec command available, can't launch
-      console.warn('[BrowserViewer] No execCommand configured, cannot launch browser via CLI');
+    if (typeof cli !== 'string') {
+      // Custom CLI providers don't have openArgs, so we skip launching
       return;
     }
 
-    if (typeof cli === 'string') {
-      // Built-in CLI provider
-      const commands = CLI_PROVIDER_COMMANDS[cli];
-      if (!commands) {
-        throw new Error(`Unknown CLI provider: ${cli}`);
-      }
-
-      // Build open args based on headless config
-      // Default is headless=true (no visible UI), so we only add headed arg when headless=false
-      const openArgs = [...commands.openArgs];
-      if (this.viewerConfig.headless === false && commands.headedArg) {
-        openArgs.push(commands.headedArg);
-      }
-
-      // Try direct command first, fall back to npx
-      const useNpx = !commandExists(commands.binary);
-      const cmdParts = useNpx ? ['npx', commands.npxPackage, ...openArgs] : [commands.binary, ...openArgs];
-      const fullCommand = cmdParts.join(' ');
-
-      try {
-        await execCommand(fullCommand);
-      } catch (error) {
-        // Command may "fail" but browser still launches - check if we can get CDP URL
-        const msg = error instanceof Error ? error.message : String(error);
-        console.info(`[BrowserViewer] CLI launch completed: ${msg}`);
-      }
+    // Built-in CLI provider
+    const commands = CLI_PROVIDER_COMMANDS[cli];
+    if (!commands) {
+      throw new Error(`Unknown CLI provider: ${cli}`);
     }
-    // Custom CLI providers don't have openArgs, so we skip launching
+
+    // Build open args based on headless config
+    // Default is headless=true (no visible UI), so we only add headed arg when headless=false
+    const openArgs = [...commands.openArgs];
+    if (this.viewerConfig.headless === false && commands.headedArg) {
+      openArgs.push(commands.headedArg);
+    }
+
+    // Try direct command first, fall back to npx
+    const useNpx = !commandExists(commands.binary);
+    const cmdParts = useNpx ? ['npx', commands.npxPackage, ...openArgs] : [commands.binary, ...openArgs];
+    const fullCommand = cmdParts.join(' ');
+
+    // Prefer processManager for spawning (enables PID tracking and thread isolation)
+    const processManager = this.viewerConfig.processManager;
+    if (processManager) {
+      try {
+        this.browserProcess = await processManager.spawn(fullCommand);
+        this.logger.debug?.(`[BrowserViewer] Spawned browser process with PID: ${this.browserProcess.pid}`);
+
+        // Wait a bit for the browser to start and expose CDP port
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch {
+        // Process may exit quickly for daemon-style CLIs - this is expected
+      }
+      return;
+    }
+
+    // Fallback to execCommand (one-shot, no PID tracking)
+    const execCommand = this.viewerConfig.execCommand;
+    if (!execCommand) {
+      console.warn('[BrowserViewer] No processManager or execCommand configured, cannot launch browser via CLI');
+      return;
+    }
+
+    try {
+      await execCommand(fullCommand);
+    } catch {
+      // Command may "fail" but browser still launches - this is expected for daemon-style CLIs
+    }
   }
 
   /**
-   * CLI providers don't close the browser - the CLI handles that.
-   * This just disconnects our CDP connection.
+   * Close the browser connection and optionally kill the browser process.
+   *
+   * When the browser was spawned via processManager, we kill the process
+   * to clean up properly. Otherwise, we just disconnect (CLI handles lifecycle).
    */
   protected async doClose(): Promise<void> {
-    // CLI handles browser close via skills (e.g., `agent-browser close`)
-    // We just disconnect our CDP connection
+    // Disconnect CDP connection first
     await this.disconnect();
+
+    // If we spawned the browser via processManager, kill it
+    if (this.browserProcess) {
+      this.logger.debug?.(`[BrowserViewer] Killing browser process ${this.browserProcess.pid}`);
+      await this.browserProcess.kill();
+      this.browserProcess = null;
+    }
   }
 
   /**
@@ -409,28 +436,24 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    */
   async connect(): Promise<void> {
     if (this.cdpClient?.isConnected) {
-      this.logger.debug('[CDP] Already connected');
       return; // Already connected
     }
 
-    this.logger.debug?.('[BrowserViewer] Connecting to browser...');
     const cdpUrl = await this.getCdpUrl();
     this._lastCdpUrl = cdpUrl;
     this.cdpClient = new CdpClient();
 
     try {
-      this.logger.debug?.(`[BrowserViewer] Connecting to CDP: ${cdpUrl}`);
       await this.cdpClient.connect(cdpUrl);
 
       // Enable Page domain for screencast
       await this.cdpClient.send('Page.enable');
 
-      this.logger.debug?.(`[BrowserViewer] Connected successfully to: ${cdpUrl}`);
+      this.logger.debug?.(`[BrowserViewer] Connected to CDP: ${cdpUrl}`);
       this.notifyBrowserReady();
 
       // Handle disconnection
       this.cdpClient.on('close', () => {
-        this.logger.debug?.('[BrowserViewer] Connection closed');
         this.handleDisconnect();
       });
     } catch (error) {
@@ -481,30 +504,24 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
         const binaryExists = commandExists(providerConfig.binary);
         const cmdPrefix = binaryExists ? providerConfig.binary : `npx ${providerConfig.npxPackage}`;
         const command = `${cmdPrefix} ${providerConfig.getCdpUrlArgs.join(' ')}`;
-        this.logger.debug?.(`[BrowserViewer] Getting CDP URL via command: ${command}`);
 
         try {
           const result = await this.execCommand(command);
           const cdpUrl = result.stdout.trim();
 
           if (cdpUrl && (cdpUrl.startsWith('ws://') || cdpUrl.startsWith('wss://'))) {
-            this.logger.debug?.(`[BrowserViewer] Got CDP URL from command: ${cdpUrl}`);
             return await this.getPageCdpUrl(cdpUrl);
           }
-          this.logger.debug?.(`[BrowserViewer] Command returned invalid CDP URL: ${cdpUrl}`);
-        } catch (error) {
-          this.logger.debug?.(`[BrowserViewer] Command failed, falling back to process discovery: ${error}`);
+        } catch {
+          // Command failed - fall back to process discovery
         }
       }
 
       // Fallback: discover CDP port from running Chrome processes
-      this.logger.debug?.(`[BrowserViewer] Attempting process discovery for ${cli}`);
       const cdpUrl = await this.discoverCdpFromProcesses();
       if (cdpUrl) {
-        this.logger.debug?.(`[BrowserViewer] Discovered CDP URL from process: ${cdpUrl}`);
         return await this.getPageCdpUrl(cdpUrl);
       }
-      this.logger.debug?.(`[BrowserViewer] Process discovery failed - no browser found`);
 
       throw new Error(`Could not find CDP URL for ${cli}. Is the browser running?`);
     } else {
@@ -533,50 +550,56 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   /**
    * Discover CDP port by inspecting running Chrome/Chromium processes.
    * Looks for --remote-debugging-port argument in process command lines.
-   * Returns the most recently started browser's CDP URL.
+   *
+   * When browserProcess is tracked (via processManager), searches only child
+   * processes of that PID for better isolation. Otherwise, searches globally.
    */
   private async discoverCdpFromProcesses(): Promise<string | null> {
     try {
-      // Find Chrome processes with remote debugging enabled
-      // Works on macOS/Linux; Windows would need different approach
-      const cmd =
-        process.platform === 'win32'
-          ? "wmic process where \"name like '%chrome%' or name like '%chromium%'\" get commandline 2>nul"
-          : "ps aux | grep -E 'chrome|chromium' | grep 'remote-debugging-port' | grep -v grep";
+      let cmd: string;
 
-      this.logger.debug?.(`[BrowserViewer] Running process discovery: ${cmd}`);
+      if (this.browserProcess && process.platform !== 'win32') {
+        // We have a tracked browser process - search its child processes only
+        // This provides thread isolation (each viewer only sees its own browser)
+        const pid = this.browserProcess.pid;
+
+        // Use pgrep to find child processes, then get their command lines
+        cmd = `pgrep -P ${pid} | xargs -I{} ps -p {} -o command= 2>/dev/null | grep -E 'remote-debugging-port'`;
+      } else {
+        // No tracked process - fall back to global search
+        // Works on macOS/Linux; Windows would need different approach
+        cmd =
+          process.platform === 'win32'
+            ? "wmic process where \"name like '%chrome%' or name like '%chromium%'\" get commandline 2>nul"
+            : "ps aux | grep -E 'chrome|chromium' | grep 'remote-debugging-port' | grep -v grep";
+      }
+
       const result = await this.execCommand(cmd);
       const output = result.stdout;
 
       // Extract all unique ports from --remote-debugging-port=XXXXX
       const portMatches = output.matchAll(/--remote-debugging-port=(\d+)/g);
       const ports = [...new Set([...portMatches].map(m => m[1]).filter(p => p !== '0'))];
-      this.logger.debug?.(`[BrowserViewer] Found ports: ${ports.join(', ') || 'none'}`);
 
       // Try each port, return first accessible one
-      // (Processes listed most recently are likely newer browsers)
       for (const port of ports.reverse()) {
         try {
-          this.logger.debug?.(`[BrowserViewer] Trying port ${port}...`);
           const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
             signal: AbortSignal.timeout(1000),
           });
           if (response.ok) {
             const data = (await response.json()) as { webSocketDebuggerUrl?: string };
             if (data.webSocketDebuggerUrl) {
-              this.logger.debug?.(`[BrowserViewer] Port ${port} accessible, CDP URL: ${data.webSocketDebuggerUrl}`);
               return data.webSocketDebuggerUrl;
             }
           }
-        } catch (error) {
-          this.logger.debug?.(`[BrowserViewer] Port ${port} not accessible: ${error}`);
+        } catch {
+          // Port not accessible, try next
         }
       }
 
-      this.logger.debug?.('[BrowserViewer] No accessible CDP ports found');
       return null;
-    } catch (error) {
-      this.logger.debug?.(`[BrowserViewer] Process discovery error: ${error}`);
+    } catch {
       return null;
     }
   }
@@ -798,18 +821,15 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
       return;
     }
 
-    this.logger.debug?.('[BrowserViewer] Polling for browser availability...');
     // Try to connect to the browser
     this.connect()
       .then(() => {
         // Successfully connected - stop polling
-        this.logger.debug?.('[BrowserViewer] Browser found, stopping poll');
         this.stopPollingForBrowser();
         // notifyBrowserReady() is called in connect()
       })
-      .catch(error => {
+      .catch(() => {
         // Browser not ready yet - schedule next poll
-        this.logger.debug?.(`[BrowserViewer] Poll attempt failed: ${error}`);
         if (this._isPollingForBrowser) {
           this.browserPollTimer = setTimeout(() => this.pollForBrowser(), 1000);
         }

@@ -735,16 +735,13 @@ export class Workspace<
       screencast: config.screencast,
       headless: config.headless,
       autoReconnect: false, // Let user control reconnection
-      // Use sandbox's executeCommand if available
+      // Prefer processManager for spawning (enables PID tracking and thread isolation)
+      processManager: this._sandbox?.processes,
+      // Fallback to executeCommand for one-shot commands
       execCommand: this._sandbox?.executeCommand
         ? async (command: string) => {
-            // Parse command string into command and args
-            // Simple split - for complex commands, user should use shell
-            const parts = command.split(' ');
-            const cmd = parts[0] ?? '';
-            const args = parts.slice(1);
-
-            const result = await this._sandbox!.executeCommand!(cmd, args, { timeout: 10000 });
+            // Pass command as-is (no splitting) to allow shell syntax (pipes, redirects)
+            const result = await this._sandbox!.executeCommand!(command, [], { timeout: 10000 });
             return {
               stdout: result.stdout ?? '',
               stderr: result.stderr ?? '',
