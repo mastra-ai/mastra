@@ -103,6 +103,27 @@ describe('createMastraClient credentials', () => {
     expect(capturedClient.options.credentials).toBe('include');
   });
 
+  it('should allow overriding credentials via prop', async () => {
+    const { createElement } = await import('react');
+    const { renderToString } = await import('react-dom/server');
+
+    let capturedClient: any;
+    function Inspector() {
+      capturedClient = useMastraClient();
+      return null;
+    }
+
+    renderToString(
+      createElement(
+        MastraClientProvider,
+        { baseUrl: 'http://localhost:4000', credentials: 'same-origin' },
+        createElement(Inspector),
+      ),
+    );
+
+    expect(capturedClient.options.credentials).toBe('same-origin');
+  });
+
   it('should pass credentials: include for remote URLs', async () => {
     const { createElement } = await import('react');
     const { renderToString } = await import('react-dom/server');
