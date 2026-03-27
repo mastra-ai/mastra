@@ -104,18 +104,15 @@ export function sanitizeV5UIMessages(
 
         if (!AIV5.isToolUIPart(p)) return true;
 
-        // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
-        // This filters out input-available (incomplete client-side tool calls) and input-streaming
+        // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
+        // Filter out incomplete client-side tool calls (input-available without providerExecuted)
+        // and input-streaming states.
         if (filterIncompleteToolCalls) {
-          if (p.state === 'output-available' || p.state === 'output-error') {
-            // Strip completed provider-executed tools (e.g. Anthropic web_search). The provider
-            // already handled these internally — sending tool_result for server_tool_use is invalid.
-            if (p.providerExecuted) return false;
-            return true;
-          }
-          // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
-          // because no client-side result is added. Keep them so the provider API sees the
-          // server_tool_use block and can execute the deferred tool on the next request.
+          // Completed tools (client or provider) — keep them
+          if (p.state === 'output-available' || p.state === 'output-error') return true;
+          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+          // the server_tool_use block on the next request.
           if (p.state === 'input-available' && p.providerExecuted) return true;
           return false;
         }
@@ -196,6 +193,23 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
       // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
       // However, we should NOT add step-start between consecutive tool parts (parallel tool calls)
       if (nextPart && nextPart.type !== `step-start` && !AIV5.isToolUIPart(nextPart)) {
+        message.parts.splice(index + 1, 0, { type: 'step-start' });
+      }
+
+      // Split client tools from completed provider-executed tools.
+      // Anthropic requires tool_result to immediately follow tool_use. When a client tool_use and
+      // a server_tool_use (with inline result) are in the same block, convertToModelMessages produces:
+      //   assistant: [tool_use(client), server_tool_use(provider), tool_result(provider)]
+      //   user:      [tool_result(client)]
+      // Anthropic rejects this because tool_result(client) doesn't immediately follow tool_use(client).
+      // Splitting them into separate blocks fixes the ordering.
+      if (
+        nextPart &&
+        AIV5.isToolUIPart(nextPart) &&
+        !part.providerExecuted &&
+        nextPart.providerExecuted &&
+        (nextPart.state === 'output-available' || nextPart.state === 'output-error')
+      ) {
         message.parts.splice(index + 1, 0, { type: 'step-start' });
       }
     }

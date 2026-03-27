@@ -145,6 +145,29 @@ npx @mastra/codemod@latest v1/agent-processor-methods .
 
 :::
 
+### Zod v3 and v4 structured output schemas remain supported
+
+Mastra v1 continues to accept both Zod v3 and Zod v4 schemas in public agent APIs that take structured output schemas. This includes methods such as `agent.generateLegacy()` and `agent.streamLegacy()` and the related option types.
+
+If you already pass Zod schemas to agent APIs, no migration is required for Zod version compatibility. Keep your existing schema imports:
+
+```ts
+import { z as z3 } from 'zod/v3'
+import { z as z4 } from 'zod/v4'
+
+await agent.generateLegacy({
+  prompt: 'Summarize this ticket',
+  output: z3.object({ summary: z3.string() }),
+})
+
+await agent.streamLegacy({
+  prompt: 'Extract contact info',
+  output: z4.object({ email: z4.string().email() }),
+})
+```
+
+Only update your imports if you want to standardize on one Zod version across your application.
+
 ### Default options method renames for AI SDK versions
 
 Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
@@ -213,7 +236,7 @@ To migrate, add an `id` field to all Agent configurations.
 +   id: 'my-agent',
     name: 'My Agent',
     instructions: 'You are a helpful assistant',
-    model: 'openai/gpt-4',
+    model: 'openai/gpt-5.4',
   });
 ```
 

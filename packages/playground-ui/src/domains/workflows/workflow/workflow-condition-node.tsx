@@ -1,15 +1,16 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
+import { ChevronDown } from 'lucide-react';
+import { Highlight, themes } from 'prism-react-renderer';
 import { Fragment, useState } from 'react';
 
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
-
+import { useCurrentRun } from '../context/use-current-run';
 import type { Condition } from './utils';
-import { Highlight, themes } from 'prism-react-renderer';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
+import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { Badge } from '@/ds/components/Badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+
 import {
   Dialog,
   DialogContent,
@@ -19,10 +20,9 @@ import {
   DialogBody,
 } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { useCurrentRun } from '../context/use-current-run';
-import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { cn } from '@/lib/utils';
 
 export type ConditionNode = Node<
   {

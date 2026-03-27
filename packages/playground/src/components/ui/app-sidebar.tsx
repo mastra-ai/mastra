@@ -1,7 +1,6 @@
 import {
   AgentIcon,
   AuthStatus,
-  GithubIcon,
   McpServerIcon,
   ToolsIcon,
   WorkflowIcon,
@@ -14,117 +13,159 @@ import {
   useIsCmsAvailable,
   useAuthCapabilities,
   isAuthenticated,
+  usePermissions,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
-  GaugeIcon,
   EyeIcon,
-  PackageIcon,
   GlobeIcon,
   BookIcon,
   FileTextIcon,
-  EarthIcon,
-  CloudUploadIcon,
-  MessagesSquareIcon,
   FolderIcon,
   Cpu,
+  BarChart3Icon,
   DatabaseIcon,
+  TestTubeDiagonalIcon,
+  BeakerIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui-manager';
 
-const mainNavigation: NavSection[] = [
+type SidebarLink = NavLink & {
+  requiredPermission?: string;
+  requiredAnyPermission?: string[];
+  requiresExperimentalFeatures?: boolean;
+};
+
+type SidebarSection = Omit<NavSection, 'links'> & {
+  links: SidebarLink[];
+};
+
+const mainNavigation: SidebarSection[] = [
   {
-    key: 'main',
-
+    key: 'primitives',
+    title: 'Primitives',
+    href: '/primitives',
     links: [
       {
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
         isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'agents:read',
       },
       {
         name: 'Prompts',
         url: '/prompts',
         icon: <FileTextIcon />,
         isOnMastraPlatform: true,
+        indent: true,
       },
       {
         name: 'Workflows',
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'workflows:read',
       },
       {
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
         isOnMastraPlatform: false,
+        indent: true,
+        requiredPermission: 'processors:read',
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         icon: <McpServerIcon />,
         isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'mcps:read',
       },
       {
         name: 'Tools',
         url: '/tools',
         icon: <ToolsIcon />,
         isOnMastraPlatform: true,
-      },
-      {
-        name: 'Scorers',
-        url: '/scorers',
-        icon: <GaugeIcon />,
-        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'tools:read',
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         icon: <FolderIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'workspaces:read',
       },
       {
         name: 'Request Context',
         url: '/request-context',
         icon: <GlobeIcon />,
         isOnMastraPlatform: true,
+        indent: true,
+      },
+    ],
+  },
+  {
+    key: 'evaluation',
+    title: 'Evaluation',
+    href: '/evaluation',
+    links: [
+      {
+        name: 'Scorers',
+        url: '/evaluation?tab=scorers',
+        icon: <BeakerIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'scorers:read',
+      },
+      {
+        name: 'Datasets',
+        url: '/evaluation?tab=datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredAnyPermission: ['datasets:read'],
+      },
+      {
+        name: 'Experiments',
+        url: '/evaluation?tab=experiments',
+        icon: <TestTubeDiagonalIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredAnyPermission: ['datasets:read'],
       },
     ],
   },
   {
     key: 'observability',
-    separator: true,
+    title: 'Observability',
+    href: '/observability-overview',
     links: [
       {
-        name: 'Observability',
+        name: 'Metrics',
+        url: '/metrics',
+        icon: <BarChart3Icon />,
+        isOnMastraPlatform: true,
+        indent: true,
+      },
+      {
+        name: 'Traces',
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
-      },
-      {
-        name: 'Datasets',
-        url: '/datasets',
-        icon: <DatabaseIcon />,
-        isOnMastraPlatform: false,
+        indent: true,
+        requiredPermission: 'observability:read',
       },
     ],
   },
   {
-    key: 'Templates',
-    separator: true,
-    links: [
-      {
-        name: 'Templates',
-        url: '/templates',
-        icon: <PackageIcon />,
-        isOnMastraPlatform: false,
-      },
-    ],
-  },
-
-  {
-    key: 'Settings',
+    key: 'bottom',
     separator: true,
     links: [
       {
@@ -133,45 +174,49 @@ const mainNavigation: NavSection[] = [
         icon: <SettingsIcon />,
         isOnMastraPlatform: false,
       },
+      {
+        name: 'Resources',
+        url: '/resources',
+        icon: <BookIcon />,
+        isOnMastraPlatform: true,
+      },
     ],
   },
 ];
 
-const secondNavigation: NavSection = {
-  key: 'others',
-  title: 'Other links',
-  links: [
-    {
-      name: 'Mastra APIs',
-      url: '/swagger-ui',
-      icon: <EarthIcon />,
-      isOnMastraPlatform: false,
-    },
-    {
-      name: 'Documentation',
-      url: 'https://mastra.ai/en/docs',
-      icon: <BookIcon />,
-      isOnMastraPlatform: true,
-    },
-    {
-      name: 'Github',
-      url: 'https://github.com/mastra-ai/mastra',
-      icon: <GithubIcon />,
-      isOnMastraPlatform: true,
-    },
-    {
-      name: 'Community',
-      url: 'https://discord.gg/BTYqqHKUrf',
-      icon: <MessagesSquareIcon />,
-      isOnMastraPlatform: true,
-    },
-  ],
-};
-
 declare global {
   interface Window {
     MASTRA_HIDE_CLOUD_CTA: string;
+    MASTRA_TEMPLATES?: string;
   }
+}
+
+/**
+ * Maps evaluation tab values to their corresponding detail route prefixes.
+ * e.g. tab=scorers should also be active when at /evaluation/scorers/:id
+ */
+const TAB_DETAIL_PREFIX: Record<string, string> = {
+  scorers: '/evaluation/scorers',
+  datasets: '/evaluation/datasets',
+};
+
+function getIsLinkActive(link: SidebarLink, pathname: string, search: string): boolean {
+  if (link.url.includes('?')) {
+    const [linkPath, linkQuery] = link.url.split('?');
+    // Parse the tab param from both the link URL and the current location
+    const linkTab = new URLSearchParams(linkQuery).get('tab');
+    const currentTab = new URLSearchParams(search).get('tab');
+    // Exact tab match on the same base path
+    if (pathname === linkPath && linkTab && linkTab === currentTab) return true;
+    // Detail page match: e.g. /evaluation/scorers/:id while Scorers tab link is active
+    if (linkTab) {
+      const routePrefix = TAB_DETAIL_PREFIX[linkTab];
+      if (routePrefix && (pathname === routePrefix || pathname.startsWith(routePrefix + '/'))) return true;
+    }
+    return false;
+  }
+  // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
+  return pathname === link.url || pathname.startsWith(link.url + '/');
 }
 
 export function AppSidebar() {
@@ -180,27 +225,51 @@ export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const {
+    hasPermission,
+    hasAnyPermission,
+    rbacEnabled,
+    isAuthenticated: isPermissionsAuthenticated,
+    isLoading: isPermissionsLoading,
+  } = usePermissions();
 
   // Check if user is authenticated (small avatar) vs not (wide login button)
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
 
-  const filterPlatformLink = (link: NavLink) => {
+  const filterSidebarLink = (link: SidebarLink) => {
+    // 1) CMS link gating
     if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
       return false;
     }
-    if (isMastraPlatform) {
-      return link.isOnMastraPlatform;
+
+    // 2) Mastra platform link gating
+    if (isMastraPlatform && !link.isOnMastraPlatform) {
+      return false;
     }
+
+    // 3) RBAC link gating
+    // Avoid hiding during transient permission loading to prevent nav flicker.
+    if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) {
+      return true;
+    }
+
+    if (link.requiredPermission && !hasPermission(link.requiredPermission)) {
+      return false;
+    }
+
+    if (link.requiredAnyPermission && !hasAnyPermission(link.requiredAnyPermission)) {
+      return false;
+    }
+
     return true;
   };
 
   return (
-    <MainSidebar>
+    <MainSidebar footerSlot={<ExperimentalUIManager pathname={pathname} />}>
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
@@ -227,19 +296,24 @@ export function AppSidebar() {
 
       <MainSidebar.Nav>
         {mainNavigation.map(section => {
-          const filteredLinks = section.links.filter(filterPlatformLink);
+          const filteredLinks = section.links.filter(filterSidebarLink);
           const showSeparator = filteredLinks.length > 0 && section?.separator;
+
+          const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname, location.search));
+          const isHeaderActive = !!(section.href && pathname === section.href && !anySubLinkActive);
 
           return (
             <MainSidebar.NavSection key={section.key}>
               {section?.title ? (
-                <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
+                <MainSidebar.NavHeader state={state} href={section.href} isActive={isHeaderActive}>
+                  {section.title}
+                </MainSidebar.NavHeader>
               ) : (
                 <>{showSeparator && <MainSidebar.NavSeparator />}</>
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const isActive = pathname.startsWith(link.url);
+                  const isActive = getIsLinkActive(link, pathname, location.search);
                   return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>
@@ -249,30 +323,6 @@ export function AppSidebar() {
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom>
-        <MainSidebar.Nav>
-          <MainSidebar.NavSection>
-            <MainSidebar.NavSeparator />
-            <MainSidebar.NavList>
-              {secondNavigation.links.filter(filterPlatformLink).map(link => {
-                return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
-              })}
-
-              {!hideCloudCta && !isMastraPlatform ? (
-                <MainSidebar.NavLink
-                  link={{
-                    name: 'Share',
-                    url: 'https://mastra.ai/cloud',
-                    icon: <CloudUploadIcon />,
-                    variant: 'featured',
-                    tooltipMsg: "You're running Mastra Studio locally. Want your team to collaborate?",
-                    isOnMastraPlatform: false,
-                  }}
-                  state={state}
-                />
-              ) : null}
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-        </MainSidebar.Nav>
         {state !== 'collapsed' && (
           <>
             <MainSidebar.NavSeparator />

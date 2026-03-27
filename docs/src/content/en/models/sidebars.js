@@ -203,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/dinference',
+          label: 'DInference',
+        },
+        {
+          type: 'doc',
           id: 'providers/evroc',
           label: 'evroc',
         },
@@ -290,6 +295,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'LLM Gateway',
         },
         {
           type: 'doc',
@@ -470,6 +480,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/synthetic',
           label: 'Synthetic',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-coding-plan',
+          label: 'Tencent Coding Plan (China)',
         },
         {
           type: 'doc',

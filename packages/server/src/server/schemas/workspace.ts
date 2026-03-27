@@ -7,7 +7,7 @@
  * - Skills operations (list, get, search, references)
  */
 
-import z from 'zod';
+import { z } from 'zod/v4';
 
 // =============================================================================
 // Filesystem Path Schemas
@@ -265,6 +265,11 @@ export const skillReferencePathParams = skillNamePathParams.extend({
   referencePath: z.string().describe('Reference file path (URL encoded)'),
 });
 
+// Optional query param for disambiguating same-named skills
+export const skillDisambiguationQuerySchema = z.object({
+  path: z.string().optional().describe('Skill path for disambiguation when multiple skills share the same name'),
+});
+
 // =============================================================================
 // Skills Query Parameter Schemas
 // =============================================================================
@@ -287,6 +292,7 @@ export const skillMetadataSchema = z.object({
   license: z.string().optional(),
   compatibility: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  path: z.string(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [
@@ -296,7 +302,6 @@ export const skillSourceSchema = z.discriminatedUnion('type', [
 ]);
 
 export const skillSchema = skillMetadataSchema.extend({
-  path: z.string(),
   instructions: z.string(),
   source: skillSourceSchema,
   references: z.array(z.string()),
@@ -314,7 +319,6 @@ export const skillsShSourceSchema = z.object({
 });
 
 export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
-  path: z.string().describe('Path to the skill directory'),
   /** Source info for skills installed via skills.sh (from .meta.json) */
   skillsShSource: skillsShSourceSchema.optional(),
 });
@@ -353,6 +357,7 @@ export const listReferencesResponseSchema = z.object({
 
 export const skillSearchResultSchema = z.object({
   skillName: z.string(),
+  skillPath: z.string(),
   source: z.string(),
   content: z.string(),
   score: z.number(),

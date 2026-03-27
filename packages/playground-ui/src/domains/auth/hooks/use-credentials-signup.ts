@@ -84,7 +84,7 @@ export function useCredentialsSignUp() {
     },
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
+      void queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
   });
 }

@@ -1,12 +1,12 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
-import { ErrorAwareText } from './error-aware-text';
-import { IconButton } from '@/ds/components/IconButton';
 import { ToolFallback } from '../tools/tool-fallback';
+import { ErrorAwareText } from './error-aware-text';
 import { Reasoning } from './reasoning';
-import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { IconButton } from '@/ds/components/IconButton';
+import { cn } from '@/lib/utils';
 
 /**
  * Content item type for assistant message content parts.

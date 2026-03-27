@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 import { MoreVertical, Download, FolderPlus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '@/ds/components/Button';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Icon } from '@/ds/icons/Icon';
 
 export interface ActionsMenuProps {
   onExportClick: () => void;

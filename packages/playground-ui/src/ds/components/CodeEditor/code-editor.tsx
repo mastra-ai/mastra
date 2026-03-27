@@ -1,19 +1,19 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { forwardRef, type HTMLAttributes, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-
-import type { Extension } from '@codemirror/state';
-import type { JsonSchema } from '@/lib/json-schema';
-
-import { CopyButton } from '@/ds/components/CopyButton';
-import { variableHighlight } from './variable-highlight-extension';
+import CodeMirror from '@uiw/react-codemirror';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { forwardRef, useMemo } from 'react';
+import type { HTMLAttributes } from 'react';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
+import { variableHighlight } from './variable-highlight-extension';
+import { CopyButton } from '@/ds/components/CopyButton';
+import type { JsonSchema } from '@/lib/json-schema';
+import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 
@@ -25,71 +25,80 @@ export const useCodemirrorTheme = (): Extension => {
         fontSize: '0.8rem',
         lineHighlight: 'transparent',
         gutterBackground: 'transparent',
-        gutterForeground: '#939393',
+        gutterForeground: 'var(--neutral2)',
         background: 'transparent',
+        foreground: 'var(--neutral6)',
       },
       styles: [
-        { tag: [t.className, t.propertyName] },
-        // Markdown-specific styles using Dracula colors
-        { tag: t.heading, color: '#ff79c6', fontWeight: 'bold' },
+        { tag: [t.className, t.propertyName], color: 'var(--neutral6)' },
+        { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
         {
           tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-          color: '#ff79c6',
+          color: 'var(--accent3)',
           fontWeight: 'bold',
         },
-        { tag: t.emphasis, fontStyle: 'italic', color: '#f8f8f2' },
-        { tag: t.strong, fontWeight: 'bold', color: '#f8f8f2' },
-        { tag: t.link, color: '#8be9fd', textDecoration: 'underline' },
-        { tag: t.url, color: '#8be9fd' },
-        { tag: t.monospace, color: '#f1fa8c' },
+        { tag: t.emphasis, fontStyle: 'italic', color: 'var(--neutral6)' },
+        { tag: t.strong, fontWeight: 'bold', color: 'var(--neutral6)' },
+        { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
+        { tag: t.url, color: 'var(--accent3)' },
+        { tag: t.monospace, color: 'var(--neutral6)' },
         { tag: t.strikethrough, textDecoration: 'line-through' },
-        { tag: t.quote, fontStyle: 'italic', color: '#6272a4' },
+        { tag: t.quote, fontStyle: 'italic', color: 'var(--neutral2)' },
       ],
     });
 
     const customLineNumberTheme = EditorView.theme({
       '.cm-editor': {
-        colorScheme: 'dark',
         backgroundColor: 'transparent',
       },
-      '.cm-lineNumbers .cm-gutterElement': {
-        color: '#939393',
+      '.cm-content': {
+        color: 'var(--neutral6)',
       },
-      // Autocomplete popover - Dracula theme
+      '.cm-lineNumbers .cm-gutterElement': {
+        color: 'var(--neutral2)',
+      },
+      '.cm-activeLineGutter': {
+        color: 'var(--neutral3)',
+      },
+      '.cm-cursor': {
+        borderLeftColor: 'var(--neutral6)',
+      },
+      '.cm-selectionBackground, .cm-content ::selection': {
+        backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
+      },
       '.cm-tooltip-autocomplete': {
-        backgroundColor: '#282a36',
-        border: '1px solid #44475a',
+        backgroundColor: 'var(--surface2)',
+        border: '1px solid var(--border1)',
         borderRadius: '6px',
-        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
+        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
       },
       '.cm-tooltip-autocomplete > ul': {
         fontFamily: 'var(--geist-mono)',
       },
       '.cm-completionLabel': {
-        color: '#f8f8f2',
+        color: 'var(--neutral6)',
       },
       '.cm-completionDetail': {
-        color: '#A1A1AA',
+        color: 'var(--neutral3)',
         fontSize: '0.7rem',
         marginLeft: 'auto',
         paddingLeft: '12px',
       },
       '.cm-completionInfo': {
-        backgroundColor: '#282a36',
-        border: '1px solid #44475a',
-        color: '#6272a4',
+        backgroundColor: 'var(--surface2)',
+        border: '1px solid var(--border1)',
+        color: 'var(--neutral3)',
         padding: '8px 12px',
       },
       '.cm-completionIcon': {
         display: 'none',
       },
       'ul.cm-completionList li[aria-selected]': {
-        backgroundColor: '#44475a',
-        color: '#f8f8f2',
+        backgroundColor: 'var(--surface4)',
+        color: 'var(--neutral6)',
       },
-      // Variable highlight styling - uses high specificity to override syntax highlighting
       '.cm-line .cm-variable-highlight': {
-        color: '#F59E0B !important',
+        color: 'var(--accent6) !important',
         fontWeight: '500',
       },
     });
@@ -107,11 +116,11 @@ export type CodeEditorProps = {
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
   placeholder?: string;
-  /** Enable word wrapping instead of horizontal scrolling */
-  wordWrap?: boolean;
   /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
   schema?: JsonSchema;
   autoFocus?: boolean;
+  /** Show line numbers in the gutter (default: true) */
+  lineNumbers?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
@@ -125,9 +134,9 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       language = 'json',
       highlightVariables = false,
       placeholder,
-      wordWrap = false,
       schema,
       autoFocus,
+      lineNumbers = true,
       ...props
     },
     ref,
@@ -173,6 +182,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
+          basicSetup={{ lineNumbers }}
         />
       </div>
     );

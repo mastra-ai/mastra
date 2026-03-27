@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export const comboboxStyles = {
   /** Root wrapper */
@@ -28,7 +28,7 @@ export const comboboxStyles = {
   ),
 
   /** Positioner */
-  positioner: 'z-[100]',
+  positioner: 'z-[100] pointer-events-auto',
 
   /** Search input container */
   searchContainer: cn('flex items-center border-b border-border1 px-3 py-2', transitions.colors),

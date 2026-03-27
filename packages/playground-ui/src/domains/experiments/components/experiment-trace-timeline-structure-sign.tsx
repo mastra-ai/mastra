@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { CircleChevronDownIcon, CircleChevronUpIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type ExperimentTraceTimelineStructureSignProps = {
   isLastChild?: boolean;

@@ -51,6 +51,7 @@ const {
         id: `mock-dd-span-${parents.length}`,
         options,
         setTag: vi.fn(),
+        finish: vi.fn(),
       };
       spans.push(ddSpan);
       // Activate this span in scope for the duration of the callback
@@ -213,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'workflow'],
-      [SpanType.MODEL_STEP, 'llm'],
+      [SpanType.MODEL_GENERATION, 'llm'],
+      [SpanType.MODEL_STEP, 'task'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -239,7 +240,7 @@ describe('DatadogExporter', () => {
   });
 
   describe('error handling', () => {
-    it('includes error tags for error spans', async () => {
+    it('includes error tags and error message in metadata for error spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -254,13 +255,13 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something went wrong',
+          }),
           tags: expect.objectContaining({
             error: true,
-            errorInfo: {
-              message: 'Something went wrong',
-              id: 'err-123',
-              category: 'validation',
-            },
+            'error.id': 'err-123',
+            'error.category': 'validation',
           }),
         }),
       );
@@ -326,7 +327,7 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('merges span.tags with error tags when both present', async () => {
+    it('merges span.tags with error tags when both present, error message in metadata', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         tags: ['production', 'critical'],
@@ -341,14 +342,14 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something failed',
+          }),
           tags: {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.category': 'runtime',
           },
         }),
       );
@@ -494,10 +495,13 @@ describe('DatadogExporter', () => {
       expect(mockTrace).toHaveBeenCalledWith(
         expect.objectContaining({
           startTime,
-          endTime: startTime,
         }),
         expect.any(Function),
       );
+
+      // endTime is set via ddSpan.finish() instead of trace options
+      const ddSpan = capturedSpans[0];
+      expect(ddSpan.finish).toHaveBeenCalledWith(startTime.getTime());
     });
 
     it('buffers event spans until parent exists and emits with parent context', async () => {
@@ -1046,7 +1050,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1220,7 +1224,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)
