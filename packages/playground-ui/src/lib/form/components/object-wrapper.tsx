@@ -33,7 +33,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
       {isOpen && (
         <div
           className={
-            hasLabel ? 'flex flex-col gap-1 [&>*]:border-dashed [&>*]:border-l [&>*]:border-l-border1 [&>*]:pl-4' : ''
+            hasLabel ? 'flex flex-col gap-1 *:border-dashed *:border-l *:border-l-border1 *:pl-4' : ''
           }
         >
           {children}

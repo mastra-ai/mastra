@@ -134,14 +134,14 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-surface2">
         <EntityContent>
-          <EntityName className="!text-ui-md !leading-ui-md font-medium">{tool.label}</EntityName>
+          <EntityName className="text-ui-md! leading-ui-md! font-medium">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={readOnly}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline focus:outline-1 focus:outline-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-white',
+                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
                 !readOnly && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -163,7 +163,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -198,7 +198,7 @@ export function ToolsPage() {
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
+                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
                     >
                       <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
                       {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}

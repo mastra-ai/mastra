@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
 @font-face {
   font-family: 'TasaExplorer';
@@ -140,10 +138,11 @@ html.light {
 
 @layer base {
   * {
-    @apply border-border1;
+    border-color: var(--border1);
   }
   body {
-    @apply bg-surface1 text-neutral6;
+    background-color: var(--surface1);
+    color: var(--neutral6);
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);
@@ -152,16 +151,20 @@ html.light {
 
   *:focus,
   *:focus-visible {
-    @apply outline-none;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
   *:focus-visible {
-    @apply outline outline-accent1;
+    outline-style: solid;
+    outline-color: var(--accent1);
   }
 }
 
 .react-flow__controls-button {
-  @apply !text-neutral5 !bg-surface2 !border-none;
+  color: var(--neutral5) !important;
+  background-color: var(--surface2) !important;
+  border: none !important;
 }
 
 .scorerListItem:has(+ .expanded) {

@@ -2705,7 +2705,7 @@
 
   **Other changes:**
   - All form elements now use `rounded-md` radius
-  - All form elements now use `focus:outline focus:outline-accent1` focus effect
+  - All form elements now use `focus:outline-solid focus:outline-accent1` focus effect
   - Removed `button-md` and `button-lg` size tokens (use `form-sm`, `form-md`, `form-lg` instead)
 
 - Added platform-aware navigation filtering using `useMastraPlatform` hook. Nav links now include an `isOnMastraPlatform` property that controls visibility based on whether the app is running on Mastra Platform or locally. ([#11990](https://github.com/mastra-ai/mastra/pull/11990))
@@ -3123,10 +3123,10 @@
 - Rename icon color tokens to neutral for better semantic naming ([#11933](https://github.com/mastra-ai/mastra/pull/11933))
 
 - Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability. ([#11965](https://github.com/mastra-ai/mastra/pull/11965))
-  - Changed arbitrary spacing values like `gap-[1rem]`, `p-[1.5rem]`, `px-[2rem]` to standard classes (`gap-4`, `p-6`, `px-8`)
-  - Updated z-index values from `z-[1]` and `z-[100]` to standard `z-10` and `z-50`
+  - Changed arbitrary spacing values like `gap-4`, `p-6`, `px-8` to standard classes (`gap-4`, `p-6`, `px-8`)
+  - Updated z-index values from `z-1` and `z-100` to standard `z-10` and `z-50`
   - Replaced arbitrary gap values like `gap-[6px]` with `gap-1.5`
-  - Updated duration values from `duration-[1s]` to `duration-1000`
+  - Updated duration values from `duration-1000` to `duration-1000`
 
 - Replaced arbitrary Tailwind text sizes with semantic design tokens for consistent typography. ([#11956](https://github.com/mastra-ai/mastra/pull/11956))
 
@@ -3537,7 +3537,7 @@
 
   **Other changes:**
   - All form elements now use `rounded-md` radius
-  - All form elements now use `focus:outline focus:outline-accent1` focus effect
+  - All form elements now use `focus:outline-solid focus:outline-accent1` focus effect
   - Removed `button-md` and `button-lg` size tokens (use `form-sm`, `form-md`, `form-lg` instead)
 
 - Added platform-aware navigation filtering using `useMastraPlatform` hook. Nav links now include an `isOnMastraPlatform` property that controls visibility based on whether the app is running on Mastra Platform or locally. ([#11990](https://github.com/mastra-ai/mastra/pull/11990))
@@ -3582,10 +3582,10 @@
 - Rename icon color tokens to neutral for better semantic naming ([#11933](https://github.com/mastra-ai/mastra/pull/11933))
 
 - Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability. ([#11965](https://github.com/mastra-ai/mastra/pull/11965))
-  - Changed arbitrary spacing values like `gap-[1rem]`, `p-[1.5rem]`, `px-[2rem]` to standard classes (`gap-4`, `p-6`, `px-8`)
-  - Updated z-index values from `z-[1]` and `z-[100]` to standard `z-10` and `z-50`
+  - Changed arbitrary spacing values like `gap-4`, `p-6`, `px-8` to standard classes (`gap-4`, `p-6`, `px-8`)
+  - Updated z-index values from `z-1` and `z-100` to standard `z-10` and `z-50`
   - Replaced arbitrary gap values like `gap-[6px]` with `gap-1.5`
-  - Updated duration values from `duration-[1s]` to `duration-1000`
+  - Updated duration values from `duration-1000` to `duration-1000`
 
 - Replaced arbitrary Tailwind text sizes with semantic design tokens for consistent typography. ([#11956](https://github.com/mastra-ai/mastra/pull/11956))
 

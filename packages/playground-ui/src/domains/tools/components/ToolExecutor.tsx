@@ -47,7 +47,7 @@ const ToolExecutorContent = ({
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r border-border1 w-[20rem] flex flex-col">
+      <div className="bg-surface2 border-r border-border1 w-80 flex flex-col">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
         <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
           <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
