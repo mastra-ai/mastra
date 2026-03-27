@@ -1,8 +1,9 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Plus } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { useCanCreateAgent } from '../../hooks/use-can-create-agent';
 import { getColumns } from './columns';
 import type { AgentTableData } from './types';
 import { Button } from '@/ds/components/Button';
@@ -135,29 +136,48 @@ const AgentsTableSkeleton = () => (
   </Table>
 );
 
-const EmptyAgentsTable = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<AgentCoinIcon />}
-      titleSlot="No Agents Yet"
-      descriptionSlot="Configure agents in code to get started."
-      actionSlot={
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            size="lg"
-            variant="outline"
-            as="a"
-            href="https://mastra.ai/docs/agents/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon>
-              <BookOpen />
-            </Icon>
-            Documentation
-          </Button>
-        </div>
-      }
-    />
-  </div>
-);
+const EmptyAgentsTable = () => {
+  const { canCreateAgent } = useCanCreateAgent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <EmptyState
+        iconSlot={<AgentCoinIcon />}
+        titleSlot="No Agents Yet"
+        descriptionSlot={
+          showCreateCta
+            ? 'Create your first agent or configure agents in code.'
+            : 'Configure agents in code to get started.'
+        }
+        actionSlot={
+          <div className="flex flex-col sm:flex-row gap-2">
+            {showCreateCta && (
+              <Button size="lg" variant="primary" as={FrameworkLink} to={createAgentPath}>
+                <Icon>
+                  <Plus />
+                </Icon>
+                Create an agent
+              </Button>
+            )}
+            <Button
+              size="lg"
+              variant="outline"
+              as="a"
+              href="https://mastra.ai/docs/agents/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon>
+                <BookOpen />
+              </Icon>
+              Documentation
+            </Button>
+          </div>
+        }
+      />
+    </div>
+  );
+};

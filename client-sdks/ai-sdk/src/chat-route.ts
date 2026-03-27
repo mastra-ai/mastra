@@ -41,6 +41,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  onError?: (error: unknown) => string;
   messageMetadata?: UI_MESSAGE extends V6UIMessage
     ? UIMessageStreamOptionsV6<UI_MESSAGE>['messageMetadata']
     : UI_MESSAGE extends V5UIMessage
@@ -102,6 +103,7 @@ export async function handleChatStream<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  onError,
   messageMetadata,
 }: ChatStreamHandlerOptions<any, OUTPUT>): Promise<ReadableStream<any>> {
   const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
@@ -173,6 +175,7 @@ export async function handleChatStream<OUTPUT = undefined>({
           sendFinish,
           sendReasoning,
           sendSources,
+          onError,
           messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
         })) {
           writer.write(part);
@@ -191,6 +194,7 @@ export async function handleChatStream<OUTPUT = undefined>({
         sendFinish,
         sendReasoning,
         sendSources,
+        onError,
         messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
       })) {
         writer.write(part);

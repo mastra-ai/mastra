@@ -4436,22 +4436,22 @@ export class Agent<
         if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
-            const title = await this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
+            void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
+              async title => {
+                if (title) {
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                }
+              },
+              error => {
+                this.logger.error('Error persisting generated title:', error);
+              },
             );
-            if (title) {
-              await memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
           }
         }
       } catch (e) {
