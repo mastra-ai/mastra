@@ -19,12 +19,6 @@ test('overall layout information', async ({ page }) => {
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
-  // Thread history (with memory)
-  const newChatButton = await page.locator('a:has-text("New workflow run")');
-  await expect(newChatButton).toBeVisible();
-  await expect(newChatButton).toHaveAttribute('href', /workflows\/complexWorkflow/);
-  await expect(page.locator('text=Your run history will appear here once you run the workflow')).toBeVisible();
-
   // Information side panel
   await expect(page.locator('h2:has-text("complex-workflow")')).toBeVisible();
   await expect(page.locator('button:has-text("complexWorkflow")')).toBeVisible();

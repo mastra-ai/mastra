@@ -70,6 +70,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
+import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
 import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
@@ -3162,7 +3163,18 @@ ${formattedMessages}
    * await turn.end();
    * ```
    */
-  beginTurn(opts: { threadId: string; resourceId?: string; messageList: MessageList }): ObservationTurn {
-    return new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList);
+  beginTurn(opts: {
+    threadId: string;
+    resourceId?: string;
+    messageList: MessageList;
+    hooks?: ObservationTurnHooks;
+  }): ObservationTurn {
+    return new ObservationTurn({
+      om: this,
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      messageList: opts.messageList,
+      hooks: opts.hooks,
+    });
   }
 }

@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 19.1.0-alpha.4
+
+### Minor Changes
+
+- Redesigned the Agent Traces tab with improved layout and new filtering capabilities: ([#14644](https://github.com/mastra-ai/mastra/pull/14644))
+  - Added sortable columns for Timestamp and Duration
+  - Inline score display when a scorer is selected, with a threshold filter to surface low-scoring traces
+  - Status and date-range filters for narrowing traces
+  - Client-side search across trace inputs and outputs
+  - Bulk checkbox selection with "Add to dataset" action
+  - Improved text truncation to prevent horizontal scrolling
+
+- Redesigned the Evaluation dashboard with new list views, review pipeline, and dataset-level review tab. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  **Evaluation dashboard**
+  - Replaced table-based list views with the new `EntityList` design system for Scorers, Datasets, and Experiments tabs.
+  - Moved charts to an Overview tab and list views to dedicated tabs (Scorers, Datasets, Experiments). Tabs are now driven by sidebar navigation instead of an in-page tab bar.
+  - Added per-tab filter toolbars with search, status filters, and tag filters.
+  - Added "Create Dataset" button to Datasets tab.
+  - Added "Needs Review" KPI card and "Review Pipeline" chart to the Overview tab.
+
+  **Dataset review tab**
+  - New "Review" tab on the dataset detail page for reviewing experiment results across all agents targeting that dataset.
+  - Extracted shared review components (`ReviewItemCard`, `TagPicker`, `BulkTagPicker`, `ProposalTag`) into a reusable `review` domain.
+  - LLM-powered failure clustering and tag proposal integrated into dataset-level review.
+  - Tag-based filtering, bulk operations, ratings, and comments.
+
+  **Other improvements**
+  - Dataset tags displayed in a dedicated column with truncation and hover tooltip.
+  - Experiment result panel now shows review status badge and tags.
+  - Scores-over-time chart uses adaptive time bucketing (minute/hour/day) and shows date labels for multi-day ranges.
+  - Bar chart labels repositioned above bars for better contrast.
+  - Breadcrumbs across dataset and experiment pages updated to use `/evaluation/` prefix.
+
+  **Sidebar design system**
+  - `MainSidebarNavHeader` now supports an optional `href` prop for clickable section headers, and an `isActive` prop for header highlighting.
+  - `MainSidebarNavLink` now supports an optional `indent` prop for sub-link indentation.
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/client-js@1.10.1-alpha.4
+  - @mastra/ai-sdk@1.2.1
+  - @mastra/react@0.2.18-alpha.4
+
 ## 19.1.0-alpha.3
 
 ### Minor Changes
