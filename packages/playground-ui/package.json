@@ -17,7 +17,7 @@
         "default": "./dist/index.es.js"
       }
     },
-    "./style.css": "./dist/style.css",
+    "./style.css": "./dist/index.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
