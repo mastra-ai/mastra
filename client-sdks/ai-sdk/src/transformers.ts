@@ -415,6 +415,36 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   });
 }
 
+function ensureAgentRunState(bufferedSteps: Map<string, any>, runId: string) {
+  if (!bufferedSteps.has(runId)) {
+    bufferedSteps.set(runId, {
+      id: '',
+      object: null,
+      finishReason: null,
+      usage: null,
+      warnings: [],
+      text: '',
+      reasoning: [],
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      request: {},
+      response: {
+        id: '',
+        timestamp: new Date(),
+        modelId: '',
+        messages: [],
+      },
+      providerMetadata: undefined,
+      steps: [],
+      status: 'running',
+    });
+  }
+
+  return bufferedSteps.get(runId)!;
+}
+
 export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
@@ -455,7 +485,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'text-delta':
+    case 'text-delta': {
       const prevData = bufferedSteps.get(payload.runId!)!;
       bufferedSteps.set(payload.runId!, {
         ...prevData,
@@ -463,6 +493,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
+    }
     case 'reasoning-delta':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -491,13 +522,15 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'tool-result':
+    case 'tool-result': {
+      const toolResultRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload],
+        ...toolResultRun,
+        toolResults: [...toolResultRun.toolResults, payload.payload],
       });
       hasChanged = true;
       break;
+    }
     case 'object-result':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -512,44 +545,45 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'step-finish':
-      const currentRun = bufferedSteps.get(payload.runId!)!;
+    case 'step-finish': {
+      const stepRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       const stepResult = {
-        ...bufferedSteps.get(payload.runId!)!,
-        stepType: currentRun.steps.length === 0 ? 'initial' : 'tool-result',
-        reasoningText: bufferedSteps.get(payload.runId!)!.reasoning.join(''),
-        staticToolCalls: bufferedSteps
-          .get(payload.runId!)!
-          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === false),
-        dynamicToolCalls: bufferedSteps
-          .get(payload.runId!)!
-          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === true),
-        staticToolResults: bufferedSteps
-          .get(payload.runId!)!
-          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === false),
-        dynamicToolResults: bufferedSteps
-          .get(payload.runId!)!
-          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === true),
+        ...stepRun,
+        stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
+        reasoningText: stepRun.reasoning.join(''),
+        staticToolCalls: stepRun.toolCalls.filter(
+          (part: any) => part.type === 'tool-call' && part.payload?.dynamic === false,
+        ),
+        dynamicToolCalls: stepRun.toolCalls.filter(
+          (part: any) => part.type === 'tool-call' && part.payload?.dynamic === true,
+        ),
+        staticToolResults: stepRun.toolResults.filter(
+          (part: any) => part.type === 'tool-result' && part.payload?.dynamic === false,
+        ),
+        dynamicToolResults: stepRun.toolResults.filter(
+          (part: any) => part.type === 'tool-result' && part.payload?.dynamic === true,
+        ),
         finishReason: payload.payload.stepResult.reason,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         response: {
+          ...stepRun.response,
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
-          ...bufferedSteps.get(payload.runId!)!.response,
-          messages: bufferedSteps.get(payload.runId!)!.response.messages || [],
+          messages: stepRun.response.messages || [],
         },
       };
 
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!)!,
+        ...stepRun,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
-        steps: [...bufferedSteps.get(payload.runId!)!.steps, stepResult],
+        steps: [...stepRun.steps, stepResult],
       });
       hasChanged = true;
       break;
+    }
     default:
       break;
   }

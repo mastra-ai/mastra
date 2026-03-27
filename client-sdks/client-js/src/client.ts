@@ -132,6 +132,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
@@ -1606,6 +1607,27 @@ export class MastraClient extends BaseResource {
   // ============================================================================
   // Dataset Experiments
   // ============================================================================
+
+  /**
+   * Lists all experiments across all datasets
+   */
+  public listExperiments(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
+  }
 
   /**
    * Lists experiments for a dataset
