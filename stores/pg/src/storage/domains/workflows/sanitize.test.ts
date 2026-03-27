@@ -2,6 +2,20 @@ import { describe, it, expect } from 'vitest';
 
 /**
  * Sanitizes JSON string by removing or escaping problematic sequences that PostgreSQL jsonb rejects.
+ *
+ * @param jsonString - The JSON string to sanitize
+ * @returns The sanitized JSON string safe for PostgreSQL insertion
+ *
+ * @example
+ * ```ts
+ * sanitizeJsonForPg('{"text": "hello\\u0000world"}')
+ * // Returns: '{"text": "helloworld"}'
+ *
+ * sanitizeJsonForPg('{"text": "Omschr\\vijving"}')
+ * // Returns: '{"text": "Omschr\\\\vijving"}'
+ * ```
+ *
+ * @remarks
  * Handles:
  * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
  * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
