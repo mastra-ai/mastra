@@ -220,6 +220,8 @@ async function getOMConfigFromAgent(
   observationTokens?: number | { min: number; max: number };
   observationModel?: string;
   reflectionModel?: string;
+  observationModelRouting?: Array<{ upTo: number; model: string }>;
+  reflectionModelRouting?: Array<{ upTo: number; model: string }>;
 } | null> {
   try {
     // Guard against older @mastra/core versions that don't have resolveProcessorById
@@ -245,6 +247,8 @@ async function getOMConfigFromAgent(
         observationTokens: resolvedConfig.reflection?.observationTokens,
         observationModel: resolvedConfig.observation?.model,
         reflectionModel: resolvedConfig.reflection?.model,
+        observationModelRouting: resolvedConfig.observation?.routing,
+        reflectionModelRouting: resolvedConfig.reflection?.routing,
       };
     }
 
@@ -258,6 +262,8 @@ async function getOMConfigFromAgent(
       observationTokens: processorConfig.reflection?.observationTokens,
       observationModel: undefined,
       reflectionModel: undefined,
+      observationModelRouting: undefined,
+      reflectionModelRouting: undefined,
     };
   } catch {
     return null;

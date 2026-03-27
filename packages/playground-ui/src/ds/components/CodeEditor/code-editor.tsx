@@ -1,19 +1,19 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { forwardRef, type HTMLAttributes, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-
-import type { Extension } from '@codemirror/state';
-import type { JsonSchema } from '@/lib/json-schema';
-
-import { CopyButton } from '@/ds/components/CopyButton';
-import { variableHighlight } from './variable-highlight-extension';
+import CodeMirror from '@uiw/react-codemirror';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { forwardRef, useMemo } from 'react';
+import type { HTMLAttributes } from 'react';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
+import { variableHighlight } from './variable-highlight-extension';
+import { CopyButton } from '@/ds/components/CopyButton';
+import type { JsonSchema } from '@/lib/json-schema';
+import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 
@@ -116,11 +116,11 @@ export type CodeEditorProps = {
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
   placeholder?: string;
-  /** Enable word wrapping instead of horizontal scrolling */
-  wordWrap?: boolean;
   /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
   schema?: JsonSchema;
   autoFocus?: boolean;
+  /** Show line numbers in the gutter (default: true) */
+  lineNumbers?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
@@ -134,9 +134,9 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       language = 'json',
       highlightVariables = false,
       placeholder,
-      wordWrap = false,
       schema,
       autoFocus,
+      lineNumbers = true,
       ...props
     },
     ref,
@@ -182,6 +182,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
+          basicSetup={{ lineNumbers }}
         />
       </div>
     );

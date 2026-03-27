@@ -69,6 +69,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
+        { type: 'doc', id: 'auth/okta', label: 'Okta' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
         { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
       ],
@@ -174,13 +175,21 @@ const sidebars = {
         { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
         { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
         { type: 'doc', id: 'evals/toxicity', label: 'Toxicity' },
+        { type: 'doc', id: 'evals/trajectory-accuracy', label: 'Trajectory Accuracy Scorers' },
       ],
     },
     {
       type: 'category',
       label: 'Harness',
       collapsed: true,
-      items: [{ type: 'doc', id: 'harness/harness-class', label: 'Harness Class', customProps: { tags: ['alpha'] } }],
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/harness-class',
+          label: 'Harness Class',
+          customProps: { tags: ['alpha'] },
+        },
+      ],
     },
     {
       type: 'category',
@@ -325,6 +334,7 @@ const sidebars = {
           label: 'PromptInjectionDetector',
         },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
+        { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },

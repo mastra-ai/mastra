@@ -38,4 +38,6 @@ export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
 export * from './components/agent-top-bar-controls';
 export * from './hooks/use-agent-experiments';
+export * from './hooks/use-can-create-agent';
 export * from './components/agent-traces-panel';
+export * from './components/agent-list/agents-list';

@@ -10,7 +10,7 @@
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 
 /** Exact schema from packages/core/src/loop/network/validation.ts:370-377 */

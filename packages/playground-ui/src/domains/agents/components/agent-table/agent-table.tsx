@@ -1,22 +1,24 @@
-import { GetAgentResponse } from '@mastra/client-js';
+import type { GetAgentResponse } from '@mastra/client-js';
+import type { ColumnDef } from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { BookOpen, Plus } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useCanCreateAgent } from '../../hooks/use-can-create-agent';
+import { getColumns } from './columns';
+import type { AgentTableData } from './types';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-import { BookOpen } from 'lucide-react';
 
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { getColumns } from './columns';
-import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -134,29 +136,48 @@ const AgentsTableSkeleton = () => (
   </Table>
 );
 
-const EmptyAgentsTable = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<AgentCoinIcon />}
-      titleSlot="No Agents Yet"
-      descriptionSlot="Configure agents in code to get started."
-      actionSlot={
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            size="lg"
-            variant="outline"
-            as="a"
-            href="https://mastra.ai/docs/agents/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon>
-              <BookOpen />
-            </Icon>
-            Documentation
-          </Button>
-        </div>
-      }
-    />
-  </div>
-);
+const EmptyAgentsTable = () => {
+  const { canCreateAgent } = useCanCreateAgent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <EmptyState
+        iconSlot={<AgentCoinIcon />}
+        titleSlot="No Agents Yet"
+        descriptionSlot={
+          showCreateCta
+            ? 'Create your first agent or configure agents in code.'
+            : 'Configure agents in code to get started.'
+        }
+        actionSlot={
+          <div className="flex flex-col sm:flex-row gap-2">
+            {showCreateCta && (
+              <Button size="lg" variant="primary" as={FrameworkLink} to={createAgentPath}>
+                <Icon>
+                  <Plus />
+                </Icon>
+                Create an agent
+              </Button>
+            )}
+            <Button
+              size="lg"
+              variant="outline"
+              as="a"
+              href="https://mastra.ai/docs/agents/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon>
+                <BookOpen />
+              </Icon>
+              Documentation
+            </Button>
+          </div>
+        }
+      />
+    </div>
+  );
+};

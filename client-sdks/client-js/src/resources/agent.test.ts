@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { RequestContext as RequestContextClass } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraClient } from '../client';
 import type { StreamParams, ClientOptions } from '../types';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';

@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { Collapsible } from '@/ds/components/Collapsible';
+import { cn } from '@/lib/utils';
 
 export interface TreeFolderProps {
   defaultOpen?: boolean;

@@ -25,6 +25,7 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
@@ -37,6 +38,7 @@ export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
+export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-content';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';

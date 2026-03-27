@@ -1003,6 +1003,8 @@ export interface BufferedObservationChunkInput {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -2168,6 +2170,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2183,6 +2186,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2227,6 +2231,7 @@ export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2237,6 +2242,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2278,6 +2284,7 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2351,6 +2358,7 @@ export interface CreateExperimentInput {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion?: string;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -2405,4 +2413,12 @@ export interface ListExperimentResultsInput {
 export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

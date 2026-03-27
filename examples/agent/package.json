@@ -10,7 +10,9 @@
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
     "@ai-sdk/provider": "^2.0.0",
+    "@mastra/auth-auth0": "latest",
     "@mastra/auth-better-auth": "latest",
+    "@mastra/auth-okta": "latest",
     "@mastra/auth-workos": "latest",
     "@mastra/auth-cloud": "latest",
     "@mastra/client-js": "latest",
@@ -33,7 +35,9 @@
   },
   "pnpm": {
     "overrides": {
+      "@mastra/auth-auth0": "link:../../auth/auth0",
       "@mastra/auth-better-auth": "link:../../auth/better-auth",
+      "@mastra/auth-okta": "link:../../auth/okta",
       "@mastra/auth-workos": "link:../../auth/workos",
       "@mastra/auth-cloud": "link:../../auth/cloud",
       "@mastra/core": "link:../../packages/core",

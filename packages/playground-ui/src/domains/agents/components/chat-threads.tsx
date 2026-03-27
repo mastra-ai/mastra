@@ -1,13 +1,13 @@
+import type { StorageThreadType } from '@mastra/core/memory';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Plus } from 'lucide-react';
-import { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useState } from 'react';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];

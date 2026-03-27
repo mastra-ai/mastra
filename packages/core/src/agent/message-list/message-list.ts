@@ -686,6 +686,45 @@ export class MessageList {
     return false;
   }
 
+  /**
+   * Append a `step-start` boundary to the last assistant message.
+   * This marks the beginning of a new loop iteration so that
+   * `convertToModelMessages` splits sequential tool-call turns into
+   * separate message blocks instead of collapsing them into one.
+   *
+   * Respects sealed messages (post-observation) — if the last assistant
+   * message is sealed, the step-start is not added.
+   *
+   * If the message was loaded from memory it is moved to the response
+   * source so the updated content is re-saved.
+   */
+  public stepStart(): boolean {
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
+    }
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    // Don't add a duplicate step-start
+    const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
+    if (lastPart?.type === 'step-start') {
+      return false;
+    }
+
+    lastMsg.content.parts.push({ type: 'step-start' as const });
+
+    // Ensure the mutated message is persisted
+    if (!this.stateManager.isResponseMessage(lastMsg)) {
+      this.stateManager.removeMessage(lastMsg);
+      this.stateManager.addToSource(lastMsg, 'response');
+    }
+
+    return true;
+  }
+
   public getSystemMessages(tag?: string): CoreMessageV4[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];

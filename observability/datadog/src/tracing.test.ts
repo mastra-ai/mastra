@@ -214,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'workflow'],
-      [SpanType.MODEL_STEP, 'llm'],
+      [SpanType.MODEL_GENERATION, 'llm'],
+      [SpanType.MODEL_STEP, 'task'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -257,11 +257,9 @@ describe('DatadogExporter', () => {
         expect.objectContaining({
           tags: expect.objectContaining({
             error: true,
-            errorInfo: {
-              message: 'Something went wrong',
-              id: 'err-123',
-              category: 'validation',
-            },
+            'error.message': 'Something went wrong',
+            'error.id': 'err-123',
+            'error.category': 'validation',
           }),
         }),
       );
@@ -346,10 +344,8 @@ describe('DatadogExporter', () => {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.message': 'Something failed',
+            'error.category': 'runtime',
           },
         }),
       );
@@ -1050,7 +1046,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1224,7 +1220,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)

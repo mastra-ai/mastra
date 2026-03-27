@@ -1,5 +1,9 @@
 import { useComposerRuntime } from '@assistant-ui/react';
 
+import { CloudUpload, Link } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogHeader,
@@ -8,14 +12,10 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { FormEvent } from 'react';
 import { Input } from '@/ds/components/Input';
-import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
-import { Icon } from '@/ds/icons';
-import { CloudUpload, Link } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
-import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
+import { Icon } from '@/ds/icons';
 import { getFileContentType } from '@/lib/file/contentTypeFromUrl';
 
 export interface AttachFileDialogProps {
@@ -46,7 +46,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
         type: await getFileContentType(url),
       });
 
-      composerRuntime.addAttachment(file);
+      void composerRuntime.addAttachment(file);
       onOpenChange(false);
     }
   };

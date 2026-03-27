@@ -44,10 +44,13 @@ import type {
   WorkflowRunStatus,
   WorkflowState,
 } from '@mastra/core/workflows';
-import type { PublicSchema } from '@mastra/schema-compat';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -1347,6 +1350,8 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  storageType?: string;
+  observabilityStorageType?: string;
 }
 
 // ============================================================================
@@ -1544,13 +1549,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -2059,6 +2064,7 @@ export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -2186,6 +2192,7 @@ export interface TriggerDatasetExperimentParams {
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  agentVersion?: string;
   maxConcurrency?: number;
   requestContext?: Record<string, unknown>;
 }
@@ -2370,4 +2377,12 @@ export interface ActivatePromptBlockVersionResponse {
 export interface DeletePromptBlockVersionResponse {
   success: boolean;
   message: string;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }
