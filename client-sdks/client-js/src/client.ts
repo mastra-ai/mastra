@@ -75,6 +75,7 @@ import type {
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  AgentVersionIdentifier,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -132,13 +133,17 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
+  GenerateDatasetItemsParams,
+  GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
   DatasetItemVersionResponse,
@@ -187,10 +192,11 @@ export class MastraClient extends BaseResource {
   /**
    * Gets an agent instance by ID
    * @param agentId - ID of the agent to retrieve
+   * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string) {
-    return new Agent(this.options, agentId);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
+    return new Agent(this.options, agentId, version);
   }
 
   /**
@@ -1522,6 +1528,42 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /**
+   * Generates synthetic dataset items using AI. Items are returned for review, not auto-saved.
+   */
+  public generateDatasetItems(params: GenerateDatasetItemsParams): Promise<{ items: GeneratedItem[] }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/generate-items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Cluster experiment failures using AI to identify common failure patterns.
+   */
+  public clusterFailures(params: {
+    modelId: string;
+    items: Array<{
+      id: string;
+      input: unknown;
+      output?: unknown;
+      error?: string;
+      scores?: Record<string, number>;
+      existingTags?: string[];
+    }>;
+    availableTags?: string[];
+    prompt?: string;
+  }): Promise<{
+    clusters: Array<{ id: string; label: string; description: string; itemIds: string[] }>;
+    proposedTags?: Array<{ itemId: string; tags: string[]; reason: string }>;
+  }> {
+    return this.request(`/datasets/cluster-failures`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
   // ============================================================================
   // Dataset Item Versions
   // ============================================================================
@@ -1569,6 +1611,27 @@ export class MastraClient extends BaseResource {
   // ============================================================================
 
   /**
+   * Lists all experiments across all datasets
+   */
+  public listExperiments(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
+  }
+
+  /**
    * Lists experiments for a dataset
    */
   public listDatasetExperiments(
@@ -1607,6 +1670,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Updates an experiment result's status and/or tags
+   */
+  public updateDatasetExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
+  }
+
+  /**
    * Triggers a new dataset experiment
    */
   public triggerDatasetExperiment(params: TriggerDatasetExperimentParams): Promise<{
@@ -1641,6 +1718,20 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Updates the status and/or tags on an experiment result
+   */
+  public updateExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
   }
 
   /**

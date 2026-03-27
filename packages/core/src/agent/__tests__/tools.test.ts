@@ -7,7 +7,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';

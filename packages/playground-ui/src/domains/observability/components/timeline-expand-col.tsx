@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type TimelineExpandColProps = {
   isSelected?: boolean;

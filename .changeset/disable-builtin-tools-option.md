@@ -1,0 +1,11 @@
+---
+'@mastra/core': minor
+---
+
+Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools.
+
+Example:
+
+```ts
+new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] })
+```

@@ -3,7 +3,6 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -100,6 +99,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -2060,6 +2060,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2126,6 +2127,7 @@ export class Agent<
           logger: this.logger,
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2193,6 +2195,7 @@ export class Agent<
           logger: this.logger,
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2492,6 +2495,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2558,6 +2562,7 @@ export class Agent<
             mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
+            agentId: this.id,
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
@@ -2615,6 +2620,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -3425,6 +3431,7 @@ export class Agent<
           mastra: this.#mastra,
           memory: await this.getMemory({ requestContext }),
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
@@ -3685,6 +3692,7 @@ export class Agent<
           mastra: this.#mastra,
           memory: await this.getMemory({ requestContext }),
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
@@ -4385,22 +4393,22 @@ export class Agent<
         if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
-            const title = await this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
+            void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
+              async title => {
+                if (title) {
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                }
+              },
+              error => {
+                this.logger.error('Error persisting generated title:', error);
+              },
             );
-            if (title) {
-              await memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
           }
         }
       } catch (e) {
@@ -5242,11 +5250,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;

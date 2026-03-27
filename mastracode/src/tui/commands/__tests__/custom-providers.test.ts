@@ -17,7 +17,6 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
-      claudeMaxOAuthWarningAcknowledgedAt: null,
     },
     models: {
       activeModelPackId: null,
@@ -26,11 +25,12 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       omModelOverride: null,
       subagentModels: {},
     },
-    preferences: { yolo: null, theme: 'auto' },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
     storage,
     customModelPacks: [],
     customProviders: [],
     modelUseCounts: {},
+    updateDismissedVersion: null,
     ...overrides,
   };
 }

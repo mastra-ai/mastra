@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import { stripEphemeralAnchorIds } from './anchor-ids';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -1319,7 +1320,7 @@ export function extractCurrentTask(observations: string): string | null {
  * The full format is preserved in storage for analysis.
  */
 export function optimizeObservationsForContext(observations: string): string {
-  let optimized = observations;
+  let optimized = stripEphemeralAnchorIds(observations);
 
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');

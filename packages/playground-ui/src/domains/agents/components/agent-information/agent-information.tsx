@@ -1,13 +1,13 @@
-import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
-import { AgentEntityHeader } from '../agent-entity-header';
-import { Tabs, Tab, TabContent, TabList } from '@/ds/components/Tabs';
-import { AgentMetadata } from '../agent-metadata';
 import { useAgent } from '../../hooks/use-agent';
-import { useMemory } from '@/domains/memory/hooks';
+import { AgentEntityHeader } from '../agent-entity-header';
+import { AgentMetadata } from '../agent-metadata';
 import { AgentSettings } from '../agent-settings';
+import { AgentMemory } from './agent-memory';
+import { useMemory } from '@/domains/memory/hooks';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
+import { Tabs, Tab, TabContent, TabList } from '@/ds/components/Tabs';
 
 export interface AgentInformationProps {
   agentId: string;

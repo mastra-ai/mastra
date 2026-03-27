@@ -41,7 +41,7 @@ import {
   paginationArgsSchema,
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -286,7 +286,15 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getTags(args);
+    try {
+      return await observabilityStore.getTags(args);
+    } catch (error) {
+      // Some storage providers (e.g. LibSQL) don't support tag discovery
+      if (error instanceof Error && error.message.includes('does not support tag discovery')) {
+        return { tags: [] };
+      }
+      throw error;
+    }
   },
 });
 

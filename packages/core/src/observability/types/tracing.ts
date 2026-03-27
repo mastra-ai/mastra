@@ -12,7 +12,7 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -474,6 +474,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
 
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
+
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
@@ -610,6 +616,7 @@ export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
 }
@@ -814,6 +821,8 @@ export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOption
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Span name override */
+  name?: string;
   /** Input data */
   input?: any;
   /** Output data */

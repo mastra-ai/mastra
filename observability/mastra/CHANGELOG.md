@@ -1,5 +1,67 @@
 # @mastra/observability
 
+## 1.6.0-alpha.1
+
+### Minor Changes
+
+- Added cost estimation for observability metrics. ([#14609](https://github.com/mastra-ai/mastra/pull/14609))
+  - Added embedded pricing data and runtime cost estimation for auto-extracted model token metrics.
+  - Added cost context propagation through observability metrics and exporters.
+
+  **Breaking / Upgrade Notes**
+  - This version adds metric cost estimation and requires the newer observability fields and hooks provided by `@mastra/core >=1.17.0-0`.
+
+### Patch Changes
+
+- Fixed cost estimation matching for AI SDK providers by normalizing provider names (e.g. 'openai.chat' → 'openai') to match pricing data keys. ([#14716](https://github.com/mastra-ai/mastra/pull/14716))
+
+- Improved model usage normalization and total cost reporting. Model generation spans now populate input and output text detail buckets from the reported totals when providers do not supply a full breakdown, and `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens` now include estimated cost based on the successfully priced detail buckets for those totals. ([#14674](https://github.com/mastra-ai/mastra/pull/14674))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added cost estimation for observability metrics. ([#14609](https://github.com/mastra-ai/mastra/pull/14609))
+  - Added embedded pricing data and runtime cost estimation for auto-extracted model token metrics.
+  - Added cost context propagation through observability metrics and exporters.
+
+  **Breaking / Upgrade Notes**
+  - This version adds metric cost estimation and requires the newer observability fields and hooks provided by `@mastra/core >=1.17.0-0`.
+
+### Patch Changes
+
+- Improved model usage normalization and total cost reporting. Model generation spans now populate input and output text detail buckets from the reported totals when providers do not supply a full breakdown, and `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens` now include estimated cost based on the successfully priced detail buckets for those totals. ([#14674](https://github.com/mastra-ai/mastra/pull/14674))
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/core@1.16.1-alpha.1
+
+## 1.5.1
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Fixed span serialization to avoid incorrect [Circular] placeholders in traces. ([#14263](https://github.com/mastra-ai/mastra/pull/14263))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
 ## 1.5.1-alpha.0
 
 ### Patch Changes

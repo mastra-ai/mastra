@@ -50,7 +50,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
     description:
       'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
     isOptional: true,
@@ -73,6 +73,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
+    name: 'retrieval',
+    type: 'boolean',
+    description:
+      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. Retrieval mode is only active when `scope` is `'thread'`. If you set `retrieval: true` with `scope: 'resource'`, OM keeps resource-scoped memory behavior but skips retrieval-mode context and does not register the `recall` tool.",
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'observation',
     type: 'ObservationalMemoryObservationConfig',
     description: 'Configuration for the observation step. Controls when the Observer agent runs and how it behaves.',
@@ -83,7 +91,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
             isOptional: true,
@@ -194,7 +202,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
             isOptional: true,
@@ -780,6 +788,160 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
       'When enabled, thread IDs are hashed before being included in observation context. This prevents the LLM from recognizing patterns in thread identifiers. Automatically enabled when using resource scope through the Memory class.',
     isOptional: true,
     defaultValue: 'false',
+  },
+]}
+/>
+
+## Recall tool
+
+When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` tool that the agent can call to page through the raw messages behind an observation group's `_range`. The tool is automatically added to the agent's tool list — no manual registration is needed.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cursor',
+    type: 'string',
+    isOptional: false,
+    description:
+      'A message ID to anchor the recall query. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1',
+    description:
+      'Pagination offset from the cursor. Positive values page forward (messages after the cursor), negative values page backward (messages before the cursor). `0` is treated as `1`.',
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '20',
+    description: 'Maximum number of messages per page.',
+  },
+  {
+    name: 'detail',
+    type: "'low' | 'high'",
+    isOptional: true,
+    defaultValue: "'low'",
+    description:
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints.",
+  },
+  {
+    name: 'partIndex',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Fetch a single message part at full detail by its positional index. Use this when a low-detail recall shows an interesting part at `[p1]` — call again with `partIndex: 1` to see the full content without loading every part.',
+  },
+]}
+/>
+
+### Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'messages',
+    type: 'string',
+    description: 'Formatted message content. Format depends on the `detail` level.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of messages in this page.',
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    description: 'The cursor message ID used for this query.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'The page number returned.',
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'The limit used for this query.',
+  },
+  {
+    name: 'hasNextPage',
+    type: 'boolean',
+    description: 'Whether more messages exist after this page.',
+  },
+  {
+    name: 'hasPrevPage',
+    type: 'boolean',
+    description: 'Whether more messages exist before this page.',
+  },
+  {
+    name: 'truncated',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content.',
+  },
+  {
+    name: 'tokenOffset',
+    type: 'number',
+    isOptional: true,
+    description: 'Approximate number of tokens that were trimmed when `truncated` is true.',
+  },
+]}
+/>
+
+### ModelByInputTokens
+
+`ModelByInputTokens` selects a model based on the input token count. It chooses the model for the smallest threshold that covers the actual input size.
+
+#### Constructor
+
+```typescript
+new ModelByInputTokens(config)
+```
+
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+
+#### Example
+
+```typescript
+import { ModelByInputTokens } from '@mastra/memory'
+
+const selector = new ModelByInputTokens({
+  upTo: {
+    10_000: 'google/gemini-2.5-flash', // Fast for small inputs
+    40_000: 'openai/gpt-5.4-mini', // Stronger for medium inputs
+    1_000_000: 'openai/gpt-5.4', // Most capable for large inputs
+  },
+})
+```
+
+#### Behavior
+
+- Thresholds are sorted internally, so the order in the config object does not matter.
+- `inputTokens ≤ smallest threshold` → uses that threshold's model
+- `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
+- OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly
+
+#### Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resolve',
+    type: '(inputTokens: number) => MastraModelConfig',
+    description:
+      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold. When this happens during an OM run, callers receive a TripWire/empty-text outcome instead of a normal assistant response.',
+  },
+  {
+    name: 'getThresholds',
+    type: '() => number[]',
+    description: 'Returns the configured thresholds in ascending order. Useful for introspection.',
   },
 ]}
 />

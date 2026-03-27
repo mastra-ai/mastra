@@ -5,28 +5,69 @@ import {
   MainContentContent,
   Icon,
   Button,
+  ButtonWithTooltip,
   HeaderAction,
-  useLinkComponent,
   DocsIcon,
   useAgents,
   AgentsTable,
+  AgentsList,
   AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
+  useCanCreateAgent,
+  useLinkComponent,
 } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
+import { BookIcon, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 
 function Agents() {
-  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { isCmsAvailable } = useIsCmsAvailable();
-  const { canEdit } = usePermissions();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
+  const { canCreateAgent } = useCanCreateAgent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
-  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <AgentIcon /> Agents
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              {showCreateCta && (
+                <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
+                  <Plus />
+                </ButtonWithTooltip>
+              )}
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/agents/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Agents documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+          </div>
+        </EntityListPageLayout.Top>
 
-  const handleCreateClick = () => {
-    navigate('/cms/agents/create');
-  };
+        <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <MainContentLayout>
@@ -39,9 +80,11 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {canCreateAgent && (
-            <Button as={Link} to="/cms/agents/create">
-              <Plus />
+          {showCreateCta && (
+            <Button variant="light" as={FrameworkLink} to={createAgentPath}>
+              <Icon>
+                <Plus />
+              </Icon>
               Create an agent
             </Button>
           )}
@@ -53,12 +96,7 @@ function Agents() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-        />
+        <AgentsTable agents={agents} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );
