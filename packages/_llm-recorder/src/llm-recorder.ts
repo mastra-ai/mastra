@@ -971,7 +971,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           const transformedReqBody = options.transformRequest
             ? options.transformRequest({ url, body: recording.request.body }).body
             : recording.request.body;
-          const changes = diffJson(normalizeRequestBody(transformedReqBody)!, normalizeRequestBody(transformedBody) ?? {});
+          const changes = diffJson(
+            normalizeRequestBody(transformedReqBody)!,
+            normalizeRequestBody(transformedBody) ?? {},
+          );
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';
