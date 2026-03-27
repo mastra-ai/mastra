@@ -283,15 +283,13 @@ html.light {
   --color-positive1: var(--positive1);
   --color-negative1: var(--negative1);
 
-  --font-serif:
-    var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times,
-    serif;
+  --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   --font-mono:
-    var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    'Liberation Mono', 'Courier New', monospace;
+    var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   --font-sans:
-    var(--font-inter), ui-sans-serif, system-ui, sans-serif,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
 
   --duration-normal: 200ms;
   --duration-slow: 300ms;
