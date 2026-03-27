@@ -744,7 +744,15 @@ export class Mastra<
    * const response = await agent.generate('What is the weather?');
    * ```
    */
-  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
+  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName];
+  public getAgent<TAgentName extends keyof TAgents>(
+    name: TAgentName,
+    version: { versionId: string } | { status?: 'draft' | 'published' },
+  ): Promise<TAgents[TAgentName]>;
+  public getAgent<TAgentName extends keyof TAgents>(
+    name: TAgentName,
+    version?: { versionId: string } | { status?: 'draft' | 'published' },
+  ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     const agent = this.#agents?.[name];
     if (!agent) {
       const error = new MastraError({
@@ -761,7 +769,12 @@ export class Mastra<
       this.#logger?.trackException(error);
       throw error;
     }
-    return this.#agents[name];
+
+    if (!version) {
+      return this.#agents[name];
+    }
+
+    return this.resolveVersionedAgent(agent, version);
   }
 
   /**
@@ -790,12 +803,20 @@ export class Mastra<
    * const sameAgent = mastra.getAgentById(assistant.id);
    * ```
    */
-  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
+  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName];
+  public getAgentById<TAgentName extends keyof TAgents>(
+    id: TAgents[TAgentName]['id'],
+    version: { versionId: string } | { status?: 'draft' | 'published' },
+  ): Promise<TAgents[TAgentName]>;
+  public getAgentById<TAgentName extends keyof TAgents>(
+    id: TAgents[TAgentName]['id'],
+    version?: { versionId: string } | { status?: 'draft' | 'published' },
+  ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
       try {
-        agent = this.getAgent(id);
+        agent = this.getAgent(id as keyof TAgents) as TAgents[TAgentName];
       } catch {
         // do nothing
       }
@@ -817,7 +838,40 @@ export class Mastra<
       throw error;
     }
 
-    return agent as TAgents[TAgentName];
+    if (!version) {
+      return agent as TAgents[TAgentName];
+    }
+
+    return this.resolveVersionedAgent(agent as TAgents[TAgentName], version);
+  }
+
+  private async resolveVersionedAgent<TAgent extends Agent>(
+    agent: TAgent,
+    version: { versionId: string } | { status?: 'draft' | 'published' },
+  ): Promise<TAgent> {
+    const editor = this.getEditor();
+
+    if (!editor) {
+      const error = new MastraError({
+        id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Versioned agent lookup requires the editor package to be configured',
+        details: {
+          status: 400,
+          agentId: agent.id,
+          ...(version && 'versionId' in version ? { versionId: version.versionId } : {}),
+          ...(version && 'status' in version && version.status ? { versionStatus: version.status } : {}),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return editor.agent.applyStoredOverrides(
+      agent,
+      'versionId' in version ? version : { status: version.status ?? 'published' },
+    ) as Promise<TAgent>;
   }
 
   /**
