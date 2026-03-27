@@ -10,6 +10,7 @@
  */
 import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalSandbox, LocalFilesystem } from '@mastra/core/workspace';
+import { Memory } from '@mastra/memory';
 
 /**
  * Create a workspace with browser capabilities using browser-use CLI.
@@ -42,6 +43,8 @@ browserUseWorkspace.init().catch(err => {
   console.error('Failed to initialize browser-use workspace:', err);
 });
 
+const memory = new Memory();
+
 /**
  * Agent that uses workspace for browser automation with browser-use CLI.
  *
@@ -64,4 +67,5 @@ Use the workspace_execute_command tool to run browser commands. The browser-use 
 Browser context (current URL, page title) will be provided when available.`,
   model: 'openai/gpt-5.2',
   workspace: browserUseWorkspace,
+  memory,
 });

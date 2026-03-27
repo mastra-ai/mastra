@@ -46,8 +46,6 @@ export class StagehandBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: StagehandThreadManager;
 
-  private currentThreadId: string = DEFAULT_THREAD_ID;
-
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
     this.id = `stagehand-${Date.now()}`;
@@ -68,21 +66,6 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Set the current thread ID for subsequent operations.
-   * Tools should call this before executing browser actions.
-   */
-  setCurrentThread(threadId?: string): void {
-    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
-  }
-
-  /**
-   * Get the current thread ID.
-   */
-  getCurrentThreadId(): string {
-    return this.currentThreadId;
-  }
-
-  /**
    * Ensure browser is ready and thread session exists.
    * Creates a new page for the current thread if needed.
    */
@@ -90,10 +73,11 @@ export class StagehandBrowser extends MastraBrowser {
     await super.ensureReady();
 
     // Ensure thread session exists for the current thread
-    const isolation = this.threadManager.getIsolationMode();
-    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+    const isolation = this.getThreadIsolationMode();
+    const threadId = this.getCurrentThread();
+    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
       // This will create the session/page if it doesn't exist
-      await this.getPageForThread(this.currentThreadId);
+      await this.getPageForThread(threadId);
     }
   }
 
@@ -166,7 +150,7 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // Reset thread state
-    this.currentThreadId = DEFAULT_THREAD_ID;
+    this.setCurrentThread(undefined);
   }
 
   /**
@@ -248,11 +232,12 @@ export class StagehandBrowser extends MastraBrowser {
   private getPage(): V3Page | null {
     if (!this.stagehand) return null;
 
-    const isolation = this.threadManager.getIsolationMode();
+    const isolation = this.getThreadIsolationMode();
+    const threadId = this.getCurrentThread();
 
     // If using thread isolation, get the page for the current thread
-    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
-      const threadPage = this.threadManager.getPageForThread(this.currentThreadId);
+    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
+      const threadPage = this.threadManager.getPageForThread(threadId);
       if (threadPage) {
         return threadPage as V3Page;
       }

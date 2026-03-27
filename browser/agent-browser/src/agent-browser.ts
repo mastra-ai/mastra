@@ -3,7 +3,6 @@ import type {
   BrowserToolError,
   ScreencastOptions,
   ScreencastStream,
-  ThreadIsolationMode,
   CdpSessionProvider,
   CdpSessionLike,
   MouseEventParams,
@@ -52,9 +51,6 @@ export class AgentBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
 
-  /** Currently active thread (set by tools before operations) */
-  private currentThreadId: string = DEFAULT_THREAD_ID;
-
   constructor(config: BrowserConfig = {}) {
     super(config);
     this.id = `agent-browser-${Date.now()}`;
@@ -83,14 +79,6 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   /**
-   * Set the current thread ID for subsequent operations.
-   * Called by tools before executing browser actions.
-   */
-  setCurrentThread(threadId?: string): void {
-    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
-  }
-
-  /**
    * Ensure browser is ready and thread session exists.
    * Creates a new page/context for the current thread if needed.
    */
@@ -99,9 +87,10 @@ export class AgentBrowser extends MastraBrowser {
 
     // Ensure thread session exists for the current thread
     const isolation = this.threadManager.getIsolationMode();
-    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
+    const threadId = this.getCurrentThread();
+    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
       // This will create the session if it doesn't exist
-      await this.getManagerForThread(this.currentThreadId);
+      await this.getManagerForThread(threadId);
     }
   }
 
@@ -110,7 +99,7 @@ export class AgentBrowser extends MastraBrowser {
    * Delegates to ThreadManager for isolation handling.
    */
   async getManagerForThread(threadId?: string): Promise<BrowserManager> {
-    return this.threadManager.getManagerForThread(threadId ?? this.currentThreadId);
+    return this.threadManager.getManagerForThread(threadId ?? this.getCurrentThread());
   }
 
   /**
@@ -128,13 +117,6 @@ export class AgentBrowser extends MastraBrowser {
    */
   async closeThreadSession(threadId: string): Promise<void> {
     await this.threadManager.destroySession(threadId);
-  }
-
-  /**
-   * Get the current thread isolation mode.
-   */
-  getThreadIsolationMode(): ThreadIsolationMode {
-    return this.threadManager.getIsolationMode();
   }
 
   // ---------------------------------------------------------------------------
@@ -178,7 +160,7 @@ export class AgentBrowser extends MastraBrowser {
   protected override async doClose(): Promise<void> {
     // Close all thread sessions via ThreadManager
     await this.threadManager.destroyAllSessions();
-    this.currentThreadId = DEFAULT_THREAD_ID;
+    this.setCurrentThread(undefined); // Reset to default thread
 
     // Close the main browser manager
     if (this.browserManager) {
@@ -230,20 +212,14 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get the current thread ID.
-   */
-  getCurrentThread(): string {
-    return this.currentThreadId;
-  }
-
-  /**
    * Get the page for the current thread.
    * Uses thread isolation if enabled, otherwise returns the shared page.
    */
   private async getPage(): Promise<Page> {
-    const isolation = this.threadManager.getIsolationMode();
-    if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
-      return this.getPageForThread(this.currentThreadId);
+    const isolation = this.getThreadIsolationMode();
+    const threadId = this.getCurrentThread();
+    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
+      return this.getPageForThread(threadId);
     }
     if (!this.browserManager) throw new Error('Browser not launched');
     return this.browserManager.getPage();

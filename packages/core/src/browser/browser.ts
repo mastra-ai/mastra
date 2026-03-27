@@ -27,6 +27,7 @@ import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
+import { DEFAULT_THREAD_ID } from './thread-manager';
 import type { ThreadIsolationMode, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
@@ -218,6 +219,12 @@ export abstract class MastraBrowser extends MastraBase {
    * Set by subclasses that support thread isolation.
    */
   protected threadManager?: ThreadManager;
+
+  /**
+   * Current thread ID for browser operations.
+   * Used by thread isolation to route operations to the correct session.
+   */
+  protected currentThreadId: string = DEFAULT_THREAD_ID;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
@@ -601,6 +608,37 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async navigateTo(_url: string): Promise<void> {
     // Default implementation does nothing - providers can override
+  }
+
+  // ---------------------------------------------------------------------------
+  // Thread Management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the current thread ID for subsequent browser operations.
+   * Called by tools before executing browser actions to ensure
+   * operations are routed to the correct thread session.
+   *
+   * @param threadId - The thread ID, or undefined to use the default thread
+   */
+  setCurrentThread(threadId?: string): void {
+    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Get the current thread ID.
+   * @returns The current thread ID being used for operations
+   */
+  getCurrentThread(): string {
+    return this.currentThreadId;
+  }
+
+  /**
+   * Get the thread isolation mode.
+   * @returns The isolation mode from threadManager or config, or 'none' if not set
+   */
+  getThreadIsolationMode(): ThreadIsolationMode {
+    return this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
   }
 
   // ---------------------------------------------------------------------------

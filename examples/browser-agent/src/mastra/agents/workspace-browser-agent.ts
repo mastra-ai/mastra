@@ -10,6 +10,7 @@
  */
 import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalSandbox, LocalFilesystem } from '@mastra/core/workspace';
+import { Memory } from '@mastra/memory';
 
 /**
  * Create a workspace with browser capabilities using agent-browser CLI.
@@ -42,6 +43,8 @@ browserWorkspace.init().catch(err => {
   console.error('Failed to initialize browser workspace:', err);
 });
 
+const memory = new Memory();
+
 /**
  * Agent that uses workspace for browser automation.
  *
@@ -56,7 +59,8 @@ browserWorkspace.init().catch(err => {
 export const workspaceAgentBrowserAgent = new Agent({
   id: 'workspace-agent-browser-agent',
   name: 'Workspace Agent-Browser Agent',
-  description: 'An agent that uses agent-browser CLI (vercel-labs/agent-browser) for web automation with screencast viewing.',
+  description:
+    'An agent that uses agent-browser CLI (vercel-labs/agent-browser) for web automation with screencast viewing.',
   instructions: `You are a web browsing assistant with browser automation capabilities.
 
 Use the workspace_execute_command tool to run browser commands. The browser CLI is available for navigation, interaction, and data extraction.
@@ -64,4 +68,5 @@ Use the workspace_execute_command tool to run browser commands. The browser CLI 
 Browser context (current URL, page title) will be provided when available.`,
   model: 'openai/gpt-5.2',
   workspace: browserWorkspace,
+  memory,
 });
