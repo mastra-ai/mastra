@@ -121,7 +121,13 @@ export interface BrowserStreamResult {
  * Minimal interface for ViewerRegistry that adapters interact with.
  */
 export interface ViewerRegistryLike {
-  addViewer(agentId: string, ws: BrowserStreamWebSocket, getToolset: BrowserStreamConfig['getToolset']): Promise<void>;
-  removeViewer(agentId: string, ws: BrowserStreamWebSocket): Promise<void>;
+  addViewer(
+    viewerKey: string,
+    ws: BrowserStreamWebSocket,
+    getToolset: BrowserStreamConfig['getToolset'],
+    agentId?: string,
+    threadId?: string,
+  ): Promise<void>;
+  removeViewer(viewerKey: string, ws: BrowserStreamWebSocket): Promise<void>;
   closeBrowserSession(agentId: string): Promise<void>;
 }

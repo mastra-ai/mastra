@@ -11,12 +11,14 @@
  * @see AgentBrowserThreadManager for a full implementation with 'browser' mode.
  */
 
+import type { Stagehand } from '@browserbasehq/stagehand';
 import { ThreadManager, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 
-// Import V3 (Stagehand) types
-type V3 = import('@browserbasehq/stagehand').V3;
-type V3Page = Awaited<ReturnType<V3['context']['newPage']>>;
+// Type aliases for Stagehand v3
+// V3 is the Stagehand instance, V3Page is the page type from context.activePage()
+type V3 = Stagehand;
+type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
 
 /**
  * Extended session info for Stagehand threads.
@@ -115,7 +117,23 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       };
     }
 
-    // 'context' mode - create a new page for this thread
+    // 'context' mode - for the first thread, reuse the default page (index 0)
+    // created during launch. This prevents opening an extra window.
+    const isFirstThread = this.getSessionCount() === 0;
+
+    if (isFirstThread) {
+      const page = stagehand.context.activePage();
+      this.logger?.debug?.(`First thread ${threadId} reusing default page (index: 0)`);
+
+      return {
+        threadId,
+        createdAt: Date.now(),
+        page,
+        pageIndex: 0,
+      };
+    }
+
+    // Subsequent threads get new pages
     const page = await stagehand.context.newPage();
     const pages = stagehand.context.pages();
     const pageIndex = pages.indexOf(page);

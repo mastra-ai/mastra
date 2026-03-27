@@ -63,11 +63,19 @@ export class AgentBrowser extends MastraBrowser {
     }
 
     // Initialize thread manager
+    // Default to 'context' isolation so each thread gets its own browser context
     this.threadManager = new AgentBrowserThreadManager({
-      isolation: config.threadIsolation ?? 'none',
+      isolation: config.threadIsolation ?? 'context',
       browserConfig: config,
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
+      // When a new thread session is created, notify listeners so screencast can start
+      onSessionCreated: session => {
+        console.log(`[AgentBrowser] onSessionCreated: "${session.threadId}"`);
+        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
+        // for threads that just started using the browser
+        this.notifyBrowserReady();
+      },
     });
   }
 
@@ -80,7 +88,9 @@ export class AgentBrowser extends MastraBrowser {
    * Called by tools before executing browser actions.
    */
   setCurrentThread(threadId?: string): void {
-    this.currentThreadId = threadId ?? DEFAULT_THREAD_ID;
+    const newThreadId = threadId ?? DEFAULT_THREAD_ID;
+    console.log(`[AgentBrowser] setCurrentThread: "${this.currentThreadId}" -> "${newThreadId}"`);
+    this.currentThreadId = newThreadId;
   }
 
   /**
@@ -1032,13 +1042,59 @@ export class AgentBrowser extends MastraBrowser {
   // Screencast (for Studio live view)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Check if a thread has an existing browser session.
+   * For 'context' isolation, the first thread reuses the default page,
+   * so we return true even if no session exists yet (it will be created).
+   */
+  override hasThreadSession(threadId: string): boolean {
+    const isolation = this.threadManager.getIsolationMode();
+
+    // No isolation - all threads share the same session
+    if (isolation === 'none') {
+      return true;
+    }
+
+    // Check if this thread already has a session
+    if (this.threadManager.hasSession(threadId)) {
+      return true;
+    }
+
+    // For 'context' mode: if no sessions exist, the first thread will reuse page 0
+    // So we consider it as "having a session" for screencast purposes
+    if (isolation === 'context' && this.threadManager.getSessionCount() === 0) {
+      return true;
+    }
+
+    return false;
+  }
+
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
     if (!this.browserManager) throw new Error('Browser not launched');
 
-    // Create CDP session provider adapter for BrowserManager
     const browserManager = this.browserManager;
+    const threadId = _options?.threadId;
+    const isolation = this.threadManager.getIsolationMode();
+
+    // For thread-isolated modes, check if this thread already has a session
+    // Note: For 'context' mode, the first thread reuses the default page (page 0),
+    // so we check hasSession() which will be false until the thread actually uses the browser.
+    // In that case, we fall back to the shared page (which is correct - first thread gets page 0).
+    const hasExistingSession =
+      isolation !== 'none' && threadId && threadId !== DEFAULT_THREAD_ID && this.threadManager.hasSession(threadId);
+
+    // Create CDP session provider adapter
     const provider: CdpSessionProvider = {
-      getCdpSession: async () => browserManager.getCDPSession() as unknown as CdpSessionLike,
+      getCdpSession: async () => {
+        if (hasExistingSession) {
+          // Thread has an existing session - use its page
+          const page = await this.getPageForThread(threadId);
+          const cdpSession = await page.context().newCDPSession(page);
+          return cdpSession as unknown as CdpSessionLike;
+        }
+        // No thread session yet, or isolation is 'none' - use the shared page
+        return browserManager.getCDPSession() as unknown as CdpSessionLike;
+      },
       isBrowserRunning: () => browserManager.isLaunched(),
     };
 

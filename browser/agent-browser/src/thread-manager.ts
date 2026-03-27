@@ -93,14 +93,32 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       session.manager = manager;
       this.threadBrowsers.set(threadId, manager);
     } else if (this.isolation === 'context') {
-      // Context isolation - create a new window in the shared browser
+      // Context isolation - each thread gets its own page/context
       const manager = this.getSharedManager();
-      if (!manager.newWindow) {
-        throw new Error('Browser manager does not support newWindow() for context isolation');
+
+      // For the first thread, reuse the default page that was created during launch
+      // This avoids creating an extra empty window
+      if (this.getSessionCount() === 0) {
+        // First thread - reuse page index 0 (the default page)
+        session.pageIndex = 0;
+        console.log(`[ThreadManager] createSession: FIRST thread "${threadId}" reusing page 0`);
+      } else {
+        // Subsequent threads - create a new window
+        if (!manager.newWindow) {
+          throw new Error('Browser manager does not support newWindow() for context isolation');
+        }
+        const { index } = await manager.newWindow();
+        session.pageIndex = index;
+        console.log(`[ThreadManager] createSession: NEW thread "${threadId}" got page ${index}`);
       }
-      const { index } = await manager.newWindow();
-      session.pageIndex = index;
     }
+
+    console.log(`[ThreadManager] createSession complete:`, {
+      threadId,
+      isolation: this.isolation,
+      sessionCount: this.getSessionCount() + 1, // +1 because session not added yet
+      pageIndex: session.pageIndex,
+    });
 
     return session;
   }
@@ -138,7 +156,12 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       await session.manager.close();
       this.threadBrowsers.delete(session.threadId);
     } else if (this.isolation === 'context' && session.pageIndex !== undefined) {
-      // Close the context/window in the shared browser
+      // Don't close page index 0 - it's the default page shared with the browser manager
+      // Closing it would break the shared manager
+      if (session.pageIndex === 0) {
+        return;
+      }
+      // Close other contexts/windows in the shared browser
       const manager = this.getSharedManager();
       if (manager.closeTab) {
         await manager.closeTab(session.pageIndex);

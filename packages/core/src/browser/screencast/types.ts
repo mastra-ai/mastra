@@ -19,6 +19,8 @@ export interface ScreencastOptions {
   maxHeight?: number;
   /** Capture every Nth frame (default: 1) */
   everyNthFrame?: number;
+  /** Thread ID for thread-scoped screencasts (streams from thread's page) */
+  threadId?: string;
 }
 
 /**
@@ -59,7 +61,7 @@ export interface ScreencastEvents {
 /**
  * Default screencast options.
  */
-export const SCREENCAST_DEFAULTS: Required<ScreencastOptions> = {
+export const SCREENCAST_DEFAULTS: Required<Omit<ScreencastOptions, 'threadId'>> = {
   format: 'jpeg',
   quality: 80,
   maxWidth: 1280,

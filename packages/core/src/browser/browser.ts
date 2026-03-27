@@ -484,16 +484,20 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Register a callback to be invoked when the browser becomes ready.
    * If browser is already running, callback is invoked immediately.
+   * The callback is ALWAYS registered (even if invoked immediately) so it will
+   * also fire on future "ready" events (e.g., session creation for thread isolation).
    * @returns Cleanup function to unregister the callback
    */
   onBrowserReady(callback: () => void): () => void {
+    // Always register the callback so it fires on future ready events
+    // (e.g., when a new thread session is created)
+    this._onReadyCallbacks.add(callback);
+
     if (this.isBrowserRunning()) {
-      // Browser already ready - invoke immediately
+      // Browser already ready - also invoke immediately
       callback();
-      return () => {};
     }
 
-    this._onReadyCallbacks.add(callback);
     return () => {
       this._onReadyCallbacks.delete(callback);
     };
@@ -585,13 +589,39 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Check if a thread has an existing browser session.
+   * Used by startScreencastIfBrowserActive to prevent showing another thread's page.
+   * Override in subclass if thread isolation is supported.
+   * @returns true if session exists or thread isolation is not used
+   */
+  hasThreadSession(_threadId: string): boolean {
+    // Default: no thread isolation, all threads share the same session
+    return true;
+  }
+
+  /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
+   *
+   * For thread-isolated browsers, returns null if the thread doesn't have
+   * an existing session (to prevent showing another thread's page).
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
     if (!this.isBrowserRunning()) {
       return null;
     }
+
+    const threadId = options?.threadId;
+    const isolation = this.config.threadIsolation ?? 'none';
+
+    // For thread-isolated modes, only start screencast if this thread has an existing session
+    // This prevents new threads from showing another thread's page
+    if (isolation !== 'none' && threadId) {
+      if (!this.hasThreadSession(threadId)) {
+        return null;
+      }
+    }
+
     return this.startScreencast(options);
   }
 

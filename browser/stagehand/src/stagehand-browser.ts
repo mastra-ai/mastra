@@ -51,9 +51,17 @@ export class StagehandBrowser extends MastraBrowser {
     this.stagehandConfig = config;
 
     // Initialize thread manager
+    // Default to 'context' isolation so each thread gets its own browser page
     this.threadManager = new StagehandThreadManager({
-      isolation: config.threadIsolation ?? 'none',
+      isolation: config.threadIsolation ?? 'context',
       logger: this.logger,
+      // When a new thread session is created, notify listeners so screencast can start
+      onSessionCreated: session => {
+        console.log(`[StagehandBrowser] onSessionCreated: "${session.threadId}"`);
+        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
+        // for threads that just started using the browser
+        this.notifyBrowserReady();
+      },
     });
   }
 
@@ -223,7 +231,7 @@ export class StagehandBrowser extends MastraBrowser {
   private getPage(): V3Page | null {
     if (!this.stagehand) return null;
 
-    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+    const isolation = this.threadManager.getIsolationMode();
 
     // If using thread isolation, get the page for the current thread
     if (isolation !== 'none' && this.currentThreadId !== DEFAULT_THREAD_ID) {
@@ -264,7 +272,7 @@ export class StagehandBrowser extends MastraBrowser {
   async getPageForThread(threadId: string): Promise<V3Page | null> {
     if (!this.stagehand) return null;
 
-    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+    const isolation = this.threadManager.getIsolationMode();
 
     if (isolation === 'none') {
       return this.getPage();
@@ -290,6 +298,13 @@ export class StagehandBrowser extends MastraBrowser {
    */
   private getCdpSession(): any {
     const page = this.getPage();
+    return this.getCdpSessionForPage(page);
+  }
+
+  /**
+   * Get a CDP session for a specific page.
+   */
+  private getCdpSessionForPage(page: V3Page | null): any {
     if (!page) return null;
 
     try {
@@ -303,6 +318,14 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     return null;
+  }
+
+  /**
+   * Get a CDP session for a specific thread's page.
+   */
+  private async getCdpSessionForThread(threadId: string): Promise<any> {
+    const page = await this.getPageForThread(threadId);
+    return this.getCdpSessionForPage(page);
   }
 
   // ---------------------------------------------------------------------------
@@ -510,8 +533,43 @@ export class StagehandBrowser extends MastraBrowser {
   // Uses Stagehand v3's native CDP access
   // ---------------------------------------------------------------------------
 
+  /**
+   * Check if a thread has an existing browser session.
+   * For 'context' isolation, the first thread reuses the default page,
+   * so we return true even if no session exists yet.
+   */
+  override hasThreadSession(threadId: string): boolean {
+    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+
+    // No isolation - all threads share the same session
+    if (isolation === 'none') {
+      return true;
+    }
+
+    // Check if this thread already has a session
+    if (this.threadManager.hasSession(threadId)) {
+      return true;
+    }
+
+    // For 'context' mode: if no sessions exist, the first thread will reuse the default page
+    if (isolation === 'context' && this.threadManager.getSessionCount() === 0) {
+      return true;
+    }
+
+    return false;
+  }
+
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
-    const cdpSession = this.getCdpSession();
+    const threadId = options?.threadId;
+    const isolation = this.stagehandConfig.threadIsolation ?? 'none';
+
+    // Only use thread-specific page if thread already has a session
+    const hasExistingSession =
+      isolation !== 'none' && threadId && threadId !== DEFAULT_THREAD_ID && this.threadManager.hasSession(threadId);
+
+    // Get CDP session - use thread-specific page if session exists
+    const cdpSession = hasExistingSession ? await this.getCdpSessionForThread(threadId) : this.getCdpSession();
+
     if (!cdpSession) {
       throw new Error('No CDP session available for screencast');
     }

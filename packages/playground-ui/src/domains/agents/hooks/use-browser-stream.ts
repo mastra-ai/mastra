@@ -15,6 +15,7 @@ export type StreamStatus =
 
 interface UseBrowserStreamOptions {
   agentId: string;
+  threadId: string;
   enabled?: boolean;
   onFrame?: (data: string) => void;
   maxReconnectAttempts?: number;
@@ -40,7 +41,7 @@ interface UseBrowserStreamReturn {
  * - Frame callback bypasses React state for performance
  */
 export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserStreamReturn {
-  const { agentId, enabled = true, onFrame, maxReconnectAttempts = 5 } = options;
+  const { agentId, threadId, enabled = true, onFrame, maxReconnectAttempts = 5 } = options;
 
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -83,11 +84,6 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
   }, []);
 
   const connect = useCallback(() => {
-    // Don't connect if already connecting or connected
-    if (wsRef.current?.readyState === WebSocket.CONNECTING || wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
     // Clear any existing connection and timeout
     clearReconnectTimeout();
     if (wsRef.current) {
@@ -100,7 +96,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
 
     // Construct WebSocket URL based on current protocol
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream`;
+    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream?threadId=${encodeURIComponent(threadId)}`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -201,7 +197,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to create WebSocket');
     }
-  }, [agentId, enabled, maxReconnectAttempts, clearReconnectTimeout]);
+  }, [agentId, threadId, enabled, maxReconnectAttempts, clearReconnectTimeout]);
 
   // Handle tab visibility changes - reconnect when tab becomes visible
   useEffect(() => {

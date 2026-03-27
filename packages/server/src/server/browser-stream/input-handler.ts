@@ -77,11 +77,13 @@ function getVirtualKeyCode(key: string | undefined): number | undefined {
  * @param data - Raw string data from WebSocket message
  * @param getToolset - Function to retrieve MastraBrowser for an agent
  * @param agentId - The agent ID this WebSocket connection is for
+ * @param threadId - The thread ID for thread-scoped operations (optional)
  */
 export function handleInputMessage(
   data: string,
   getToolset: (agentId: string) => MastraBrowser | undefined,
   agentId: string,
+  _threadId?: string,
 ): void {
   let message: unknown;
   try {

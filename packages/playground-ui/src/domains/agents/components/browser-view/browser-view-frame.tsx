@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 interface BrowserViewFrameProps {
   agentId: string;
+  threadId: string;
   className?: string;
   onStatusChange?: (status: StreamStatus) => void;
   onUrlChange?: (url: string | null) => void;
@@ -24,6 +25,7 @@ interface BrowserViewFrameProps {
  */
 export function BrowserViewFrame({
   agentId,
+  threadId,
   className,
   onStatusChange,
   onUrlChange,
@@ -48,6 +50,7 @@ export function BrowserViewFrame({
 
   const { status, error, currentUrl, viewport, sendMessage, connect } = useBrowserStream({
     agentId,
+    threadId,
     enabled: true,
     onFrame: handleFrame,
   });
@@ -106,8 +109,15 @@ export function BrowserViewFrame({
     }
   }, [hasFrame, onFirstFrame]);
 
-  // Auto-connect when component mounts
+  // Auto-connect when component mounts or threadId changes
+  // Also reset frame state when threadId changes to show loading state
   useEffect(() => {
+    // Reset frame state for new thread
+    setHasFrame(false);
+    if (imgRef.current) {
+      imgRef.current.dataset.loaded = '';
+      imgRef.current.src = '';
+    }
     connect();
   }, [connect]);
 
