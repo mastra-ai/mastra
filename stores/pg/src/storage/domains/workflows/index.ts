@@ -27,13 +27,26 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 }
 
 /**
- * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
- * Removes:
+ * Sanitizes JSON string by removing or escaping problematic sequences that PostgreSQL jsonb rejects.
+ * Handles:
  * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
  * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ * - Invalid JSON escape sequences like \v, \k, etc. - PostgreSQL only accepts \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+ *
+ * Invalid escape sequences are escaped by doubling the backslash (e.g., \v becomes \\v).
  */
 function sanitizeJsonForPg(jsonString: string): string {
-  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
+  // First, remove problematic Unicode escape sequences
+  let sanitized = jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
+
+  // Then, escape invalid JSON escape sequences.
+  // PostgreSQL's JSON parser only accepts these escape sequences: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+  // Any other \X combination is rejected. We escape these by doubling the backslash.
+  // This regex matches a backslash followed by a character that is NOT part of a valid escape sequence.
+  // We use a negative lookahead to avoid matching valid escape sequences.
+  sanitized = sanitized.replace(/\\(?!"|\\|\/|b|f|n|r|t|u[0-9a-fA-F]{4})/g, '\\\\');
+
+  return sanitized;
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
