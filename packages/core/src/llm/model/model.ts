@@ -16,7 +16,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import type { JSONSchema7, Schema } from '@mastra/schema-compat';
-import type { ZodSchema, z } from 'zod/v3';
+import type { z } from 'zod/v4';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -24,6 +24,7 @@ import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { toStandardSchema, standardSchemaToJSONSchema, isStandardSchemaWithJSON } from '../../schema';
+import type { ZodSchema } from '../../schema';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
 import { isZodArray, getZodDef } from '../../utils/zod-utils';
@@ -390,7 +391,6 @@ export class MastraLLMV1 extends MastraBase {
         ...rest,
         messages,
         model,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
       };
@@ -875,7 +875,6 @@ export class MastraLLMV1 extends MastraBase {
           llmSpan?.error({ error: mastraError });
         },
         messages,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<inferOutput<T>>,
       };

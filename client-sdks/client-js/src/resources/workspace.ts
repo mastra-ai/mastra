@@ -25,12 +25,18 @@ import { BaseResource } from './base';
  * Resource for interacting with a specific skill via the workspace API
  */
 export class WorkspaceSkillResource extends BaseResource {
+  private basePath: string;
+  private pathQuery: string;
+
   constructor(
     options: ClientOptions,
     private workspaceId: string,
     private skillName: string,
+    private skillPath?: string,
   ) {
     super(options);
+    this.basePath = `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}`;
+    this.pathQuery = this.skillPath ? `?path=${encodeURIComponent(this.skillPath)}` : '';
   }
 
   /**
@@ -38,9 +44,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing skill details
    */
   details(): Promise<Skill> {
-    return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}`,
-    );
+    return this.request(`${this.basePath}${this.pathQuery}`);
   }
 
   /**
@@ -48,9 +52,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing list of reference paths
    */
   listReferences(): Promise<ListSkillReferencesResponse> {
-    return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}/references`,
-    );
+    return this.request(`${this.basePath}/references${this.pathQuery}`);
   }
 
   /**
@@ -59,9 +61,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing reference content
    */
   getReference(referencePath: string): Promise<GetSkillReferenceResponse> {
-    return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}`,
-    );
+    return this.request(`${this.basePath}/references/${encodeURIComponent(referencePath)}${this.pathQuery}`);
   }
 }
 
@@ -275,9 +275,10 @@ export class Workspace extends BaseResource {
   /**
    * Gets a skill instance for further operations
    * @param skillName - Skill name identifier
+   * @param skillPath - Optional skill path for disambiguation when multiple skills share the same name
    * @returns WorkspaceSkillResource instance
    */
-  getSkill(skillName: string): WorkspaceSkillResource {
-    return new WorkspaceSkillResource(this.options, this.workspaceId, skillName);
+  getSkill(skillName: string, skillPath?: string): WorkspaceSkillResource {
+    return new WorkspaceSkillResource(this.options, this.workspaceId, skillName, skillPath);
   }
 }

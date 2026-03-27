@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { paginationInfoSchema } from './common';
 
 // ============================================================================
@@ -300,6 +300,18 @@ export const listExperimentsResponseSchema = z.object({
 export const listExperimentResultsResponseSchema = z.object({
   results: z.array(experimentResultResponseSchema),
   pagination: paginationInfoSchema,
+});
+
+export const experimentReviewCountsSchema = z.object({
+  experimentId: z.string(),
+  total: z.number().int(),
+  needsReview: z.number().int(),
+  reviewed: z.number().int(),
+  complete: z.number().int(),
+});
+
+export const reviewSummaryResponseSchema = z.object({
+  counts: z.array(experimentReviewCountsSchema),
 });
 
 // ============================================================================

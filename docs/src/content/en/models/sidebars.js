@@ -298,6 +298,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
         },
