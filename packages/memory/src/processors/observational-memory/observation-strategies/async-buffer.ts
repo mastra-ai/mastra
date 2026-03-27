@@ -47,6 +47,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     return this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
+      observabilityContext: this.opts.observabilityContext,
     });
   }
 

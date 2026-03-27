@@ -102,6 +102,7 @@ export abstract class ObservationStrategy {
           abortSignal,
           reflectionHooks,
           requestContext,
+          observabilityContext: this.opts.observabilityContext,
         });
       }
     } catch (error) {

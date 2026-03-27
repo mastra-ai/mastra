@@ -1,5 +1,6 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -36,6 +37,21 @@ export interface MemoryContextProvider {
  * persistence, continuation message) stay here — they're not part of the
  * Turn/Step abstraction.
  */
+function getOmObservabilityContext(
+  args: ProcessInputStepArgs | ProcessOutputResultArgs,
+): ObservabilityContext | undefined {
+  if (!args.tracing || !args.tracingContext || !args.loggerVNext || !args.metrics) {
+    return undefined;
+  }
+
+  return {
+    tracing: args.tracing,
+    tracingContext: args.tracingContext,
+    loggerVNext: args.loggerVNext,
+    metrics: args.metrics,
+  };
+}
+
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
@@ -120,6 +136,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messageList,
+          observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
           },
@@ -129,6 +146,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         await this.turn.start(this.memory);
         state.__omTurn = this.turn;
       }
+
+      const observabilityContext = getOmObservabilityContext(args);
+      state.__omObservabilityContext = observabilityContext;
+      this.turn.observabilityContext = observabilityContext;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -233,6 +254,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
+
+    const observabilityContext = getOmObservabilityContext(args);
+    state.__omObservabilityContext = observabilityContext;
 
     return this.engine
       .getTokenCounter()
