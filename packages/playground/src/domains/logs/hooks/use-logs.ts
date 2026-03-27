@@ -4,7 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import { useEffect, useMemo } from 'react';
 
-const MOCK_LOGS = generateMockLogs(200);
+const MOCK_LOGS = generateMockLogs(500);
 
 const LOGS_PER_PAGE = 50;
 
@@ -50,7 +50,9 @@ export const useLogs = ({ filters }: LogsFilters = {}) => {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const data = query.data?.length ? query.data : MOCK_LOGS;
+  const data = query.data;
+
+  // const data = MOCK_LOGS;
 
   return { ...query, data, setEndOfListElement };
 };

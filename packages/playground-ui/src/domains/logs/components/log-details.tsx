@@ -1,135 +1,168 @@
 import { format } from 'date-fns';
-import { XIcon, CopyIcon, CheckIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
-import { LogsDataListLevelCell } from '@/ds/components/LogsDataList/logs-data-list-cells';
+import { Button } from '@/ds/components/Button';
+import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { ButtonsGroup } from '@/index';
 import { cn } from '@/lib/utils';
+
+const KV = DataDetailsPanel.KeyValueList;
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <button type="button" onClick={handleCopy} className="text-neutral2 hover:text-neutral5 transition-colors">
-      {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-    </button>
-  );
-}
-
-function DetailRow({ label, value, copyable }: { label: string; value?: string | null; copyable?: boolean }) {
-  if (!value) return null;
-
-  return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-border1">
-      <span className="text-ui-xs uppercase tracking-widest text-neutral2 shrink-0">{label}</span>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="text-ui-sm text-neutral4 font-mono truncate">{value}</span>
-        {copyable && <CopyButton text={value} />}
-      </div>
-    </div>
-  );
-}
-
 export interface LogDetailsProps {
   log: LogRecord;
   onClose: () => void;
+  onTraceClick?: (traceId: string) => void;
+  onSpanClick?: (traceId: string, spanId: string) => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function LogDetails({ log, onClose }: LogDetailsProps) {
+export function LogDetails({
+  log,
+  onClose,
+  onTraceClick,
+  onSpanClick,
+  onPrevious,
+  onNext,
+  collapsed: controlledCollapsed,
+  onCollapsedChange,
+}: LogDetailsProps) {
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const collapsed = controlledCollapsed ?? internalCollapsed;
+  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const date = toDate(log.timestamp);
 
+  console.log({ log });
+
   return (
-    <div className="flex h-full flex-col border-l border-border1 bg-surface2">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border1 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <LogsDataListLevelCell level={log.level} />
-          <span className="text-ui-sm text-neutral3">{log.entityName}</span>
-        </div>
-        <button type="button" onClick={onClose} className="text-neutral2 hover:text-neutral5 transition-colors">
-          <XIcon className="size-4" />
-        </button>
-      </div>
+    <DataDetailsPanel collapsed={collapsed}>
+      <DataDetailsPanel.Header>
+        <DataDetailsPanel.Heading>
+          Log <b>{format(date, 'MMM dd, HH:mm:ss.SSS')}</b>
+        </DataDetailsPanel.Heading>
+        <ButtonsGroup className="ml-auto shrink-0">
+          {onCollapsedChange && (
+            <ButtonWithTooltip
+              size="md"
+              tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+            </ButtonWithTooltip>
+          )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* Message */}
-        <div className="mb-6">
-          <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Message</p>
-          <p className="text-ui-sm text-neutral5 font-mono break-words whitespace-pre-wrap">
-            {log.message}
-          </p>
-        </div>
+          <ButtonsGroup spacing="close">
+            <ButtonWithTooltip size="md" tooltipContent="Previous log" onClick={onPrevious} disabled={!onPrevious}>
+              <ArrowUpIcon />
+            </ButtonWithTooltip>
+            <ButtonWithTooltip size="md" tooltipContent="Next log" onClick={onNext} disabled={!onNext}>
+              <ArrowDownIcon />
+            </ButtonWithTooltip>
+          </ButtonsGroup>
 
-        {/* Timestamp */}
-        <div className="mb-6">
-          <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Timestamp</p>
-          <p className="text-ui-sm text-neutral4 font-mono">
-            {format(date, 'MMM dd, yyyy HH:mm:ss.SSS')}
-          </p>
-        </div>
+          <DataDetailsPanel.CloseButton onClick={onClose} />
+        </ButtonsGroup>
+      </DataDetailsPanel.Header>
 
-        {/* Identifiers */}
-        <div className="mb-6">
-          <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Identifiers</p>
-          <DetailRow label="Trace ID" value={log.traceId} copyable />
-          <DetailRow label="Span ID" value={log.spanId} copyable />
-          <DetailRow label="Run ID" value={log.runId} copyable />
-        </div>
+      {!collapsed && (
+        <DataDetailsPanel.Content>
+          <div className="px-4 py-4">
+            <p className="text-ui-md text-neutral4 font-mono break-words whitespace-pre-wrap">{log.message}</p>
 
-        {/* Context */}
-        <div className="mb-6">
-          <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Context</p>
-          <DetailRow label="Entity Type" value={log.entityType} />
-          <DetailRow label="Entity Name" value={log.entityName} />
-          <DetailRow label="Service" value={log.serviceName} />
-          <DetailRow label="Environment" value={log.environment} />
-          <DetailRow label="Source" value={log.source} />
-        </div>
+            {/* Identifiers */}
+            {(log.traceId || log.spanId) && (
+              <div className={cn('grid gap-2 my-8', '[&>button]:justify-between [&>button]:overflow-hidden')}>
+                {log.traceId && (
+                  <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                    <Button
+                      size="md"
+                      className="min-w-0 flex-1 overflow-hidden"
+                      onClick={() => onTraceClick?.(log.traceId!)}
+                    >
+                      <ArrowRightIcon />
+                      <span>Trace</span>
+                      <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.traceId}</span>
+                    </Button>
+                    <CopyButton content={log.traceId!} size="md" tooltip="Copy Trace ID to clipboard" />
+                  </ButtonsGroup>
+                )}
+                {log.spanId && (
+                  <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                    <Button
+                      size="md"
+                      className="min-w-0 flex-1 overflow-hidden"
+                      onClick={() => log.traceId && onSpanClick?.(log.traceId, log.spanId!)}
+                    >
+                      <ArrowRightIcon />
+                      <span>Span</span>
+                      <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.spanId}</span>
+                    </Button>
+                    <CopyButton content={log.spanId!} size="md" tooltip="Copy Span ID to clipboard" />
+                  </ButtonsGroup>
+                )}
+              </div>
+            )}
 
-        {/* Tags */}
-        {log.tags && log.tags.length > 0 && (
-          <div className="mb-6">
-            <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Tags</p>
-            <div className="flex flex-wrap gap-1.5">
-              {log.tags.map(tag => (
-                <span key={tag} className="text-ui-xs text-neutral3 bg-surface3 border border-border1 rounded px-2 py-0.5">
-                  {tag}
-                </span>
-              ))}
-            </div>
+            <KV className="mb-6">
+              {log.entityType && (
+                <>
+                  <KV.Key>Entity Type</KV.Key>
+                  <KV.Value>{log.entityType}</KV.Value>
+                </>
+              )}
+              {log.entityName && (
+                <>
+                  <KV.Key>Entity Name</KV.Key>
+                  <KV.Value>{log.entityName}</KV.Value>
+                </>
+              )}
+              {log.serviceName && (
+                <>
+                  <KV.Key>Service</KV.Key>
+                  <KV.Value>{log.serviceName}</KV.Value>
+                </>
+              )}
+              {log.environment && (
+                <>
+                  <KV.Key>Environment</KV.Key>
+                  <KV.Value>{log.environment}</KV.Value>
+                </>
+              )}
+              {log.source && (
+                <>
+                  <KV.Key>Source</KV.Key>
+                  <KV.Value>{log.source}</KV.Value>
+                </>
+              )}
+              {log.metadata && Object.keys(log.metadata).length > 0 && (
+                <>
+                  <KV.Header>Metadata</KV.Header>
+                  {Object.entries(log.metadata).map(([key, value]) => (
+                    <Fragment key={key}>
+                      <KV.Key>{key}</KV.Key>
+                      <KV.Value>{String(value)}</KV.Value>
+                    </Fragment>
+                  ))}
+                </>
+              )}
+            </KV>
+
+            {/* Data */}
+            {log.data && Object.keys(log.data).length > 0 && (
+              <DataDetailsPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
+            )}
           </div>
-        )}
-
-        {/* Metadata */}
-        {log.metadata && Object.keys(log.metadata).length > 0 && (
-          <div className="mb-6">
-            <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Metadata</p>
-            {Object.entries(log.metadata).map(([key, value]) => (
-              <DetailRow key={key} label={key} value={String(value)} />
-            ))}
-          </div>
-        )}
-
-        {/* Data */}
-        {log.data && Object.keys(log.data).length > 0 && (
-          <div className="mb-6">
-            <p className="text-ui-xs uppercase tracking-widest text-neutral2 mb-2">Data</p>
-            <pre className="text-ui-xs text-neutral4 font-mono overflow-x-auto whitespace-pre-wrap break-words">
-              {JSON.stringify(log.data, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
+        </DataDetailsPanel.Content>
+      )}
+    </DataDetailsPanel>
   );
 }

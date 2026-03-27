@@ -1,5 +1,5 @@
 import { format, isToday } from 'date-fns';
-import { Code } from 'lucide-react';
+import { BracesIcon, Code } from 'lucide-react';
 import { DataListCell } from '../DataList/data-list-cells';
 import type { LogLevel } from '@/domains/logs/types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -92,7 +92,7 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
     case 'TOOL':
       return <ToolsIcon className={iconClass} aria-hidden />;
     default:
-      return <Code className={iconClass} aria-hidden strokeWidth={2} />;
+      return null;
   }
 }
 
@@ -107,7 +107,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      <span className="min-w-0 text-ui-smd truncate">{entityName}</span>
+      {entityName ? <span className="min-w-0 text-ui-smd truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -124,6 +124,30 @@ export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProp
   return (
     <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 truncate font-mono">
       {message}
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DataCell
+// ---------------------------------------------------------------------------
+
+export interface LogsDataListDataCellProps {
+  data?: Record<string, unknown> | null;
+}
+
+export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
+  if (!data || Object.keys(data).length === 0) {
+    return <DataListCell height="compact" />;
+  }
+
+  const summary = Object.entries(data)
+    .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(', ');
+
+  return (
+    <DataListCell height="compact" className="min-w-0">
+      <span className="block text-neutral3 text-ui-smd font-mono truncate">{summary}</span>
     </DataListCell>
   );
 }
