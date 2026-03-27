@@ -275,7 +275,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     const type = chunk?.type;
     const status = chunk?.data?.status;
 
-    if (type === 'data-tool-agent') {
+    if (type === 'data-tool-agent' || type === 'data-tool-network') {
       if (status === 'finished') {
         controller.enqueue(chunk);
         bufferedSteps.delete(runId);
@@ -284,11 +284,6 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
       if (status !== 'running') {
         controller.enqueue(chunk);
         if (status !== 'suspended') bufferedSteps.delete(runId);
-      }
-    } else if (type === 'data-tool-network') {
-      if (status === 'finished') {
-        controller.enqueue(chunk);
-        bufferedSteps.delete(runId);
       }
     } else if (chunk) {
       controller.enqueue(chunk);
