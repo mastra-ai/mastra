@@ -96,9 +96,7 @@ describe('createMastraClient credentials', () => {
       return null;
     }
 
-    renderToString(
-      createElement(MastraClientProvider, { baseUrl: 'http://localhost:4000' }, createElement(Inspector)),
-    );
+    renderToString(createElement(MastraClientProvider, { baseUrl: 'http://localhost:4000' }, createElement(Inspector)));
 
     expect(capturedClient.options.credentials).toBe('include');
   });
