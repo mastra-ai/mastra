@@ -1,5 +1,32 @@
 # mastra
 
+## 1.3.16-alpha.5
+
+### Patch Changes
+
+- During `create-mastra`, skip the git initialization question if the current directory is already a git repository. ([#14763](https://github.com/mastra-ai/mastra/pull/14763))
+
+- Updated dependencies [[`4e7f4e6`](https://github.com/mastra-ai/mastra/commit/4e7f4e6fe6239e0aa5f15416fb1e8ad8e9c52bcf), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`c40d0dd`](https://github.com/mastra-ai/mastra/commit/c40d0dd55890425e0a108db227711a0fffa80722)]:
+  - @mastra/deployer@1.18.0-alpha.2
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/loggers@1.1.0-alpha.0
+
+## 1.3.16-alpha.4
+
+### Patch Changes
+
+- Restructured Studio sidebar navigation into section-based layout with overview pages. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+  - **Section headers**: Sidebar now groups links under "Primitives", "Evaluation", and "Observability" section headers. Headers are clickable and link to overview pages.
+  - **Sub-link indentation**: Links within each section are visually indented when the sidebar is expanded.
+  - **Overview pages**: New overview pages for Primitives (`/primitives`), Observability (`/observability-overview`), and Resources (`/resources`) showing clickable cards for each sub-section.
+  - **Evaluation tab bar removed**: Scorers, Datasets, and Experiments are now navigated via sidebar sub-links instead of in-page tabs.
+  - **Layout cleanup**: Removed grey `bg-surface2` panel styling from the main content area, applying the dark background universally. Cleaned up experimental UI gating code.
+  - **Sidebar bottom**: Removed "Share" button (moved to Resources page) and "Templates" link. Sidebar bottom now only shows the version footer.
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/deployer@1.18.0-alpha.1
+
 ## 1.3.16-alpha.3
 
 ### Patch Changes

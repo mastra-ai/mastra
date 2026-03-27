@@ -1,5 +1,24 @@
 # mastracode
 
+## 0.9.3-alpha.5
+
+### Patch Changes
+
+- Custom slash commands now load correctly from all configured directories ([#14727](https://github.com/mastra-ai/mastra/pull/14727))
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+
+## 0.9.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`0dbaab9`](https://github.com/mastra-ai/mastra/commit/0dbaab988103f27495c37fd820f03a632eab2c59), [`1662721`](https://github.com/mastra-ai/mastra/commit/1662721aac59ad048b5df80323bdfb836fccbbfe), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/memory@1.10.1-alpha.3
+  - @mastra/libsql@1.7.3-alpha.2
+  - @mastra/pg@1.8.4-alpha.2
+
 ## 0.9.3-alpha.3
 
 ### Patch Changes
