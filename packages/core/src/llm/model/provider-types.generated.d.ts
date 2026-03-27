@@ -280,6 +280,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5.1',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -2587,15 +2588,23 @@ export type ProviderModelsMap = {
     'veo-3.1-generate-preview',
   ];
   readonly groq: readonly [
+    'allam-2-7b',
+    'canopylabs/orpheus-arabic-saudi',
+    'canopylabs/orpheus-v1-english',
+    'groq/compound',
+    'groq/compound-mini',
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
-    'meta-llama/llama-4-maverick-17b-128e-instruct',
     'meta-llama/llama-4-scout-17b-16e-instruct',
-    'meta-llama/llama-guard-4-12b',
+    'meta-llama/llama-prompt-guard-2-22m',
+    'meta-llama/llama-prompt-guard-2-86m',
     'moonshotai/kimi-k2-instruct-0905',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'openai/gpt-oss-safeguard-20b',
     'qwen/qwen3-32b',
+    'whisper-large-v3',
+    'whisper-large-v3-turbo',
   ];
   readonly aihubmix: readonly [
     'Kimi-K2-0905',
@@ -3565,6 +3574,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5.1',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
