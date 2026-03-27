@@ -171,13 +171,15 @@ export class AgentChat {
           toolCallId,
           threadId,
           platform: storedPlatform,
-          callStr,
+          toolName: storedToolName,
+          argsSummary: storedArgsSummary,
         } = JSON.parse(event.value) as {
           runId: string;
           toolCallId: string;
           threadId: string;
           platform: string;
-          callStr: string;
+          toolName: string;
+          argsSummary: string;
         };
         const approved = event.actionId === 'tool_approve';
         const platform = storedPlatform || event.adapter.name;
@@ -205,7 +207,10 @@ export class AgentChat {
             await adapter.editMessage(
               sdkThread.id,
               event.messageId,
-              Card({ title: callStr, children: [CardText(statusText)] }),
+              Card({
+                title: storedArgsSummary ? `${storedToolName} \`${storedArgsSummary}\`` : storedToolName,
+                children: [CardText(statusText)],
+              }),
             );
           } catch {
             // best-effort — some platforms may not support editing
@@ -247,7 +252,9 @@ export class AgentChat {
           sdkThread,
           platform,
           ensureTyping,
-          approved && event.messageId ? { messageId: event.messageId, callStr } : undefined,
+          approved && event.messageId
+            ? { messageId: event.messageId, toolName: storedToolName, argsSummary: storedArgsSummary }
+            : undefined,
         );
       } catch (err) {
         this.log('error', 'Error handling tool approval action', err);
@@ -490,7 +497,7 @@ export class AgentChat {
     sdkThread: Thread,
     platform: string,
     ensureTyping: () => Promise<void>,
-    approvalContext?: { messageId: string; callStr: string },
+    approvalContext?: { messageId: string; toolName: string; argsSummary: string },
   ): Promise<void> {
     const adapterConfig = this.adapterConfigs[platform];
 
@@ -498,7 +505,7 @@ export class AgentChat {
     interface TrackedToolCall {
       toolName: string;
       args: Record<string, unknown>;
-      argsText: string;
+      argsSummary: string;
       sentMessage?: SentMessage;
     }
     const toolCalls = new Map<string, TrackedToolCall>();
@@ -518,22 +525,26 @@ export class AgentChat {
         await flushText();
 
         const displayName = stripToolPrefix(chunk.payload.toolName);
-        const argsText = formatArgsInline(chunk.payload.args);
         const rawArgs = (
           typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
         ) as Record<string, unknown>;
+        const argsSummary = formatArgsSummary(rawArgs);
 
-        const callStr = defaultFormatToolCall(displayName, argsText);
         const sentMessage = adapterConfig?.formatToolCall
           ? undefined
-          : await sdkThread.post(Card({ title: callStr, children: [] }));
+          : await sdkThread.post(
+              Card({
+                title: argsSummary ? `${displayName} \`${argsSummary}\`` : displayName,
+                children: [],
+              }),
+            );
 
-        toolCalls.set(chunk.payload.toolCallId, { toolName: displayName, args: rawArgs, argsText, sentMessage });
+        toolCalls.set(chunk.payload.toolCallId, { toolName: displayName, args: rawArgs, argsSummary, sentMessage });
       } else if (chunk.type === 'tool-result') {
         const entry = toolCalls.get(chunk.payload.toolCallId);
         const displayName = entry?.toolName ?? stripToolPrefix(chunk.payload.toolName);
         const args = entry?.args ?? ((chunk.payload.args ?? {}) as Record<string, unknown>);
-        const argsText = entry?.argsText ?? formatArgsInline(args);
+        const argsSummary = entry?.argsSummary ?? formatArgsSummary(args);
         toolCalls.delete(chunk.payload.toolCallId);
 
         if (adapterConfig?.formatToolCall) {
@@ -548,8 +559,7 @@ export class AgentChat {
           }
         } else {
           const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-          const callStr = defaultFormatToolCall(displayName, argsText);
-          const resultCard = buildToolResultCard(callStr, resultText, chunk.payload.isError);
+          const resultCard = buildToolResultCard(displayName, argsSummary, resultText, chunk.payload.isError);
 
           // Try to edit the existing message (call message or approval card) into the result card
           const editTarget = entry?.sentMessage ?? (approvalContext ? null : undefined);
@@ -579,8 +589,7 @@ export class AgentChat {
         const { toolCallId, toolName, args } = chunk.payload;
         const entry = toolCalls.get(toolCallId);
         const displayName = entry?.toolName ?? stripToolPrefix(toolName);
-        const argsText = entry?.argsText ?? formatArgsInline(args);
-        const callStr = defaultFormatToolCall(displayName, argsText);
+        const argsSummary = entry?.argsSummary ?? formatArgsSummary(args);
         toolCalls.delete(toolCallId);
 
         const approvalData = JSON.stringify({
@@ -588,11 +597,13 @@ export class AgentChat {
           toolCallId,
           threadId: sdkThread.id,
           platform,
-          callStr,
+          toolName: displayName,
+          argsSummary,
         });
 
+        const cardTitle = argsSummary ? `${displayName} \`${argsSummary}\`` : displayName;
         const approvalCard = Card({
-          title: callStr,
+          title: cardTitle,
           children: [
             CardText('Requires approval to run.'),
             Actions([
@@ -809,7 +820,6 @@ export class AgentChat {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-const MAX_ARG_VALUE_LENGTH = 80;
 const MAX_RESULT_LENGTH = 300;
 
 /**
@@ -827,44 +837,32 @@ function stripToolPrefix(name: string): string {
   return name;
 }
 
+const MAX_ARG_SUMMARY_LENGTH = 40;
+
 /**
- * Format tool arguments as a compact inline string.
- * Strips internal metadata, skips false/null/empty, and truncates long values.
- * Returns e.g. "path: ., maxDepth: 5" or empty string if no meaningful args.
+ * Build a compact summary of tool arguments for display in the card title.
+ * Shows only the first meaningful argument value, truncated.
+ * e.g. "." for list_files, "ls -la" for execute_command.
  */
-function formatArgsInline(args: unknown): string {
-  if (args == null) return '';
+function formatArgsSummary(args: unknown): string {
   try {
     const obj = typeof args === 'string' ? JSON.parse(args) : args;
     if (!obj || typeof obj !== 'object') return '';
 
-    const parts = Object.entries(obj as Record<string, unknown>)
-      .filter(([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '')
-      .map(([key, val]) => {
-        let display: string;
-        if (typeof val === 'string') {
-          display = val.length > MAX_ARG_VALUE_LENGTH ? val.slice(0, MAX_ARG_VALUE_LENGTH) + '…' : val;
-        } else {
-          display = JSON.stringify(val);
-          if (display.length > MAX_ARG_VALUE_LENGTH) {
-            display = display.slice(0, MAX_ARG_VALUE_LENGTH) + '…';
-          }
-        }
-        return `${key}: ${display}`;
-      });
+    const entries = Object.entries(obj as Record<string, unknown>).filter(
+      ([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '',
+    );
+    if (entries.length === 0) return '';
 
-    return parts.join(', ');
+    const [, first] = entries[0]!;
+    let display = typeof first === 'string' ? first : JSON.stringify(first);
+    if (display.length > MAX_ARG_SUMMARY_LENGTH) {
+      display = display.slice(0, MAX_ARG_SUMMARY_LENGTH) + '…';
+    }
+    return display;
   } catch {
     return '';
   }
-}
-
-/**
- * Format a tool call as a function-call string.
- * e.g. "list_files(path: ., maxDepth: 2)"
- */
-function defaultFormatToolCall(toolName: string, argsText: string): string {
-  return `${toolName}(${argsText})`;
 }
 
 /**
@@ -883,12 +881,18 @@ function formatResult(result: unknown, isError?: boolean): string {
 
 /**
  * Build a Card for a tool result.
- * Uses the function-call string as the title and result as the body.
+ * Title = tool name, subtitle = first arg in inline code, body = result in code block.
  */
-function buildToolResultCard(callStr: string, resultText: string, isError?: boolean): CardElement {
-  const body = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
+function buildToolResultCard(
+  toolName: string,
+  argsSummary: string,
+  resultText: string,
+  isError?: boolean,
+): CardElement {
+  const title = argsSummary ? `${toolName} \`${argsSummary}\`` : toolName;
+  const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
   return Card({
-    title: callStr,
-    children: [CardText(body, { style: isError ? 'bold' : 'plain' })],
+    title,
+    children: [CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
   });
 }
