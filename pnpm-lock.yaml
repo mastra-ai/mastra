@@ -36,7 +36,7 @@ overrides:
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.2.2
-  fast-xml-parser@<=5.3.8: 5.3.8
+  fast-xml-parser@<=5.3.8: 5.5.7
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -54,8 +54,8 @@ importers:
         specifier: ^14.1.0
         version: 14.1.0
       node-forge:
-        specifier: 1.3.3
-        version: 1.3.3
+        specifier: 1.4.0
+        version: 1.4.0
       resolve-from:
         specifier: ^5.0.0
         version: 5.0.0
@@ -991,7 +991,7 @@ importers:
         version: 0.552.0(react@18.3.1)
       node-forge:
         specifier: ^1.3.3
-        version: 1.3.3
+        version: 1.4.0
       posthog-docusaurus:
         specifier: ^2.0.5
         version: 2.0.5
@@ -1391,9 +1391,6 @@ importers:
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
-      js-yaml:
-        specifier: ^3.14.2
-        version: 3.14.2
       partial-json:
         specifier: ^0.1.7
         version: 0.1.7
@@ -1409,6 +1406,9 @@ importers:
       vscode-languageserver-protocol:
         specifier: ^3.17.5
         version: 3.17.5
+      yaml:
+        specifier: ^2.7.1
+        version: 2.8.2
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -1419,9 +1419,6 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../packages/_types-builder
-      '@types/js-yaml':
-        specifier: ^4.0.9
-        version: 4.0.9
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3291,6 +3288,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.3.6)
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -11573,6 +11573,7 @@ packages:
   '@opentelemetry/instrumentation-fastify@0.57.0':
     resolution: {integrity: sha512-D+rwRtbiOediYocpKGvY/RQTpuLsLdCVwaOREyqWViwItJGibWI7O/wgd9xIV63pMP0D9IdSy27wnARfUaotKg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Deprecated in favor of @fastify/otel, maintained by the Fastify authors.
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
@@ -14660,9 +14661,6 @@ packages:
 
   '@types/istanbul-reports@3.0.4':
     resolution: {integrity: sha512-pk2B1NWalF9toCRu6gjBzR69syFjP4Od8WRAX+0mmf9lAjCRicLOWc+ZrxZHx/0XRjotgkF9t6iaMJ+aXcOdZQ==}
-
-  '@types/js-yaml@4.0.9':
-    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
 
   '@types/jscodeshift@17.3.0':
     resolution: {integrity: sha512-ogvGG8VQQqAQQ096uRh+d6tBHrYuZjsumHirKtvBa5qEyTMN3IQJ7apo+sw9lxaB/iKWIhbbLlF3zmAWk9XQIg==}
@@ -17812,15 +17810,15 @@ packages:
   fast-uri@3.1.0:
     resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
 
-  fast-xml-builder@1.0.0:
-    resolution: {integrity: sha512-fpZuDogrAgnyt9oDDz+5DBz0zgPdPZz6D4IR7iESxRXElrlGTRkHJ9eEt+SACRJwT0FNFrt71DFQIUFBJfX/uQ==}
-
-  fast-xml-parser@5.3.8:
-    resolution: {integrity: sha512-53jIF4N6u/pxvaL1eb/hEZts/cFLWZ92eCfLrNyCI0k38lettCG/Bs40W9pPwoPXyHQlKu2OUbQtiEIZK/J6Vw==}
-    hasBin: true
+  fast-xml-builder@1.1.4:
+    resolution: {integrity: sha512-f2jhpN4Eccy0/Uz9csxh3Nu6q4ErKxf0XIsasomfOihuSUa3/xw6w8dnOtCDgEItQFJG8KyXPzQXzcODDrrbOg==}
 
   fast-xml-parser@5.4.1:
     resolution: {integrity: sha512-BQ30U1mKkvXQXXkAGcuyUA/GA26oEB7NzOtsxCDtyu62sjGw5QraKFhx2Em3WQNjPw9PG6MQ9yuIIgkSDfGu5A==}
+    hasBin: true
+
+  fast-xml-parser@5.5.7:
+    resolution: {integrity: sha512-LteOsISQ2GEiDHZch6L9hB0+MLoYVLToR7xotrzU0opCICBkxOPgHAy1HxAvtxfJNXDJpgAsQN30mkrfpO2Prg==}
     hasBin: true
 
   fastembed@2.1.0:
@@ -20452,8 +20450,8 @@ packages:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  node-forge@1.3.3:
-    resolution: {integrity: sha512-rLvcdSyRCyouf6jcOIPe/BgwG/d7hKjzMKOas33/pHEr6gbq18IK9zV7DiPvzsz0oBJPme6qr6H6kGZuI9/DZg==}
+  node-forge@1.4.0:
+    resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
     engines: {node: '>= 6.13.0'}
 
   node-gyp-build@3.9.0:
@@ -20909,6 +20907,10 @@ packages:
   path-exists@5.0.0:
     resolution: {integrity: sha512-RjhtfwJOxzcFmNOi6ltcbcu4Iu+FL3zEj83dk4kAS+fVpTxXLO1b38RvJgT/0QwvV/L3aY9TAnyv0EOqW4GoMQ==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  path-expression-matcher@1.2.0:
+    resolution: {integrity: sha512-DwmPWeFn+tq7TiyJ2CxezCAirXjFxvaiD03npak3cRjlP9+OjTmSy1EpIrEbh+l6JgUundniloMLDQ/6VTdhLQ==}
+    engines: {node: '>=14.0.0'}
 
   path-is-inside@1.0.2:
     resolution: {integrity: sha512-DUWJr3+ULp4zXmol/SZkFf3JGsS9/SIv+Y3Rt93/UjPpDpklB5f1er4O3POIbUuUJ3FXgqte2Q7SrU6zAqwk8w==}
@@ -29561,7 +29563,7 @@ snapshots:
       abort-controller: 3.0.0
       async-retry: 1.3.3
       duplexify: 4.1.3
-      fast-xml-parser: 5.3.8
+      fast-xml-parser: 5.5.7
       gaxios: 6.7.1(encoding@0.1.13)
       google-auth-library: 9.15.1(encoding@0.1.13)
       html-entities: 2.6.0
@@ -35128,8 +35130,6 @@ snapshots:
     dependencies:
       '@types/istanbul-lib-report': 3.0.3
 
-  '@types/js-yaml@4.0.9': {}
-
   '@types/jscodeshift@17.3.0':
     dependencies:
       ast-types: 0.16.1
@@ -38973,15 +38973,19 @@ snapshots:
 
   fast-uri@3.1.0: {}
 
-  fast-xml-builder@1.0.0: {}
-
-  fast-xml-parser@5.3.8:
+  fast-xml-builder@1.1.4:
     dependencies:
-      strnum: 2.2.0
+      path-expression-matcher: 1.2.0
 
   fast-xml-parser@5.4.1:
     dependencies:
-      fast-xml-builder: 1.0.0
+      fast-xml-builder: 1.1.4
+      strnum: 2.2.0
+
+  fast-xml-parser@5.5.7:
+    dependencies:
+      fast-xml-builder: 1.1.4
+      path-expression-matcher: 1.2.0
       strnum: 2.2.0
 
   fastembed@2.1.0:
@@ -39168,7 +39172,7 @@ snapshots:
       google-auth-library: 10.6.2
       jsonwebtoken: 9.0.3
       jwks-rsa: 3.2.2
-      node-forge: 1.3.3
+      node-forge: 1.4.0
       uuid: 11.1.0
     optionalDependencies:
       '@google-cloud/firestore': 7.11.6
@@ -42358,7 +42362,7 @@ snapshots:
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
 
-  node-forge@1.3.3: {}
+  node-forge@1.4.0: {}
 
   node-gyp-build@3.9.0:
     optional: true
@@ -42382,7 +42386,7 @@ snapshots:
       es6-promise: 4.2.8
       lodash: 4.17.23
       long: 5.3.2
-      node-forge: 1.3.3
+      node-forge: 1.4.0
       pako: 2.1.0
       process: 0.11.10
       uuid: 9.0.1
@@ -42871,6 +42875,8 @@ snapshots:
   path-exists@4.0.0: {}
 
   path-exists@5.0.0: {}
+
+  path-expression-matcher@1.2.0: {}
 
   path-is-inside@1.0.2: {}
 

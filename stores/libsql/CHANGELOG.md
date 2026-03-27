@@ -1,5 +1,30 @@
 # @mastra/libsql
 
+## 1.7.3-alpha.2
+
+### Patch Changes
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
+## 1.7.3-alpha.1
+
+### Patch Changes
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
 ## 1.7.3-alpha.0
 
 ### Patch Changes
