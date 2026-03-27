@@ -83,7 +83,7 @@ export function handleInputMessage(
   data: string,
   getToolset: (agentId: string) => MastraBrowser | undefined,
   agentId: string,
-  _threadId?: string,
+  threadId?: string,
 ): void {
   let message: unknown;
   try {
@@ -103,7 +103,7 @@ export function handleInputMessage(
 
   switch (message.type) {
     case 'mouse':
-      void injectMouse(toolset, message).catch(err => {
+      void injectMouse(toolset, message, threadId).catch(err => {
         if (isDisconnectionError(err)) {
           notifyBrowserClosed(toolset);
         } else if (!isExpectedInjectionError(err)) {
@@ -112,7 +112,7 @@ export function handleInputMessage(
       });
       break;
     case 'keyboard':
-      void injectKeyboard(toolset, message).catch(err => {
+      void injectKeyboard(toolset, message, threadId).catch(err => {
         if (isDisconnectionError(err)) {
           notifyBrowserClosed(toolset);
         } else if (!isExpectedInjectionError(err)) {
@@ -191,33 +191,39 @@ async function relaunchBrowser(toolset: MastraBrowser): Promise<void> {
 /**
  * Inject a mouse event into the browser.
  */
-async function injectMouse(toolset: MastraBrowser, msg: MouseInputMessage): Promise<void> {
-  await toolset.injectMouseEvent({
-    type: msg.eventType,
-    x: msg.x,
-    y: msg.y,
-    button: msg.button,
-    clickCount: msg.clickCount,
-    deltaX: msg.deltaX,
-    deltaY: msg.deltaY,
-    modifiers: msg.modifiers,
-  });
+async function injectMouse(toolset: MastraBrowser, msg: MouseInputMessage, threadId?: string): Promise<void> {
+  await toolset.injectMouseEvent(
+    {
+      type: msg.eventType,
+      x: msg.x,
+      y: msg.y,
+      button: msg.button,
+      clickCount: msg.clickCount,
+      deltaX: msg.deltaX,
+      deltaY: msg.deltaY,
+      modifiers: msg.modifiers,
+    },
+    threadId,
+  );
 }
 
 /**
  * Inject a keyboard event into the browser.
  */
-async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage): Promise<void> {
+async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage, threadId?: string): Promise<void> {
   const windowsVirtualKeyCode = getVirtualKeyCode(msg.key);
 
-  await toolset.injectKeyboardEvent({
-    type: msg.eventType,
-    key: msg.key,
-    code: msg.code,
-    text: msg.text,
-    modifiers: msg.modifiers,
-    windowsVirtualKeyCode,
-  });
+  await toolset.injectKeyboardEvent(
+    {
+      type: msg.eventType,
+      key: msg.key,
+      code: msg.code,
+      text: msg.text,
+      modifiers: msg.modifiers,
+      windowsVirtualKeyCode,
+    },
+    threadId,
+  );
 }
 
 // --- Validation ---

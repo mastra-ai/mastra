@@ -4254,7 +4254,7 @@ export class Agent<
         provider: this.#browser.provider,
         sessionId: this.#browser.id,
         headless: (this.#browser as any).config?.headless,
-        currentUrl: this.#browser.getCurrentUrl() ?? undefined,
+        currentUrl: (await this.#browser.getCurrentUrl()) ?? undefined,
         isRunning: this.#browser.isBrowserRunning(),
       };
       requestContext.set('browser', browserCtx);

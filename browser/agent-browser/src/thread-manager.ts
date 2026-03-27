@@ -32,9 +32,8 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
 /**
  * Thread manager implementation for AgentBrowser.
  *
- * Supports three isolation modes:
+ * Supports two isolation modes:
  * - 'none': All threads share the shared browser manager
- * - 'context': Each thread gets a new window (BrowserContext) in the shared browser
  * - 'browser': Each thread gets a dedicated browser manager instance
  */
 export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
@@ -92,40 +91,19 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       await manager.launch(launchOptions);
       session.manager = manager;
       this.threadBrowsers.set(threadId, manager);
-    } else if (this.isolation === 'context') {
-      // Context isolation - each thread gets its own page/context
-      const manager = this.getSharedManager();
-
-      // For the first thread, reuse the default page that was created during launch
-      // This avoids creating an extra empty window
-      if (this.getSessionCount() === 0) {
-        // First thread - reuse page index 0 (the default page)
-        session.pageIndex = 0;
-      } else {
-        // Subsequent threads - create a new window
-        if (!manager.newWindow) {
-          throw new Error('Browser manager does not support newWindow() for context isolation');
-        }
-        const { index } = await manager.newWindow();
-        session.pageIndex = index;
-      }
     }
+    // For 'none' isolation, no session setup needed - all threads share the manager
 
     return session;
   }
 
   /**
    * Switch to an existing session.
+   * For 'browser' mode, no switching needed - each thread has its own manager.
+   * For 'none' mode, nothing to switch.
    */
-  protected async switchToSession(session: AgentBrowserSession): Promise<void> {
-    if (this.isolation === 'context' && session.pageIndex !== undefined) {
-      const manager = this.getSharedManager();
-      if (!manager.switchTo) {
-        throw new Error('Browser manager does not support switchTo() for context isolation');
-      }
-      await manager.switchTo(session.pageIndex);
-    }
-    // For 'browser' mode, no switching needed - each thread has its own manager
+  protected async switchToSession(_session: AgentBrowserSession): Promise<void> {
+    // No-op for both modes - 'browser' has separate managers, 'none' shares everything
   }
 
   /**
@@ -146,18 +124,8 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       // Close the dedicated browser manager
       await session.manager.close();
       this.threadBrowsers.delete(session.threadId);
-    } else if (this.isolation === 'context' && session.pageIndex !== undefined) {
-      // Don't close page index 0 - it's the default page shared with the browser manager
-      // Closing it would break the shared manager
-      if (session.pageIndex === 0) {
-        return;
-      }
-      // Close other contexts/windows in the shared browser
-      const manager = this.getSharedManager();
-      if (manager.closeTab) {
-        await manager.closeTab(session.pageIndex);
-      }
     }
+    // For 'none' mode, nothing to clean up - all threads share the manager
   }
 
   /**

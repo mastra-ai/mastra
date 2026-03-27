@@ -6,14 +6,13 @@
  *
  * Thread isolation modes:
  * - 'none': All threads share a single browser session (no isolation)
- * - 'context': Each thread gets its own BrowserContext (isolated state, shared process)
- * - 'browser': Each thread gets its own browser process (full isolation)
+ * - 'browser': Each thread gets its own browser instance (full isolation)
  */
 
 import type { IMastraLogger } from '../logger';
 
 /** Thread isolation mode */
-export type ThreadIsolationMode = 'none' | 'context' | 'browser';
+export type ThreadIsolationMode = 'none' | 'browser';
 
 /** Default thread ID used when no thread is specified */
 export const DEFAULT_THREAD_ID = '__default__';
@@ -24,8 +23,6 @@ export const DEFAULT_THREAD_ID = '__default__';
 export interface ThreadSession {
   /** Unique thread identifier */
   threadId: string;
-  /** Page/context index for 'context' mode */
-  pageIndex?: number;
   /** Timestamp when session was created */
   createdAt: number;
   /** Last known URL for this thread (for restore on relaunch) */
@@ -113,7 +110,6 @@ export abstract class ThreadManager<TManager = unknown> {
    * Get or create a session for a thread, and return the browser manager for that thread.
    *
    * For 'none' mode, returns the shared manager.
-   * For 'context' mode, creates/switches to the thread's context and returns the shared manager.
    * For 'browser' mode, creates/returns a dedicated manager for the thread.
    *
    * @param threadId - Thread identifier (uses DEFAULT_THREAD_ID if not provided)
@@ -205,7 +201,7 @@ export abstract class ThreadManager<TManager = unknown> {
 
   /**
    * Switch to an existing session.
-   * Called when switching between threads in 'context' mode.
+   * May be a no-op depending on isolation mode.
    */
   protected abstract switchToSession(session: ThreadSession): Promise<void>;
 

@@ -183,4 +183,43 @@ export class ScreencastStream extends EventEmitter {
   isActive(): boolean {
     return this.active;
   }
+
+  /**
+   * Reconnect the screencast by stopping and restarting.
+   * Use this when the active page/tab changes.
+   *
+   * @returns Promise that resolves when reconnection is complete
+   */
+  async reconnect(): Promise<void> {
+    // Clean up existing session
+    if (this.cdpSession && this.frameHandler && this.cdpSession.off) {
+      try {
+        this.cdpSession.off('Page.screencastFrame', this.frameHandler);
+      } catch {
+        // Ignore - session may be dead
+      }
+    }
+    this.frameHandler = null;
+
+    // Try to stop screencast on old session (may fail if session is dead)
+    if (this.cdpSession) {
+      try {
+        await this.cdpSession.send('Page.stopScreencast');
+      } catch {
+        // Old session may already be detached - this is expected
+      }
+      this.cdpSession = null;
+    }
+
+    // Mark as inactive so start() will work
+    this.active = false;
+
+    // Restart with fresh session from provider
+    try {
+      await this.start();
+    } catch (error) {
+      console.error('[ScreencastStream.reconnect] Failed to reconnect:', error);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+    }
+  }
 }

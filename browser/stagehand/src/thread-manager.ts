@@ -56,7 +56,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       config.logger?.warn?.(
         `StagehandBrowser: Thread isolation mode 'browser' is not supported. Using 'context' instead.`,
       );
-      super({ ...config, isolation: 'context' });
+      super({ ...config, isolation: 'browser' });
     } else {
       super({ ...config, isolation });
     }

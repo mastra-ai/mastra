@@ -326,7 +326,7 @@ export abstract class MastraBrowser extends MastraBase {
     }
 
     // Save last URL before closing for potential restore on relaunch
-    const currentUrl = this.getCurrentUrl();
+    const currentUrl = await this.getCurrentUrl();
     if (currentUrl && currentUrl !== 'about:blank') {
       this.lastUrl = currentUrl;
     }
@@ -586,9 +586,10 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Get the current page URL without launching the browser.
+   * @param threadId - Optional thread ID for thread-isolated browsers
    * @returns The current URL string, or null if browser is not running or not supported
    */
-  getCurrentUrl(): string | null {
+  async getCurrentUrl(_threadId?: string): Promise<string | null> {
     return null;
   }
 
@@ -683,9 +684,8 @@ export abstract class MastraBrowser extends MastraBase {
    * Does NOT launch the browser.
    * Uses config.screencast options as defaults if no options provided.
    *
-   * For thread-isolated browsers:
-   * - Returns null if the thread doesn't have an existing session
-   * - EXCEPT for 'context' mode when no sessions exist yet (first thread uses default page)
+   * For thread-isolated browsers ('browser' mode):
+   * - Returns null if the thread doesn't have an existing browser session
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
     if (!this.isBrowserRunning()) {
@@ -703,16 +703,7 @@ export abstract class MastraBrowser extends MastraBase {
       return this.startScreencast(mergedOptions);
     }
 
-    // For 'context' isolation: the FIRST thread should reuse the default page (page 0)
-    // even though hasSession returns false. This is because createSession will
-    // assign page 0 to the first thread that uses a browser tool.
-    if (isolation === 'context' && this.threadManager && this.threadManager.getSessionCount() === 0) {
-      // First thread - use the default page by NOT passing threadId
-      // This ensures the screencast uses page 0 (the default page)
-      return this.startScreencast({ ...mergedOptions, threadId: undefined });
-    }
-
-    // For other threads, only start if they have an existing session
+    // For 'browser' isolation, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
       return null;
     }
@@ -726,15 +717,19 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Inject a mouse event. Override in subclass if supported.
+   * @param event - Mouse event parameters
+   * @param threadId - Optional thread ID for thread-isolated sessions
    */
-  async injectMouseEvent(_event: MouseEventParams): Promise<void> {
+  async injectMouseEvent(_event: MouseEventParams, _threadId?: string): Promise<void> {
     throw new Error('Mouse event injection not supported by this provider');
   }
 
   /**
    * Inject a keyboard event. Override in subclass if supported.
+   * @param event - Keyboard event parameters
+   * @param threadId - Optional thread ID for thread-isolated sessions
    */
-  async injectKeyboardEvent(_event: KeyboardEventParams): Promise<void> {
+  async injectKeyboardEvent(_event: KeyboardEventParams, _threadId?: string): Promise<void> {
     throw new Error('Keyboard event injection not supported by this provider');
   }
 

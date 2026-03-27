@@ -880,13 +880,13 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
     // Update URL cache on each frame so getCurrentUrl() returns fresh data
     this._screencastStream.on('frame', () => {
       // Fire and forget - don't block frame delivery
-      this.fetchCurrentUrl().catch(() => {});
+      this.getCurrentUrl().catch(() => {});
     });
 
     await this._screencastStream.start();
 
     // Fetch initial URL
-    await this.fetchCurrentUrl();
+    await this.getCurrentUrl();
 
     return this._screencastStream;
   }
@@ -908,19 +908,11 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get the current URL of the browser page (synchronous, returns cached value).
-   * For MastraBrowser API compatibility.
-   * Use fetchCurrentUrl() for async version that queries the browser.
+   * Get the current URL of the browser page.
+   * Queries the browser via CDP if connected, otherwise returns cached value.
+   * @param _threadId - Ignored for BrowserViewer (no thread isolation)
    */
-  override getCurrentUrl(): string | null {
-    return this.lastUrl ?? null;
-  }
-
-  /**
-   * Fetch the current URL from the browser (async).
-   * Updates the cached value returned by getCurrentUrl().
-   */
-  async fetchCurrentUrl(): Promise<string | null> {
+  override async getCurrentUrl(_threadId?: string): Promise<string | null> {
     if (!this.cdpClient?.isConnected) {
       return this.lastUrl ?? null;
     }
@@ -974,8 +966,10 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
   /**
    * Inject a mouse event into the browser.
+   * @param params - Mouse event parameters
+   * @param _threadId - Unused in BrowserViewer (single connection)
    */
-  async injectMouseEvent(params: MouseEventParams): Promise<void> {
+  async injectMouseEvent(params: MouseEventParams, _threadId?: string): Promise<void> {
     if (!this.cdpClient?.isConnected) {
       throw new Error('Not connected to browser');
     }
@@ -985,8 +979,10 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
   /**
    * Inject a keyboard event into the browser.
+   * @param params - Keyboard event parameters
+   * @param _threadId - Unused in BrowserViewer (single connection)
    */
-  async injectKeyboardEvent(params: KeyboardEventParams): Promise<void> {
+  async injectKeyboardEvent(params: KeyboardEventParams, _threadId?: string): Promise<void> {
     if (!this.cdpClient?.isConnected) {
       throw new Error('Not connected to browser');
     }

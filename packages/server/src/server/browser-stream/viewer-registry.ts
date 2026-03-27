@@ -44,6 +44,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
   /** Map of agentId to active screencast stream */
   private screencasts = new Map<string, ScreencastStreamLike>();
 
+  /** Set of viewerKeys currently starting a screencast (to prevent race conditions) */
+  private startingScreencasts = new Set<string>();
+
   /** Map of agentId to cleanup function for onBrowserReady callback */
   private browserReadyCleanups = new Map<string, () => void>();
 
@@ -301,10 +304,13 @@ export class ViewerRegistry implements ViewerRegistryLike {
     toolset: NonNullable<ReturnType<BrowserStreamConfig['getToolset']>>,
     threadId?: string,
   ): Promise<void> {
-    // Skip if already streaming
-    if (this.screencasts.has(viewerKey)) {
+    // Skip if already streaming or currently starting (prevents race conditions)
+    if (this.screencasts.has(viewerKey) || this.startingScreencasts.has(viewerKey)) {
       return;
     }
+
+    // Mark as starting to prevent concurrent starts
+    this.startingScreencasts.add(viewerKey);
 
     try {
       this.broadcastStatus(viewerKey, { status: 'browser_starting' });
@@ -326,7 +332,11 @@ export class ViewerRegistry implements ViewerRegistryLike {
       stream.on('frame', frame => {
         this.broadcastFrame(viewerKey, frame.data);
         this.broadcastViewportIfChanged(viewerKey, frame.viewport);
-        this.broadcastUrlIfChanged(viewerKey, toolset.getCurrentUrl());
+        // Fire and forget - don't block frame delivery
+        // Pass threadId to get URL from the correct browser session
+        void toolset.getCurrentUrl(threadId).then(url => {
+          this.broadcastUrlIfChanged(viewerKey, url);
+        });
       });
 
       // Wire up stop events
@@ -343,11 +353,15 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
       this.broadcastStatus(viewerKey, { status: 'streaming' });
 
-      // Send initial URL
-      this.broadcastUrlIfChanged(viewerKey, toolset.getCurrentUrl());
+      // Send initial URL - pass threadId to get URL from correct browser session
+      const initialUrl = await toolset.getCurrentUrl(threadId);
+      this.broadcastUrlIfChanged(viewerKey, initialUrl);
     } catch (error) {
       console.error(`[ViewerRegistry] Failed to start screencast for ${viewerKey}:`, error);
       // Connection stays open - user can see error status
+    } finally {
+      // Clear starting flag
+      this.startingScreencasts.delete(viewerKey);
     }
   }
 

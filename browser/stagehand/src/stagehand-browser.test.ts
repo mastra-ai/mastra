@@ -508,13 +508,13 @@ describe('StagehandBrowser', () => {
   });
 
   describe('getCurrentUrl', () => {
-    it('should return null when not launched', () => {
-      expect(browser.getCurrentUrl()).toBeNull();
+    it('should return null when not launched', async () => {
+      expect(await browser.getCurrentUrl()).toBeNull();
     });
 
     it('should return current URL when launched', async () => {
       await browser.launch();
-      expect(browser.getCurrentUrl()).toBe('https://example.com');
+      expect(await browser.getCurrentUrl()).toBe('https://example.com');
     });
 
     it('should return null if page.url() throws', async () => {
@@ -522,7 +522,7 @@ describe('StagehandBrowser', () => {
       mockPage.url.mockImplementationOnce(() => {
         throw new Error('URL error');
       });
-      expect(browser.getCurrentUrl()).toBeNull();
+      expect(await browser.getCurrentUrl()).toBeNull();
     });
   });
 

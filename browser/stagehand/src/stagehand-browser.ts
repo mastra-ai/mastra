@@ -54,7 +54,7 @@ export class StagehandBrowser extends MastraBrowser {
     // Initialize thread manager
     // Default to 'context' isolation so each thread gets its own browser page
     this.threadManager = new StagehandThreadManager({
-      isolation: config.threadIsolation ?? 'context',
+      isolation: config.threadIsolation ?? 'browser',
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
       onSessionCreated: () => {
@@ -502,7 +502,7 @@ export class StagehandBrowser extends MastraBrowser {
   // URL Tracking (for Studio browser view)
   // ---------------------------------------------------------------------------
 
-  override getCurrentUrl(): string | null {
+  override async getCurrentUrl(_threadId?: string): Promise<string | null> {
     const page = this.getPage();
     if (!page) return null;
 
@@ -565,7 +565,7 @@ export class StagehandBrowser extends MastraBrowser {
   // Event Injection (for Studio live view interactivity)
   // ---------------------------------------------------------------------------
 
-  override async injectMouseEvent(event: MouseEventParams): Promise<void> {
+  override async injectMouseEvent(event: MouseEventParams, _threadId?: string): Promise<void> {
     const cdpSession = this.getCdpSession();
     if (!cdpSession) {
       throw new Error('No CDP session available');
@@ -591,7 +591,7 @@ export class StagehandBrowser extends MastraBrowser {
     });
   }
 
-  override async injectKeyboardEvent(event: KeyboardEventParams): Promise<void> {
+  override async injectKeyboardEvent(event: KeyboardEventParams, _threadId?: string): Promise<void> {
     const cdpSession = this.getCdpSession();
     if (!cdpSession) {
       throw new Error('No CDP session available');
