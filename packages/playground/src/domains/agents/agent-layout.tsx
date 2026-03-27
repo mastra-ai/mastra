@@ -61,10 +61,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
     </MainContentLayout>
   );
 
-  if (!showPlayground && !showObservability) {
-    return content;
-  }
-
   return (
     <SchemaRequestContextProvider>
       <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>

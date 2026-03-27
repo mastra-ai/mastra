@@ -125,6 +125,7 @@ export class Dataset {
     tags?: string[] | null;
     targetType?: TargetType | null;
     targetIds?: string[] | null;
+    scorerIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -342,11 +343,21 @@ export class Dataset {
 
     const experimentId = run.id;
 
+    // Merge dataset-attached scorers with any experiment-specified scorers
+    const mergedConfig = { ...config };
+    if (dataset.scorerIds?.length) {
+      const existingStringIds = new Set((mergedConfig.scorers ?? []).filter((s): s is string => typeof s === 'string'));
+      const newIds = dataset.scorerIds.filter(id => !existingStringIds.has(id));
+      if (newIds.length > 0) {
+        mergedConfig.scorers = [...(mergedConfig.scorers ?? []), ...newIds];
+      }
+    }
+
     // Fire-and-forget — update experiment to failed on unexpected errors
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
-      ...config,
+      ...mergedConfig,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({

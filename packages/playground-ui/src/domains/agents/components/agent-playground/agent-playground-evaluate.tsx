@@ -514,6 +514,7 @@ export function AgentPlaygroundEvaluate({
                 datasetTargetType={viewDs?.targetType}
                 datasetTargetIds={viewDs?.targetIds}
                 activeScorers={Object.keys(agentScorers)}
+                datasetScorerIds={viewDs?.scorerIds ?? []}
                 onGenerate={() => setGenerateDatasetId(view.id)}
                 onViewExperiment={(experimentId: string) =>
                   setView({ type: 'experiment', id: experimentId, datasetId: view.id })
@@ -532,7 +533,8 @@ export function AgentPlaygroundEvaluate({
               .filter(
                 ds =>
                   (ds.targetType === 'scorer' && parseTargetIds(ds.targetIds).includes(view.id)) ||
-                  (legacyDatasetId && ds.id === legacyDatasetId),
+                  (legacyDatasetId && ds.id === legacyDatasetId) ||
+                  (ds.scorerIds && ds.scorerIds.includes(view.id)),
               )
               .map(ds => ({ id: ds.id, name: ds.name }));
             return (
