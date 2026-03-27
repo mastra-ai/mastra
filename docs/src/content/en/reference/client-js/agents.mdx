@@ -317,7 +317,7 @@ response.processDataStream({
 
 ## Stored agents
 
-Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
+Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated. Memory is configured inline as a `SerializedMemoryConfig` object with options such as `lastMessages` and `semanticRecall`.
 
 ### `listStoredAgents()`
 
