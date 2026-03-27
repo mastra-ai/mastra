@@ -131,7 +131,8 @@ async function getMemoryFromContext({
     }
 
     if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
+      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+      return null;
     }
   }
 
@@ -143,8 +144,9 @@ async function getMemoryFromContext({
 }
 
 /**
- * Gets the storage from context, used as a fallback when no agentId is provided.
- * This allows fetching threads/messages without knowing which agents were involved.
+ * Gets the storage from context, used as a fallback when agent memory can't be resolved.
+ * This covers both cases where no agentId is provided and where the agentId refers to
+ * a stored agent whose memory instance can't be hydrated (e.g. no editor configured).
  */
 function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): MastraStorage | undefined {
   return mastra.getStorage();
@@ -373,12 +375,10 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         return { result: true, observationalMemory: omStatus };
       }
 
-      // Only fallback to storage if no agentId was provided
-      if (!agentId) {
-        const storage = getStorageFromContext({ mastra });
-        if (storage) {
-          return { result: true };
-        }
+      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      const storage = getStorageFromContext({ mastra });
+      if (storage) {
+        return { result: true };
       }
 
       return { result: false };
@@ -608,20 +608,18 @@ export const LIST_THREADS_ROUTE = createRoute({
         return result;
       }
 
-      // Only fallback to storage if no agentId was provided
-      if (!agentId) {
-        const storage = getStorageFromContext({ mastra });
-        if (storage) {
-          const memoryStore = await storage.getStore('memory');
-          if (memoryStore) {
-            const result = await memoryStore.listThreads({
-              filter,
-              page,
-              perPage,
-              orderBy,
-            });
-            return result;
-          }
+      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      const storage = getStorageFromContext({ mastra });
+      if (storage) {
+        const memoryStore = await storage.getStore('memory');
+        if (memoryStore) {
+          const result = await memoryStore.listThreads({
+            filter,
+            page,
+            perPage,
+            orderBy,
+          });
+          return result;
         }
       }
 
@@ -659,19 +657,17 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         return thread;
       }
 
-      // Only fallback to storage if no agentId was provided
-      if (!agentId) {
-        const storage = getStorageFromContext({ mastra });
-        if (storage) {
-          const memoryStore = await storage.getStore('memory');
-          if (memoryStore) {
-            const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId! });
-            if (!thread) {
-              throw new HTTPException(404, { message: 'Thread not found' });
-            }
-            await validateThreadOwnership(thread, effectiveResourceId);
-            return thread;
+      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      const storage = getStorageFromContext({ mastra });
+      if (storage) {
+        const memoryStore = await storage.getStore('memory');
+        if (memoryStore) {
+          const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId! });
+          if (!thread) {
+            throw new HTTPException(404, { message: 'Thread not found' });
           }
+          await validateThreadOwnership(thread, effectiveResourceId);
+          return thread;
         }
       }
 
@@ -735,29 +731,27 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         return result;
       }
 
-      // Only fallback to storage if no agentId was provided
-      if (!agentId) {
-        const storage = getStorageFromContext({ mastra });
-        if (storage) {
-          const memoryStore = await storage.getStore('memory');
-          if (memoryStore) {
-            const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId });
-            if (!thread) {
-              throw new HTTPException(404, { message: 'Thread not found' });
-            }
-            await validateThreadOwnership(thread, effectiveResourceId);
-
-            const result = await memoryStore.listMessages({
-              threadId: effectiveThreadId,
-              resourceId: effectiveResourceId,
-              perPage,
-              page,
-              orderBy,
-              include,
-              filter,
-            });
-            return result;
+      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      const storage = getStorageFromContext({ mastra });
+      if (storage) {
+        const memoryStore = await storage.getStore('memory');
+        if (memoryStore) {
+          const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId });
+          if (!thread) {
+            throw new HTTPException(404, { message: 'Thread not found' });
           }
+          await validateThreadOwnership(thread, effectiveResourceId);
+
+          const result = await memoryStore.listMessages({
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+            perPage,
+            page,
+            orderBy,
+            include,
+            filter,
+          });
+          return result;
         }
       }
 
@@ -1167,8 +1161,8 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
 
       if (memory) {
         await memory.deleteMessages(normalizedIds);
-      } else if (!agentId) {
-        // Only fallback to storage if no agentId was provided
+      } else {
+        // Fallback to storage (covers stored agents whose memory can't be resolved)
         const storage = getStorageFromContext({ mastra });
         if (storage) {
           const memoryStore = await storage.getStore('memory');
@@ -1180,8 +1174,6 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
         } else {
           throw new HTTPException(400, { message: 'Memory is not initialized' });
         }
-      } else {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
       // Count messages for response
