@@ -27,13 +27,20 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 }
 
 /**
- * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
- * Removes:
- * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
- * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ * Sanitizes JSON string for PostgreSQL jsonb:
+ * - Escapes invalid JSON escape sequences (e.g. \v, \k → \\v, \\k)
+ * - Removes problematic Unicode sequences:
+ *   - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
+ *   - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
  */
 function sanitizeJsonForPg(jsonString: string): string {
-  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
+  return (
+    jsonString
+      // Fix invalid JSON escape sequences safely without rewriting already-escaped backslashes.
+      .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')
+      // Remove problematic Unicode sequences.
+      .replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
+  );
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
