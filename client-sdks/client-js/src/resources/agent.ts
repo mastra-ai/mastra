@@ -45,6 +45,7 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
+  agentId,
   resourceId,
   threadId,
   requestContext,
@@ -52,6 +53,7 @@ async function executeToolCallAndRespond<OUTPUT>({
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  agentId: string;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -77,6 +79,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           requestContext: requestContext as RequestContext,
           tracingContext: { currentSpan: undefined },
           agent: {
+            agentId,
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.payload.toolCallId,
             suspend: async () => {},
@@ -137,7 +140,7 @@ export class AgentVoice extends BaseResource {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: { input: text, options },
+      body: { text, options },
       stream: true,
     });
   }
@@ -282,6 +285,7 @@ export class Agent extends BaseResource {
             requestContext: requestContext as RequestContext,
             tracingContext: { currentSpan: undefined },
             agent: {
+              agentId: this.agentId,
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
               suspend: async () => {},
@@ -366,6 +370,7 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond<OUTPUT>({
         response,
         params,
+        agentId: this.agentId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
@@ -1216,6 +1221,7 @@ export class Agent extends BaseResource {
                   // TODO: Pass proper tracing context when client-js supports tracing
                   tracingContext: { currentSpan: undefined },
                   agent: {
+                    agentId: this.agentId,
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
@@ -1757,6 +1763,7 @@ export class Agent extends BaseResource {
                   // TODO: Pass proper tracing context when client-js supports tracing
                   tracingContext: { currentSpan: undefined },
                   agent: {
+                    agentId: this.agentId,
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},

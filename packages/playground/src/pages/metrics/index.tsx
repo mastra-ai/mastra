@@ -1,8 +1,15 @@
-import { MetricsDashboard, DateRangeSelector, MetricsProvider, MainHeader, isValidPreset } from '@mastra/playground-ui';
+import {
+  MetricsDashboard,
+  DateRangeSelector,
+  MetricsProvider,
+  MainHeader,
+  isValidPreset,
+  ButtonWithTooltip,
+} from '@mastra/playground-ui';
 import type { DatePreset } from '@mastra/playground-ui';
-import { BarChart3Icon } from 'lucide-react';
-import { useSearchParams } from 'react-router';
+import { BarChart3Icon, BookIcon } from 'lucide-react';
 import { useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 
 const PERIOD_PARAM = 'period';
 
@@ -38,8 +45,17 @@ export default function Metrics() {
               <BarChart3Icon /> Metrics
             </MainHeader.Title>
           </MainHeader.Column>
-          <MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
             <DateRangeSelector />
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/observability/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Metrics documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
           </MainHeader.Column>
         </MainHeader>
 

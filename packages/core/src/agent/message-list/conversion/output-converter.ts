@@ -195,6 +195,23 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
       if (nextPart && nextPart.type !== `step-start` && !AIV5.isToolUIPart(nextPart)) {
         message.parts.splice(index + 1, 0, { type: 'step-start' });
       }
+
+      // Split client tools from completed provider-executed tools.
+      // Anthropic requires tool_result to immediately follow tool_use. When a client tool_use and
+      // a server_tool_use (with inline result) are in the same block, convertToModelMessages produces:
+      //   assistant: [tool_use(client), server_tool_use(provider), tool_result(provider)]
+      //   user:      [tool_result(client)]
+      // Anthropic rejects this because tool_result(client) doesn't immediately follow tool_use(client).
+      // Splitting them into separate blocks fixes the ordering.
+      if (
+        nextPart &&
+        AIV5.isToolUIPart(nextPart) &&
+        !part.providerExecuted &&
+        nextPart.providerExecuted &&
+        (nextPart.state === 'output-available' || nextPart.state === 'output-error')
+      ) {
+        message.parts.splice(index + 1, 0, { type: 'step-start' });
+      }
     }
   }
   return messages;

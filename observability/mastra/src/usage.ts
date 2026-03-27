@@ -111,7 +111,6 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
     // cache_creation_input_tokens, and cache_read_input_tokens"
     if (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite)) {
-      inputDetails.text = usage.inputTokens;
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }
@@ -130,6 +129,17 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     }
   }
 
+  if (isDefined(inputTokens)) {
+    inputDetails.text = Math.max(
+      0,
+      inputTokens - sumDefinedValues(inputDetails, ['cacheRead', 'cacheWrite', 'audio', 'image']),
+    );
+  }
+
+  if (isDefined(outputTokens)) {
+    outputDetails.text = Math.max(0, outputTokens - sumDefinedValues(outputDetails, ['reasoning', 'audio', 'image']));
+  }
+
   // Build the final UsageStats object
   const result: UsageStats = {
     inputTokens,
@@ -145,4 +155,8 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   }
 
   return result;
+}
+
+function sumDefinedValues<T extends object, K extends keyof T>(obj: T, keys: K[]): number {
+  return keys.reduce((sum, key) => sum + ((obj[key] as number | undefined) ?? 0), 0);
 }
