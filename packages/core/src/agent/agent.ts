@@ -1833,7 +1833,6 @@ export class Agent<
    */
   __setTools(tools: DynamicArgument<TTools, any>) {
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
-    this.logger.debug('Tools set', { agent: this.name, model: this.model });
   }
 
   async generateTitleFromUserMessage({
