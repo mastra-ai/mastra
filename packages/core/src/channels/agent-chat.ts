@@ -208,8 +208,12 @@ export class AgentChat {
               sdkThread.id,
               event.messageId,
               Card({
-                title: storedArgsSummary ? `${storedToolName} \`${storedArgsSummary}\`` : storedToolName,
-                children: [CardText(statusText)],
+                children: [
+                  CardText(
+                    storedArgsSummary ? `**${storedToolName}** \`${storedArgsSummary}\`` : `**${storedToolName}**`,
+                  ),
+                  CardText(statusText),
+                ],
               }),
             );
           } catch {
@@ -534,8 +538,7 @@ export class AgentChat {
           ? undefined
           : await sdkThread.post(
               Card({
-                title: argsSummary ? `${displayName} \`${argsSummary}\`` : displayName,
-                children: [],
+                children: [CardText(argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`)],
               }),
             );
 
@@ -601,10 +604,10 @@ export class AgentChat {
           argsSummary,
         });
 
-        const cardTitle = argsSummary ? `${displayName} \`${argsSummary}\`` : displayName;
+        const header = argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`;
         const approvalCard = Card({
-          title: cardTitle,
           children: [
+            CardText(header),
             CardText('Requires approval to run.'),
             Actions([
               Button({ id: 'tool_approve', label: 'Approve', style: 'primary', value: approvalData }),
@@ -889,10 +892,9 @@ function buildToolResultCard(
   resultText: string,
   isError?: boolean,
 ): CardElement {
-  const title = argsSummary ? `${toolName} \`${argsSummary}\`` : toolName;
+  const header = argsSummary ? `**${toolName}** \`${argsSummary}\`` : `**${toolName}**`;
   const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
   return Card({
-    title,
-    children: [CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
+    children: [CardText(header), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
   });
 }
