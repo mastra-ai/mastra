@@ -149,7 +149,7 @@ export class LocalSandbox extends MastraSandbox {
   readonly isolation: IsolationBackend;
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
-  private readonly env: NodeJS.ProcessEnv;
+  private env: NodeJS.ProcessEnv;
   private _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
@@ -361,6 +361,14 @@ export class LocalSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Add environment variables to the sandbox.
+   * These will be available to all commands executed in this sandbox.
+   */
+  addEnv(env: NodeJS.ProcessEnv): void {
+    this.env = { ...this.env, ...env };
   }
 
   /**

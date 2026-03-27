@@ -29,11 +29,12 @@ export const browserWorkspace = new Workspace({
     workingDirectory: process.cwd(),
   }),
   // Skills paths - npx skills add installs to .agents/skills/
-  skills: ['.agents/skills'],
+  skills: ['.agents/skills/agent-browser'],
   browser: {
     // Use agent-browser CLI for browser automation
     // Skills are auto-installed on workspace.init()
     cli: 'agent-browser',
+    headless: false,
   },
 });
 

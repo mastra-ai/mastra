@@ -59,7 +59,7 @@ export type CLIProvider = BuiltInCLIProvider | CustomCLIProvider;
  * We try the direct command first (faster if globally installed),
  * then fall back to npx if not found.
  */
-const CLI_PROVIDER_COMMANDS: Record<
+export const CLI_PROVIDER_COMMANDS: Record<
   BuiltInCLIProvider,
   {
     /** The CLI binary name (for checking if installed) */
@@ -68,8 +68,10 @@ const CLI_PROVIDER_COMMANDS: Record<
     npxPackage: string;
     /** Arguments to get CDP URL */
     getCdpUrlArgs: string[];
-    /** Arguments to open/launch browser */
+    /** Base arguments to open/launch browser (without headless flags) */
     openArgs: string[];
+    /** Argument to enable headed (visible) mode, if supported */
+    headedArg?: string;
     /** Arguments to check version */
     checkArgs: string[];
     /** Install command */
@@ -80,25 +82,28 @@ const CLI_PROVIDER_COMMANDS: Record<
     binary: 'agent-browser',
     npxPackage: 'agent-browser',
     getCdpUrlArgs: ['get', 'cdp-url'],
-    openArgs: ['open', '--headed'],
+    openArgs: ['open'],
+    headedArg: '--headed',
     checkArgs: ['--version'],
     install: 'npm install -g agent-browser',
   },
   'playwright-cli': {
-    binary: 'playwright-mcp',
-    npxPackage: '@anthropic-ai/playwright-mcp',
-    getCdpUrlArgs: ['cdp-url'],
-    openArgs: ['launch'],
-    checkArgs: ['--version'],
-    install: 'npm install -g @anthropic-ai/playwright-mcp',
+    binary: 'playwright-cli',
+    npxPackage: '@playwright/cli',
+    getCdpUrlArgs: [], // No direct command; uses process discovery fallback
+    openArgs: ['open'],
+    headedArg: '--headed',
+    checkArgs: ['--help'],
+    install: 'npm install -g @playwright/cli',
   },
   'browser-use': {
     binary: 'browser-use',
     npxPackage: 'browser-use', // Python - npx won't work, but kept for consistency
-    getCdpUrlArgs: ['cdp-url'],
-    openArgs: ['launch'],
-    checkArgs: ['--version'],
-    install: 'pip install browser-use',
+    getCdpUrlArgs: [], // No direct command; uses process discovery fallback
+    openArgs: ['open'],
+    headedArg: '--headed',
+    checkArgs: ['--help'],
+    install: 'python3 -m pipx install browser-use',
   },
 };
 
@@ -112,8 +117,8 @@ export const CLI_SKILL_REPOS: Record<BuiltInCLIProvider, { repo: string; skill: 
     skill: 'agent-browser',
   },
   'playwright-cli': {
-    repo: 'microsoft/playwright-mcp', // MCP server has playwright skills
-    skill: 'playwright',
+    repo: 'microsoft/playwright-cli',
+    skill: 'playwright-cli',
   },
   'browser-use': {
     repo: 'browser-use/browser-use',
@@ -338,11 +343,16 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
         throw new Error(`Unknown CLI provider: ${cli}`);
       }
 
+      // Build open args based on headless config
+      // Default is headless=true (no visible UI), so we only add headed arg when headless=false
+      const openArgs = [...commands.openArgs];
+      if (this.viewerConfig.headless === false && commands.headedArg) {
+        openArgs.push(commands.headedArg);
+      }
+
       // Try direct command first, fall back to npx
       const useNpx = !commandExists(commands.binary);
-      const cmdParts = useNpx
-        ? ['npx', commands.npxPackage, ...commands.openArgs]
-        : [commands.binary, ...commands.openArgs];
+      const cmdParts = useNpx ? ['npx', commands.npxPackage, ...openArgs] : [commands.binary, ...openArgs];
       const fullCommand = cmdParts.join(' ');
 
       try {
@@ -399,26 +409,32 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    */
   async connect(): Promise<void> {
     if (this.cdpClient?.isConnected) {
+      this.logger.debug('[CDP] Already connected');
       return; // Already connected
     }
 
+    this.logger.debug?.('[BrowserViewer] Connecting to browser...');
     const cdpUrl = await this.getCdpUrl();
     this._lastCdpUrl = cdpUrl;
     this.cdpClient = new CdpClient();
 
     try {
+      this.logger.debug?.(`[BrowserViewer] Connecting to CDP: ${cdpUrl}`);
       await this.cdpClient.connect(cdpUrl);
 
       // Enable Page domain for screencast
       await this.cdpClient.send('Page.enable');
 
+      this.logger.debug?.(`[BrowserViewer] Connected successfully to: ${cdpUrl}`);
       this.notifyBrowserReady();
 
       // Handle disconnection
       this.cdpClient.on('close', () => {
+        this.logger.debug?.('[BrowserViewer] Connection closed');
         this.handleDisconnect();
       });
     } catch (error) {
+      this.logger.debug?.(`[BrowserViewer] Connection failed: ${error}`);
       this.cdpClient = null;
       throw error;
     }
@@ -453,43 +469,115 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
       throw new Error('No CLI provider configured');
     }
 
-    let command: string;
-
     if (typeof cli === 'string') {
-      // Built-in provider - try direct binary first, fallback to npx
+      // Built-in provider
       const providerConfig = CLI_PROVIDER_COMMANDS[cli];
       if (!providerConfig) {
         throw new Error(`Unknown CLI provider: ${cli}`);
       }
 
-      // Check if the binary exists directly
-      const binaryExists = commandExists(providerConfig.binary);
-      const cmdPrefix = binaryExists ? providerConfig.binary : `npx ${providerConfig.npxPackage}`;
-      command = `${cmdPrefix} ${providerConfig.getCdpUrlArgs.join(' ')}`;
+      // If provider has a direct command to get CDP URL, use it
+      if (providerConfig.getCdpUrlArgs.length > 0) {
+        const binaryExists = commandExists(providerConfig.binary);
+        const cmdPrefix = binaryExists ? providerConfig.binary : `npx ${providerConfig.npxPackage}`;
+        const command = `${cmdPrefix} ${providerConfig.getCdpUrlArgs.join(' ')}`;
+        this.logger.debug?.(`[BrowserViewer] Getting CDP URL via command: ${command}`);
+
+        try {
+          const result = await this.execCommand(command);
+          const cdpUrl = result.stdout.trim();
+
+          if (cdpUrl && (cdpUrl.startsWith('ws://') || cdpUrl.startsWith('wss://'))) {
+            this.logger.debug?.(`[BrowserViewer] Got CDP URL from command: ${cdpUrl}`);
+            return await this.getPageCdpUrl(cdpUrl);
+          }
+          this.logger.debug?.(`[BrowserViewer] Command returned invalid CDP URL: ${cdpUrl}`);
+        } catch (error) {
+          this.logger.debug?.(`[BrowserViewer] Command failed, falling back to process discovery: ${error}`);
+        }
+      }
+
+      // Fallback: discover CDP port from running Chrome processes
+      this.logger.debug?.(`[BrowserViewer] Attempting process discovery for ${cli}`);
+      const cdpUrl = await this.discoverCdpFromProcesses();
+      if (cdpUrl) {
+        this.logger.debug?.(`[BrowserViewer] Discovered CDP URL from process: ${cdpUrl}`);
+        return await this.getPageCdpUrl(cdpUrl);
+      }
+      this.logger.debug?.(`[BrowserViewer] Process discovery failed - no browser found`);
+
+      throw new Error(`Could not find CDP URL for ${cli}. Is the browser running?`);
     } else {
-      // Custom provider
-      command = cli.getCdpUrlCommand;
+      // Custom provider - use the provided command
+      const command = cli.getCdpUrlCommand;
+      try {
+        const result = await this.execCommand(command);
+        const cdpUrl = result.stdout.trim();
+
+        if (!cdpUrl) {
+          throw new Error(`CLI returned empty CDP URL. Is the browser running?`);
+        }
+
+        if (!cdpUrl.startsWith('ws://') && !cdpUrl.startsWith('wss://')) {
+          throw new Error(`Invalid CDP URL from CLI: ${cdpUrl}`);
+        }
+
+        return await this.getPageCdpUrl(cdpUrl);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to get CDP URL from CLI: ${message}`);
+      }
     }
+  }
 
+  /**
+   * Discover CDP port by inspecting running Chrome/Chromium processes.
+   * Looks for --remote-debugging-port argument in process command lines.
+   * Returns the most recently started browser's CDP URL.
+   */
+  private async discoverCdpFromProcesses(): Promise<string | null> {
     try {
-      const result = await this.execCommand(command);
-      const cdpUrl = result.stdout.trim();
+      // Find Chrome processes with remote debugging enabled
+      // Works on macOS/Linux; Windows would need different approach
+      const cmd =
+        process.platform === 'win32'
+          ? "wmic process where \"name like '%chrome%' or name like '%chromium%'\" get commandline 2>nul"
+          : "ps aux | grep -E 'chrome|chromium' | grep 'remote-debugging-port' | grep -v grep";
 
-      if (!cdpUrl) {
-        throw new Error(`CLI returned empty CDP URL. Is the browser running?`);
+      this.logger.debug?.(`[BrowserViewer] Running process discovery: ${cmd}`);
+      const result = await this.execCommand(cmd);
+      const output = result.stdout;
+
+      // Extract all unique ports from --remote-debugging-port=XXXXX
+      const portMatches = output.matchAll(/--remote-debugging-port=(\d+)/g);
+      const ports = [...new Set([...portMatches].map(m => m[1]).filter(p => p !== '0'))];
+      this.logger.debug?.(`[BrowserViewer] Found ports: ${ports.join(', ') || 'none'}`);
+
+      // Try each port, return first accessible one
+      // (Processes listed most recently are likely newer browsers)
+      for (const port of ports.reverse()) {
+        try {
+          this.logger.debug?.(`[BrowserViewer] Trying port ${port}...`);
+          const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
+            signal: AbortSignal.timeout(1000),
+          });
+          if (response.ok) {
+            const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+            if (data.webSocketDebuggerUrl) {
+              this.logger.debug?.(`[BrowserViewer] Port ${port} accessible, CDP URL: ${data.webSocketDebuggerUrl}`);
+              return data.webSocketDebuggerUrl;
+            }
+          }
+        } catch (error) {
+          this.logger.debug?.(`[BrowserViewer] Port ${port} not accessible: ${error}`);
+        }
       }
 
-      // Validate it looks like a WebSocket URL
-      if (!cdpUrl.startsWith('ws://') && !cdpUrl.startsWith('wss://')) {
-        throw new Error(`Invalid CDP URL from CLI: ${cdpUrl}`);
-      }
-
-      // The CLI returns a browser-level CDP URL, but we need a page-level URL
-      // for Page.* commands. Query /json endpoint to find a page target.
-      return await this.getPageCdpUrl(cdpUrl);
+      this.logger.debug?.('[BrowserViewer] No accessible CDP ports found');
+      return null;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to get CDP URL from CLI: ${message}`);
+      this.logger.debug?.(`[BrowserViewer] Process discovery error: ${error}`);
+      return null;
     }
   }
 
@@ -710,15 +798,18 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
       return;
     }
 
+    this.logger.debug?.('[BrowserViewer] Polling for browser availability...');
     // Try to connect to the browser
     this.connect()
       .then(() => {
         // Successfully connected - stop polling
+        this.logger.debug?.('[BrowserViewer] Browser found, stopping poll');
         this.stopPollingForBrowser();
         // notifyBrowserReady() is called in connect()
       })
-      .catch(() => {
+      .catch(error => {
         // Browser not ready yet - schedule next poll
+        this.logger.debug?.(`[BrowserViewer] Poll attempt failed: ${error}`);
         if (this._isPollingForBrowser) {
           this.browserPollTimer = setTimeout(() => this.pollForBrowser(), 1000);
         }

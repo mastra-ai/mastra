@@ -97,6 +97,12 @@ export interface BrowserCapabilities {
 
   /** Auto-connect to browser on workspace init (default: false) */
   autoConnect?: boolean;
+
+  /**
+   * Whether to run the browser in headless mode (no visible UI).
+   * @default true
+   */
+  headless?: boolean;
 }
 
 // =============================================================================

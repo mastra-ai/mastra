@@ -73,6 +73,17 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
+  // Environment
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Add environment variables to the sandbox.
+   * These will be available to all commands executed in this sandbox.
+   * Optional - if not implemented, environment cannot be modified after creation.
+   */
+  addEnv?(env: NodeJS.ProcessEnv): void;
+
+  // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 

@@ -32,7 +32,7 @@
 
 import * as path from 'node:path';
 import type { BrowserContext } from '../browser/processor';
-import { BrowserViewer, CLI_SKILL_REPOS } from '../browser/viewer';
+import { BrowserViewer, CLI_SKILL_REPOS, CLI_PROVIDER_COMMANDS } from '../browser/viewer';
 import type { BuiltInCLIProvider } from '../browser/viewer';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
@@ -733,6 +733,7 @@ export class Workspace<
       cli: config.cli,
       cdpUrl,
       screencast: config.screencast,
+      headless: config.headless,
       autoReconnect: false, // Let user control reconnection
       // Use sandbox's executeCommand if available
       execCommand: this._sandbox?.executeCommand
@@ -842,11 +843,21 @@ export class Workspace<
   }
 
   /**
-   * Internal browser setup - installs CLI and skill.
+   * Internal browser setup - installs CLI and skill, configures env vars.
    */
   private async _setupBrowser(): Promise<void> {
-    const cli = this._config.browser?.cli;
+    const browserConfig = this._config.browser;
+    const cli = browserConfig?.cli;
     if (!cli) return;
+
+    // Configure headed mode env var if headless is false
+    // This makes browser CLIs open visible windows by default
+    if (browserConfig?.headless === false && this._sandbox?.addEnv) {
+      this._sandbox.addEnv({
+        AGENT_BROWSER_HEADED: '1', // agent-browser
+        // playwright-cli doesn't support env var, but the skill has --headed examples
+      });
+    }
 
     // Only handle built-in CLI providers (string names)
     if (typeof cli !== 'string') {
@@ -878,22 +889,63 @@ export class Workspace<
     const skillInstalled = await this._checkSkillInstalled(skillInfo.skill);
     if (skillInstalled) {
       console.info(`[Workspace "${this.name}"] Browser skill already installed: ${skillInfo.skill}`);
+    } else {
+      // Install skill via npx skills CLI
+      // Note: This installs to multiple agent folders (.claude/, .agents/, etc.)
+      // Future improvement: Use skills API directly like the studio does to only install to .agents/skills/
+      console.info(`[Workspace "${this.name}"] Installing browser skill "${skillInfo.skill}" from ${skillInfo.repo}`);
+      try {
+        await this._sandbox.executeCommand('npx', ['skills', 'add', skillInfo.repo, '--skill', skillInfo.skill, '-y'], {
+          timeout: 60000, // 60s timeout for npm install
+        });
+        console.info(`[Workspace "${this.name}"] Browser skill installed successfully`);
+      } catch (error) {
+        console.warn(
+          `[Workspace "${this.name}"] Failed to install browser skill: ${error}. ` +
+            `Install manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
+        );
+      }
+    }
+
+    // Always try to install the CLI binary (checks if already installed first)
+    await this._installBrowserCLI(cli);
+  }
+
+  /**
+   * Install the browser CLI binary if not already available.
+   */
+  private async _installBrowserCLI(cli: BuiltInCLIProvider): Promise<void> {
+    const commands = CLI_PROVIDER_COMMANDS[cli];
+    if (!commands || !this._sandbox?.executeCommand) {
       return;
     }
 
-    // Install skill via npx skills CLI
-    // Note: This installs to multiple agent folders (.claude/, .agents/, etc.)
-    // Future improvement: Use skills API directly like the studio does to only install to .agents/skills/
-    console.info(`[Workspace "${this.name}"] Installing browser skill "${skillInfo.skill}" from ${skillInfo.repo}`);
+    // Check if CLI is already installed
     try {
-      await this._sandbox.executeCommand('npx', ['skills', 'add', skillInfo.repo, '--skill', skillInfo.skill, '-y'], {
-        timeout: 60000, // 60s timeout for npm install
+      const result = await this._sandbox.executeCommand(commands.binary, commands.checkArgs, {
+        timeout: 5000,
       });
-      console.info(`[Workspace "${this.name}"] Browser skill installed successfully`);
+      if (result.exitCode === 0) {
+        console.info(`[Workspace "${this.name}"] Browser CLI "${commands.binary}" is already installed`);
+        return;
+      }
+      // Non-zero exit code means CLI not working properly, continue to install
+    } catch {
+      // CLI not installed or check failed, continue to install
+    }
+
+    // Parse and execute install command
+    console.info(`[Workspace "${this.name}"] Installing browser CLI: ${commands.install}`);
+    try {
+      const [cmd, ...args] = commands.install.split(' ');
+      await this._sandbox.executeCommand(cmd!, args, {
+        timeout: 120000, // 2 min timeout for install
+      });
+      console.info(`[Workspace "${this.name}"] Browser CLI installed successfully`);
     } catch (error) {
       console.warn(
-        `[Workspace "${this.name}"] Failed to install browser skill: ${error}. ` +
-          `Install manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
+        `[Workspace "${this.name}"] Failed to install browser CLI: ${error}. ` +
+          `Install manually: ${commands.install}`,
       );
     }
   }
