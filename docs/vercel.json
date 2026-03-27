@@ -664,6 +664,16 @@
       "source": "/docs/agents/agent-memory",
       "destination": "/docs/memory/overview",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/listStoredAgents",
+      "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getStoredAgentById",
+      "destination": "/reference",
+      "permanent": true
     }
   ]
 }
