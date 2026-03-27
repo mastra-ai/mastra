@@ -266,6 +266,35 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
   let tripwireOccurred = false;
   let finishEventSent = false;
 
+  // Suppress intermediate data-tool-* events that re-broadcast full accumulated state
+  // on every chunk, causing O(N²) payload growth that overwhelms HTTP/2 connections.
+  // Only emit these on completion (or suspension for workflows). All other chunk types
+  // (text-delta, tool-call, custom data-*, etc.) pass through unchanged.
+  // See: https://github.com/mastra-ai/mastra/issues/14685
+  function enqueueIfReady(chunk: any, runId: string, controller: TransformStreamDefaultController<object>) {
+    const type = chunk?.type;
+    const status = chunk?.data?.status;
+
+    if (type === 'data-tool-agent') {
+      if (status === 'finished') {
+        controller.enqueue(chunk);
+        bufferedSteps.delete(runId);
+      }
+    } else if (type === 'data-tool-workflow') {
+      if (status !== 'running') {
+        controller.enqueue(chunk);
+        if (status !== 'suspended') bufferedSteps.delete(runId);
+      }
+    } else if (type === 'data-tool-network') {
+      if (status === 'finished') {
+        controller.enqueue(chunk);
+        bufferedSteps.delete(runId);
+      }
+    } else if (chunk) {
+      controller.enqueue(chunk);
+    }
+  }
+
   return new TransformStream<ChunkType<OUTPUT>, object>({
     transform(chunk, controller) {
       if (chunk.type === 'tripwire') {
@@ -292,15 +321,10 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
       });
 
       if (transformedChunk) {
-        // data-tool-* events accumulate full state and re-broadcast it on every chunk,
-        // causing O(N²) payload growth that overwhelms HTTP/2 connections.
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
           const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-          if (agentTransformed?.data?.status === 'finished') {
-            controller.enqueue(agentTransformed);
-            bufferedSteps.delete(payload.runId!);
-          }
+          if (agentTransformed) enqueueIfReady(agentTransformed, payload.runId!, controller);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
           const workflowChunk = transformWorkflow(
@@ -311,31 +335,13 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
             undefined,
             convertMastraChunkToAISDK,
           );
-          if (workflowChunk) {
-            const isWorkflowData = workflowChunk.type === 'data-tool-workflow';
-            const status = isWorkflowData ? (workflowChunk as any).data?.status : undefined;
-            if (!isWorkflowData || status !== 'running') {
-              controller.enqueue(workflowChunk);
-            }
-            if (isWorkflowData && status !== 'running' && status !== 'suspended') {
-              bufferedSteps.delete(payload.runId!);
-            }
-          }
+          if (workflowChunk) enqueueIfReady(workflowChunk, payload.runId!, controller);
         } else if (transformedChunk.type === 'tool-network') {
           const payload = transformedChunk.payload;
           const networkResult = transformNetwork(payload, bufferedSteps, true);
           if (networkResult) {
             const items = Array.isArray(networkResult) ? networkResult : [networkResult];
-            for (const item of items) {
-              const isNetworkData = item.type === 'data-tool-network';
-              const status = isNetworkData ? (item as any).data?.status : undefined;
-              if (!isNetworkData || status === 'finished') {
-                controller.enqueue(item);
-              }
-              if (isNetworkData && status === 'finished') {
-                bufferedSteps.delete(payload.runId!);
-              }
-            }
+            for (const item of items) enqueueIfReady(item, payload.runId!, controller);
           }
         } else {
           controller.enqueue(transformedChunk as any);
