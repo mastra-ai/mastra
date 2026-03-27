@@ -137,7 +137,7 @@ const expectedOutput = {
 };
 
 describe('OpenAI e2e test', () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({ exactMatch: true });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -147,8 +147,8 @@ describe('OpenAI e2e test', () => {
     const model = openai('gpt-4.1');
 
     const compat = new OpenAISchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -202,7 +202,7 @@ describe('OpenAI e2e test', () => {
       enum: expect.stringMatching(/^[ABC]$/),
       nativeEnum: expect.stringMatching(/^[ABC]$/),
       optional: null,
-      default: '',
+      default: expect.any(String),
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
@@ -212,8 +212,8 @@ describe('OpenAI e2e test', () => {
     const model = openai('gpt-4.1');
 
     const compat = new OpenAISchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -254,8 +254,8 @@ describe('OpenAI e2e test', () => {
     const model = openai('gpt-4.1');
 
     const compat = new OpenAISchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 

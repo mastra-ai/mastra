@@ -140,7 +140,7 @@ const expectedOutput = {
 };
 
 describe('OpenAI reasoning e2e test', () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({ exactMatch: true });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -150,8 +150,8 @@ describe('OpenAI reasoning e2e test', () => {
     const model = openai('o4-mini');
 
     const compat = new OpenAIReasoningSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -215,8 +215,8 @@ describe('OpenAI reasoning e2e test', () => {
     const model = openai('o4-mini');
 
     const compat = new OpenAIReasoningSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -257,8 +257,8 @@ describe('OpenAI reasoning e2e test', () => {
     const model = openai('o4-mini');
 
     const compat = new OpenAIReasoningSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 

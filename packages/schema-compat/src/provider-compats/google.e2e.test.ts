@@ -136,7 +136,7 @@ const expectedOutput = {
 };
 
 describe('Google e2e test', () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({ exactMatch: true });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -146,8 +146,8 @@ describe('Google e2e test', () => {
     const model = google('gemini-3.1-pro-preview');
 
     const compat = new GoogleSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -210,8 +210,8 @@ describe('Google e2e test', () => {
     const model = google('gemini-3.1-pro-preview');
 
     const compat = new GoogleSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -253,8 +253,8 @@ describe('Google e2e test', () => {
     const model = google('gemini-3.1-pro-preview');
 
     const compat = new GoogleSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 

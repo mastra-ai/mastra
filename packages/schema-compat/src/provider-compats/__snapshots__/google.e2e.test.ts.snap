@@ -321,47 +321,45 @@ constraints: a valid uuid",
 exports[`Google e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2023-10-10T12:00:00.000Z,
+    "actualData": 2023-10-10T00:00:00.000Z,
     "arrayMax": [
-      "item1",
-      "item2",
+      "a",
     ],
     "arrayMin": [
-      "item1",
+      "a",
     ],
-    "date": 2023-10-10T12:00:00.000Z,
-    "dateAfter": 2025-01-01T12:00:00.000Z,
-    "dateBefore": 2023-01-01T12:00:00.000Z,
-    "default": "sample text that is the default value",
+    "date": 2023-10-10T00:00:00.000Z,
+    "dateAfter": 2024-05-01T00:00:00.000Z,
+    "dateBefore": 2023-01-01T00:00:00.000Z,
+    "default": "default",
     "enum": "A",
     "exampleArray": [
-      "item1",
-      "item2",
+      "a",
     ],
     "nativeEnum": "B",
     "nullable": null,
-    "number": 10,
-    "numberGt": 5,
-    "numberGte": 2,
-    "numberInt": 42,
-    "numberLt": 4,
-    "numberLte": 0,
-    "numberMultipleOf": 8,
+    "number": 42,
+    "numberGt": 4,
+    "numberGte": 1,
+    "numberInt": 10,
+    "numberLt": 5,
+    "numberLte": 1,
+    "numberMultipleOf": 2,
     "object": {
-      "bar": 100,
-      "foo": "test",
+      "bar": 1,
+      "foo": "a",
     },
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 25,
-        "name": "Alice",
+        "age": 20,
+        "name": "Bob",
       },
     },
     "objectPassthrough": {},
     "string": "Sample text",
     "stringCuid": "c123456789",
-    "stringEmail": "user@example.com",
+    "stringEmail": "test@example.com",
     "stringEmoji": "😀",
     "stringMax": "abcdefghij",
     "stringMin": "abcde",
@@ -370,9 +368,9 @@ exports[`Google e2e test > should be succesful with structured_output 2`] = `
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
       "amount": 10,
-      "inventoryItemName": "Widget",
+      "inventoryItemName": "item",
     },
-    "unionPrimitives": 42,
+    "unionPrimitives": "test",
   },
 }
 `;
@@ -380,18 +378,18 @@ exports[`Google e2e test > should be succesful with structured_output 2`] = `
 exports[`Google e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2024-05-01T12:00:00.000Z,
+    "actualData": 2024-05-15T12:00:00.000Z,
     "arrayMax": [
       "one",
       "two",
       "three",
     ],
     "arrayMin": [
-      "first",
+      "one",
     ],
-    "date": 2024-05-01T12:00:00.000Z,
-    "dateAfter": 2025-01-01T12:00:00.000Z,
-    "dateBefore": 2022-01-01T12:00:00.000Z,
+    "date": 2024-05-15T12:00:00.000Z,
+    "dateAfter": 2025-01-02T12:00:00.000Z,
+    "dateBefore": 2023-12-31T12:00:00.000Z,
     "default": "default text",
     "enum": "A",
     "exampleArray": [
@@ -400,11 +398,11 @@ exports[`Google e2e test > should handle tool call with manySchemas input 1`] = 
     ],
     "nativeEnum": "B",
     "nullable": null,
-    "number": 42.5,
-    "numberGt": 4,
+    "number": 42,
+    "numberGt": 5,
     "numberGte": 1,
     "numberInt": 10,
-    "numberLt": 5,
+    "numberLt": 4,
     "numberLte": 0,
     "numberMultipleOf": 8,
     "object": {
@@ -412,33 +410,31 @@ exports[`Google e2e test > should handle tool call with manySchemas input 1`] = 
       "foo": "bar",
     },
     "objectLoose": {
-      "test": 123,
+      "anyKey": 123,
     },
     "objectNested": {
       "user": {
-        "age": 25,
-        "name": "John Doe",
+        "age": 30,
+        "name": "Alice",
       },
     },
     "objectPassthrough": {
-      "hello": "world",
+      "customKey": "customValue",
     },
     "string": "Sample text",
     "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
-    "stringEmail": "user@example.com",
-    "stringEmoji": "🚀",
-    "stringMax": "1234567890",
-    "stringMin": "12345",
+    "stringEmail": "test@example.com",
+    "stringEmoji": "😊",
+    "stringMax": "Short",
+    "stringMin": "Hello",
     "stringRegex": "test-data",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 100,
-      "inventoryItemName": "Widgets",
+      "amount": 10,
+      "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "primitive string",
+    "unionPrimitives": "Hello Union",
   },
 }
 `;
-
-exports[`Google e2e test > should handle tool call with manySchemas input and output 1`] = `"I have successfully called the \`manySchemasTool\` with the valid sample data fulfilling all the required schemas and constraints."`;

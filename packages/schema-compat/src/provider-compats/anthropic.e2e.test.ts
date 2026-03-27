@@ -136,7 +136,7 @@ const expectedOutput = {
 };
 
 describe('Anthropic e2e test', () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({ exactMatch: true });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -146,8 +146,8 @@ describe('Anthropic e2e test', () => {
     const model = anthropic('claude-sonnet-4-0');
 
     const compat = new AnthropicSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -210,8 +210,8 @@ describe('Anthropic e2e test', () => {
     const model = anthropic('claude-sonnet-4-0');
 
     const compat = new AnthropicSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
@@ -251,8 +251,8 @@ describe('Anthropic e2e test', () => {
     const model = anthropic('claude-sonnet-4-0');
 
     const compat = new AnthropicSchemaCompatLayer({
-      provider: model.modelId,
-      modelId: model.provider,
+      provider: model.provider,
+      modelId: model.modelId,
       supportsStructuredOutputs: true,
     });
 
