@@ -1,7 +1,8 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -24,11 +25,11 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
-import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolicy } from '../observability';
+import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
-import type { OutputSchema } from '../stream';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -39,7 +40,6 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -49,6 +49,8 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
@@ -67,7 +69,9 @@ type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-type StructuredOutputOptionsBase<OUTPUT = {}> = {
+export type StructuredOutputOptionsBase<OUTPUT = {}> = {
+  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
+  model?: MastraModelConfig;
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
@@ -98,18 +102,19 @@ type StructuredOutputOptionsBase<OUTPUT = {}> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type StructuredOutputOptions<OUTPUT = {}> = {
+export type StructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
   /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
+  schema: StandardSchemaWithJSON<OUTPUT>;
+};
 
-  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraModelConfig;
-} & StructuredOutputOptionsBase<OUTPUT>;
+export type PublicStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
+  schema: PublicSchema<OUTPUT>;
+};
 
-export type SerializableStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase & {
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptionsBase<OUTPUT>, 'model'> & {
   model?: ModelRouterModelId | OpenAICompatibleConfig;
-  /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
+  /** JSON Schema to validate the output against */
+  schema: JSONSchema7;
 };
 
 /**
@@ -328,13 +333,13 @@ export interface AgentConfig<
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.
    */
-  requestContextSchema?: ZodSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
 }
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
-  options?: MemoryConfig;
+  options?: MemoryConfigInternal;
 };
 
 /**
@@ -436,7 +441,7 @@ export type AgentStreamOptions<
   /**
    * @deprecated Use the `memory` property instead for all memory-related options.
    */
-  memoryOptions?: MemoryConfig;
+  memoryOptions?: MemoryConfigInternal;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -506,7 +511,7 @@ export type AgentExecuteOnFinishOptions = {
   resourceId?: string;
   requestContext: RequestContext;
   agentSpan?: Span<SpanType.AGENT_RUN>;
-  memoryConfig: MemoryConfig | undefined;
+  memoryConfig: MemoryConfigInternal | undefined;
   outputText: string;
   messageList: MessageList;
   threadExists: boolean;

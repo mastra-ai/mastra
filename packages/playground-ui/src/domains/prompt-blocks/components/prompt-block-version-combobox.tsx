@@ -1,6 +1,7 @@
-import { Combobox } from '@/ds/components/Combobox';
-import { Badge } from '@/ds/components/Badge';
 import { usePromptBlockVersions } from '../hooks/use-prompt-block-versions';
+import { Badge } from '@/ds/components/Badge';
+import type { ComboboxProps } from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -19,7 +20,7 @@ export interface PromptBlockVersionComboboxProps {
   onValueChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
   activeVersionId?: string;
 }
 
@@ -29,7 +30,7 @@ export function PromptBlockVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
   activeVersionId,
 }: PromptBlockVersionComboboxProps) {
   const { data, isLoading } = usePromptBlockVersions({

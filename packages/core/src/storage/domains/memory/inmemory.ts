@@ -935,7 +935,11 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    // Use caller-provided refreshed chunks (with up-to-date token weights) for
+    // activation math, falling back to persisted chunks otherwise.
+    // Keep refreshed chunks local — don't overwrite the stored buffer.
+    const persistedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    const chunks = Array.isArray(input.bufferedChunks) ? input.bufferedChunks : persistedChunks;
     if (chunks.length === 0) {
       return {
         chunksActivated: 0,
@@ -1025,9 +1029,10 @@ export class InMemoryMemory extends MemoryStorage {
     const derivedLastObservedAt =
       lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
-    // Append activated content to active observations
+    // Append activated content to active observations with message boundary for cache stability
     if (record.activeObservations) {
-      record.activeObservations = `${record.activeObservations}\n\n${activatedContent}`;
+      const boundary = `\n\n--- message boundary (${derivedLastObservedAt.toISOString()}) ---\n\n`;
+      record.activeObservations = `${record.activeObservations}${boundary}${activatedContent}`;
     } else {
       record.activeObservations = activatedContent;
     }

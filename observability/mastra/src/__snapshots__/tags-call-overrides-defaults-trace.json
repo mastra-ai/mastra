@@ -57,11 +57,18 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
-                "outputTokens": 25
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 15
+                },
+                "outputDetails": {
+                  "text": 25
+                }
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "source": "call"
             },
             "input": {
               "messages": [
@@ -106,12 +113,20 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "source": "call",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -140,6 +155,10 @@
                     "attributes": {
                       "chunkType": "text",
                       "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "source": "call"
                     },
                     "output": {
                       "text": "Mock V2 generate response"

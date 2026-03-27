@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { EditorView } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
 import { MergeView } from '@codemirror/merge';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
+import { draculaInit } from '@uiw/codemirror-theme-dracula';
+import { useEffect, useRef } from 'react';
 
 const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-changedLine': {

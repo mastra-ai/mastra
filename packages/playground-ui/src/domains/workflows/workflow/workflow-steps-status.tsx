@@ -1,7 +1,6 @@
-import { Txt } from '@/ds/components/Txt';
-
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowStatus } from './workflow-status';
+import { Txt } from '@/ds/components/Txt';
 
 interface StepResult {
   status: string;

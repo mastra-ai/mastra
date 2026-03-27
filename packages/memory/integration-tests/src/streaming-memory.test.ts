@@ -15,20 +15,25 @@ setupUseChatV5Plus({ useChatFunc: useChatV5, version: 'v5' });
 
 setupUseChatV5Plus({ useChatFunc: useChatV6, version: 'v6' });
 
+const RECORDING_NAME = 'memory-integration-tests-src-streaming-memory';
+
 setupStreamingMemoryTest({
   model: openai('gpt-4o'),
   memory,
   tools: { get_weather: weatherToolV4 },
+  recordingName: RECORDING_NAME,
 });
 
 setupStreamingMemoryTest({
   model: 'openai/gpt-4o',
   memory,
   tools: { get_weather: weatherToolV5 },
+  recordingName: RECORDING_NAME,
 });
 
 setupStreamingMemoryTest({
   model: openaiV6('gpt-4o'),
   memory,
   tools: { get_weather: weatherToolV6 },
+  recordingName: RECORDING_NAME,
 });

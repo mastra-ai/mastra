@@ -82,6 +82,16 @@ interface PgCreateIndexParams extends Omit<CreateIndexParams, 'metric'> {
    * Use 'sparsevec' for BM25/TF-IDF and other sparse embeddings
    */
   vectorType?: VectorType;
+  /**
+   * Metadata fields to create btree indexes for.
+   * This improves query performance when filtering vectors by these metadata fields.
+   *
+   * Each entry creates a btree index on `metadata->>'field_name'`.
+   *
+   * Example: `['thread_id', 'resource_id']` creates indexes that speed up
+   * queries filtering by `thread_id` or `resource_id` in the metadata JSONB column.
+   */
+  metadataIndexes?: string[];
 }
 
 interface PgDefineIndexParams {
@@ -675,8 +685,21 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metric,
     type,
     vectorType = 'vector',
-  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType }) {
-    const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType; // ivfflat is default
+    metadataIndexes,
+  }: Omit<CreateIndexParams, 'metric'> & {
+    metric?: PgMetric;
+    type: IndexType | undefined;
+    vectorType?: VectorType;
+    metadataIndexes?: string[];
+  }) {
+    const input = JSON.stringify([
+      indexName,
+      dimension,
+      metric,
+      type || 'ivfflat',
+      vectorType,
+      metadataIndexes?.toSorted() ?? [],
+    ]);
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -741,6 +764,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     indexConfig = {},
     buildIndex = true,
     vectorType = 'vector',
+    metadataIndexes,
   }: PgCreateIndexParams): Promise<void> {
     // Normalize metric for bit vectors: default to 'hamming' unless explicitly 'hamming' or 'jaccard'
     const metric: PgMetric =
@@ -794,6 +818,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       type: indexConfig.type,
       metric,
       vectorType,
+      metadataIndexes,
     });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
@@ -896,6 +921,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
           if (buildIndex) {
             await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
+          }
+
+          if (metadataIndexes?.length) {
+            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1095,6 +1124,29 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       await client.query(indexSQL);
     });
+  }
+
+  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+    const hasher = await this.hasher;
+    for (const field of metadataFields) {
+      // Hash the field to produce a safe, fixed-length suffix for the index name.
+      // This avoids issues with fields containing characters invalid in SQL identifiers
+      // (e.g. "user-id") and keeps the total index name under PostgreSQL's 63-char limit.
+      const fieldHash = hasher.h32(field).toString(16);
+      const prefix = indexName.slice(0, 63 - '_md__idx'.length - fieldHash.length);
+      const metadataIdxName = `"${prefix}_md_${fieldHash}_idx"`;
+      // DDL statements don't support bind parameters, so we must interpolate
+      // the field name as a literal. Escape single quotes to prevent SQL injection.
+      const escapedField = field.replace(/'/g, "''");
+      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
+      // This must run outside a transaction, so we use pool.query() directly.
+      await this.pool.query(
+        `
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
+        ON ${tableName} ((metadata->>'${escapedField}'))
+      `,
+      );
+    }
   }
 
   private async installVectorExtension(client: pg.PoolClient) {

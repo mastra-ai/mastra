@@ -14,6 +14,7 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  CorrelationContext,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
@@ -130,6 +131,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public requestContext?: Record<string, any>;
   public tags?: string[];
   public traceState?: TraceState;
   /** Entity type that created the span (e.g., agent, workflow) */
@@ -142,6 +144,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /** Cached canonical correlation context for this live span */
+  protected correlationContext?: CorrelationContext;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
@@ -151,7 +155,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.name = options.name;
     this.type = options.type;
     this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
-    this.metadata = deepClean(options.metadata, this.deepCleanOptions);
+    // Metadata - inherit from parent if not explicitly provided, merge if both exist
+    this.metadata = deepClean(
+      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+      this.deepCleanOptions,
+    );
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+    }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
@@ -253,6 +264,53 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return undefined;
   }
 
+  /** Build and cache the canonical correlation context for this live span. */
+  public getCorrelationContext(): CorrelationContext {
+    if (this.correlationContext) {
+      return this.correlationContext;
+    }
+
+    const metadata = this.metadata ?? {};
+    const getMetadataString = (key: string): string | undefined =>
+      typeof metadata[key] === 'string' ? metadata[key] : undefined;
+    const parentSpan = this.getParentSpan(false);
+
+    let rootSpan: AnySpan = this;
+    while (rootSpan.parent) {
+      rootSpan = rootSpan.parent;
+    }
+
+    const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;
+
+    this.correlationContext = {
+      traceId: this.traceId,
+      spanId: this.id,
+      tags: rootTags,
+      entityType: this.entityType,
+      entityId: this.entityId,
+      entityName: this.entityName,
+      parentEntityType: parentSpan?.entityType,
+      parentEntityId: parentSpan?.entityId,
+      parentEntityName: parentSpan?.entityName,
+      rootEntityType: rootSpan.entityType,
+      rootEntityId: rootSpan.entityId,
+      rootEntityName: rootSpan.entityName,
+      userId: getMetadataString('userId'),
+      organizationId: getMetadataString('organizationId'),
+      resourceId: getMetadataString('resourceId'),
+      runId: getMetadataString('runId'),
+      sessionId: getMetadataString('sessionId'),
+      threadId: getMetadataString('threadId'),
+      requestId: getMetadataString('requestId'),
+      environment: getMetadataString('environment'),
+      source: getMetadataString('source'),
+      serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
+      experimentId: getMetadataString('experimentId'),
+    };
+
+    return this.correlationContext;
+  }
+
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
     // Check if input/output should be hidden based on traceState
@@ -274,6 +332,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
+      requestContext: this.requestContext,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),

@@ -28,16 +28,19 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     datasetVersion: row.datasetVersion,
     input: row.input,
     groundTruth: row.groundTruth,
+    requestContext: row.requestContext,
     metadata: row.metadata,
+    source: row.source,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
 /** Internal record that allows null schemas (for "clear schema" semantics) */
-type InternalDatasetRecord = Omit<DatasetRecord, 'inputSchema' | 'groundTruthSchema'> & {
+type InternalDatasetRecord = Omit<DatasetRecord, 'inputSchema' | 'groundTruthSchema' | 'requestContextSchema'> & {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 };
 
 /** Normalize internal record (which may have null schemas) to public DatasetRecord */
@@ -46,6 +49,7 @@ function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
     ...record,
     inputSchema: record.inputSchema ?? undefined,
     groundTruthSchema: record.groundTruthSchema ?? undefined,
+    requestContextSchema: record.requestContextSchema ?? undefined,
   };
 }
 
@@ -74,6 +78,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       metadata: input.metadata,
       inputSchema: input.inputSchema,
       groundTruthSchema: input.groundTruthSchema,
+      requestContextSchema: input.requestContextSchema,
+      targetType: input.targetType,
+      targetIds: input.targetIds,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -100,6 +107,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       metadata: args.metadata ?? existing.metadata,
       inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
       groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
+      requestContextSchema:
+        args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema,
+      tags: args.tags !== undefined ? args.tags : existing.tags,
+      targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
+      targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
@@ -172,7 +184,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       isDeleted: false,
       input: args.input,
       groundTruth: args.groundTruth,
+      requestContext: args.requestContext,
       metadata: args.metadata,
+      source: args.source,
       createdAt: now,
       updatedAt: now,
     };
@@ -221,7 +235,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       isDeleted: false,
       input: args.input ?? currentRow.input,
       groundTruth: args.groundTruth ?? currentRow.groundTruth,
+      requestContext: args.requestContext ?? currentRow.requestContext,
       metadata: args.metadata ?? currentRow.metadata,
+      source: args.source ?? currentRow.source,
       createdAt: currentRow.createdAt,
       updatedAt: now,
     };
@@ -269,6 +285,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       isDeleted: true,
       input: currentRow.input,
       groundTruth: currentRow.groundTruth,
+      requestContext: currentRow.requestContext,
       metadata: currentRow.metadata,
       createdAt: currentRow.createdAt,
       updatedAt: now,
@@ -438,7 +455,9 @@ export class DatasetsInMemory extends DatasetsStorage {
         isDeleted: false,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
+        requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
+        source: itemInput.source,
         createdAt: now,
         updatedAt: now,
       };
@@ -483,6 +502,7 @@ export class DatasetsInMemory extends DatasetsStorage {
         isDeleted: true,
         input: currentRow.input,
         groundTruth: currentRow.groundTruth,
+        requestContext: currentRow.requestContext,
         metadata: currentRow.metadata,
         createdAt: currentRow.createdAt,
         updatedAt: now,

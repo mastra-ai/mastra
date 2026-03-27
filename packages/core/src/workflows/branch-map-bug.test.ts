@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createStep, createWorkflow } from './workflow';
 
 vi.mock('crypto', () => {

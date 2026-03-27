@@ -1,18 +1,19 @@
-import { useState } from 'react';
-import { Controller, Control, useWatch, type UseFormSetValue } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormSetValue, Control } from 'react-hook-form';
 
-import { MemoryIcon } from '@/ds/icons';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { Label } from '@/ds/components/Label';
-import { Input } from '@/ds/components/Input';
-import { Switch } from '@/ds/components/Switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
+import { useVectors } from '@/domains/vectors/hooks/use-vectors';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Switch } from '@/ds/components/Switch';
+import { MemoryIcon } from '@/ds/icons';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -233,7 +234,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 field.onChange(v);
                                 setValue('memory.observationalMemory.model.name', '');
                               }}
-                              variant="light"
                             />
                           </div>
                         )}
@@ -248,12 +248,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         control={control}
                         render={({ field }) => (
                           <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMModels
-                              value={field.value ?? ''}
-                              onValueChange={field.onChange}
-                              llmId={omProvider}
-                              variant="light"
-                            />
+                            <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
                           </div>
                         )}
                       />
@@ -332,7 +327,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                       field.onChange(v);
                                       setValue('memory.observationalMemory.observation.model.name', '');
                                     }}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -351,7 +345,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     value={field.value ?? ''}
                                     onValueChange={field.onChange}
                                     llmId={observerProvider}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -539,7 +532,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                       field.onChange(v);
                                       setValue('memory.observationalMemory.reflection.model.name', '');
                                     }}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -558,7 +550,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     value={field.value ?? ''}
                                     onValueChange={field.onChange}
                                     llmId={reflectorProvider}
-                                    variant="light"
                                   />
                                 </div>
                               )}

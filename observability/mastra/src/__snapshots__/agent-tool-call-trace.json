@@ -23,7 +23,8 @@
         "entityId": "test-agent",
         "attributes": {
           "conversationId": "test-thread-id",
-          "instructions": "You are a test agent"
+          "instructions": "You are a test agent",
+          "availableTools": ["calculator", "apiCall", "workflowExecutor"]
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -32,7 +33,9 @@
         },
         "input": "Calculate 5 + 3",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -62,7 +65,13 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 35
+                "outputTokens": 35,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 35
+                }
               }
             },
             "metadata": {
@@ -90,7 +99,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -112,12 +123,20 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "resourceId": "test-resource-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -157,6 +176,10 @@
                       "chunkType": "tool-call",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "output": {
                       "toolName": "calculator",
                       "toolCallId": "call-calc-1",
@@ -185,6 +208,10 @@
                       "toolType": "tool",
                       "success": true
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "input": {
                       "operation": "add",
                       "a": 5,
@@ -212,6 +239,8 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     },
@@ -239,12 +268,20 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "resourceId": "test-resource-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -253,7 +290,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -274,8 +313,14 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

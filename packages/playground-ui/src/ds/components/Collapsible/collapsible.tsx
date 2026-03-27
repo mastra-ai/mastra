@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
 import React from 'react';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const Collapsible = CollapsiblePrimitive.Root;
 

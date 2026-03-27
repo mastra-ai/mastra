@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -17,7 +17,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
 }
@@ -71,6 +71,16 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
       });
+
+      // Update the agent span with available tool names for observability
+      const toolNames = Object.keys(convertedTools);
+      if (toolNames.length > 0) {
+        agentSpan?.update({
+          attributes: {
+            availableTools: toolNames,
+          },
+        });
+      }
 
       return {
         convertedTools,

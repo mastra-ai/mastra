@@ -10,6 +10,8 @@ import {
   useDatasetExperimentResults,
   ExperimentPageContent,
   ExperimentPageHeader,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database } from 'lucide-react';
 import { useParams, Link } from 'react-router';
@@ -51,6 +53,16 @@ function DatasetExperimentPage() {
     );
   }
 
+  if (experimentError && is403ForbiddenError(experimentError)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (experimentError || !experiment) {
     return (
       <MainContentLayout>
@@ -65,13 +77,13 @@ function DatasetExperimentPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name}
           </Crumb>
           <Crumb isCurrent as="span">

@@ -54,7 +54,13 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 10,
-                "outputTokens": 5
+                "outputTokens": 5,
+                "inputDetails": {
+                  "text": 10
+                },
+                "outputDetails": {
+                  "text": 5
+                }
               }
             },
             "metadata": {
@@ -103,12 +109,19 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 10,
-                    "outputTokens": 5
+                    "outputTokens": 5,
+                    "inputDetails": {
+                      "text": 10
+                    },
+                    "outputDetails": {
+                      "text": 5
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -137,6 +150,9 @@
                     "attributes": {
                       "chunkType": "text",
                       "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
                     },
                     "output": {
                       "text": "Hello world"

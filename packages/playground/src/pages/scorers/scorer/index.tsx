@@ -41,7 +41,7 @@ export default function Scorer() {
 
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
-    label: 'All',
+    label: 'All Entities',
     type: 'ALL' as const,
   });
 
@@ -78,7 +78,7 @@ export default function Scorer() {
   );
 
   const entityOptions: EntityOptions[] = useMemo(
-    () => [{ value: 'all', label: 'All', type: 'ALL' as const }, ...agentOptions, ...workflowOptions],
+    () => [{ value: 'all', label: 'All Entities', type: 'ALL' as const }, ...agentOptions, ...workflowOptions],
     [agentOptions, workflowOptions],
   );
 
@@ -116,7 +116,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -190,7 +190,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -210,10 +210,8 @@ export default function Scorer() {
                 Edit
               </Button>
             )}
-            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
+            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
+              <DocsIcon />
               Scorers documentation
             </Button>
           </HeaderAction>

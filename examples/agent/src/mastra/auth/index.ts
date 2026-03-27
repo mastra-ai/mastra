@@ -7,6 +7,8 @@
  * - workos: Enterprise SSO (SAML, OIDC)
  * - cloud: Mastra Cloud OAuth with PKCE
  * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
+ * - auth0-okta: Auth0 for authentication + Okta for RBAC (cross-provider)
+ * - okta: Full Okta for both authentication and RBAC
  *
  * Set AUTH_PROVIDER environment variable to switch between providers.
  */
@@ -37,9 +39,13 @@ async function initAuth(): Promise<AuthResult> {
       const { initComposite } = await import('./composite');
       return initComposite();
     }
-    case 'simple': {
-      const { initSimpleAuth } = await import('./simple');
-      return initSimpleAuth();
+    case 'auth0-okta': {
+      const { initAuth0Okta } = await import('./auth0-okta');
+      return initAuth0Okta();
+    }
+    case 'okta': {
+      const { initOkta } = await import('./okta');
+      return initOkta();
     }
     default:
       return {};

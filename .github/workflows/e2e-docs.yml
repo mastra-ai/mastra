@@ -9,6 +9,10 @@ on:
       - 'docs/**'
       - '.github/workflows/e2e-docs.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   e2e-docs:
     name: Docs E2E tests
@@ -43,7 +47,7 @@ jobs:
         run: pnpm test:navigation
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-docs

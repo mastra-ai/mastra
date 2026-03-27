@@ -9,7 +9,7 @@ packages:
 
 The `listThreads()` method retrieves threads with pagination support and optional filtering by `resourceId`, `metadata`, or both.
 
-## Usage Examples
+## Usage examples
 
 ### List all threads with pagination
 
@@ -37,7 +37,7 @@ const result = await memory.listThreads({
 })
 ```
 
-### Filter by resourceId
+### Filter by `resourceId`
 
 ```typescript
 const result = await memory.listThreads({
@@ -160,7 +160,7 @@ while (hasMorePages) {
 }
 ```
 
-## Metadata Filtering
+## Metadata filtering
 
 The metadata filter uses AND logic - all specified key-value pairs must match for a thread to be included in the results:
 

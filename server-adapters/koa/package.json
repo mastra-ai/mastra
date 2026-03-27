@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.2.5",
+  "version": "1.4.1-alpha.4",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -26,30 +26,30 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/server": "workspace:*",
-    "@fastify/busboy": "^3.2.0"
+    "@fastify/busboy": "^3.2.0",
+    "@mastra/server": "workspace:*"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "^2.0.99",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "^20.19.35",
-    "eslint": "^9.37.0",
+    "@mastra/observability": "workspace:*",
+    "@types/koa": "^2.15.0",
+    "@types/koa-bodyparser": "^4.3.13",
+    "@types/node": "22.19.15",
+    "eslint": "^9.39.4",
+    "koa": "^3.1.2",
+    "koa-bodyparser": "^4.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "@internal/types-builder": "workspace:*",
-    "koa": "^3.1.1",
-    "@types/koa": "^2.15.0",
-    "koa-bodyparser": "^4.4.1",
-    "@types/koa-bodyparser": "^4.3.13",
-    "@ai-sdk/openai": "^2.0.62",
-    "zod": "^3.25.0"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

@@ -1,9 +1,10 @@
 import { createContext, useContext, useLayoutEffect, useState } from 'react';
-import { StudioConfig } from '../types';
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
+import type { StudioConfig } from '../types';
 
 export type StudioConfigContextType = StudioConfig & {
   isLoading: boolean;
+  themeToggleEnabled: boolean;
   setConfig: (partialNewConfig: Partial<StudioConfig>) => void;
 };
 
@@ -12,6 +13,7 @@ export const StudioConfigContext = createContext<StudioConfigContextType>({
   headers: {},
   apiPrefix: undefined,
   isLoading: false,
+  themeToggleEnabled: false,
   setConfig: () => {},
 });
 
@@ -23,6 +25,7 @@ export interface StudioConfigProviderProps {
   children: React.ReactNode;
   endpoint?: string;
   defaultApiPrefix?: string;
+  themeToggleEnabled?: boolean;
 }
 
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
@@ -31,6 +34,7 @@ export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
   defaultApiPrefix = '/api',
+  themeToggleEnabled = false,
 }: StudioConfigProviderProps) => {
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
@@ -79,7 +83,7 @@ export const StudioConfigProvider = ({
   };
 
   return (
-    <StudioConfigContext.Provider value={{ ...config, setConfig: doSetConfig }}>
+    <StudioConfigContext.Provider value={{ ...config, themeToggleEnabled, setConfig: doSetConfig }}>
       {children}
     </StudioConfigContext.Provider>
   );
