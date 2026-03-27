@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.3.16-alpha.5
+
+### Patch Changes
+
+- Fixed the viewer-role E2E suite by skipping a sidebar assertion that is currently out of sync with Observability navigation behavior. ([#14760](https://github.com/mastra-ai/mastra/pull/14760))
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/client-js@1.10.1-alpha.5
+  - @mastra/playground-ui@20.0.0-alpha.5
+  - @mastra/react@0.2.18-alpha.5
+
 ## 1.3.16-alpha.4
 
 ### Patch Changes

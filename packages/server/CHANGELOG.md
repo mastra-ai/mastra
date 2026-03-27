@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.18.0-alpha.2
+
+### Patch Changes
+
+- Fixed `@mastra/server` memory message filters to accept `startExclusive` and `endExclusive` date range flags in HTTP requests. ([#14014](https://github.com/mastra-ai/mastra/pull/14014))
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+
 ## 1.18.0-alpha.1
 
 ### Patch Changes
