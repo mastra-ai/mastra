@@ -81,6 +81,8 @@ export interface MastraCodeConfig {
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
+  /** Enable or disable observational memory. Default: true */
+  observationalMemory?: boolean;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
@@ -124,7 +126,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const memory = getDynamicMemory(storage);
+  const memory = getDynamicMemory(storage, config?.observationalMemory);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
@@ -296,7 +298,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Build initial state with global preferences
   const globalInitialState: Record<string, unknown> = {};
-  if (effectiveOmModel) {
+  if (config?.observationalMemory !== false && effectiveOmModel) {
     globalInitialState.observerModelId = effectiveOmModel;
     globalInitialState.reflectorModelId = effectiveOmModel;
   }

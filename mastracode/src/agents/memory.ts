@@ -38,18 +38,34 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 
 /**
  * Dynamic memory factory function.
- * Reads OM thresholds from harness state via requestContext.
- * Model functions also read from requestContext (no mutable bridge needed).
+ * Reads OM thresholds from harness state via requestContext when observational
+ * memory is enabled. Model functions also read from requestContext (no mutable
+ * bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore) {
+export function getDynamicMemory(storage: MastraCompositeStore, observationalMemory = true) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
+    if (!observationalMemory) {
+      const cacheKey = `${observationalMemory}`;
+      if (cachedMemory && cachedMemoryKey === cacheKey) {
+        return cachedMemory;
+      }
+
+      cachedMemory = new Memory({
+        storage,
+        options: {
+          observationalMemory: false,
+        },
+      });
+      cachedMemoryKey = cacheKey;
+
+      return cachedMemory;
+    }
+
     const state = getHarnessState(requestContext);
     const omScope = getOmScope(state?.projectPath);
-
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
-
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`;
+    const cacheKey = `${observationalMemory}:${obsThreshold}:${refThreshold}:${omScope}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }

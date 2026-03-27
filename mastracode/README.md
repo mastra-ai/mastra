@@ -72,6 +72,20 @@ Type `@` followed by a partial filename to fuzzy-search project files and refere
 
 Select a suggestion with arrow keys and press Tab to insert it.
 
+### Programmatic usage
+
+If you embed `mastracode` in another app, `createMastraCode()` accepts a config object:
+
+```ts
+import { createMastraCode } from 'mastracode';
+
+const { harness } = await createMastraCode({
+  observationalMemory: false,
+});
+```
+
+Set `observationalMemory: false` to fully disable observational memory, including background observation buffering and reflection.
+
 ### Slash commands
 
 | Command             | Description                                      |
