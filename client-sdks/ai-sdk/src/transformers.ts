@@ -310,19 +310,32 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
             undefined,
             undefined,
             convertMastraChunkToAISDK,
-          ) as WorkflowDataPart | null;
-          if (workflowChunk && workflowChunk.data?.status !== 'running') {
-            controller.enqueue(workflowChunk);
-            if (workflowChunk.data?.status !== 'suspended') {
+          );
+          if (workflowChunk) {
+            const isWorkflowData = workflowChunk.type === 'data-tool-workflow';
+            const status = isWorkflowData ? (workflowChunk as any).data?.status : undefined;
+            if (!isWorkflowData || status !== 'running') {
+              controller.enqueue(workflowChunk);
+            }
+            if (isWorkflowData && status !== 'running' && status !== 'suspended') {
               bufferedSteps.delete(payload.runId!);
             }
           }
         } else if (transformedChunk.type === 'tool-network') {
           const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps, true) as NetworkDataPart | null;
-          if (networkChunk?.data?.status === 'finished') {
-            controller.enqueue(networkChunk);
-            bufferedSteps.delete(payload.runId!);
+          const networkResult = transformNetwork(payload, bufferedSteps, true);
+          if (networkResult) {
+            const items = Array.isArray(networkResult) ? networkResult : [networkResult];
+            for (const item of items) {
+              const isNetworkData = item.type === 'data-tool-network';
+              const status = isNetworkData ? (item as any).data?.status : undefined;
+              if (!isNetworkData || status === 'finished') {
+                controller.enqueue(item);
+              }
+              if (isNetworkData && status === 'finished') {
+                bufferedSteps.delete(payload.runId!);
+              }
+            }
           }
         } else {
           controller.enqueue(transformedChunk as any);
