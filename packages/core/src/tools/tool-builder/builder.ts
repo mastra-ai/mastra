@@ -59,7 +59,7 @@ interface LogMessageOptions {
   error: string;
 }
 
-export class CoreToolBuilder extends MastraBase {
+export class AISDKToolConverter extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
   private logType?: LogType;
@@ -70,7 +70,7 @@ export class CoreToolBuilder extends MastraBase {
     logType?: LogType;
     autoResumeSuspendedTools?: boolean;
   }) {
-    super({ name: 'CoreToolBuilder' });
+    super({ name: 'AISDKToolConverter' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
@@ -749,3 +749,6 @@ export class CoreToolBuilder extends MastraBase {
     } as unknown as CoreTool;
   }
 }
+
+// Backwards compatibility alias
+export { AISDKToolConverter as CoreToolBuilder };
