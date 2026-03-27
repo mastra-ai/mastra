@@ -1676,4 +1676,188 @@ describe('AgentStreamToAISDKTransformer - intermediate data-tool-* suppression',
     expect(workflowDataChunks[0].data.steps['step-1']).toBeDefined();
     expect(workflowDataChunks[0].data.steps['step-2']).toBeDefined();
   });
+
+  it('should emit data-tool-workflow when workflow suspends', async () => {
+    const mockStream = new ReadableStream<ChunkType>({
+      async start(controller) {
+        const runId = 'agent-run-1';
+
+        controller.enqueue({
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'msg-1' },
+        });
+
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { workflowId: 'test-workflow' },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-1', status: 'running', payload: {} },
+            },
+          },
+        });
+
+        // Step suspends
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-suspended',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { id: 'step-1', status: 'suspended', suspendPayload: { reason: 'approval' } },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop', warnings: [] },
+            output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          },
+        });
+
+        controller.close();
+      },
+    });
+
+    const transformedStream = mockStream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: true, sendFinish: true }),
+    );
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    // Suspended workflow should emit its data-tool-workflow event
+    const workflowDataChunks = chunks.filter(c => c.type === 'data-tool-workflow');
+    expect(workflowDataChunks.length).toBe(1);
+    expect(workflowDataChunks[0].data.status).toBe('suspended');
+  });
+
+  it('should pass through non-data-tool-workflow chunks from transformWorkflow', async () => {
+    const mockStream = new ReadableStream<ChunkType>({
+      async start(controller) {
+        const runId = 'agent-run-1';
+
+        controller.enqueue({
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'msg-1' },
+        });
+
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-start',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { workflowId: 'test-workflow' },
+            },
+          },
+        });
+
+        // workflow-step-output with a custom data chunk — should pass through
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-step-output',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: {
+                output: {
+                  type: 'data-custom-progress',
+                  data: { progress: 50 },
+                },
+              },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'tool-output',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'tool-1',
+            output: {
+              type: 'workflow-finish',
+              from: ChunkFrom.WORKFLOW,
+              runId: 'wf-run-1',
+              payload: { workflowStatus: 'success', output: null },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop', warnings: [] },
+            output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          },
+        });
+
+        controller.close();
+      },
+    });
+
+    const transformedStream = mockStream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: true, sendFinish: true }),
+    );
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    // Custom data chunk from workflow-step-output should pass through
+    const customChunks = chunks.filter(c => c.type === 'data-custom-progress');
+    expect(customChunks.length).toBe(1);
+    expect(customChunks[0].data).toEqual({ progress: 50 });
+
+    // workflow-finish should still emit
+    const workflowDataChunks = chunks.filter(c => c.type === 'data-tool-workflow');
+    expect(workflowDataChunks.length).toBe(1);
+    expect(workflowDataChunks[0].data.status).toBe('success');
+  });
 });
