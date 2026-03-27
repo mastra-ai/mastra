@@ -3291,6 +3291,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.3.6)
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config

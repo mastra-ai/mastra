@@ -38,6 +38,7 @@ export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
+export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-content';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';

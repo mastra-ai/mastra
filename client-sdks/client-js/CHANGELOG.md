@@ -1,5 +1,25 @@
 # @mastra/client-js
 
+## 1.10.1-alpha.4
+
+### Patch Changes
+
+- Added experiment review summary API endpoint and client SDK method. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+  - **Server**: New `GET /experiments/review-summary` endpoint that returns aggregated review status counts (`needsReview`, `reviewed`, `complete`) per experiment, with totals.
+  - **Client SDK**: New `getExperimentReviewSummary()` method and `ExperimentReviewCounts` type for querying the review pipeline state from the client.
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Fixed AgentVoice.speak() sending incorrect field name `input` instead of `text` in the request body, which caused speech generation requests to fail ([#14615](https://github.com/mastra-ai/mastra/pull/14615))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
 ## 1.10.1-alpha.2
 
 ### Patch Changes
