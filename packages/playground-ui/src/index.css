@@ -50,6 +50,12 @@
   --overlay: rgba(0, 0, 0, 0.75);
   --border1: rgba(255, 255, 255, 0.08);
   --border2: rgba(255, 255, 255, 0.12);
+
+  /* Semantic color aliases */
+  --text1: var(--neutral6);
+  --warning1: var(--accent6);
+  --positive1: var(--accent1);
+  --negative1: var(--accent2);
 }
 
 html.light {
@@ -89,6 +95,12 @@ html.light {
   --overlay: rgba(15, 23, 42, 0.45);
   --border1: rgba(15, 23, 42, 0.12);
   --border2: rgba(15, 23, 42, 0.2);
+
+  /* Semantic color aliases */
+  --text1: var(--neutral6);
+  --warning1: var(--accent6);
+  --positive1: var(--accent1);
+  --negative1: var(--accent2);
 }
 
 @utility container {
@@ -272,10 +284,10 @@ html.light {
   --color-border2: var(--border2);
 
   /* Semantic color aliases */
-  --color-text1: var(--neutral6);
-  --color-warning1: var(--accent6);
-  --color-positive1: var(--accent1);
-  --color-negative1: var(--accent2);
+  --color-text1: var(--text1);
+  --color-warning1: var(--warning1);
+  --color-positive1: var(--positive1);
+  --color-negative1: var(--negative1);
 
   --font-serif:
     var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times,
