@@ -51,5 +51,6 @@ const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string
     baseUrl: baseUrl || '',
     headers: isLocalUrl(baseUrl) ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
     apiPrefix,
+    credentials: 'include',
   });
 };
