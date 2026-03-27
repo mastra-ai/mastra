@@ -69,7 +69,7 @@ function DatasetCompareVersionsPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
+            <Crumb as={Link} to="/evaluation?tab=datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -96,7 +96,7 @@ function DatasetCompareVersionsPage() {
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/evaluation/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
@@ -105,13 +105,13 @@ function DatasetCompareVersionsPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -138,7 +138,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
+              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

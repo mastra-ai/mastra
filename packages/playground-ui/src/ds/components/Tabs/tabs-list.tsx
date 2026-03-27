@@ -9,7 +9,7 @@ export type TabListProps = {
   alignment?: 'left' | 'full-width';
 };
 
-export const TabList = ({ children, variant = 'default', alignment = 'left', className }: TabListProps) => {
+export const TabList = ({ children, variant = 'default', alignment = 'full-width', className }: TabListProps) => {
   return (
     <div className={cn('w-full overflow-x-auto', className)}>
       <RadixTabs.List
