@@ -15,7 +15,7 @@ import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { slash } from '../build/utils';
+import { isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -325,7 +325,7 @@ export abstract class Bundler extends MastraBundler {
 
     const dependenciesToInstall = new Map<string, string>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
-      if (analyzedBundleInfo.workspaceMap.has(dep)) {
+      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 

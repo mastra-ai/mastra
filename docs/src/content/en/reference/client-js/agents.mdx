@@ -317,7 +317,7 @@ response.processDataStream({
 
 ## Stored agents
 
-Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
+Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated. Memory is configured inline as a `SerializedMemoryConfig` object with options such as `lastMessages` and `semanticRecall`.
 
 ### `listStoredAgents()`
 
@@ -370,10 +370,15 @@ const agent = await mastraClient.createStoredAgent({
     provider: 'openai',
     name: 'gpt-5.4',
   },
-  tools: ['calculator', 'weather'],
-  workflows: ['data-processing'],
-  agents: ['subagent-1'],
-  memory: 'my-memory',
+  tools: { calculator: {}, weather: {} },
+  workflows: { 'data-processing': {} },
+  agents: { 'subagent-1': {} },
+  memory: {
+    options: {
+      lastMessages: 20,
+      semanticRecall: false,
+    },
+  },
   scorers: {
     'quality-scorer': {
       sampling: { type: 'ratio', rate: 0.1 },
@@ -424,7 +429,7 @@ const updated = await storedAgent.update({
 ```typescript
 // Update just the tools
 await storedAgent.update({
-  tools: ['new-tool-1', 'new-tool-2'],
+  tools: { 'new-tool-1': {}, 'new-tool-2': {} },
 })
 
 // Update metadata

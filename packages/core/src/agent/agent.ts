@@ -3131,7 +3131,6 @@ export class Agent<
                         : {}),
                     });
 
-                let fullText = '';
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
@@ -3162,10 +3161,6 @@ export class Agent<
                         resumeSchema = chunk.payload.resumeSchema;
                       }
                     }
-                  }
-
-                  if (chunk.type === 'text-delta') {
-                    fullText += chunk.payload.text;
                   }
                 }
 
@@ -3226,7 +3221,15 @@ export class Agent<
                   });
                 }
 
-                result = { text: fullText, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                // Use streamResult.text (a delayed promise) which resolves to the
+                // output-processor-modified text, rather than the raw accumulated text-deltas.
+                const processedText = await streamResult.text;
+                result = {
+                  text: processedText,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults,
+                };
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
@@ -4393,22 +4396,22 @@ export class Agent<
         if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
-            const title = await this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
+            void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
+              async title => {
+                if (title) {
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                }
+              },
+              error => {
+                this.logger.error('Error persisting generated title:', error);
+              },
             );
-            if (title) {
-              await memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
           }
         }
       } catch (e) {

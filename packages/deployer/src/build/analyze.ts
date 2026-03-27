@@ -15,7 +15,14 @@ import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
-import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, slash } from './utils';
+import {
+  getPackageName,
+  isBareModuleSpecifier,
+  isBuiltinModule,
+  isDependencyPartOfPackage,
+  isExternalProtocolImport,
+  slash,
+} from './utils';
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
@@ -248,6 +255,10 @@ async function validateOutput(
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
     for (const dep of Object.keys(deps)) {
+      if (isExternalProtocolImport(dep)) {
+        continue;
+      }
+
       const pkgName = getPackageName(dep);
       if (pkgName) {
         // Use version info from analysis if available
@@ -467,6 +478,10 @@ If you think your configuration is valid, please open an issue.`);
         continue;
       }
 
+      if (!isBareModuleSpecifier(i) || isExternalProtocolImport(i)) {
+        continue;
+      }
+
       // Do not include workspace packages
       if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
         continue;
@@ -506,6 +521,10 @@ If you think your configuration is valid, please open an issue.`);
    */
   const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
   for (const [dep, info] of allUsedExternals) {
+    if (isExternalProtocolImport(dep)) {
+      continue;
+    }
+
     const existing = mergedExternalDeps.get(dep);
     if (!existing || (!existing.version && info.version)) {
       mergedExternalDeps.set(dep, info);

@@ -10,6 +10,12 @@ export interface TurnContext {
   record: ObservationalMemoryRecord;
 }
 
+export type RotateResponseMessageId = () => string;
+
+export interface ObservationTurnHooks {
+  onBufferChunkSealed?: RotateResponseMessageId | (() => void | Promise<void>);
+}
+
 /** Returned by `step.prepare()` — what the agent needs for this step. */
 export interface StepContext {
   /** System messages containing observations (one per cache-stable chunk). */
