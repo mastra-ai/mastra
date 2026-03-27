@@ -296,32 +296,35 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
-      try {
-        // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+      // Merge class-level mcpOptions with route-specific options (route takes precedence)
+      const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-        await server.startHTTP({
+      // Do NOT await startHTTP — let it run in the background so SSE
+      // notifications stream to the client as they are written.
+      // toFetchResponse resolves when headers are sent, not when the body finishes.
+      server
+        .startHTTP({
           url: new URL(response.req.url),
           httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
+        })
+        .catch((e: unknown) => {
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: { code: -32603, message: 'Internal server error' },
+                id: null,
+              }),
+            );
+          }
+          console.error('[MCP HTTP] Error in background startHTTP:', e);
         });
-        return await toFetchResponse(res);
-      } catch {
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-          return await toFetchResponse(res);
-        }
-        return await toFetchResponse(res);
-      }
+
+      return await toFetchResponse(res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
