@@ -10,6 +10,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 
@@ -198,14 +199,14 @@ export async function getSerializedAgentTools(
     if (!partial) {
       try {
         if (tool.inputSchema) {
-          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+          if (isStandardSchemaWithJSON(tool.inputSchema)) {
+            inputSchemaForReturn = stringify(standardSchemaToJSONSchema(tool.inputSchema));
           } else if (typeof tool.inputSchema === 'function') {
             const inputSchema = tool.inputSchema();
             if (inputSchema && inputSchema.jsonSchema) {
               inputSchemaForReturn = stringify(inputSchema.jsonSchema);
             }
-          } else if (tool.inputSchema) {
+          } else {
             inputSchemaForReturn = stringify(
               zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
             );
@@ -213,14 +214,14 @@ export async function getSerializedAgentTools(
         }
 
         if (tool.outputSchema) {
-          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+          if (isStandardSchemaWithJSON(tool.outputSchema)) {
+            outputSchemaForReturn = stringify(standardSchemaToJSONSchema(tool.outputSchema));
           } else if (typeof tool.outputSchema === 'function') {
             const outputSchema = tool.outputSchema();
             if (outputSchema && outputSchema.jsonSchema) {
               outputSchemaForReturn = stringify(outputSchema.jsonSchema);
             }
-          } else if (tool.outputSchema) {
+          } else {
             outputSchemaForReturn = stringify(
               zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
             );
@@ -228,18 +229,14 @@ export async function getSerializedAgentTools(
         }
 
         if (tool.requestContextSchema) {
-          if (
-            tool.requestContextSchema &&
-            typeof tool.requestContextSchema === 'object' &&
-            'jsonSchema' in tool.requestContextSchema
-          ) {
-            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
+          if (isStandardSchemaWithJSON(tool.requestContextSchema)) {
+            requestContextSchemaForReturn = stringify(standardSchemaToJSONSchema(tool.requestContextSchema));
           } else if (typeof tool.requestContextSchema === 'function') {
             const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
             if (requestContextSchema && requestContextSchema.jsonSchema) {
               requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
             }
-          } else if (tool.requestContextSchema) {
+          } else {
             requestContextSchemaForReturn = stringify(
               zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
             );

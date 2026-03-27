@@ -1,3 +1,4 @@
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -35,6 +36,34 @@ function resolveSchema(schema: unknown): unknown {
 }
 
 /**
+ * Serializes a schema for API responses, handling StandardSchemaWithJSON (e.g. MCP tools),
+ * lazy AI SDK schemas, and Zod schemas.
+ */
+function serializeSchema(schema: unknown): string | undefined {
+  if (!schema) return undefined;
+
+  // StandardSchemaWithJSON (e.g. MCP tools, JSON Schema-backed tools, workspace tools)
+  if (isStandardSchemaWithJSON(schema)) {
+    return stringify(standardSchemaToJSONSchema(schema));
+  }
+
+  // Lazy AI SDK schemas (provider-defined tools)
+  if (typeof schema === 'function') {
+    try {
+      const resolved = schema();
+      if (resolved && typeof resolved === 'object' && 'jsonSchema' in resolved) {
+        return stringify(resolved.jsonSchema);
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Zod schemas (legacy — schemas not yet wrapped in StandardSchemaWithJSON)
+  return stringify(zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0]));
+}
+
+/**
  * Serializes a tool for API responses, handling both regular tools (with Zod schemas)
  * and provider-defined tools (with AI SDK lazy schemas).
  */
@@ -60,9 +89,9 @@ function serializeTool(tool: any): any {
 
   return {
     ...tool,
-    inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-    outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-    requestContextSchema: tool.requestContextSchema ? stringify(zodToJsonSchema(tool.requestContextSchema)) : undefined,
+    inputSchema: serializeSchema(tool.inputSchema),
+    outputSchema: serializeSchema(tool.outputSchema),
+    requestContextSchema: serializeSchema(tool.requestContextSchema),
   };
 }
 

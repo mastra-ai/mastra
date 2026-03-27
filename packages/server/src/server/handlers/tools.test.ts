@@ -366,6 +366,51 @@ describe('Tools Handlers', () => {
     });
   });
 
+  describe('JSON Schema tools serialization (MCP tools)', () => {
+    const jsonSchemaTool = createTool({
+      id: 'mcp-calculator',
+      description: 'A calculator tool from an MCP server',
+      inputSchema: { type: 'object', properties: { expression: { type: 'string' } }, required: ['expression'] } as any,
+      execute: async ({ context }: any) => ({ result: context.expression }),
+    });
+
+    describe('listToolsHandler', () => {
+      it('should serialize tools with JSON Schema inputSchema without crashing', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [jsonSchemaTool.id]: jsonSchemaTool } as any,
+        });
+        expect(result).toHaveProperty('mcp-calculator');
+        expect(result['mcp-calculator']).toHaveProperty('id', 'mcp-calculator');
+        expect(result['mcp-calculator'].inputSchema).toBeDefined();
+      });
+
+      it('should serialize a mix of Zod and JSON Schema tools', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [mockTool.id]: mockTool, [jsonSchemaTool.id]: jsonSchemaTool } as any,
+        });
+        expect(result).toHaveProperty(mockTool.id);
+        expect(result).toHaveProperty('mcp-calculator');
+      });
+    });
+
+    describe('getToolByIdHandler', () => {
+      it('should serialize a JSON Schema tool without crashing', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await GET_TOOL_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [jsonSchemaTool.id]: jsonSchemaTool } as any,
+          toolId: 'mcp-calculator',
+        });
+        expect(result).toHaveProperty('id', 'mcp-calculator');
+        expect(result.inputSchema).toBeDefined();
+      });
+    });
+  });
+
   describe('provider-defined tools serialization', () => {
     const providerTool = openai.tools.webSearch({});
 
