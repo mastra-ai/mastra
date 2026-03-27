@@ -1,10 +1,10 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { useState, useMemo } from 'react';
-import { DatasetExperiment } from '@mastra/client-js';
-import { useLinkComponent } from '@/lib/framework';
-import { DatasetExperimentsToolbar } from './dataset-experiments-toolbar';
-import { DatasetExperimentsList } from './dataset-experiments-list';
-import { Column, Columns } from '@/ds/components/Columns';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
+import { DatasetExperimentsList } from './dataset-experiments-list';
+import { DatasetExperimentsToolbar } from './dataset-experiments-toolbar';
+import { Column, Columns } from '@/ds/components/Columns';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetExperimentsProps {
   experiments: DatasetExperiment[];
@@ -52,7 +52,7 @@ export function DatasetExperiments({
   const handleCompare = () => {
     if (selectedExperimentIds.length === 2) {
       const [experimentIdA, experimentIdB] = selectedExperimentIds;
-      navigate(`/datasets/${datasetId}/experiments?baseline=${experimentIdA}&contender=${experimentIdB}`);
+      navigate(`/evaluation/datasets/${datasetId}/experiments?baseline=${experimentIdA}&contender=${experimentIdB}`);
     }
   };
 
@@ -62,7 +62,7 @@ export function DatasetExperiments({
   };
 
   const handleRowClick = (experimentId: string) => {
-    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    navigate(`/evaluation/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   if (isLoading) {

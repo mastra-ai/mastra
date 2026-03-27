@@ -1,16 +1,15 @@
+import { useMastraClient } from '@mastra/react';
+import type { ColumnDef, Row } from '@tanstack/react-table';
+import { useMCPServerTools } from '../../hooks/useMCPServerTools';
+import type { MCPTableColumn } from './types';
 import { Badge } from '@/ds/components/Badge';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, EntryCell } from '@/ds/components/Table';
 
-import { ColumnDef, Row } from '@tanstack/react-table';
+import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 
 import { useLinkComponent } from '@/lib/framework';
-
-import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
-import { MCPTableColumn } from './types';
-import { useMastraClient } from '@mastra/react';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { useMCPServerTools } from '../../hooks/useMCPServerTools';
 
 const NameCell = ({ row }: { row: Row<MCPTableColumn> }) => {
   const client = useMastraClient();
@@ -42,6 +41,7 @@ export const columns: ColumnDef<MCPTableColumn>[] = [
     accessorKey: 'attachedTools',
     cell: ({ row }) => {
       const mcpServer = row.original;
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       const { data: tools, isLoading } = useMCPServerTools(mcpServer);
 
       if (isLoading)

@@ -2,8 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;

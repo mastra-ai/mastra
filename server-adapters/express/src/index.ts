@@ -13,6 +13,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;

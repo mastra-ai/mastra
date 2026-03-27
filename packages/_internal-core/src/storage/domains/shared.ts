@@ -196,6 +196,24 @@ export const commonFilterFields = {
   environment: environmentField.optional(),
 } as const;
 
+/**
+ * Additional filters shared by observability signals that carry correlation context.
+ * Logs and metrics should generally expose this same context filter surface.
+ */
+export const observabilitySignalFilterFields = {
+  parentEntityType: parentEntityTypeField.optional(),
+  parentEntityName: parentEntityNameField.optional(),
+  rootEntityType: rootEntityTypeField.optional(),
+  rootEntityName: rootEntityNameField.optional(),
+  resourceId: resourceIdField.optional(),
+  runId: runIdField.optional(),
+  sessionId: sessionIdField.optional(),
+  threadId: threadIdField.optional(),
+  requestId: requestIdField.optional(),
+  source: sourceField.optional(),
+  tags: z.array(z.string()).optional().describe('Filter by tags (must have all specified tags)'),
+} as const;
+
 // ============================================================================
 // Tracing identifier fields (shared across scores, feedback, metrics)
 // ============================================================================

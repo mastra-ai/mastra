@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
 import type { CreateStoredScorerParams, UpdateStoredScorerParams } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredScorer = (scorerId?: string, options?: { status?: 'draft' | 'published' }) => {
   const client = useMastraClient();
@@ -22,8 +22,8 @@ export const useStoredScorerMutations = (scorerId?: string) => {
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredScorerParams) => client.createStoredScorer(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
-      queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['scorers'] });
     },
   });
 
@@ -33,10 +33,10 @@ export const useStoredScorerMutations = (scorerId?: string) => {
       return client.getStoredScorer(scorerId).update(params, requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
-      queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['scorers'] });
       if (scorerId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }
     },
   });
@@ -47,10 +47,10 @@ export const useStoredScorerMutations = (scorerId?: string) => {
       return client.getStoredScorer(scorerId).delete(requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
-      queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['scorers'] });
       if (scorerId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }
     },
   });

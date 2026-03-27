@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { useMastraClient } from '@mastra/react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 function parseJsonString(jsonString: string): any {
@@ -61,7 +61,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   }, [agentId, threadId, resourceId]);
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, [refetch]);
 
   const updateWorkingMemory = async (newMemory: string) => {
@@ -70,12 +70,12 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
       if (workingMemoryFormat === 'json') {
         try {
           JSON.parse(newMemory);
-        } catch (e) {
+        } catch {
           throw new Error('Invalid JSON working memory');
         }
       }
       await client.updateWorkingMemory({ agentId, threadId, workingMemory: newMemory, resourceId, requestContext });
-      refetch();
+      void refetch();
     } catch (error) {
       console.error('Error updating working memory', error);
       throw error;

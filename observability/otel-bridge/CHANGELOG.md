@@ -1,5 +1,50 @@
 # @mastra/otel-bridge
 
+## 1.0.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`478d6dc`](https://github.com/mastra-ai/mastra/commit/478d6dc8c976b90d278c2f0421ff99e54c40c4c4), [`6e6a2bb`](https://github.com/mastra-ai/mastra/commit/6e6a2bb1c4538ac46679d0140cd84745cbb78395), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`9a3e532`](https://github.com/mastra-ai/mastra/commit/9a3e532a85ce404fa99eea8091b5a1d1ef764b43)]:
+  - @mastra/core@1.18.0-alpha.0
+  - @mastra/observability@1.6.0-alpha.1
+  - @mastra/otel-exporter@1.0.9-alpha.1
+
+## 1.0.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d), [`6e6a2bb`](https://github.com/mastra-ai/mastra/commit/6e6a2bb1c4538ac46679d0140cd84745cbb78395), [`9a3e532`](https://github.com/mastra-ai/mastra/commit/9a3e532a85ce404fa99eea8091b5a1d1ef764b43)]:
+  - @mastra/core@1.16.1-alpha.1
+  - @mastra/observability@1.6.0-alpha.0
+  - @mastra/otel-exporter@1.0.9-alpha.0
+
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`5ac24c4`](https://github.com/mastra-ai/mastra/commit/5ac24c4fa5275b9c837641d98ed1d988f6b7c327), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`4e699e0`](https://github.com/mastra-ai/mastra/commit/4e699e0c97a3991f9bbf793c78284149944f646a), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+  - @mastra/observability@1.5.1
+  - @mastra/otel-exporter@1.0.8
+
+## 1.0.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`5ac24c4`](https://github.com/mastra-ai/mastra/commit/5ac24c4fa5275b9c837641d98ed1d988f6b7c327), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/observability@1.5.1-alpha.1
+  - @mastra/otel-exporter@1.0.8-alpha.1
+
+## 1.0.8-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`4e699e0`](https://github.com/mastra-ai/mastra/commit/4e699e0c97a3991f9bbf793c78284149944f646a), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/observability@1.5.1-alpha.0
+  - @mastra/otel-exporter@1.0.8-alpha.0
+
 ## 1.0.7
 
 ### Patch Changes

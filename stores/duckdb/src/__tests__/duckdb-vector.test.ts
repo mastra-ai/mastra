@@ -13,7 +13,7 @@
 
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DuckDBVector } from '../vector/index.js';
+import { DuckDBVector } from '../vector/index';
 
 describe('DuckDBVector', () => {
   let vectorDB: DuckDBVector;

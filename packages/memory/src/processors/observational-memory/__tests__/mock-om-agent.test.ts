@@ -470,6 +470,9 @@ describe('Mock OM Agent Integration', () => {
     expect(subRecord!.activeObservations).toContain('User asked for help');
   });
 
+  // TODO: processInputStep is not called by v5 execution engine for generate() — needs investigation.
+  // On main, OM implements Processor directly; in our refactored architecture, ObservationalMemoryProcessor
+  // is a separate class. The v5 execution engine's processor discovery may not find it.
   it('should insert a message boundary with a date matching the observed messages', async () => {
     // Create a model that supports multiple generate calls (alternating tool-call / text).
     // The shared createMockOmModel only fires a tool call on the very first call,

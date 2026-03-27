@@ -1,5 +1,5 @@
+import type { Agent } from '@mastra/core/agent';
 import { useMastraClient } from '@mastra/react';
-import { Agent } from '@mastra/core/agent';
 import { useEffect, useRef, useState } from 'react';
 import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
 import { usePlaygroundStore } from '@/store/playground-store';
@@ -43,12 +43,12 @@ export const useSpeechRecognition = ({
         } else {
           setAgent(null);
         }
-      } catch (error) {
+      } catch {
         setAgent(null);
       }
     };
 
-    check();
+    void check();
   }, [agentId]);
 
   const {
@@ -155,13 +155,13 @@ const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
   }
 
   const handleFinish = (file: File) => {
-    agent.voice.listen(file as any).then(res => {
+    void agent.voice.listen(file as any).then(res => {
       setTranscript((res as unknown as { text: string }).text);
     });
   };
 
   const start = () => {
-    recordMicrophoneToFile(handleFinish).then(recorder => {
+    void recordMicrophoneToFile(handleFinish).then(recorder => {
       setRecorder(recorder);
       recorder.start();
     });

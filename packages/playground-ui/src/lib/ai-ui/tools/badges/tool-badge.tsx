@@ -1,12 +1,10 @@
-import { ToolsIcon } from '@/ds/icons';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
-import { Check, X } from 'lucide-react';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import type { MastraUIMessage } from '@mastra/react';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { MastraUIMessage } from '@mastra/react';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ToolsIcon } from '@/ds/icons';
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
