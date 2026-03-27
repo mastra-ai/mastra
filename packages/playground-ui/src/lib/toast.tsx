@@ -26,7 +26,7 @@ const defaultOptions: ExternalToast = {
     description: 'text-xs text-neutral3',
     cancelButton:
       'bg-transparent! hover:bg-surface2! border-none! rounded-md! p-1.5! m-0! text-neutral3! hover:text-neutral6! shrink-0 transition-all',
-    actionButton: '!bg-white flex items-center justify-center font-medium !text-black order-last hover:opacity-80',
+    actionButton: 'bg-white! flex items-center justify-center font-medium text-black! order-last hover:opacity-80',
   },
 };
 

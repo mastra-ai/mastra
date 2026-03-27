@@ -128,9 +128,9 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                           className={cn(
                             'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
                             className,
-                            previousDisplayStatus === 'success' && nextStep && '!bg-accent1Dark',
-                            previousDisplayStatus === 'failed' && nextStep && '!bg-accent2Dark',
-                            previousDisplayStatus === 'tripwire' && nextStep && '!bg-amber-900/40',
+                            previousDisplayStatus === 'success' && nextStep && 'bg-accent1Dark!',
+                            previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Dark!',
+                            previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-900/40!',
                           )}
                           onClick={() => setOpenDialog(true)}
                           style={style}
