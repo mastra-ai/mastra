@@ -54,6 +54,8 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Compact low-detail rendering of recently removed messages */
+  conciseHistory?: string;
   /** Observer-generated thread title */
   threadTitle?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */

@@ -103,6 +103,25 @@ function createMemoryProvider(om: ObservationalMemory): MemoryContextProvider {
     },
   };
 }
+
+async function updateThreadOMMetadata(storage: any, threadId: string, updates: Record<string, unknown>) {
+  const existingThread = await storage.getThreadById({ threadId });
+  await storage.updateThread({
+    id: threadId,
+    title: existingThread?.title ?? 'Test Thread',
+    metadata: {
+      ...(existingThread?.metadata ?? {}),
+      mastra: {
+        ...((existingThread?.metadata as any)?.mastra ?? {}),
+        om: {
+          ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
+          ...updates,
+        },
+      },
+    },
+  });
+}
+
 import {
   buildReflectorPrompt,
   parseReflectorOutput,
@@ -2243,13 +2262,27 @@ describe('ObservationalMemory Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         true,
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
-      expect(formattedText).toContain('recall tool');
+      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('- 🔴 User prefers direct answers');
+      expect(formattedText).not.toContain('## Group `group-1`');
+    });
+
+    it('should keep system context focused on observations and continuation hints', () => {
+      const formatted = (om as any).formatObservationsForContext(
+        '- 🔴 User asked about the latest turn',
+        'Keep working on the latest request',
+        'Answer directly',
+      );
+      const formattedText = formatted.join('\n\n');
+
+      expect(formattedText).not.toContain('<concise-history>');
+      expect(formattedText).toContain('<current-task>');
+      expect(formattedText).toContain('<suggested-response>');
     });
 
     it('should default retrieval mode to false', () => {
@@ -7483,21 +7516,9 @@ describe('Full Async Buffering Flow', () => {
       },
     });
 
-    const existingThread = await storage.getThreadById({ threadId });
-    await storage.updateThread({
-      id: threadId,
-      title: existingThread?.title ?? 'Test Thread',
-      metadata: {
-        ...(existingThread?.metadata ?? {}),
-        mastra: {
-          ...((existingThread?.metadata as any)?.mastra ?? {}),
-          om: {
-            ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
-            currentTask: 'Stale task before activation',
-            suggestedResponse: 'Stale suggestion before activation',
-          },
-        },
-      },
+    await updateThreadOMMetadata(storage, threadId, {
+      currentTask: 'Stale task before activation',
+      suggestedResponse: 'Stale suggestion before activation',
     });
 
     await step(0, { freshState: true });
@@ -7507,6 +7528,100 @@ describe('Full Async Buffering Flow', () => {
     const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(omAfterActivation.currentTask).toBeUndefined();
     expect(omAfterActivation.suggestedResponse).toBeUndefined();
+  });
+
+  it('should persist concise history after buffered activation removes messages', async () => {
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 20,
+    });
+
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    const removedMessages = [
+      createTestMessage('Oldest removed context', 'user', 'buf-msg-1'),
+      createTestMessage('Newest removed context', 'assistant', 'buf-msg-2'),
+    ];
+    await storage.saveMessages({
+      messages: removedMessages.map((message, index) => ({
+        ...message,
+        threadId,
+        resourceId,
+        createdAt: new Date(Date.now() + index),
+      })),
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🔴 Older chunk with hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-1'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'buf-cycle-1',
+      },
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🟡 Latest chunk without hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-2'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:05:00Z'),
+        cycleId: 'buf-cycle-2',
+      },
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.conciseHistory).toContain('Oldest removed context');
+    expect(omAfterActivation.conciseHistory).toContain('Newest removed context');
+  });
+
+  it('should clear stale concise history when latest activated chunk has no removed messages', async () => {
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 20,
+    });
+
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    await updateThreadOMMetadata(storage, threadId, {
+      conciseHistory: 'stale concise history',
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🟡 Latest chunk without hints',
+        tokenCount: 30,
+        messageIds: ['missing-msg-id'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:05:00Z'),
+        cycleId: 'buf-cycle-2',
+      },
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.conciseHistory).toBeUndefined();
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {

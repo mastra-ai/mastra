@@ -10,6 +10,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import xxhash from 'xxhash-wasm';
 
 import { BufferingCoordinator } from './buffering-coordinator';
+import { formatConciseHistory } from './concise-history';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
@@ -2907,6 +2908,15 @@ ${formattedMessages}
     // Update thread metadata with continuation hints from activated chunks
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
+      const activatedMessageIds = new Set(activationResult.activatedMessageIds ?? []);
+      const removedMessages =
+        activatedMessageIds.size > 0 && opts.messageList
+          ? opts.messageList.get.all
+              .db()
+              .filter(msg => !!msg?.id && msg.id !== 'om-continuation' && activatedMessageIds.has(msg.id))
+          : [];
+      const conciseHistory = formatConciseHistory(removedMessages, { maxTokens: 1000 }) || undefined;
+
       // Get hints from the most recent activated chunk
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
       const lastActivated = activatedChunks[activatedChunks.length - 1];
@@ -2914,6 +2924,7 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: lastActivated.suggestedContinuation,
           currentTask: lastActivated.currentTask,
+          conciseHistory,
         });
         await this.storage.updateThread({
           id: threadId,

@@ -27,9 +27,81 @@ class TestableMemory extends Memory {
   public testUpdateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     return this.updateMessageToHideWorkingMemoryV2(message);
   }
+
+  public async testGetContext(opts: { threadId: string; resourceId?: string; memoryConfig?: MemoryConfig }) {
+    return this.getContext(opts);
+  }
 }
 
 describe('Memory', () => {
+  describe('getContext continuation message', () => {
+    let memory: TestableMemory;
+    let store: InMemoryStore;
+    const threadId = 'om-thread';
+    const resourceId = 'om-resource';
+
+    beforeEach(async () => {
+      store = new InMemoryStore();
+      memory = new TestableMemory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            model: 'openai/gpt-4o-mini',
+            observation: {
+              messageTokens: 1,
+              bufferTokens: false,
+            },
+          },
+        },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'OM Thread',
+          metadata: {
+            mastra: {
+              om: {
+                conciseHistory: '**user (2025-01-01 10:00:00Z)**: What changed?',
+              },
+            },
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'm1',
+            threadId,
+            resourceId,
+            role: 'user',
+            createdAt: new Date('2025-01-01T10:00:00Z'),
+            content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+          } as MastraDBMessage,
+        ],
+      });
+
+      const omEngine = await (memory as any).omEngine;
+      await omEngine.observe({ threadId, resourceId });
+    });
+
+    it('includes concise history in the continuation message instead of the system message', async () => {
+      const ctx = await memory.testGetContext({ threadId, resourceId });
+      const continuationText = ((ctx.continuationMessage?.content as any)?.parts?.[0] as { text?: string } | undefined)
+        ?.text;
+
+      expect(ctx.systemMessage).toContain('<observations>');
+      expect(ctx.systemMessage).not.toContain('<concise-history>');
+      expect(continuationText).toContain('<system-reminder>');
+      expect(continuationText).toContain('<concise-history>');
+      expect(continuationText).toContain('What changed?');
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 

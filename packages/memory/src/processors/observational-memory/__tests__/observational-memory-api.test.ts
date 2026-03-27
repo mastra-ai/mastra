@@ -807,6 +807,41 @@ describe('buildContextSystemMessage()', () => {
 
     expect(result).toBeTruthy();
   });
+
+  it('should not include concise history in the system message', async () => {
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'ctx-resource',
+        title: threadId,
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+    await om.observe({ threadId });
+    const thread = await storage.getThreadById({ threadId });
+    await storage.updateThread({
+      id: threadId,
+      title: thread?.title ?? threadId,
+      metadata: {
+        ...((thread?.metadata as Record<string, unknown> | undefined) ?? {}),
+        mastra: {
+          om: {
+            conciseHistory: '**user (2025-01-01 10:00:00Z)**: What changed?',
+          },
+        },
+      },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    const result = await om.buildContextSystemMessage({ threadId, record });
+
+    expect(result).toBeTruthy();
+    expect(result).not.toContain('<concise-history>');
+    expect(result).not.toContain('What changed?');
+  });
 });
 
 // =============================================================================

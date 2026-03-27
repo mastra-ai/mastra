@@ -1,5 +1,6 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
-import { getThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+
+import { formatConciseHistory } from '../concise-history';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
@@ -133,7 +134,7 @@ export class ObservationStep {
           record: statusSnapshot.record,
           writer: this.turn.writer,
           requestContext: this.turn.requestContext,
-          beforeBuffer: async (candidates: MastraDBMessage[]) => {
+          beforeBuffer: async candidates => {
             om.sealMessagesForBuffering(candidates);
             if (this.turn.memory) {
               await this.turn.memory.persistMessages(candidates);
@@ -169,6 +170,12 @@ export class ObservationStep {
 
           // Cleanup after observation
           const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+          const removedMessages =
+            observedIds.length > 0
+              ? messageList.get.all
+                  .db()
+                  .filter(msg => !!msg?.id && msg.id !== 'om-continuation' && observedIds.includes(msg.id))
+              : [];
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,
@@ -181,6 +188,23 @@ export class ObservationStep {
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
           });
+
+          if (obsResult.activatedMessageIds?.length) {
+            const storage = om.getStorage();
+            const thread = await storage.getThreadById({ threadId });
+            if (thread) {
+              const conciseHistory = formatConciseHistory(removedMessages, { maxTokens: 1000 }) || undefined;
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                ...getThreadOMMetadata(thread.metadata),
+                conciseHistory,
+              });
+              await storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
+            }
+          }
 
           if (statusSnapshot.asyncObservationEnabled) {
             await om.resetBufferingState({

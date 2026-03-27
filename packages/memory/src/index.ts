@@ -6,7 +6,12 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import {
+  MastraMemory,
+  extractWorkingMemoryContent,
+  getThreadOMMetadata,
+  removeWorkingMemoryTags,
+} from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -1155,6 +1160,12 @@ ${workingMemory}`;
 
         // Build the continuation reminder message
         const { OBSERVATION_CONTINUATION_HINT } = await import('./processors/observational-memory/constants');
+        const conciseHistory = getThreadOMMetadata(
+          (await memoryStore.getThreadById({ threadId }))?.metadata,
+        )?.conciseHistory;
+        const continuationText = conciseHistory
+          ? `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>\n\n<concise-history>\nThe following is a compact summary of recently processed messages that are no longer in the direct conversation context:\n${conciseHistory}\n</concise-history>`
+          : `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`;
         continuationMessage = {
           id: 'om-continuation',
           role: 'user' as const,
@@ -1164,7 +1175,7 @@ ${workingMemory}`;
             parts: [
               {
                 type: 'text' as const,
-                text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
+                text: continuationText,
               },
             ],
           },
