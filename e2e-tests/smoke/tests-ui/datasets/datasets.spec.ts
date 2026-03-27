@@ -2,17 +2,15 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Datasets', () => {
   test('datasets list page shows create button and heading', async ({ page }) => {
-    await page.goto('/datasets');
+    await page.goto('/evaluation?tab=datasets');
 
-    await expect(page.getByRole('heading', { name: 'Datasets', level: 1 })).toBeVisible();
-    // "Create Dataset" should always be available in the header
-    await expect(
-      page.locator('main').locator('header').getByRole('button', { name: 'Create Dataset' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeVisible();
+    // "Create Dataset" should always be available
+    await expect(page.getByRole('button', { name: 'Create Dataset' })).toBeVisible();
   });
 
   test('create dataset and verify it appears in list', async ({ page }) => {
-    await page.goto('/datasets');
+    await page.goto('/evaluation?tab=datasets');
 
     // Open create dialog
     await page.getByRole('button', { name: 'Create Dataset' }).first().click();
@@ -46,7 +44,7 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     // Navigate to dataset detail
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Items Test Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Should show empty items tab initially — the "Add Item" button should be present
@@ -56,18 +54,15 @@ test.describe('Datasets', () => {
     await page.getByRole('button', { name: 'Add Item' }).click();
     await expect(page.getByRole('dialog', { name: 'Add Item' })).toBeVisible();
 
-    // The dialog has CodeMirror editors for Input and Ground Truth.
-    // Fill the input editor — find it via the label association
+    // The dialog has textbox editors for Input and Ground Truth
     const dialog = page.getByRole('dialog', { name: 'Add Item' });
-    // Input editor is the first .cm-content in the dialog
-    const inputEditor = dialog.locator('.cm-content').first();
+    const inputEditor = dialog.getByRole('textbox').first();
     await inputEditor.click();
-    // Select all and replace existing content
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('{"prompt": "Hello world"}');
 
-    // Fill Ground Truth editor — second .cm-content
-    const gtEditor = dialog.locator('.cm-content').nth(1);
+    // Fill Ground Truth editor — second textbox
+    const gtEditor = dialog.getByRole('textbox').nth(1);
     await gtEditor.click();
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('{"response": "Hi there"}');
@@ -103,7 +98,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Before Edit', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Open actions menu → Edit Dataset
@@ -149,7 +144,7 @@ test.describe('Datasets', () => {
     });
     expect(itemRes.ok()).toBeTruthy();
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Edit Item Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Click item to open detail panel
@@ -166,7 +161,7 @@ test.describe('Datasets', () => {
     // Should switch to edit mode
     await expect(page.getByRole('heading', { name: 'Edit Item', level: 3 })).toBeVisible();
 
-    // Modify the input JSON — the first CodeMirror editor in edit mode
+    // Modify the input JSON — the CodeMirror editor in edit mode
     const inputEditor = page.locator('.cm-content').first();
     await inputEditor.click();
     await page.keyboard.press('ControlOrMeta+a');
@@ -198,7 +193,7 @@ test.describe('Datasets', () => {
     });
     expect(itemRes.ok()).toBeTruthy();
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByText('to_delete')).toBeVisible({ timeout: 10_000 });
 
     // Click item to open detail panel
@@ -236,7 +231,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Experiments Tab Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Switch to Experiments tab
@@ -265,7 +260,7 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     // Navigate to dataset detail
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: uniqueName, level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Open actions menu and click Delete
@@ -278,11 +273,11 @@ test.describe('Datasets', () => {
     await expect(alertDialog.getByText(uniqueName)).toBeVisible();
     await alertDialog.getByRole('button', { name: 'Delete' }).click();
 
-    // Should navigate back to datasets list
-    await expect(page).toHaveURL(/\/datasets\/?$/, { timeout: 10_000 });
+    // Should navigate back to evaluation datasets list
+    await expect(page).toHaveURL(/\/evaluation\?tab=datasets/, { timeout: 10_000 });
 
     // The specific dataset link should be removed from the DOM entirely
-    const datasetLink = page.locator(`a[href="/datasets/${datasetId}"]`);
+    const datasetLink = page.locator(`a[href="/evaluation/datasets/${datasetId}"]`);
     await expect(datasetLink).toHaveCount(0, { timeout: 10_000 });
   });
 
@@ -295,7 +290,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'JSON Import Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // On an empty dataset, Import JSON is a direct button in the empty state
@@ -355,7 +350,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'CSV Import Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // On an empty dataset, Import CSV is a direct button in the empty state
@@ -421,7 +416,7 @@ test.describe('Datasets', () => {
     }
 
     // Navigate to dataset page
-    await page.goto(`/datasets/${datasetId}`);
+    await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: /Experiment Dataset/ })).toBeVisible({ timeout: 10_000 });
 
     // Click "Run Experiment"
@@ -441,12 +436,9 @@ test.describe('Datasets', () => {
     await dialog.getByRole('button', { name: 'Run' }).click();
 
     // After triggering, the page should navigate to the experiment detail page
-    // Wait for the experiment detail page to load (URL changes to /datasets/{id}/experiments/{experimentId})
-    await page.waitForURL(/\/datasets\/.*\/experiments\//, { timeout: 15_000 });
+    await page.waitForURL(/\/evaluation\/datasets\/.*\/experiments\//, { timeout: 15_000 });
 
-    // The experiment detail page shows the experiment ID and stats
-    // Wait for the experiment to complete (polling happens automatically in the UI every 2s)
-    // The status badge shows "completed" in exact lowercase
+    // Wait for the experiment to complete
     await expect(page.getByText('completed', { exact: true })).toBeVisible({ timeout: 30_000 });
 
     // Verify stats show our 2 items succeeded
@@ -460,7 +452,6 @@ test.describe('Datasets', () => {
     // Switch to Results tab and verify concrete result rows from our seeded items
     await page.getByRole('tab', { name: 'Results' }).click();
     // Each result row renders the first 8 chars of the dataset item ID
-    // Verify both seeded items appear as result rows
     for (const itemId of itemIds) {
       await expect(page.getByText(itemId.slice(0, 8))).toBeVisible({ timeout: 10_000 });
     }
