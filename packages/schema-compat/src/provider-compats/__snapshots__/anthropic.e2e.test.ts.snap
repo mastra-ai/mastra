@@ -321,20 +321,18 @@ constraints: a valid uuid",
 exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2024-01-15T12:00:00.000Z,
+    "actualData": 2024-03-10T09:15:00.000Z,
     "arrayMax": [
-      "a",
-      "b",
-      "c",
-      "d",
-      "e",
+      "one",
+      "two",
+      "three",
     ],
     "arrayMin": [
-      "item1",
+      "required",
     ],
-    "date": 2023-06-15T14:30:00.000Z,
-    "dateAfter": 2024-06-15T10:00:00.000Z,
-    "dateBefore": 2023-12-31T23:59:59.000Z,
+    "date": 2024-01-15T10:30:00.000Z,
+    "dateAfter": 2024-02-01T12:00:00.000Z,
+    "dateBefore": 2023-12-15T14:30:00.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
@@ -345,20 +343,19 @@ exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
     "nativeEnum": "B",
     "nullable": null,
     "number": 42.5,
-    "numberGt": 5,
+    "numberGt": 5.7,
     "numberGte": 1,
-    "numberInt": 123,
-    "numberLt": 3,
+    "numberInt": 15,
+    "numberLt": 3.2,
     "numberLte": 1,
     "numberMultipleOf": 8,
     "object": {
-      "bar": 100,
-      "foo": "example",
+      "bar": 123,
+      "foo": "example text",
     },
     "objectLoose": {
-      "boolean": false,
-      "example": "data",
-      "number": 123,
+      "count": 10,
+      "exampleField": "data",
     },
     "objectNested": {
       "user": {
@@ -367,25 +364,24 @@ exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
       },
     },
     "objectPassthrough": {
-      "key1": "value1",
-      "key2": 42,
-      "key3": true,
+      "anotherKey": 42,
+      "sampleKey": "sampleValue",
     },
     "optional": "null",
     "string": "Sample text",
-    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+    "stringCuid": "cuid1234567890",
     "stringEmail": "test@example.com",
     "stringEmoji": "😀",
-    "stringMax": "Short text",
+    "stringMax": "Test data",
     "stringMin": "Hello world",
     "stringRegex": "test-example",
     "stringUrl": "https://example.com",
     "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
     "unionObjects": {
-      "amount": 50,
+      "amount": 100,
       "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "Hello",
+    "unionPrimitives": 42,
   },
 }
 `;
@@ -393,17 +389,17 @@ exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
 exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2024-01-15T16:45:00.000Z,
+    "actualData": 2024-03-20T16:45:30.000Z,
     "arrayMax": [
-      "one",
-      "two",
-      "three",
+      "a",
+      "b",
+      "c",
     ],
     "arrayMin": [
-      "required item",
+      "item1",
     ],
-    "date": 2023-06-15T10:30:00.000Z,
-    "dateAfter": 2024-03-15T14:20:00.000Z,
+    "date": 2023-06-15T14:30:00.000Z,
+    "dateAfter": 2024-06-15T10:00:00.000Z,
     "dateBefore": 2023-12-01T09:00:00.000Z,
     "default": "test",
     "enum": "A",
@@ -416,10 +412,10 @@ exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`]
     "nullable": null,
     "number": 42.5,
     "numberGt": 5,
-    "numberGte": 2,
-    "numberInt": 15,
+    "numberGte": 1,
+    "numberInt": 100,
     "numberLt": 4,
-    "numberLte": 0.5,
+    "numberLte": 1,
     "numberMultipleOf": 8,
     "object": {
       "bar": 123,
@@ -427,8 +423,8 @@ exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`]
     },
     "objectLoose": {
       "active": true,
-      "name": "Alice",
-      "score": 95,
+      "id": 456,
+      "name": "Sample",
     },
     "objectNested": {
       "user": {
@@ -441,34 +437,34 @@ exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`]
       "key2": 42,
       "key3": true,
     },
-    "string": "Sample text",
-    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+    "string": "Hello World",
+    "stringCuid": "c123456789",
     "stringEmail": "user@example.com",
-    "stringEmoji": "😊",
-    "stringMax": "Short text",
-    "stringMin": "Hello world",
-    "stringRegex": "test-example",
-    "stringUrl": "https://example.com",
+    "stringEmoji": "😀",
+    "stringMax": "Short",
+    "stringMin": "Hello",
+    "stringRegex": "test-sample",
+    "stringUrl": "https://www.example.com",
     "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
     "unionObjects": {
-      "amount": 100,
+      "amount": 150,
       "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "Hello",
+    "unionPrimitives": "Sample text",
   },
 }
 `;
 
 exports[`Anthropic e2e test > should handle tool call with manySchemas input and output 1`] = `
-"The manySchemasTool was successfully called with valid sample data that satisfies all the schema requirements. The tool validated and returned the data with the following highlights:
+"The tool call was successful! The manySchemasTool validated all the sample data and returned the processed output. Here's what was validated:
 
-- **String fields**: Various string validations including minimum/maximum length, email format, emoji, URL, UUID, CUID, and regex pattern matching
-- **Numeric fields**: Numbers with constraints like greater than, less than, multiples, and integers
-- **Arrays**: Different array constraints including minimum and maximum lengths
-- **Dates**: Various date validations including dates after 2024-01-01 and before today
-- **Objects**: Nested objects with required properties and validation rules
-- **Special fields**: Nullable field set to null, enums with specific values, and union types
-- **Default value**: Used the schema's default value of "test"
+- **String fields**: Various text samples with different constraints (min/max length, email format, emoji, URL, UUID, CUID, regex pattern)
+- **Number fields**: Different numeric values with constraints (greater than, less than, multiples, integers)
+- **Array fields**: String arrays with minimum and maximum length constraints
+- **Date fields**: Valid ISO date-time strings with temporal constraints
+- **Object fields**: Nested objects with required properties and validation rules
+- **Special fields**: Nullable field set to null, enum values, union types
+- **Default field**: Used the default value "test"
 
-All the data passed validation and was returned in the standardized JSON format."
+All the data passed validation according to the schema constraints, demonstrating that the tool properly handles complex validation rules including format validation, numerical constraints, array length limits, object structure requirements, and union types."
 `;
