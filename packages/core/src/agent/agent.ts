@@ -4388,10 +4388,14 @@ export class Agent<
           shouldGenerate,
           model: titleModel,
           instructions: titleInstructions,
-        } = this.resolveTitleGenerationConfig(config.generateTitle);
+          minMessages,
+        } = this.resolveTitleGenerationConfig(config?.generateTitle);
 
-        if (shouldGenerate && !thread.title) {
-          const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+        const messages = messageList.get.all.ui();
+        const requiredMessages = minMessages ?? 1;
+
+        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+          const userMessage = this.getMostRecentUserMessage(messages);
           if (userMessage) {
             const title = await this.genTitle(
               userMessage,
@@ -4769,7 +4773,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = await result.result.getFullOutput();
+    const fullOutput = await (result as any).result.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -4885,7 +4889,7 @@ export class Agent<
       });
     }
 
-    return result.result;
+    return (result as any).result;
   }
 
   /**
@@ -5133,7 +5137,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+    const fullOutput = (await (result as any).result.getFullOutput()) as Awaited<
       ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
     >;
 
@@ -5334,12 +5338,13 @@ export class Agent<
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number }
       | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
+    minMessages?: number;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -5350,6 +5355,7 @@ export class Agent<
         shouldGenerate: true,
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
+        minMessages: generateTitleConfig.minMessages,
       };
     }
 

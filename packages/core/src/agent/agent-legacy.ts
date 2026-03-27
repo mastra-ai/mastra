@@ -153,12 +153,17 @@ export interface AgentLegacyCapabilities {
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | {
+          model: DynamicArgument<MastraModelConfig>;
+          instructions?: DynamicArgument<string>;
+          minMessages?: number;
+        }
       | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
+    minMessages?: number;
   };
   /** Save step messages */
   saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
@@ -589,9 +594,13 @@ export class AgentLegacyHandler {
               shouldGenerate,
               model: titleModel,
               instructions: titleInstructions,
+              minMessages,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            if (shouldGenerate && !thread.title && userMessage) {
+            const messages = messageList.get.all.ui();
+            const requiredMessages = minMessages ?? 1;
+
+            if (shouldGenerate && !thread.title && userMessage && messages.length >= requiredMessages) {
               const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
               promises.push(
                 this.capabilities
