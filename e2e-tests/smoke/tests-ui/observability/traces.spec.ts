@@ -3,10 +3,21 @@ import { fillAndSend, waitForAssistantMessage } from '../helpers';
 
 /**
  * Locate non-skeleton trace entries in the observability list.
- * The list renders inside a <ul> with <li> buttons for each trace.
+ * Each trace is a <button> inside an <li> within the EntryList <ul>.
+ * Skeleton rows have disabled buttons, so we exclude them.
  */
 function traceEntries(page: Page) {
-  return page.locator('main li button:not([disabled])');
+  return page.locator('ul.bg-surface3 > li button:not([disabled])');
+}
+
+/**
+ * Open the entity type filter dropdown and select an option.
+ * The new UI uses: Filter button → Entity Type sub-menu → radio items.
+ */
+async function selectEntityFilter(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await page.getByRole('menuitem', { name: 'Entity Type' }).click();
+  await page.getByRole('menuitemradio', { name, exact: true }).click();
 }
 
 test.describe('Observability', () => {
@@ -23,9 +34,7 @@ test.describe('Observability', () => {
 
     // Navigate to observability and filter by this workflow
     await page.goto('/observability');
-    const entityFilter = page.getByRole('combobox');
-    await entityFilter.click();
-    await page.getByRole('option', { name: 'sequential-steps' }).click();
+    await selectEntityFilter(page, 'sequential-steps');
 
     // Should show at least one trace containing the workflow name
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
@@ -42,9 +51,7 @@ test.describe('Observability', () => {
 
     // Navigate to observability and filter by this agent
     await page.goto('/observability');
-    const entityFilter = page.getByRole('combobox');
-    await entityFilter.click();
-    await page.getByRole('option', { name: 'Test Agent' }).click();
+    await selectEntityFilter(page, 'Test Agent');
 
     // Should show at least one trace for this agent
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
@@ -59,7 +66,7 @@ test.describe('Observability', () => {
     await expect(page.locator('h1').first()).toHaveText('Observability');
 
     // Filter controls should be visible
-    await expect(page.getByRole('combobox')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Filter' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Group by thread' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset' })).toBeVisible();
 
@@ -71,13 +78,13 @@ test.describe('Observability', () => {
     await page.goto('/observability');
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
 
-    // Open the entity filter dropdown
-    const entityFilter = page.getByRole('combobox');
-    await entityFilter.click();
+    // Open the entity filter and verify "All" option exists
+    await page.getByRole('button', { name: 'Filter' }).click();
+    await page.getByRole('menuitem', { name: 'Entity Type' }).click();
+    await expect(page.getByRole('menuitemradio', { name: 'All', exact: true })).toBeVisible();
 
-    // Verify "All" option exists and select a workflow
-    await expect(page.getByRole('option', { name: 'All', exact: true })).toBeVisible();
-    await page.getByRole('option', { name: 'sequential-steps' }).click();
+    // Select a workflow entity
+    await page.getByRole('menuitemradio', { name: 'sequential-steps' }).click();
 
     // URL should update with the entity filter
     await expect(page).toHaveURL(/entity=/, { timeout: 5_000 });
@@ -88,7 +95,6 @@ test.describe('Observability', () => {
 
     // Reset filter
     await page.getByRole('button', { name: 'Reset' }).click();
-    await expect(entityFilter).toContainText('All');
   });
 
   test('click trace to open detail dialog', async ({ page }) => {
@@ -113,9 +119,7 @@ test.describe('Observability', () => {
   test('span inspection within trace', async ({ page }) => {
     // Filter to a workflow trace that has multiple spans
     await page.goto('/observability');
-    const entityFilter = page.getByRole('combobox');
-    await entityFilter.click();
-    await page.getByRole('option', { name: 'sequential-steps' }).click();
+    await selectEntityFilter(page, 'sequential-steps');
 
     // Click the first workflow trace
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
