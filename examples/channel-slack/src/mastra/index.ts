@@ -5,7 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { exampleAgent } from './agents';
 
 export const mastra = new Mastra({
-  logger: new ConsoleLogger({ name: 'Mastra', level: 'debug' }),
+  logger: new ConsoleLogger({ name: 'Mastra', level: 'debug', components: ['CHANNEL'] }),
   storage: new LibSQLStore({
     id: 'channel-slack-storage',
     url: 'file:./mastra.db',

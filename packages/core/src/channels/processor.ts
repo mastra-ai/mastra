@@ -49,13 +49,8 @@ export class ChatChannelProcessor {
       lines.push(`The user you are talking to is "${ctx.userName}".`);
     }
 
-    if (ctx.channelId) {
-      lines.push(`Channel ID: ${ctx.channelId}`);
-    }
-
-    if (ctx.threadId) {
-      lines.push(`Thread ID: ${ctx.threadId}`);
-    }
+    // channelId and threadId are internal identifiers used by tools via request
+    // context — they don't need to be exposed to the model.
 
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];
 

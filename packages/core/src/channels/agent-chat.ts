@@ -1,6 +1,6 @@
 import { createMemoryState } from '@chat-adapter/state-memory';
-import type { Adapter, Message, StateAdapter, Thread } from 'chat';
-import { Chat } from 'chat';
+import type { Adapter, CardElement, Message, StateAdapter, Thread } from 'chat';
+import { Card, CardText, Chat } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -14,20 +14,26 @@ import { createTool } from '../tools/tool';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext } from './types';
 
-/** Options for configuring channel behavior. */
+/** Per-adapter configuration. */
+export interface ChannelAdapterConfig {
+  adapter: Adapter;
+  /**
+   * Start a persistent Gateway WebSocket listener for this adapter
+   * (default: `true`).
+   *
+   * Only relevant for adapters that support it (e.g. Discord).
+   * Required for receiving DMs, @mentions, and reactions. Set to `false` for
+   * serverless deployments that only need slash commands via HTTP Interactions.
+   */
+  gateway?: boolean;
+}
+
+/** Global options for configuring channel behavior. */
 export interface ChannelOptions {
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
   /** The bot's display name (default: `'Mastra'`). */
   userName?: string;
-  /**
-   * Start persistent Gateway WebSocket listeners for adapters that support it,
-   * e.g. Discord (default: `true`).
-   *
-   * Required for receiving DMs, @mentions, and reactions. Set to `false` for
-   * serverless deployments that only need slash commands via HTTP Interactions.
-   */
-  gateway?: boolean;
 }
 
 /**
@@ -46,18 +52,38 @@ export class AgentChat {
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
   private userName: string;
-  private gateway: boolean;
+  /** Per-adapter gateway overrides. `true` by default. */
+  private gatewayFlags: Record<string, boolean>;
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
 
-  constructor(config: { adapters: Record<string, Adapter> } & ChannelOptions) {
-    this.adapters = config.adapters;
+  constructor(config: { adapters: Record<string, Adapter | ChannelAdapterConfig> } & ChannelOptions) {
+    // Normalize: extract adapters and per-adapter gateway flags
+    const adapters: Record<string, Adapter> = {};
+    const gatewayFlags: Record<string, boolean> = {};
+
+    for (const [name, value] of Object.entries(config.adapters)) {
+      if (value && typeof value === 'object' && 'adapter' in value) {
+        adapters[name] = (value as ChannelAdapterConfig).adapter;
+        gatewayFlags[name] = (value as ChannelAdapterConfig).gateway ?? true;
+      } else {
+        adapters[name] = value as Adapter;
+        gatewayFlags[name] = true;
+      }
+    }
+
+    this.adapters = adapters;
+    this.gatewayFlags = gatewayFlags;
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
-    this.gateway = config.gateway ?? true;
 
-    const suffixes = ['send_message', 'edit_message', 'delete_message', 'add_reaction', 'remove_reaction'];
-    this.channelToolNames = new Set(Object.keys(this.adapters).flatMap(p => suffixes.map(s => `${p}_${s}`)));
+    this.channelToolNames = new Set([
+      'send_message',
+      'edit_message',
+      'delete_message',
+      'add_reaction',
+      'remove_reaction',
+    ]);
   }
 
   /**
@@ -73,7 +99,8 @@ export class AgentChat {
    * @internal
    */
   __setLogger(logger: IMastraLogger): void {
-    this.logger = logger;
+    this.logger =
+      'child' in logger && typeof (logger as any).child === 'function' ? (logger as any).child('CHANNEL') : logger;
   }
 
   /**
@@ -108,16 +135,19 @@ export class AgentChat {
     chat.onNewMention(handler);
     chat.onSubscribedMessage(handler);
 
+    // TODO:
+    // chat.onSlashCommand() // Agent custom slash commands? some presets? maybe thread clear/loading etc similar to mastracode?
+    // chat.onAction() // Button clicks? HITL Tool approvals?
+    // chat.onReaction()
     await chat.initialize();
     this.chat = chat;
 
     // Start gateway listeners for adapters that support it (e.g. Discord)
-    if (!this.gateway) return;
-
     for (const [name, adapter] of Object.entries(this.adapters)) {
+      if (!this.gatewayFlags[name]) continue;
+
       const adapterAny = adapter as unknown as Record<string, unknown>;
       if (typeof adapterAny.startGatewayListener === 'function') {
-        this.log('info', `[${name}] Starting Gateway listener`);
         const startGateway = adapterAny.startGatewayListener.bind(adapter) as (
           options: { waitUntil: (p: Promise<unknown>) => void },
           durationMs?: number,
@@ -163,22 +193,31 @@ export class AgentChat {
   }
 
   /**
-   * Returns tools that let the agent interact with all connected channels.
-   * Tools are prefixed with the platform name (e.g. `discord_send_message`).
+   * Returns generic channel tools (send_message, add_reaction, etc.)
+   * that resolve the target adapter from the current request context.
    */
   getTools(): Record<string, unknown> {
-    const tools: Record<string, unknown> = {};
-
-    for (const [platform, adapter] of Object.entries(this.adapters)) {
-      Object.assign(tools, this.makeAdapterTools(platform, adapter));
-    }
-
-    return tools;
+    return this.makeChannelTools();
   }
 
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve the adapter for the current conversation from request context.
+   */
+  private getAdapterFromContext(context: { requestContext?: RequestContext }): { adapter: Adapter; threadId: string } {
+    const channel = context.requestContext?.get('channel') as ChannelContext | undefined;
+    if (!channel?.platform || !channel?.threadId) {
+      throw new Error('No channel context — cannot determine platform or thread');
+    }
+    const adapter = this.adapters[channel.platform];
+    if (!adapter) {
+      throw new Error(`No adapter registered for platform "${channel.platform}"`);
+    }
+    return { adapter, threadId: channel.threadId };
+  }
 
   /**
    * Core handler wired to Chat SDK's onDirectMessage, onNewMention,
@@ -251,6 +290,9 @@ export class AgentChat {
     } else if (authorName) {
       authorPrefix = authorName;
     }
+    if (message.author.isBot && authorPrefix) {
+      authorPrefix += ' (bot)';
+    }
     const rawText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
 
     // Build multimodal content if the message has image/file attachments,
@@ -299,8 +341,8 @@ export class AgentChat {
     });
 
     // Track pending tool calls. If a result arrives within TOOL_POST_DELAY_MS we
-    // post a single combined message; otherwise post the call immediately and the
-    // result as a follow-up when it arrives.
+    // post a single combined card; otherwise post the call card immediately and
+    // the result as a follow-up when it arrives.
     const TOOL_POST_DELAY_MS = 1000;
     interface PendingTool {
       toolName: string;
@@ -314,7 +356,7 @@ export class AgentChat {
       const entry = pendingTools.get(id);
       if (!entry || entry.posted) return;
       entry.posted = true;
-      await sdkThread.post(`🔧 \`${entry.toolName}\`(${entry.argsText})`);
+      await sdkThread.post(`\`${formatToolCall(entry.toolName, entry.argsText)}\``);
     };
 
     // Accumulate text and flush before tool calls / on step-finish.
@@ -338,7 +380,7 @@ export class AgentChat {
         await flushText();
 
         const displayName = stripToolPrefix(chunk.payload.toolName);
-        const argsText = formatArgs(chunk.payload.args);
+        const argsText = formatArgsInline(chunk.payload.args);
 
         // Start a timer — if the result doesn't arrive fast, post the call now
         const id = chunk.payload.toolCallId;
@@ -349,12 +391,13 @@ export class AgentChat {
         if (entry) {
           clearTimeout(entry.timer);
           const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+          const callStr = formatToolCall(entry.toolName, entry.argsText);
           if (entry.posted) {
-            // Slow tool: call was already posted, post result as a follow-up
-            await sdkThread.post(`> ${resultText}`);
+            // Slow tool: call was already posted, post result card as a follow-up
+            await sdkThread.post(buildToolResultCard(callStr, resultText, chunk.payload.isError));
           } else {
-            // Fast tool: combine call + result into one message
-            await sdkThread.post(`🔧 \`${entry.toolName}\`(${entry.argsText})\n> ${resultText}`);
+            // Fast tool: combined call + result in one card
+            await sdkThread.post(buildToolResultCard(callStr, resultText, chunk.payload.isError));
           }
           pendingTools.delete(chunk.payload.toolCallId);
         }
@@ -428,84 +471,75 @@ export class AgentChat {
   }
 
   /**
-   * Generate platform-prefixed tools for one adapter.
+   * Generate generic channel tools that resolve the adapter from request context.
+   * Tool names are platform-agnostic (e.g. `send_message`, not `discord_send_message`).
    */
-  private makeAdapterTools(platform: string, adapter: Adapter) {
+  private makeChannelTools() {
     return {
-      [`${platform}_send_message`]: createTool({
-        id: `${platform}_send_message`,
-        description: `Send a message to a ${platform} channel or thread.`,
+      send_message: createTool({
+        id: 'send_message',
+        description: 'Send a message in the current conversation.',
         inputSchema: z.object({
-          channelId: z.string().describe('The channel ID to send the message to'),
-          threadId: z.string().optional().describe('The thread ID to reply in (omit for a new message)'),
           text: z.string().describe('The message text to send'),
         }),
-        execute: async ({ channelId, threadId, text }) => {
-          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
-          const result = await adapter.postMessage(encodedThreadId, { markdown: text });
+        execute: async ({ text }, context) => {
+          const { adapter, threadId } = this.getAdapterFromContext(context);
+          const result = await adapter.postMessage(threadId, { markdown: text });
           return { ok: true, messageId: result.id };
         },
       }),
 
-      [`${platform}_edit_message`]: createTool({
-        id: `${platform}_edit_message`,
-        description: `Edit a previously sent message on ${platform}.`,
+      edit_message: createTool({
+        id: 'edit_message',
+        description: 'Edit a previously sent message.',
         inputSchema: z.object({
-          channelId: z.string().describe('The channel ID containing the message'),
-          threadId: z.string().optional().describe('The thread ID containing the message'),
           messageId: z.string().describe('The ID of the message to edit'),
           text: z.string().describe('The new message text'),
         }),
-        execute: async ({ channelId, threadId, messageId, text }) => {
-          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
-          await adapter.editMessage(encodedThreadId, messageId, { markdown: text });
+        execute: async ({ messageId, text }, context) => {
+          const { adapter, threadId } = this.getAdapterFromContext(context);
+          await adapter.editMessage(threadId, messageId, { markdown: text });
           return { ok: true };
         },
       }),
 
-      [`${platform}_delete_message`]: createTool({
-        id: `${platform}_delete_message`,
-        description: `Delete a message on ${platform}.`,
+      delete_message: createTool({
+        id: 'delete_message',
+        description: 'Delete a message.',
         inputSchema: z.object({
-          channelId: z.string().describe('The channel ID containing the message'),
-          threadId: z.string().optional().describe('The thread ID containing the message'),
           messageId: z.string().describe('The ID of the message to delete'),
         }),
-        execute: async ({ channelId, threadId, messageId }) => {
-          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
-          await adapter.deleteMessage(encodedThreadId, messageId);
+        execute: async ({ messageId }, context) => {
+          const { adapter, threadId } = this.getAdapterFromContext(context);
+          await adapter.deleteMessage(threadId, messageId);
           return { ok: true };
         },
       }),
 
-      [`${platform}_add_reaction`]: createTool({
-        id: `${platform}_add_reaction`,
-        description: `Add an emoji reaction to a message on ${platform}.`,
+      add_reaction: createTool({
+        id: 'add_reaction',
+        description: 'Add an emoji reaction to a message.',
         inputSchema: z.object({
-          channelId: z.string().describe('The channel ID containing the message'),
-          threadId: z.string().optional().describe('The thread ID containing the message'),
           messageId: z.string().describe('The ID of the message to react to'),
           emoji: z.string().describe('The emoji to react with (e.g. "thumbsup")'),
         }),
-        execute: async ({ channelId, threadId, messageId, emoji }) => {
-          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
-          await adapter.addReaction(encodedThreadId, messageId, emoji);
+        execute: async ({ messageId, emoji }, context) => {
+          const { adapter, threadId } = this.getAdapterFromContext(context);
+          await adapter.addReaction(threadId, messageId, emoji);
           return { ok: true };
         },
       }),
 
-      [`${platform}_remove_reaction`]: createTool({
-        id: `${platform}_remove_reaction`,
-        description: `Remove an emoji reaction from a message on ${platform}.`,
+      remove_reaction: createTool({
+        id: 'remove_reaction',
+        description: 'Remove an emoji reaction from a message.',
         inputSchema: z.object({
-          channelId: z.string().describe('The channel ID containing the message'),
-          threadId: z.string().optional().describe('The thread ID containing the message'),
           messageId: z.string().describe('The ID of the message to remove reaction from'),
           emoji: z.string().describe('The emoji to remove'),
         }),
-        execute: async ({ channelId, threadId, messageId, emoji }) => {
-          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
-          await adapter.removeReaction(encodedThreadId, messageId, emoji);
+        execute: async ({ messageId, emoji }, context) => {
+          const { adapter, threadId } = this.getAdapterFromContext(context);
+          await adapter.removeReaction(threadId, messageId, emoji);
           return { ok: true };
         },
       }),
@@ -524,7 +558,6 @@ export class AgentChat {
     const reconnect = async () => {
       while (true) {
         try {
-          this.log('info', `[${name}] Gateway connecting...`);
           let resolve: () => void;
           const done = new Promise<void>(r => {
             resolve = r;
@@ -565,72 +598,85 @@ export class AgentChat {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-const MAX_ARG_VALUE_LENGTH = 60;
-const MAX_RESULT_LENGTH = 200;
+const MAX_ARG_VALUE_LENGTH = 80;
+const MAX_RESULT_LENGTH = 300;
 
 /**
- * Strip platform/namespace prefixes from tool names.
+ * Strip known prefixes from tool names for cleaner display.
  * e.g. "mastra_workspace_list_files" → "list_files"
- *      "discord_send_message" → "send_message"
  */
+const TOOL_PREFIXES = ['mastra_workspace_'];
+
 function stripToolPrefix(name: string): string {
-  // Remove up to two underscore-separated prefixes
-  const parts = name.split('_');
-  if (parts.length <= 2) return name;
-  // Heuristic: known prefixes are single-word (platform or namespace)
-  // Try dropping first segment, then first two if the second is also a known namespace word
-  const knownPrefixes = new Set(['mastra_workspace']);
-  if (knownPrefixes.has(parts[0]!)) {
-    const rest = parts.slice(1);
-    if (rest.length > 1 && knownPrefixes.has(rest[0]!)) {
-      return rest.slice(1).join('_');
+  for (const prefix of TOOL_PREFIXES) {
+    if (name.startsWith(prefix)) {
+      return name.slice(prefix.length);
     }
-    return rest.join('_');
   }
   return name;
 }
 
 /**
- * Format tool call args as compact key: value pairs.
- * Strips internal metadata, skips false/null values, and truncates long strings.
+ * Format tool arguments as a compact inline string.
+ * Strips internal metadata, skips false/null/empty, and truncates long values.
+ * Returns e.g. "path: ., maxDepth: 5" or empty string if no meaningful args.
  */
-function formatArgs(args: unknown): string {
+function formatArgsInline(args: unknown): string {
   if (args == null) return '';
   try {
     const obj = typeof args === 'string' ? JSON.parse(args) : args;
-    if (!obj || typeof obj !== 'object') return String(args);
+    if (!obj || typeof obj !== 'object') return '';
 
-    const entries = Object.entries(obj as Record<string, unknown>).filter(
-      ([key, val]) => key !== '__mastraMetadata' && val != null && val !== false,
-    );
-
-    if (entries.length === 0) return '';
-
-    const parts = entries.map(([key, val]) => {
-      if (typeof val === 'string') {
-        const truncated = val.length > MAX_ARG_VALUE_LENGTH ? val.slice(0, MAX_ARG_VALUE_LENGTH) + '…' : val;
-        return `${key}: "${truncated}"`;
-      }
-      return `${key}: ${JSON.stringify(val)}`;
-    });
+    const parts = Object.entries(obj as Record<string, unknown>)
+      .filter(([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '')
+      .map(([key, val]) => {
+        let display: string;
+        if (typeof val === 'string') {
+          display = val.length > MAX_ARG_VALUE_LENGTH ? val.slice(0, MAX_ARG_VALUE_LENGTH) + '…' : val;
+        } else {
+          display = JSON.stringify(val);
+          if (display.length > MAX_ARG_VALUE_LENGTH) {
+            display = display.slice(0, MAX_ARG_VALUE_LENGTH) + '…';
+          }
+        }
+        return `${key}: ${display}`;
+      });
 
     return parts.join(', ');
   } catch {
-    return String(args);
+    return '';
   }
+}
+
+/**
+ * Format a tool call as a function-call string.
+ * e.g. "list_files(path: ., maxDepth: 2)"
+ */
+function formatToolCall(toolName: string, argsText: string): string {
+  return `${toolName}(${argsText})`;
 }
 
 /**
  * Format a tool result for display. Truncates long output.
  */
 function formatResult(result: unknown, isError?: boolean): string {
-  const prefix = isError ? '❌ ' : '';
+  const prefix = isError ? 'Error: ' : '';
   if (result == null) return `${prefix}(no output)`;
-  let text = typeof result === 'string' ? result : JSON.stringify(result);
-  // Collapse to single line for blockquote
-  text = text.replace(/\n/g, ' ').trim();
+  let text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  text = text.trim();
   if (text.length > MAX_RESULT_LENGTH) {
     text = text.slice(0, MAX_RESULT_LENGTH) + '…';
   }
   return `${prefix}${text}`;
+}
+
+/**
+ * Build a Card for a tool result.
+ * Uses the function-call string as the title and result as the body.
+ */
+function buildToolResultCard(callStr: string, resultText: string, isError?: boolean): CardElement {
+  return Card({
+    title: callStr,
+    children: [CardText(resultText, { style: isError ? 'bold' : 'plain' })],
+  });
 }

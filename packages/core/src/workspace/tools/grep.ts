@@ -11,6 +11,7 @@ import { applyTokenLimit } from './output-helpers';
 export const grepTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.GREP,
   description: `Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.
+Omit args when using their default value.
 
 Usage:
 - Basic search: { pattern: "TODO" }

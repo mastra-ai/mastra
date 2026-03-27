@@ -4,7 +4,7 @@ import type { Adapter } from 'chat';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
-import type { AgentChat, ChannelOptions } from '../channels/agent-chat';
+import type { AgentChat, ChannelAdapterConfig } from '../channels/agent-chat';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -300,17 +300,17 @@ export interface AgentConfig<
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
-   * Pass a record of Chat SDK adapters, or an `AgentChat` instance for full control:
+   * Each entry can be a bare adapter (uses defaults) or a config object with per-adapter options:
    * ```ts
-   * channels: { discord: new DiscordAdapter({ ... }) }
+   * channels: {
+   *   discord: new DiscordAdapter({ ... }),
+   *   slack: { adapter: new SlackAdapter({ ... }), gateway: false },
+   * }
    * ```
+   *
+   * For full control, pass an `AgentChat` instance directly.
    */
-  channels?: Record<string, Adapter> | AgentChat;
-  /**
-   * Options for channel behavior (streaming edits, edit interval, etc.).
-   * Ignored when `channels` is an `AgentChat` instance.
-   */
-  channelOptions?: ChannelOptions;
+  channels?: Record<string, Adapter | ChannelAdapterConfig> | AgentChat;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

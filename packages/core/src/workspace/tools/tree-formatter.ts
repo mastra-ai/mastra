@@ -106,7 +106,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     globMatcher = createGlobMatcher(patterns, { dot: showHidden });
   }
 
-  const lines: string[] = ['.'];
+  const lines: string[] = [];
   const paths: string[] = [];
   let dirCount = 0;
   let fileCount = 0;

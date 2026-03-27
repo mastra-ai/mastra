@@ -10,6 +10,7 @@ export const listFilesTool = createTool({
   description: `List files and directories in the workspace filesystem.
 Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
+Omit args when using their default value.
 
 Examples:
 - List workspace root: { path: "." }

@@ -74,25 +74,20 @@ describe('AgentChat', () => {
   });
 
   describe('getTools', () => {
-    it('generates platform-prefixed tools for each adapter', () => {
+    it('generates generic channel tools', () => {
       const tools = agentChat.getTools();
       const toolNames = Object.keys(tools);
 
-      expect(toolNames).toContain('discord_send_message');
-      expect(toolNames).toContain('discord_edit_message');
-      expect(toolNames).toContain('discord_delete_message');
-      expect(toolNames).toContain('discord_add_reaction');
-      expect(toolNames).toContain('discord_remove_reaction');
-      expect(toolNames).toContain('slack_send_message');
-      expect(toolNames).toContain('slack_edit_message');
-      expect(toolNames).toContain('slack_delete_message');
-      expect(toolNames).toContain('slack_add_reaction');
-      expect(toolNames).toContain('slack_remove_reaction');
+      expect(toolNames).toContain('send_message');
+      expect(toolNames).toContain('edit_message');
+      expect(toolNames).toContain('delete_message');
+      expect(toolNames).toContain('add_reaction');
+      expect(toolNames).toContain('remove_reaction');
     });
 
-    it('generates 5 tools per adapter', () => {
+    it('generates exactly 5 tools regardless of adapter count', () => {
       const tools = agentChat.getTools();
-      expect(Object.keys(tools)).toHaveLength(10); // 5 tools × 2 adapters
+      expect(Object.keys(tools)).toHaveLength(5);
     });
   });
 

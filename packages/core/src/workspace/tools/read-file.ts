@@ -8,7 +8,7 @@ import { applyTokenLimit } from './output-helpers';
 export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   description:
-    'Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.',
+    'Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files. Omit args when using their default value.',
   inputSchema: z.object({
     path: z.string().describe('The path to the file to read (e.g., "/data/config.json")'),
     encoding: z

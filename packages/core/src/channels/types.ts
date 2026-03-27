@@ -7,7 +7,7 @@
  * should be injected closer to the user message.
  */
 export type ChannelContext = {
-  /** Platform identifier (e.g. 'slack', 'discord'). */
+  /** Platform identifier — matches the adapter's name (e.g. 'slack', 'discord'). */
   platform: string;
   /** Event type that triggered this generation. */
   eventType: string;
