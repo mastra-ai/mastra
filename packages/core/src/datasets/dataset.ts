@@ -343,21 +343,12 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Merge dataset-attached scorers with any experiment-specified scorers
-    const mergedConfig = { ...config };
-    if (dataset.scorerIds?.length) {
-      const existingStringIds = new Set((mergedConfig.scorers ?? []).filter((s): s is string => typeof s === 'string'));
-      const newIds = dataset.scorerIds.filter(id => !existingStringIds.has(id));
-      if (newIds.length > 0) {
-        mergedConfig.scorers = [...(mergedConfig.scorers ?? []), ...newIds];
-      }
-    }
-
-    // Fire-and-forget — update experiment to failed on unexpected errors
+    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
-      ...mergedConfig,
+      ...config,
+      version: targetVersion,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({
