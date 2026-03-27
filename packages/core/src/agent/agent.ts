@@ -4773,7 +4773,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = await (result as any).result.getFullOutput();
+    const fullOutput = await (result.result as MastraModelOutput<OUTPUT>).getFullOutput();
 
     const error = fullOutput.error;
 
@@ -4889,7 +4889,7 @@ export class Agent<
       });
     }
 
-    return (result as any).result;
+    return result.result as MastraModelOutput<OUTPUT>;
   }
 
   /**
@@ -5137,7 +5137,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = (await (result as any).result.getFullOutput()) as Awaited<
+    const fullOutput = (await (result.result as MastraModelOutput<OUTPUT>).getFullOutput()) as Awaited<
       ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
     >;
 
