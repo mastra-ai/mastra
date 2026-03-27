@@ -13,7 +13,7 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { defaultDisplayState, defaultOMProgressState, emptyTokenUsage } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -34,11 +34,6 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
-
-/** Creates a zero-initialized TokenUsage object. */
-function emptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0 };
-}
 
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
