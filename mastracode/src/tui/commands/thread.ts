@@ -47,7 +47,8 @@ export async function handleThreadCommand(ctx: SlashCommandContext): Promise<voi
   if (cloneMetadata?.sourceThreadId) {
     lines.push(`Forked from: ${cloneMetadata.sourceThreadId}`);
     if (cloneMetadata.clonedAt) {
-      const clonedAt = cloneMetadata.clonedAt instanceof Date ? cloneMetadata.clonedAt : new Date(cloneMetadata.clonedAt);
+      const clonedAt =
+        cloneMetadata.clonedAt instanceof Date ? cloneMetadata.clonedAt : new Date(cloneMetadata.clonedAt);
       lines.push(`Forked at: ${formatDateWithLocal(clonedAt)}`);
     }
   }

@@ -241,10 +241,7 @@ function parseObservationGroupsFromBatch(messages: MastraDBMessage[], state: Cyc
           markerType: part.type === 'data-om-buffering-end' ? 'buffering' : 'observation',
           matchType: 'matched',
           cycleId,
-          recordId:
-            (typeof data.recordId === 'string' && data.recordId) ||
-            openCycle.recordId ||
-            undefined,
+          recordId: (typeof data.recordId === 'string' && data.recordId) || openCycle.recordId || undefined,
           startMessageId: openCycle.startMessageId,
           endMessageId: message.id,
           startPartType: openCycle.startPartType,
@@ -476,7 +473,6 @@ async function indexObservationGroupsFromMessages(
   return { indexed, errors, scannedMessages, emittedGroups };
 }
 
-
 // -- Main --
 
 function getAppDataDir(): string {
@@ -547,7 +543,12 @@ function acquireIndexLock(lockPath: string): IndexLock {
     }
   }
 
-  const owner = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), resourceId: RESOURCE_ID, workerMode: WORKER_MODE });
+  const owner = JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    resourceId: RESOURCE_ID,
+    workerMode: WORKER_MODE,
+  });
   fs.writeFileSync(fd, `${owner}\n`, 'utf8');
 
   let released = false;
@@ -641,7 +642,11 @@ function updateThreadProgress(
   return readProgress(progressPath, resourceId);
 }
 
-function ensureThreadsTracked(progressPath: string, resourceId: string, threads: { id: string; title?: string | null }[]) {
+function ensureThreadsTracked(
+  progressPath: string,
+  resourceId: string,
+  threads: { id: string; title?: string | null }[],
+) {
   const progress = readProgress(progressPath, resourceId);
   let changed = false;
 
@@ -765,7 +770,9 @@ function createMemory() {
 async function runThreadWorker(resourceId: string, threadId: string) {
   const memory = createMemory();
   const stats = await indexObservationGroupsFromMessages(memory, resourceId, threadId, `thread ${threadId}`);
-  console.log(`WORKER_RESULT ${JSON.stringify({ threadId, ...stats } satisfies { threadId: string } & ThreadRunStats)}`);
+  console.log(
+    `WORKER_RESULT ${JSON.stringify({ threadId, ...stats } satisfies { threadId: string } & ThreadRunStats)}`,
+  );
 }
 
 async function main() {
@@ -826,13 +833,17 @@ async function main() {
       if (existing?.status === 'completed' && !HASH_ONLY_MODE) {
         totalIndexed += existing.indexed;
         console.log(`  [${i + 1}/${threads.length}] "${title}" (${thread.id})`);
-        console.log(`    SKIP: already completed with ${existing.indexed}/${existing.emittedGroups} groups from ${existing.scannedMessages} messages`);
+        console.log(
+          `    SKIP: already completed with ${existing.indexed}/${existing.emittedGroups} groups from ${existing.scannedMessages} messages`,
+        );
         continue;
       }
 
       if (!HASH_ONLY_MODE && !shouldRetryThread(existing)) {
         console.log(`  [${i + 1}/${threads.length}] "${title}" (${thread.id})`);
-        console.log(`    SKIP: attempts exhausted at ${existing?.attempts ?? 0}/${MAX_THREAD_ATTEMPTS}${existing?.failure ? ` — ${existing.failure}` : ''}`);
+        console.log(
+          `    SKIP: attempts exhausted at ${existing?.attempts ?? 0}/${MAX_THREAD_ATTEMPTS}${existing?.failure ? ` — ${existing.failure}` : ''}`,
+        );
         continue;
       }
 
@@ -856,22 +867,20 @@ async function main() {
 
       console.log(`  [${i + 1}/${threads.length}] "${title}" (${thread.id})`);
       if (existing?.status === 'failed') {
-        console.log(`    RETRY #${attemptNumber}: previous failure at ${existing.updatedAt}${existing.failure ? ` — ${existing.failure}` : ''}`);
+        console.log(
+          `    RETRY #${attemptNumber}: previous failure at ${existing.updatedAt}${existing.failure ? ` — ${existing.failure}` : ''}`,
+        );
       } else {
         console.log(`    START: attempt ${attemptNumber}`);
       }
 
-      const result = spawnSync(
-        process.execPath,
-        [...workerExecArgv, scriptPath, RESOURCE_ID, thread.id],
-        {
-          cwd: process.cwd(),
-          env: { ...process.env, OM_INDEX_WORKER: '1', OM_INDEX_HASH_ONLY: HASH_ONLY_MODE ? '1' : '0' },
-          encoding: 'utf8',
-          maxBuffer: 1024 * 1024 * 50,
-          timeout: THREAD_TIMEOUT_MS,
-        },
-      );
+      const result = spawnSync(process.execPath, [...workerExecArgv, scriptPath, RESOURCE_ID, thread.id], {
+        cwd: process.cwd(),
+        env: { ...process.env, OM_INDEX_WORKER: '1', OM_INDEX_HASH_ONLY: HASH_ONLY_MODE ? '1' : '0' },
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024 * 50,
+        timeout: THREAD_TIMEOUT_MS,
+      });
 
       if (result.stdout) {
         process.stdout.write(result.stdout);
@@ -884,8 +893,7 @@ async function main() {
         const failure = classifyWorkerFailure(result);
         const terminal = attemptNumber >= MAX_THREAD_ATTEMPTS || !failure.retryable;
         const statusLabel =
-          result.error?.message ||
-          (result.signal ? `signal ${result.signal}` : `status ${result.status ?? 'unknown'}`);
+          result.error?.message || (result.signal ? `signal ${result.signal}` : `status ${result.status ?? 'unknown'}`);
         updateThreadProgress(progressPath, RESOURCE_ID, thread.id, {
           status: terminal ? 'failed' : 'pending',
           title,
@@ -903,14 +911,14 @@ async function main() {
         });
         console.log(
           `    ERROR: worker exited with ${statusLabel}` +
-            (failure.retryable ? ` (retryable${terminal ? ', attempts exhausted' : ', queued for retry'})` : ' (non-retryable)'),
+            (failure.retryable
+              ? ` (retryable${terminal ? ', attempts exhausted' : ', queued for retry'})`
+              : ' (non-retryable)'),
         );
         continue;
       }
 
-      const workerLine = result.stdout
-        ?.split('\n')
-        .find(line => line.startsWith('WORKER_RESULT '));
+      const workerLine = result.stdout?.split('\n').find(line => line.startsWith('WORKER_RESULT '));
 
       if (!workerLine) {
         const terminal = attemptNumber >= MAX_THREAD_ATTEMPTS;
@@ -983,7 +991,9 @@ async function main() {
     }
 
     const finalProgress = readProgress(progressPath, RESOURCE_ID);
-    console.log(`\nDone! ${HASH_ONLY_MODE ? `Hashed ${totalIndexed} indexed-groups-equivalent observations` : `Indexed ${totalIndexed} observation groups`}.`);
+    console.log(
+      `\nDone! ${HASH_ONLY_MODE ? `Hashed ${totalIndexed} indexed-groups-equivalent observations` : `Indexed ${totalIndexed} observation groups`}.`,
+    );
     console.log(
       `Progress summary: ${finalProgress.completed} completed, ${finalProgress.failed} failed, ${finalProgress.pending} pending, ${finalProgress.inProgress} in_progress.`,
     );
