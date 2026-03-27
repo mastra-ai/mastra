@@ -15,6 +15,8 @@ import { getDatabasePath, getVectorDatabasePath } from './project.js';
 
 export interface StorageResult {
   storage: MastraCompositeStore;
+  /** The effective backend after any fallback logic has run. */
+  backend: 'libsql' | 'pg';
   /** Non-null when PG was requested but failed — contains a user-facing warning. */
   warning?: string;
 }
@@ -44,6 +46,7 @@ export async function createStorage(config: StorageConfig): Promise<StorageResul
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
     }),
+    backend: 'libsql',
   };
 }
 
@@ -52,6 +55,7 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
   if (!config.connectionString && !config.host) {
     return {
       storage: createFallbackLibSQL(),
+      backend: 'libsql',
       warning:
         'PostgreSQL backend selected but no connection info configured. ' +
         'Using LibSQL fallback. Set a connection string via /settings.',
@@ -90,13 +94,14 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
     }
     return {
       storage: createFallbackLibSQL(),
+      backend: 'libsql',
       warning:
         `Failed to connect to PostgreSQL at ${target}: ${msg}\n` +
         'Using LibSQL fallback. Fix the connection via /settings.',
     };
   }
 
-  return { storage: store };
+  return { storage: store, backend: 'pg' };
 }
 
 /**
@@ -104,8 +109,11 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
  * Uses a separate LibSQL file to avoid bloating the main storage DB with embedding data.
  * For PG backends, reuses the same connection (PG handles the extra tables fine).
  */
-export async function createVectorStore(config: StorageConfig): Promise<MastraVector | undefined> {
-  if (config.backend === 'pg') {
+export async function createVectorStore(
+  config: StorageConfig,
+  effectiveBackend: 'libsql' | 'pg' = config.backend,
+): Promise<MastraVector | undefined> {
+  if (effectiveBackend === 'pg') {
     // PG can handle vector tables in the same database
     const pgConfig = config as PgStorageConfig;
     if (!pgConfig.connectionString && !pgConfig.host) return undefined;

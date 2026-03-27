@@ -146,7 +146,7 @@ export class ObservationalMemory {
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
-  private onIndexObservations?: (observation: {
+  readonly onIndexObservations?: (observation: {
     text: string;
     groupId: string;
     range: string;
@@ -3154,21 +3154,6 @@ ${formattedMessages}
    */
   getObscureThreadIds(): boolean {
     return this.shouldObscureThreadIds;
-  }
-
-  /**
-   * Get the observation-group indexing callback.
-   */
-  getOnIndexObservations():
-    | ((observation: {
-        text: string;
-        groupId: string;
-        range: string;
-        threadId: string;
-        resourceId: string;
-      }) => Promise<void>)
-    | undefined {
-    return this.onIndexObservations;
   }
 
   /**

@@ -139,7 +139,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storageWarning = storageResult.warning;
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
-  const vectorStore = await createVectorStore(storageConfig);
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
   const memory = getDynamicMemory(storage, vectorStore);
 
