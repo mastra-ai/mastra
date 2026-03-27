@@ -7,7 +7,9 @@
 **Added** optional `credentials` when you want tighter control, for example same-origin-only requests:
 
 ```tsx
-<MastraReactProvider baseUrl="http://localhost:4000" credentials="same-origin" />
+<MastraReactProvider baseUrl="http://localhost:4000" credentials="same-origin">
+  {children}
+</MastraReactProvider>
 ```
 
 **Added** `MastraClientCredentials` and `MastraClientProviderProps` so you can type provider props explicitly.
