@@ -4,7 +4,6 @@ import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace
 import { DiscordAdapter } from '@chat-adapter/discord';
 import { SlackAdapter } from '@chat-adapter/slack';
 import { Memory } from '@mastra/memory';
-import { ConsoleLogger } from '@mastra/core/logger';
 
 export const exampleAgent = new Agent({
   id: 'example-agent',
@@ -17,18 +16,19 @@ export const exampleAgent = new Agent({
     },
   }),
   channels: {
-    discord: new DiscordAdapter({
-      applicationId: process.env.DISCORD_APPLICATION_ID,
-      publicKey: process.env.DISCORD_PUBLIC_KEY,
-      botToken: process.env.DISCORD_BOT_TOKEN,
-      logger: new ConsoleLogger({ name: 'DiscordAdapter', level: 'debug', component: 'CHANNEL' }),
-    }),
+    discord: {
+      adapter: new DiscordAdapter({
+        applicationId: process.env.DISCORD_APPLICATION_ID,
+        publicKey: process.env.DISCORD_PUBLIC_KEY,
+        botToken: process.env.DISCORD_BOT_TOKEN,
+      }),
+      // formatError: () => 'Something went wrong. Please try again later.',
+    },
     slack: new SlackAdapter({
-      clientId: process.env.SLACK_CLIENT_ID!,
-      clientSecret: process.env.SLACK_CLIENT_SECRET!,
-      signingSecret: process.env.SLACK_SIGNING_SECRET!,
-      botToken: process.env.SLACK_BOT_TOKEN!,
-      logger: new ConsoleLogger({ name: 'SlackAdapter', level: 'debug', component: 'CHANNEL' }),
+      clientId: process.env.SLACK_CLIENT_ID,
+      clientSecret: process.env.SLACK_CLIENT_SECRET,
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      botToken: process.env.SLACK_BOT_TOKEN,
     }),
   },
   inputProcessors: [new ChatChannelProcessor()],

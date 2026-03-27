@@ -310,7 +310,7 @@ export interface AgentConfig<
    *
    * For full control, pass an `AgentChat` instance directly.
    */
-  channels?: Record<string, Adapter | ChannelAdapterConfig> | AgentChat;
+  channels?: Record<string, (Adapter & { adapter?: never }) | ChannelAdapterConfig> | AgentChat;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

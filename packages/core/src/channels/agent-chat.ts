@@ -1,6 +1,6 @@
 import { createMemoryState } from '@chat-adapter/state-memory';
-import type { Adapter, CardElement, Message, StateAdapter, Thread } from 'chat';
-import { Card, CardText, Chat } from 'chat';
+import type { Adapter, CardElement, Message, SentMessage, StateAdapter, Thread } from 'chat';
+import { Actions, Button, Card, CardText, Chat, ThreadImpl } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -9,10 +9,14 @@ import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
+import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools/tool';
 
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext } from './types';
+
+/** Message content that can be posted to a channel. */
+export type PostableMessage = string | CardElement;
 
 /** Per-adapter configuration. */
 export interface ChannelAdapterConfig {
@@ -26,6 +30,28 @@ export interface ChannelAdapterConfig {
    * serverless deployments that only need slash commands via HTTP Interactions.
    */
   gateway?: boolean;
+
+  /**
+   * Override how tool calls are rendered in the chat.
+   * Called once per tool invocation after the result is available.
+   * Return `null` to suppress the message entirely.
+   *
+   * @default - A Card showing the function-call signature and result.
+   */
+  formatToolCall?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    isError?: boolean;
+  }) => PostableMessage | null;
+
+  /**
+   * Override how errors are rendered in the chat.
+   * Return a user-friendly message instead of exposing the raw error.
+   *
+   * @default `"❌ Error: <error.message>"`
+   */
+  formatError?: (error: Error) => PostableMessage;
 }
 
 /** Global options for configuring channel behavior. */
@@ -52,28 +78,29 @@ export class AgentChat {
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
   private userName: string;
-  /** Per-adapter gateway overrides. `true` by default. */
-  private gatewayFlags: Record<string, boolean>;
+  /** Normalized per-adapter configs (gateway flags, hooks, etc.). */
+  private adapterConfigs: Record<string, ChannelAdapterConfig>;
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
 
   constructor(config: { adapters: Record<string, Adapter | ChannelAdapterConfig> } & ChannelOptions) {
-    // Normalize: extract adapters and per-adapter gateway flags
+    // Normalize: extract adapters and per-adapter configs
     const adapters: Record<string, Adapter> = {};
-    const gatewayFlags: Record<string, boolean> = {};
+    const adapterConfigs: Record<string, ChannelAdapterConfig> = {};
 
     for (const [name, value] of Object.entries(config.adapters)) {
       if (value && typeof value === 'object' && 'adapter' in value) {
-        adapters[name] = (value as ChannelAdapterConfig).adapter;
-        gatewayFlags[name] = (value as ChannelAdapterConfig).gateway ?? true;
+        const cfg = value as ChannelAdapterConfig;
+        adapters[name] = cfg.adapter;
+        adapterConfigs[name] = cfg;
       } else {
         adapters[name] = value as Adapter;
-        gatewayFlags[name] = true;
+        adapterConfigs[name] = { adapter: value as Adapter };
       }
     }
 
     this.adapters = adapters;
-    this.gatewayFlags = gatewayFlags;
+    this.adapterConfigs = adapterConfigs;
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
 
@@ -135,16 +162,120 @@ export class AgentChat {
     chat.onNewMention(handler);
     chat.onSubscribedMessage(handler);
 
+    // Tool approval buttons
+    chat.onAction(['tool_approve', 'tool_deny'], async event => {
+      try {
+        if (!event.value) return;
+        const {
+          runId,
+          toolCallId,
+          threadId,
+          platform: storedPlatform,
+          callStr,
+        } = JSON.parse(event.value) as {
+          runId: string;
+          toolCallId: string;
+          threadId: string;
+          platform: string;
+          callStr: string;
+        };
+        const approved = event.actionId === 'tool_approve';
+        const platform = storedPlatform || event.adapter.name;
+
+        // Reconstruct the original conversation thread from the encoded data.
+        // We can't use event.thread because Slack roots it on the card message,
+        // creating unwanted sub-threads in DMs.
+        const adapter = this.adapters[platform];
+        if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
+        const parts = threadId.split(':');
+        const sdkThread: Thread = new ThreadImpl({
+          adapter,
+          stateAdapter: this.stateAdapter,
+          id: threadId,
+          channelId: parts[1] || '',
+          isDM: event.thread?.isDM,
+        });
+
+        // Update the approval card to remove buttons
+        if (event.messageId) {
+          const isDM = event.thread?.isDM ?? sdkThread.isDM;
+          const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
+          const statusText = approved ? `✅ Approved${suffix}` : `🚫 Denied${suffix}`;
+          try {
+            await adapter.editMessage(
+              sdkThread.id,
+              event.messageId,
+              Card({ title: callStr, children: [CardText(statusText)] }),
+            );
+          } catch {
+            // best-effort — some platforms may not support editing
+          }
+        }
+
+        // Build request context for the resumed stream
+        const requestContext = new RequestContext();
+        requestContext.set('channel', {
+          platform,
+          eventType: 'action',
+          isDM: sdkThread.isDM,
+          threadId: sdkThread.id,
+          channelId: sdkThread.channelId,
+          messageId: event.messageId,
+          userId: event.user.userId,
+          userName: event.user.fullName || event.user.userName,
+        } satisfies ChannelContext);
+
+        // Resume the agent stream
+        const method = approved ? 'approveToolCall' : 'declineToolCall';
+        const resumedStream = await this.agent[method]({
+          runId,
+          toolCallId,
+          requestContext,
+        });
+
+        // Lazy typing for the resumed stream
+        let typingStarted = false;
+        const ensureTyping = async () => {
+          if (!typingStarted) {
+            typingStarted = true;
+            await sdkThread.startTyping();
+          }
+        };
+
+        await this.consumeAgentStream(
+          resumedStream,
+          sdkThread,
+          platform,
+          ensureTyping,
+          approved && event.messageId ? { messageId: event.messageId, callStr } : undefined,
+        );
+      } catch (err) {
+        this.log('error', 'Error handling tool approval action', err);
+        try {
+          const thread = event.thread;
+          if (thread) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            const adapterConfig = this.adapterConfigs[event.adapter.name];
+            const errorMessage = adapterConfig?.formatError
+              ? adapterConfig.formatError(error)
+              : `❌ Error: ${error.message}`;
+            await thread.post(errorMessage);
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    });
+
     // TODO:
-    // chat.onSlashCommand() // Agent custom slash commands? some presets? maybe thread clear/loading etc similar to mastracode?
-    // chat.onAction() // Button clicks? HITL Tool approvals?
+    // chat.onSlashCommand()
     // chat.onReaction()
     await chat.initialize();
     this.chat = chat;
 
     // Start gateway listeners for adapters that support it (e.g. Discord)
     for (const [name, adapter] of Object.entries(this.adapters)) {
-      if (!this.gatewayFlags[name]) continue;
+      if (!(this.adapterConfigs[name]?.gateway ?? true)) continue;
 
       const adapterAny = adapter as unknown as Record<string, unknown>;
       if (typeof adapterAny.startGatewayListener === 'function') {
@@ -228,10 +359,14 @@ export class AgentChat {
     try {
       await this.processChatMessage(sdkThread, message, mastra);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const error = err instanceof Error ? err : new Error(String(err));
       this.log('error', `[${sdkThread.adapter.name}] Error handling message`, err);
       try {
-        await sdkThread.post(`⚠️ ${errMsg}`);
+        const adapterConfig = this.adapterConfigs[sdkThread.adapter.name];
+        const errorMessage = adapterConfig?.formatError
+          ? adapterConfig.formatError(error)
+          : `❌ Error: ${error.message}`;
+        await sdkThread.post(errorMessage);
       } catch {
         // best-effort — if we can't post the error, just log it
       }
@@ -340,28 +475,35 @@ export class AgentChat {
       },
     });
 
-    // Track pending tool calls. If a result arrives within TOOL_POST_DELAY_MS we
-    // post a single combined card; otherwise post the call card immediately and
-    // the result as a follow-up when it arrives.
-    const TOOL_POST_DELAY_MS = 1000;
-    interface PendingTool {
+    await this.consumeAgentStream(stream, sdkThread, platform, ensureTyping);
+
+    // Subscribe so follow-up messages also get handled
+    await sdkThread.subscribe();
+  }
+
+  /**
+   * Consume an agent stream (initial or resumed), posting text, tool cards,
+   * and approval prompts to the SDK thread.
+   */
+  private async consumeAgentStream(
+    stream: MastraModelOutput,
+    sdkThread: Thread,
+    platform: string,
+    ensureTyping: () => Promise<void>,
+    approvalContext?: { messageId: string; callStr: string },
+  ): Promise<void> {
+    const adapterConfig = this.adapterConfigs[platform];
+
+    // Track tool calls: store metadata + the sent message so we can edit it if approval comes
+    interface TrackedToolCall {
       toolName: string;
+      args: Record<string, unknown>;
       argsText: string;
-      timer: ReturnType<typeof setTimeout>;
-      posted: boolean;
+      sentMessage?: SentMessage;
     }
-    const pendingTools = new Map<string, PendingTool>();
+    const toolCalls = new Map<string, TrackedToolCall>();
 
-    const postToolCall = async (id: string) => {
-      const entry = pendingTools.get(id);
-      if (!entry || entry.posted) return;
-      entry.posted = true;
-      await sdkThread.post(`\`${formatToolCall(entry.toolName, entry.argsText)}\``);
-    };
-
-    // Accumulate text and flush before tool calls / on step-finish.
     let text = '';
-
     const flushText = async () => {
       if (text.trim()) {
         await sdkThread.post(text);
@@ -371,36 +513,108 @@ export class AgentChat {
 
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-call') {
-        // Skip channel tools — their effects are already visible in the chat
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
         await ensureTyping();
-
-        // Flush any accumulated text before the tool message
         await flushText();
 
         const displayName = stripToolPrefix(chunk.payload.toolName);
         const argsText = formatArgsInline(chunk.payload.args);
+        const rawArgs = (
+          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
+        ) as Record<string, unknown>;
 
-        // Start a timer — if the result doesn't arrive fast, post the call now
-        const id = chunk.payload.toolCallId;
-        const timer = setTimeout(() => void postToolCall(id), TOOL_POST_DELAY_MS);
-        pendingTools.set(id, { toolName: displayName, argsText, timer, posted: false });
+        const callStr = defaultFormatToolCall(displayName, argsText);
+        const sentMessage = adapterConfig?.formatToolCall
+          ? undefined
+          : await sdkThread.post(Card({ title: callStr, children: [] }));
+
+        toolCalls.set(chunk.payload.toolCallId, { toolName: displayName, args: rawArgs, argsText, sentMessage });
       } else if (chunk.type === 'tool-result') {
-        const entry = pendingTools.get(chunk.payload.toolCallId);
-        if (entry) {
-          clearTimeout(entry.timer);
-          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-          const callStr = formatToolCall(entry.toolName, entry.argsText);
-          if (entry.posted) {
-            // Slow tool: call was already posted, post result card as a follow-up
-            await sdkThread.post(buildToolResultCard(callStr, resultText, chunk.payload.isError));
-          } else {
-            // Fast tool: combined call + result in one card
-            await sdkThread.post(buildToolResultCard(callStr, resultText, chunk.payload.isError));
+        const entry = toolCalls.get(chunk.payload.toolCallId);
+        const displayName = entry?.toolName ?? stripToolPrefix(chunk.payload.toolName);
+        const args = entry?.args ?? ((chunk.payload.args ?? {}) as Record<string, unknown>);
+        const argsText = entry?.argsText ?? formatArgsInline(args);
+        toolCalls.delete(chunk.payload.toolCallId);
+
+        if (adapterConfig?.formatToolCall) {
+          const custom = adapterConfig.formatToolCall({
+            toolName: displayName,
+            args,
+            result: chunk.payload.result,
+            isError: chunk.payload.isError,
+          });
+          if (custom != null) {
+            await sdkThread.post(custom);
           }
-          pendingTools.delete(chunk.payload.toolCallId);
+        } else {
+          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+          const callStr = defaultFormatToolCall(displayName, argsText);
+          const resultCard = buildToolResultCard(callStr, resultText, chunk.payload.isError);
+
+          // Try to edit the existing message (call message or approval card) into the result card
+          const editTarget = entry?.sentMessage ?? (approvalContext ? null : undefined);
+          if (editTarget) {
+            try {
+              await editTarget.edit(resultCard);
+            } catch {
+              await sdkThread.post(resultCard);
+            }
+          } else if (approvalContext) {
+            // Resumed after approval — edit the approval card via adapter
+            try {
+              const adapter = this.adapters[platform]!;
+              await adapter.editMessage(sdkThread.id, approvalContext.messageId, resultCard);
+            } catch {
+              await sdkThread.post(resultCard);
+            }
+            approvalContext = undefined; // Only use it for the first tool-result
+          } else {
+            await sdkThread.post(resultCard);
+          }
         }
+      } else if (chunk.type === 'tool-call-approval') {
+        await ensureTyping();
+        await flushText();
+
+        const { toolCallId, toolName, args } = chunk.payload;
+        const entry = toolCalls.get(toolCallId);
+        const displayName = entry?.toolName ?? stripToolPrefix(toolName);
+        const argsText = entry?.argsText ?? formatArgsInline(args);
+        const callStr = defaultFormatToolCall(displayName, argsText);
+        toolCalls.delete(toolCallId);
+
+        const approvalData = JSON.stringify({
+          runId: stream.runId,
+          toolCallId,
+          threadId: sdkThread.id,
+          platform,
+          callStr,
+        });
+
+        const approvalCard = Card({
+          title: callStr,
+          children: [
+            CardText('Requires approval to run.'),
+            Actions([
+              Button({ id: 'tool_approve', label: 'Approve', style: 'primary', value: approvalData }),
+              Button({ id: 'tool_deny', label: 'Deny', style: 'danger', value: approvalData }),
+            ]),
+          ],
+        });
+
+        // If we already posted a call message, edit it into the approval card;
+        // otherwise post a new one
+        if (entry?.sentMessage) {
+          try {
+            await entry.sentMessage.edit(approvalCard);
+          } catch {
+            await sdkThread.post(approvalCard);
+          }
+        } else {
+          await sdkThread.post(approvalCard);
+        }
+        // Stream is suspended — the onAction handler will resume it
+        return;
       } else if (chunk.type === 'text-delta') {
         if (chunk.payload.text) await ensureTyping();
         text += chunk.payload.text;
@@ -410,9 +624,6 @@ export class AgentChat {
         await flushText();
       }
     }
-
-    // Subscribe so follow-up messages also get handled
-    await sdkThread.subscribe();
   }
 
   /**
@@ -652,7 +863,7 @@ function formatArgsInline(args: unknown): string {
  * Format a tool call as a function-call string.
  * e.g. "list_files(path: ., maxDepth: 2)"
  */
-function formatToolCall(toolName: string, argsText: string): string {
+function defaultFormatToolCall(toolName: string, argsText: string): string {
   return `${toolName}(${argsText})`;
 }
 
@@ -675,8 +886,9 @@ function formatResult(result: unknown, isError?: boolean): string {
  * Uses the function-call string as the title and result as the body.
  */
 function buildToolResultCard(callStr: string, resultText: string, isError?: boolean): CardElement {
+  const body = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
   return Card({
     title: callStr,
-    children: [CardText(resultText, { style: isError ? 'bold' : 'plain' })],
+    children: [CardText(body, { style: isError ? 'bold' : 'plain' })],
   });
 }
