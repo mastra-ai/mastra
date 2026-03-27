@@ -128,6 +128,24 @@ export interface DatadogExporterConfig extends BaseExporterConfig {
    * Defaults to false to avoid unexpected instrumentation.
    */
   integrationsEnabled?: boolean;
+
+  /**
+   * Keys from the request context (set via `requestContextKeys` in the Mastra
+   * Observability config) that should be promoted to flat Datadog LLM Observability
+   * tags instead of being nested inside `annotations.metadata`.
+   *
+   * Flat tags are indexable and filterable in the Datadog LLM Observability UI,
+   * which makes them suitable for multi-tenant filtering (e.g. tenantId, agentId).
+   *
+   * @example
+   * ```typescript
+   * new DatadogExporter({
+   *   mlApp: 'my-app',
+   *   requestContextKeys: ['tenantId', 'agentId'],
+   * })
+   * ```
+   */
+  requestContextKeys?: string[];
 }
 
 /**
@@ -286,11 +304,27 @@ export class DatadogExporter extends BaseExporter {
     const knownFields = ['usage', 'model', 'provider', 'parameters'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
-    // Merge span.metadata + remaining attributes into metadata
+    // Separate requestContextKeys from span.metadata:
+    // - Keys listed in this.config.requestContextKeys are promoted to flat LLM Obs tags,
+    //   making them indexable and filterable in the Datadog UI (e.g. tenantId, agentId).
+    // - All remaining metadata keys stay nested in annotations.metadata as before.
+    const contextKeySet = new Set(this.config.requestContextKeys ?? []);
+    const flatContextTags: Record<string, any> = {};
+    const remainingMetadata: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(span.metadata ?? {})) {
+      if (contextKeySet.has(key)) {
+        flatContextTags[key] = value;
+      } else {
+        remainingMetadata[key] = value;
+      }
+    }
+
+    // Merge remaining span.metadata + span attributes into metadata
     // Error message goes into metadata (not tags) because tags get normalized/truncated
     // which mangles free-form error text (e.g. colons split into key/value, spaces become underscores)
     const combinedMetadata: Record<string, any> = {
-      ...span.metadata,
+      ...remainingMetadata,
       ...otherAttributes,
     };
     if (span.errorInfo) {
@@ -300,10 +334,14 @@ export class DatadogExporter extends BaseExporter {
       annotations.metadata = combinedMetadata;
     }
 
-    // Build tags from span.tags (user-provided string[] converted to object) and error info
-    // Datadog annotation tags accept Record<string, any>, so we use proper types
+    // Build tags from span.tags (user-provided string[] converted to object),
+    // promoted requestContextKeys values (flat, indexable in Datadog), and error info.
+    // Datadog annotation tags accept Record<string, any>, so we use proper types.
     // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
-    const tags: Record<string, any> = {};
+    const tags: Record<string, any> = {
+      // Promote requestContextKeys values to flat, searchable LLM Observability tags
+      ...flatContextTags,
+    };
 
     // Convert span.tags (string[]) to object format
     // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }

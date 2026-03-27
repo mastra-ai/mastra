@@ -1314,6 +1314,89 @@ describe('DatadogExporter', () => {
     });
   });
 
+  describe('requestContextKeys', () => {
+    it('promotes listed metadata keys to flat tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId', 'agentId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123', agentId: 'agent-456', otherKey: 'stays-in-metadata' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // Promoted keys appear as flat tags
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-123', agentId: 'agent-456' });
+      // Promoted keys are NOT duplicated in metadata
+      expect(annotateCall?.metadata).not.toHaveProperty('tenantId');
+      expect(annotateCall?.metadata).not.toHaveProperty('agentId');
+      // Keys not listed remain in metadata
+      expect(annotateCall?.metadata).toMatchObject({ otherKey: 'stays-in-metadata' });
+    });
+
+    it('does not affect metadata when requestContextKeys is not set', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123', someKey: 'some-value' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // All metadata stays in metadata when no requestContextKeys configured
+      expect(annotateCall?.metadata).toMatchObject({ tenantId: 'tenant-123', someKey: 'some-value' });
+    });
+
+    it('merges promoted context keys with existing span tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-abc' },
+        tags: ['production', 'instance_name:api-server'],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      expect(annotateCall?.tags).toMatchObject({
+        tenantId: 'tenant-abc',
+        production: true,
+        instance_name: 'api-server',
+      });
+    });
+
+    it('handles empty requestContextKeys array gracefully', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: [],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // All metadata stays in metadata when requestContextKeys is empty
+      expect(annotateCall?.metadata).toMatchObject({ tenantId: 'tenant-123' });
+    });
+  });
+
   describe('timer cancellation on new activity', () => {
     beforeEach(() => {
       vi.useFakeTimers();
