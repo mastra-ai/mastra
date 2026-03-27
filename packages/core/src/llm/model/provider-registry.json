@@ -826,10 +826,6 @@
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
     },
-    "cloudflare-workers-ai": {
-      "url": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-      "apiKeyEnvVar": "CLOUDFLARE_API_KEY"
-    },
     "nvidia": {
       "url": "https://integrate.api.nvidia.com/v1",
       "apiKeyEnvVar": "NVIDIA_API_KEY",
