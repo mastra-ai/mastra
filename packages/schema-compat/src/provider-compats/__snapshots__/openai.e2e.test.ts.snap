@@ -329,23 +329,24 @@ constraints: a valid uuid",
 exports[`OpenAI e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2024-06-08T12:00:00.000Z,
+    "actualData": 2024-06-10T10:00:00.000Z,
     "arrayMax": [
       "a",
       "b",
       "c",
     ],
     "arrayMin": [
-      "single",
+      "atleastone",
     ],
-    "date": 2024-06-01T10:00:00.000Z,
-    "dateAfter": 2024-02-01T00:00:00.000Z,
-    "dateBefore": 2024-06-10T00:00:00.000Z,
+    "date": 2024-06-15T12:00:00.000Z,
+    "dateAfter": 2024-05-10T00:00:00.000Z,
+    "dateBefore": 2024-06-11T00:00:00.000Z,
     "default": "",
     "enum": "A",
     "exampleArray": [
       "one",
       "two",
+      "three",
     ],
     "nativeEnum": "B",
     "nullable": null,
@@ -355,34 +356,34 @@ exports[`OpenAI e2e test > should be succesful with structured_output 2`] = `
     "numberInt": 7,
     "numberLt": 5,
     "numberLte": 1,
-    "numberMultipleOf": 6,
+    "numberMultipleOf": 8,
     "object": {
-      "bar": 123,
+      "bar": 25,
       "foo": "bar",
     },
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 30,
-        "name": "Joe",
+        "age": 29,
+        "name": "John",
       },
     },
     "objectPassthrough": {},
     "optional": undefined,
-    "string": "sample text",
-    "stringCuid": "cizxh6v6q0000q8imhx5oq3xx",
-    "stringEmail": "test@example.com",
-    "stringEmoji": "😀",
-    "stringMax": "shorttext",
-    "stringMin": "hello",
+    "string": "hello world",
+    "stringCuid": "cjnckbz3n0000qzrmn831i7rn",
+    "stringEmail": "example@test.com",
+    "stringEmoji": "😊",
+    "stringMax": "shortword",
+    "stringMin": "sample",
     "stringRegex": "test-value",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 9,
-      "inventoryItemName": "Widget",
+      "amount": 10,
+      "inventoryItemName": "Widget A",
     },
-    "unionPrimitives": "text or 123",
+    "unionPrimitives": "sample union string",
   },
 }
 `;
@@ -390,102 +391,122 @@ exports[`OpenAI e2e test > should be succesful with structured_output 2`] = `
 exports[`OpenAI e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2024-01-30T09:45:00.000Z,
+    "actualData": 2024-06-16T08:00:00.000Z,
     "arrayMax": [
-      "a",
-      "b",
-      "c",
+      "one",
+      "two",
     ],
     "arrayMin": [
-      "minimum",
+      "element",
     ],
-    "date": 2024-06-15T12:00:00.000Z,
-    "dateAfter": 2024-02-15T12:00:00.000Z,
-    "dateBefore": 2024-06-10T12:00:00.000Z,
+    "date": 2024-06-10T12:00:00.000Z,
+    "dateAfter": 2024-06-15T00:00:00.000Z,
+    "dateBefore": 2024-05-01T00:00:00.000Z,
     "default": "test",
-    "enum": "A",
+    "enum": "B",
     "exampleArray": [
-      "apple",
-      "banana",
-      "cherry",
+      "foo",
+      "bar",
+      "baz",
     ],
     "nativeEnum": "C",
     "nullable": null,
     "number": 42,
     "numberGt": 5,
-    "numberGte": 10,
-    "numberInt": 7,
+    "numberGte": 7,
+    "numberInt": 15,
     "numberLt": 3,
     "numberLte": 1,
     "numberMultipleOf": 8,
     "object": {
-      "bar": 123,
+      "bar": 55,
       "foo": "bar",
     },
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 25,
+        "age": 20,
         "name": "Jo",
       },
     },
     "objectPassthrough": {},
     "optional": undefined,
-    "string": "Sample text",
-    "stringCuid": "cjo29ssle0000qzrmn831i7rn",
-    "stringEmail": "example@email.com",
+    "string": "Hello, world!",
+    "stringCuid": "cklbz5z8f0002h1t4z5h0r9yb",
+    "stringEmail": "sample@example.com",
     "stringEmoji": "😊",
-    "stringMax": "ShortText",
+    "stringMax": "ShortTxt",
     "stringMin": "Hello!",
-    "stringRegex": "test-value",
+    "stringRegex": "test-example",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
       "amount": 10,
-      "inventoryItemName": "Widget",
+      "inventoryItemName": "Pen",
     },
-    "unionPrimitives": "Union sample",
+    "unionPrimitives": "text or number",
   },
 }
 `;
 
 exports[`OpenAI e2e test > should handle tool call with manySchemas input and output 1`] = `
-"Here is a valid call to the manySchemasTool tool with sample data:
+"Here is the validated tool output using sample data with many different schema types:
 
-- string: "Sample text"
-- stringMin: "Hello world"
-- stringMax: "Short txt"
-- stringEmail: "example@email.com"
-- stringEmoji: "😀"
-- stringUrl: "https://example.com"
-- stringUuid: "123e4567-e89b-12d3-a456-426614174000"
-- stringCuid: "cjnk3sl7i0000it7k2gk1h6g3"
-- stringRegex: "test-sample"
-- number: 42
-- numberGt: 5
-- numberLt: 4
-- numberGte: 7
-- numberLte: 1
-- numberMultipleOf: 8
-- numberInt: 10
-- exampleArray: ["apple", "banana", "cherry"]
-- arrayMin: ["first"]
-- arrayMax: ["one", "two", "three", "four", "five"]
-- date: "2023-05-15T12:34:56Z"
-- dateAfter: "2024-02-02T10:00:00Z"
-- dateBefore: "2023-12-31T23:59:59Z"
-- actualData: "2024-06-27T14:00:00Z"
-- object: { foo: "bar", bar: 7 }
-- objectNested: { user: { name: "Jo", age: 22 } }
-- objectPassthrough: {}
-- objectLoose: {}
-- optional: null
-- nullable: null
-- enum: "B"
-- nativeEnum: "A"
-- unionPrimitives: 123
-- unionObjects: { amount: 10, inventoryItemName: "Laptop" }
-- default: "test"
+{
+  "string": "Sample text",
+  "stringMin": "Hello!",
+  "stringMax": "ShortText",
+  "stringEmail": "example@email.com",
+  "stringEmoji": "😊",
+  "stringUrl": "https://www.example.com",
+  "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+  "stringCuid": "cjy1v3jjx0000qrsx9n7j5x2y",
+  "stringRegex": "test-sample",
+  "number": 5.5,
+  "numberGt": 10,
+  "numberLt": 3,
+  "numberGte": 1,
+  "numberLte": 1,
+  "numberMultipleOf": 8,
+  "numberInt": 42,
+  "exampleArray": [
+    "apple",
+    "banana"
+  ],
+  "arrayMin": [
+    "item1"
+  ],
+  "arrayMax": [
+    "a",
+    "b",
+    "c"
+  ],
+  "date": "2023-12-12T10:00:00.000Z",
+  "dateAfter": "2024-03-10T00:00:00.000Z",
+  "dateBefore": "2024-03-10T00:00:00.000Z",
+  "actualData": "2022-11-11T10:00:00.000Z",
+  "object": {
+    "foo": "bar",
+    "bar": 7
+  },
+  "objectNested": {
+    "user": {
+      "name": "Jo",
+      "age": 30
+    }
+  },
+  "objectPassthrough": {},
+  "objectLoose": {},
+  "nullable": null,
+  "enum": "A",
+  "nativeEnum": "B",
+  "unionPrimitives": "test-value",
+  "unionObjects": {
+    "amount": 7,
+    "inventoryItemName": "Widget"
+  },
+  "default": "test"
+}
 
-Let me know if you want any specific schema explained!"
+If you want explanations about any field, let me know!"
 `;

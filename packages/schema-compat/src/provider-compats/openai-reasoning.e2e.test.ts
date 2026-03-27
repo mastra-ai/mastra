@@ -284,7 +284,7 @@ describe('OpenAI reasoning e2e test', () => {
       },
       toolChoice: 'auto' as const,
       stopWhen: stepCountIs(2),
-      prompt: 'Call the manySchemasTool tool with valid sample data.',
+      prompt: 'Call the manySchemasTool tool with valid sample data and return the validated tool output.',
     });
 
     const toolResult = result.steps[0].toolResults[0];

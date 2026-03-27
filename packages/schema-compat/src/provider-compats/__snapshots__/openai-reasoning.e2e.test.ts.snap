@@ -329,27 +329,91 @@ constraints: a valid uuid",
 exports[`OpenAI reasoning e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2026-03-25T12:00:00.000Z,
+    "actualData": 2026-03-27T00:00:00.000Z,
+    "arrayMax": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+    ],
+    "arrayMin": [
+      "a",
+    ],
+    "date": 2023-08-15T13:45:30.000Z,
+    "dateAfter": 2024-06-01T10:00:00.000Z,
+    "dateBefore": 2025-12-31T23:59:59.000Z,
+    "default": "",
+    "enum": "B",
+    "exampleArray": [
+      "one",
+      "two",
+      "three",
+    ],
+    "nativeEnum": "C",
+    "nullable": null,
+    "number": 42.5,
+    "numberGt": 4,
+    "numberGte": 1,
+    "numberInt": 7,
+    "numberLt": 5,
+    "numberLte": 1,
+    "numberMultipleOf": 4,
+    "object": {
+      "bar": 123,
+      "foo": "bar",
+    },
+    "objectLoose": {},
+    "objectNested": {
+      "user": {
+        "age": 30,
+        "name": "John",
+      },
+    },
+    "objectPassthrough": {},
+    "optional": undefined,
+    "string": "Sample text",
+    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+    "stringEmail": "user@example.com",
+    "stringEmoji": "😊",
+    "stringMax": "HelloMax",
+    "stringMin": "Hello",
+    "stringRegex": "test-value",
+    "stringUrl": "https://example.com",
+    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+    "unionObjects": {
+      "amount": 100,
+      "inventoryItemName": "Widget",
+    },
+    "unionPrimitives": "sample",
+  },
+}
+`;
+
+exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input 1`] = `
+{
+  "value": {
+    "actualData": 2023-01-01T00:00:00.000Z,
     "arrayMax": [
       "a",
       "b",
       "c",
     ],
     "arrayMin": [
-      "item1",
+      "single",
     ],
-    "date": 2023-05-20T12:00:00.000Z,
-    "dateAfter": 2024-02-01T00:00:00.000Z,
+    "date": 2025-03-01T12:00:00.000Z,
+    "dateAfter": 2024-06-01T00:00:00.000Z,
     "dateBefore": 2025-12-31T23:59:59.000Z,
-    "default": "",
+    "default": "test",
     "enum": "A",
     "exampleArray": [
-      "foo",
-      "bar",
+      "one",
+      "two",
     ],
     "nativeEnum": "B",
     "nullable": null,
-    "number": 3.14,
+    "number": 42,
     "numberGt": 4,
     "numberGte": 1,
     "numberInt": 7,
@@ -363,89 +427,28 @@ exports[`OpenAI reasoning e2e test > should be succesful with structured_output 
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 30,
+        "age": 25,
         "name": "Al",
       },
     },
     "objectPassthrough": {},
     "optional": undefined,
-    "string": "sample text",
-    "stringCuid": "ckb6pjq2100064g5o0rnafu2n",
-    "stringEmail": "user@example.com",
-    "stringEmoji": "😊",
-    "stringMax": "maxlength",
-    "stringMin": "hello",
-    "stringRegex": "test-123",
-    "stringUrl": "https://example.com",
-    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
-    "unionObjects": {
-      "amount": 10,
-      "inventoryItemName": "widget",
-    },
-    "unionPrimitives": "sample",
-  },
-}
-`;
-
-exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input 1`] = `
-{
-  "value": {
-    "actualData": 2023-05-20T15:30:00.000Z,
-    "arrayMax": [
-      "a",
-      "b",
-      "c",
-    ],
-    "arrayMin": [
-      "only",
-    ],
-    "date": 2025-01-01T00:00:00.000Z,
-    "dateAfter": 2024-06-01T12:00:00.000Z,
-    "dateBefore": 2025-12-31T23:59:59.000Z,
-    "default": "test",
-    "enum": "A",
-    "exampleArray": [
-      "one",
-      "two",
-    ],
-    "nativeEnum": "B",
-    "nullable": null,
-    "number": 7,
-    "numberGt": 4,
-    "numberGte": 1,
-    "numberInt": 10,
-    "numberLt": 5,
-    "numberLte": 1,
-    "numberMultipleOf": 8,
-    "object": {
-      "bar": 42,
-      "foo": "bar",
-    },
-    "objectLoose": {},
-    "objectNested": {
-      "user": {
-        "age": 30,
-        "name": "Alice",
-      },
-    },
-    "objectPassthrough": {},
-    "optional": undefined,
-    "string": "Hello, world!",
+    "string": "hello world",
     "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
-    "stringEmail": "user@example.com",
-    "stringEmoji": "😊",
-    "stringMax": "ShortTxt",
-    "stringMin": "Hello",
-    "stringRegex": "test-value",
+    "stringEmail": "example@test.com",
+    "stringEmoji": "😀",
+    "stringMax": "1234567890",
+    "stringMin": "hello",
+    "stringRegex": "test-sample",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
       "amount": 5,
-      "inventoryItemName": "Widget",
+      "inventoryItemName": "widget",
     },
-    "unionPrimitives": "union",
+    "unionPrimitives": "union text",
   },
 }
 `;
 
-exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input and output 1`] = `"The tool has been called with valid sample data. Let me know if you need anything else!"`;
+exports[`OpenAI reasoning e2e test > should handle tool call with manySchemas input and output 1`] = `"{"string":"Hello, world!","stringMin":"Hello","stringMax":"ShortTxt","stringEmail":"user@example.com","stringEmoji":"😀","stringUrl":"https://example.com","stringUuid":"123e4567-e89b-12d3-a456-426614174000","stringCuid":"cjld2cjxh0000qzrmn831i7rn","stringRegex":"test-value","number":42,"numberGt":4,"numberLt":5,"numberGte":1,"numberLte":1,"numberMultipleOf":4,"numberInt":7,"exampleArray":["one","two","three"],"arrayMin":["item1"],"arrayMax":["a","b","c","d","e"],"date":"2026-01-01T00:00:00.000Z","dateAfter":"2025-06-15T12:00:00.000Z","dateBefore":"2026-03-01T00:00:00.000Z","actualData":"2026-02-14T15:30:00.000Z","object":{"foo":"bar","bar":123},"objectNested":{"user":{"name":"John","age":30}},"objectPassthrough":{},"objectLoose":{},"nullable":null,"enum":"B","nativeEnum":"C","unionPrimitives":"union","unionObjects":{"amount":5,"inventoryItemName":"Widget"},"default":"test"}"`;
