@@ -9,6 +9,7 @@ declare global {
     MASTRA_SERVER_PORT: string;
     MASTRA_API_PREFIX?: string;
     MASTRA_TELEMETRY_DISABLED?: string;
+    MASTRA_TELEMETRY_ENDPOINT?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
@@ -310,7 +311,7 @@ const routes = [
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, telemetryBaseUrl, isLoading } = useStudioConfig();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -325,7 +326,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} telemetryBaseUrl={telemetryBaseUrl}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
@@ -342,10 +343,13 @@ export default function AppWrapper() {
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
   const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
+  const rawTelemetryEndpoint = window.MASTRA_TELEMETRY_ENDPOINT;
+  const telemetryEndpoint =
+    rawTelemetryEndpoint && !rawTelemetryEndpoint.includes('%%') ? rawTelemetryEndpoint : undefined;
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled} telemetryEndpoint={telemetryEndpoint}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

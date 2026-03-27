@@ -12,6 +12,8 @@ import type {
   // Scores (observability)
   ListScoresArgs,
   ListScoresResponse as ListScoresResponseNew,
+  ScoreTracesRequest,
+  ScoreTracesResponse,
   CreateScoreBody,
   CreateScoreResponse,
   // Feedback
@@ -888,10 +890,7 @@ export class MastraClient extends BaseResource {
   }
 
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
-  score(params: {
-    scorerName: string;
-    targets: Array<{ traceId: string; spanId?: string }>;
-  }): Promise<{ status: string; message: string }> {
+  score(params: ScoreTracesRequest): Promise<ScoreTracesResponse> {
     return this.observability.score(params);
   }
 
