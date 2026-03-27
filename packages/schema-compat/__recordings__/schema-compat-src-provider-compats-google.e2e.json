@@ -649,8 +649,8 @@
                           "test": 123
                         },
                         "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
-                        "dateBefore": "2022-01-01T12:00:00Z",
-                        "actualData": "2024-05-01T12:00:00Z",
+                        "dateBefore": "2022-01-01T12:00:00.000Z",
+                        "actualData": "2024-05-01T12:00:00.000Z",
                         "nativeEnum": "B",
                         "stringEmoji": "🚀",
                         "numberGt": 4,
@@ -666,11 +666,11 @@
                           }
                         },
                         "numberLte": 0,
-                        "dateAfter": "2025-01-01T12:00:00Z",
+                        "dateAfter": "2025-01-01T12:00:00.000Z",
                         "numberMultipleOf": 8,
                         "stringMin": "12345",
                         "number": 42.5,
-                        "date": "2024-05-01T12:00:00Z",
+                        "date": "2024-05-01T12:00:00.000Z",
                         "objectPassthrough": {
                           "hello": "world"
                         },
@@ -751,8 +751,8 @@
                         "test": 123
                       },
                       "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
-                      "dateBefore": "2022-01-01T12:00:00Z",
-                      "actualData": "2024-05-01T12:00:00Z",
+                      "dateBefore": "2022-01-01T12:00:00.000Z",
+                      "actualData": "2024-05-01T12:00:00.000Z",
                       "nativeEnum": "B",
                       "stringEmoji": "🚀",
                       "numberGt": 4,
@@ -768,11 +768,11 @@
                         }
                       },
                       "numberLte": 0,
-                      "dateAfter": "2025-01-01T12:00:00Z",
+                      "dateAfter": "2025-01-01T12:00:00.000Z",
                       "numberMultipleOf": 8,
                       "stringMin": "12345",
                       "number": 42.5,
-                      "date": "2024-05-01T12:00:00Z",
+                      "date": "2024-05-01T12:00:00.000Z",
                       "objectPassthrough": {
                         "hello": "world"
                       },
@@ -814,8 +814,8 @@
                           "test": 123
                         },
                         "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
-                        "dateBefore": "2022-01-01T12:00:00Z",
-                        "actualData": "2024-05-01T12:00:00Z",
+                        "dateBefore": "2022-01-01T12:00:00.000Z",
+                        "actualData": "2024-05-01T12:00:00.000Z",
                         "nativeEnum": "B",
                         "stringEmoji": "🚀",
                         "numberGt": 4,
@@ -831,11 +831,11 @@
                           }
                         },
                         "numberLte": 0,
-                        "dateAfter": "2025-01-01T12:00:00Z",
+                        "dateAfter": "2025-01-01T12:00:00.000Z",
                         "numberMultipleOf": 8,
                         "stringMin": "12345",
                         "number": 42.5,
-                        "date": "2024-05-01T12:00:00Z",
+                        "date": "2024-05-01T12:00:00.000Z",
                         "objectPassthrough": {
                           "hello": "world"
                         },
