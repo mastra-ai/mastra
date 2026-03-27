@@ -215,13 +215,23 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
-  // Merge dataset-attached scorers with explicitly provided scorers
+  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
   let mergedScorerInput = scorerInput;
   const datasetScorerIds = datasetRecord?.scorerIds ?? [];
   if (datasetScorerIds.length > 0) {
-    const existingIds = new Set((scorerInput ?? []).filter((s): s is string => typeof s === 'string'));
-    const newIds = datasetScorerIds.filter(id => !existingIds.has(id));
-    mergedScorerInput = [...(scorerInput ?? []), ...newIds];
+    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+  }
+  if (mergedScorerInput && mergedScorerInput.length > 0) {
+    const seen = new Set<string>();
+    mergedScorerInput = mergedScorerInput.filter(entry => {
+      if (typeof entry === 'string') {
+        if (seen.has(entry)) return false;
+        seen.add(entry);
+        return true;
+      }
+      // Keep all scorer instances — they are resolved by reference, not by ID
+      return true;
+    });
   }
 
   // Resolve scorers
