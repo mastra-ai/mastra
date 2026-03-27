@@ -101,6 +101,26 @@ export interface BrowserConfig {
    * Called before the browser is closed.
    */
   onClose?: BrowserLifecycleHook;
+
+  /**
+   * Screencast options for streaming browser frames.
+   * Controls image format, quality, and dimensions.
+   */
+  screencast?: ScreencastOptions;
+
+  /**
+   * Auto-reconnect to the browser on disconnect.
+   * Useful for cloud CDP connections that may drop.
+   * @default false
+   */
+  autoReconnect?: boolean;
+
+  /**
+   * Delay in milliseconds before attempting to reconnect.
+   * Only used when autoReconnect is true.
+   * @default 1000
+   */
+  reconnectDelay?: number;
 }
 
 // =============================================================================
@@ -623,6 +643,7 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
+   * Uses config.screencast options as defaults if no options provided.
    *
    * For thread-isolated browsers:
    * - Returns null if the thread doesn't have an existing session
@@ -633,12 +654,15 @@ export abstract class MastraBrowser extends MastraBase {
       return null;
     }
 
-    const threadId = options?.threadId;
+    // Merge provided options with config screencast options
+    const mergedOptions = options ?? this.config.screencast;
+
+    const threadId = mergedOptions?.threadId;
     const isolation = this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
 
     // No isolation - just start the screencast
     if (isolation === 'none') {
-      return this.startScreencast(options);
+      return this.startScreencast(mergedOptions);
     }
 
     // For 'context' isolation: the FIRST thread should reuse the default page (page 0)
@@ -647,7 +671,7 @@ export abstract class MastraBrowser extends MastraBase {
     if (isolation === 'context' && this.threadManager && this.threadManager.getSessionCount() === 0) {
       // First thread - use the default page by NOT passing threadId
       // This ensures the screencast uses page 0 (the default page)
-      return this.startScreencast({ ...options, threadId: undefined });
+      return this.startScreencast({ ...mergedOptions, threadId: undefined });
     }
 
     // For other threads, only start if they have an existing session
@@ -655,7 +679,7 @@ export abstract class MastraBrowser extends MastraBase {
       return null;
     }
 
-    return this.startScreencast(options);
+    return this.startScreencast(mergedOptions);
   }
 
   // ---------------------------------------------------------------------------

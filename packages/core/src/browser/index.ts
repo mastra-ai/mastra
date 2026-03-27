@@ -43,3 +43,16 @@ export type { ErrorCode, BrowserToolError } from './errors';
 
 export { BrowserContextProcessor } from './processor';
 export type { BrowserContext } from './processor';
+
+// ============================================================================
+// BrowserViewer (for Workspace browser capabilities)
+// ============================================================================
+
+export { BrowserViewer, CLI_SKILL_REPOS } from './viewer';
+export type {
+  BrowserViewerConfig,
+  BrowserViewerEvents,
+  BuiltInCLIProvider,
+  CustomCLIProvider,
+  CLIProvider,
+} from './viewer';
