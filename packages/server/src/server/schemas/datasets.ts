@@ -302,6 +302,18 @@ export const listExperimentResultsResponseSchema = z.object({
   pagination: paginationInfoSchema,
 });
 
+export const experimentReviewCountsSchema = z.object({
+  experimentId: z.string(),
+  total: z.number().int(),
+  needsReview: z.number().int(),
+  reviewed: z.number().int(),
+  complete: z.number().int(),
+});
+
+export const reviewSummaryResponseSchema = z.object({
+  counts: z.array(experimentReviewCountsSchema),
+});
+
 // ============================================================================
 // Version Schemas
 // ============================================================================

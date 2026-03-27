@@ -1,7 +1,8 @@
 import { useAgentRunsKpiMetrics } from '../hooks/use-agent-runs-kpi-metrics';
 import { useAvgScoreKpiMetrics } from '../hooks/use-avg-score-kpi-metrics';
+import { useModelCostKpiMetrics } from '../hooks/use-model-cost-kpi-metrics';
 import { useTotalTokensKpiMetrics } from '../hooks/use-total-tokens-kpi-metrics';
-import { formatCompact } from './metrics-utils';
+import { formatCompact, formatCost } from './metrics-utils';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 
 export function AgentRunsKpiCard() {
@@ -35,11 +36,31 @@ export function AgentRunsKpiCard() {
 }
 
 export function ModelCostKpiCard() {
+  const { data: costKpi, isLoading, isError } = useModelCostKpiMetrics();
+  const hasData = costKpi?.cost != null;
+
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>Total Model Cost</MetricsKpiCard.Label>
-      <MetricsKpiCard.Value className="invisible">—</MetricsKpiCard.Value>
-      <MetricsKpiCard.NoData />
+      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
+        {hasData ? formatCost(costKpi.cost!, costKpi.costUnit) : '—'}
+      </MetricsKpiCard.Value>
+      {isError ? (
+        <MetricsKpiCard.Error />
+      ) : isLoading ? (
+        <MetricsKpiCard.Loading />
+      ) : hasData ? (
+        costKpi.costChangePercent != null ? (
+          <MetricsKpiCard.Change
+            changePct={costKpi.costChangePercent}
+            prevValue={costKpi.previousCost != null ? formatCost(costKpi.previousCost, costKpi.costUnit) : undefined}
+          />
+        ) : (
+          <MetricsKpiCard.NoChange />
+        )
+      ) : (
+        <MetricsKpiCard.NoData />
+      )}
     </MetricsKpiCard>
   );
 }
