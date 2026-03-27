@@ -186,10 +186,10 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
-  --height-form-sm: 1.75rem;
-  --height-form-md: 2rem;
-  --height-form-default: 2.25rem;
-  --height-form-lg: 2.5rem;
+  --spacing-form-sm: 1.75rem;
+  --spacing-form-md: 2rem;
+  --spacing-form-default: 2.25rem;
+  --spacing-form-lg: 2.5rem;
   --height-header-default: 48px;
   --height-table-header: 28px;
   --height-table-row: 56px;
@@ -203,10 +203,10 @@ html.light {
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
   --max-height-icon-sm: 12px;
-  --max-height-form-sm: 1.75rem;
-  --max-height-form-md: 2rem;
-  --max-height-form-default: 2.25rem;
-  --max-height-form-lg: 2.5rem;
+  --spacing-form-sm: 1.75rem;
+  --spacing-form-md: 2rem;
+  --spacing-form-default: 2.25rem;
+  --spacing-form-lg: 2.5rem;
   --max-height-header-default: 48px;
   --max-height-table-header: 28px;
   --max-height-table-row: 56px;
@@ -220,10 +220,7 @@ html.light {
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;
-  --width-form-sm: 1.75rem;
-  --width-form-md: 2rem;
-  --width-form-default: 2.25rem;
-  --width-form-lg: 2.5rem;
+  /* Using --spacing-form-* for both height and width */
   --width-header-default: 48px;
   --width-table-header: 28px;
   --width-table-row: 56px;
@@ -237,10 +234,7 @@ html.light {
   --container-icon-default: 16px;
   --container-icon-lg: 20px;
   --container-icon-sm: 12px;
-  --container-form-sm: 1.75rem;
-  --container-form-md: 2rem;
-  --container-form-default: 2.25rem;
-  --container-form-lg: 2.5rem;
+  /* Using --spacing-form-* for container sizing */
   --container-header-default: 48px;
   --container-table-header: 28px;
   --container-table-row: 56px;
@@ -336,19 +330,6 @@ html.light {
 
 @utility wrap-break-word {
   overflow-wrap: break-word;
-}
-
-@utility h-form-sm {
-  height: 1.75rem;
-}
-@utility h-form-md {
-  height: 2rem;
-}
-@utility h-form-default {
-  height: 2.25rem;
-}
-@utility h-form-lg {
-  height: 2.5rem;
 }
 
 @utility time-input {
