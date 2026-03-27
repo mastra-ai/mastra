@@ -1657,15 +1657,16 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('buildReflectorPrompt', () => {
-    it('should include observations to reflect on with ephemeral anchor IDs', () => {
+    it('should include plain observations to reflect on', () => {
       const observations = '- 🔴 User is building a React app';
       const prompt = buildReflectorPrompt(observations);
 
       expect(prompt).toContain('OBSERVATIONS TO REFLECT ON');
-      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+      expect(prompt).toContain('- 🔴 User is building a React app');
+      expect(prompt).not.toContain('[O1]');
     });
 
-    it('should render grouped observations as markdown sections for reflection', () => {
+    it('should strip observation group wrappers before building the reflection prompt', () => {
       const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -1676,12 +1677,12 @@ describe('Reflector Agent Helpers', () => {
 
       const prompt = buildReflectorPrompt(observations);
 
-      expect(prompt).toContain('## Group `group-a`');
-      expect(prompt).toContain('_range: `m1:m2`_');
-      expect(prompt).toContain('## Group `group-b`');
-      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
-      expect(prompt).toContain('[O2] - 🟡 Needs help with auth flow');
-      expect(prompt).not.toContain('[O1-N1] ## Group `group-a`');
+      expect(prompt).toContain('- 🔴 User is building a React app');
+      expect(prompt).toContain('- 🟡 Needs help with auth flow');
+      expect(prompt).not.toContain('[O1]');
+      expect(prompt).not.toContain('## Group `group-a`');
+      expect(prompt).not.toContain('_range: `m1:m2`_');
+      expect(prompt).not.toContain('<observation-group');
     });
 
     it('should include manual prompt guidance if provided', () => {
