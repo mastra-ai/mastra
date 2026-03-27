@@ -133,20 +133,15 @@ export function createTrajectoryAccuracyScorerLLM({
         if (Array.isArray(staticExpectedTrajectory)) {
           expectedSteps = staticExpectedTrajectory;
         } else {
-          // Spread step fields directly — ExpectedStep mirrors TrajectoryStep with optional fields
-          expectedSteps = staticExpectedTrajectory.steps.map((s: TrajectoryStep): ExpectedStep => {
+          const toExpectedStep = (s: TrajectoryStep): ExpectedStep => {
             const { durationMs: _, metadata: _m, children, ...rest } = s;
             const result: ExpectedStep = rest as ExpectedStep;
             if (children && children.length > 0) {
-              result.children = {
-                steps: children.map((c: TrajectoryStep): ExpectedStep => {
-                  const { durationMs: _d, metadata: _md, children: _ch, ...cRest } = c;
-                  return cRest as ExpectedStep;
-                }),
-              };
+              result.children = { steps: children.map(toExpectedStep) };
             }
             return result;
-          });
+          };
+          expectedSteps = staticExpectedTrajectory.steps.map(toExpectedStep);
         }
       } else if (run.expectedTrajectory) {
         const expectation = run.expectedTrajectory as TrajectoryExpectation;

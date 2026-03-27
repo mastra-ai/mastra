@@ -202,6 +202,7 @@ export type NestedEvaluationResult = {
 function evaluateNestedExpectations(
   expectedSteps: ExpectedStep[],
   actualSteps: TrajectoryStep[],
+  weights: Required<TrajectoryScoreWeights> = { accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 },
 ): NestedEvaluationResult[] {
   const results: NestedEvaluationResult[] = [];
   const matchedIndices = new Set<number>();
@@ -293,26 +294,27 @@ function evaluateNestedExpectations(
     });
 
     // --- Recursive nested evaluation ---
-    const nested = childConfig.steps ? evaluateNestedExpectations(childConfig.steps, actualStep.children) : [];
+    const nested = childConfig.steps ? evaluateNestedExpectations(childConfig.steps, actualStep.children, weights) : [];
 
     // Compute weighted score for this level
     const scores: Array<{ weight: number; value: number }> = [];
-    if (accuracy) scores.push({ weight: 0.4, value: accuracy.score });
-    if (efficiency) scores.push({ weight: 0.3, value: efficiency.score });
-    if (toolFailures && toolFailures.patterns.length > 0) scores.push({ weight: 0.2, value: toolFailures.score });
+    if (accuracy) scores.push({ weight: weights.accuracy, value: accuracy.score });
+    if (efficiency) scores.push({ weight: weights.efficiency, value: efficiency.score });
+    if (toolFailures && toolFailures.patterns.length > 0)
+      scores.push({ weight: weights.toolFailures, value: toolFailures.score });
     if (blacklist) {
       if (blacklist.score === 0) {
         // Hard fail for blacklist violation at this level
         results.push({ stepName: expectedStep.name, score: 0, accuracy, efficiency, blacklist, toolFailures, nested });
         continue;
       }
-      scores.push({ weight: 0.1, value: blacklist.score });
+      scores.push({ weight: weights.blacklist, value: blacklist.score });
     }
 
     let levelScore = 1;
     if (scores.length > 0) {
       const totalWeight = scores.reduce((sum, s) => sum + s.weight, 0);
-      levelScore = scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0);
+      levelScore = totalWeight > 0 ? scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0) : 1;
     }
 
     // Average with nested scores if any
@@ -423,10 +425,10 @@ export interface TrajectoryScorerCodeOptions {
 export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions = {}) {
   const { defaults = {}, weights: userWeights = {} } = options;
   const w = {
-    accuracy: userWeights.accuracy ?? 0.4,
-    efficiency: userWeights.efficiency ?? 0.3,
-    toolFailures: userWeights.toolFailures ?? 0.2,
-    blacklist: userWeights.blacklist ?? 0.1,
+    accuracy: Math.max(0, userWeights.accuracy ?? 0.4),
+    efficiency: Math.max(0, userWeights.efficiency ?? 0.3),
+    toolFailures: Math.max(0, userWeights.toolFailures ?? 0.2),
+    blacklist: Math.max(0, userWeights.blacklist ?? 0.1),
   };
 
   return createScorer({
@@ -493,7 +495,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       // --- Nested expectations ---
       const nested =
         config.steps && config.steps.length > 0
-          ? evaluateNestedExpectations(config.steps, actualTrajectory.steps)
+          ? evaluateNestedExpectations(config.steps, actualTrajectory.steps, w)
           : undefined;
 
       return {
@@ -537,7 +539,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       let levelScore = 1;
       if (scores.length > 0) {
         const totalWeight = scores.reduce((sum, s) => sum + s.weight, 0);
-        levelScore = scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0);
+        levelScore = totalWeight > 0 ? scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0) : 1;
       }
 
       // Factor in nested scores

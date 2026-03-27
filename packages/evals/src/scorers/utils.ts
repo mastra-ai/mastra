@@ -956,7 +956,7 @@ function compareRelaxedOrder(
 const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   tool_call: ['toolArgs', 'toolResult', 'success'],
   mcp_tool_call: ['toolArgs', 'toolResult', 'mcpServer', 'success'],
-  model_generation: ['modelId'],
+  model_generation: ['modelId', 'promptTokens', 'completionTokens', 'finishReason'],
   agent_run: ['agentId'],
   workflow_step: ['stepId', 'status', 'output'],
   workflow_run: ['workflowId', 'status'],
