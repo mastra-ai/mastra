@@ -63,7 +63,7 @@ describe('Memory', () => {
           metadata: {
             mastra: {
               om: {
-                conciseHistory: '**user (2025-01-01 10:00:00Z)**: What changed?',
+                conciseHistory: '**user (2025-01-01 10:00:00Z)** [m1]:\n  [p0] What changed?',
               },
             },
           },
@@ -99,6 +99,25 @@ describe('Memory', () => {
       expect(continuationText).toContain('<system-reminder>');
       expect(continuationText).toContain('<concise-history>');
       expect(continuationText).toContain('What changed?');
+      expect(continuationText).not.toContain('For higher-resolution details, use the recall tool');
+    });
+
+    it('adds recall guidance before concise history when recall tools are enabled', async () => {
+      const ctx = await memory.testGetContext({
+        threadId,
+        resourceId,
+        memoryConfig: {
+          observationalMemory: {
+            retrieval: true,
+          },
+        },
+      });
+      const continuationText = ((ctx.continuationMessage?.content as any)?.parts?.[0] as { text?: string } | undefined)
+        ?.text;
+
+      expect(continuationText).toContain('For higher-resolution details, use the recall tool');
+      expect(continuationText).toContain('[m1]');
+      expect(continuationText).toContain('[p0]');
     });
   });
 

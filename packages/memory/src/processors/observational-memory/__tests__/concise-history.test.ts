@@ -14,7 +14,7 @@ function createMessage(message: Partial<MastraDBMessage> & Pick<MastraDBMessage,
 }
 
 describe('formatConciseHistory', () => {
-  it('renders low-detail message lines with timestamps', () => {
+  it('renders the same low-detail recall transcript format with timestamps, message ids, and part labels', () => {
     const history = formatConciseHistory(
       [
         createMessage({
@@ -32,11 +32,13 @@ describe('formatConciseHistory', () => {
       { maxTokens: 200 },
     );
 
-    expect(history).toContain('**user (2025-01-01 10:00:00Z)**: Need the latest status update');
-    expect(history).toContain('**assistant (2025-01-01 10:01:00Z)**: Here is the newest summary.');
+    expect(history).toContain('**user (2025-01-01 10:00:00Z)** [m1]:');
+    expect(history).toContain('[p0] Need the latest status update');
+    expect(history).toContain('**assistant (2025-01-01 10:01:00Z)** [m2]:');
+    expect(history).toContain('[p0] Here is the newest summary.');
   });
 
-  it('keeps the newest rendered lines when over budget', () => {
+  it('keeps the newest rendered messages when over budget', () => {
     const history = formatConciseHistory(
       [
         createMessage({
@@ -62,7 +64,7 @@ describe('formatConciseHistory', () => {
     expect(history).toContain('newest context to preserve');
   });
 
-  it('renders tool calls, tool results, attachments, and skips data parts', () => {
+  it('renders tool calls, tool results, attachments, and skips data parts in recall format', () => {
     const history = formatConciseHistory(
       [
         createMessage({

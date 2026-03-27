@@ -1179,8 +1179,12 @@ ${workingMemory}`;
         const conciseHistory = getThreadOMMetadata(
           (await memoryStore.getThreadById({ threadId }))?.metadata,
         )?.conciseHistory;
+        const recallToolsEnabled = !!normalizeObservationalMemoryConfig(config.observationalMemory)?.retrieval;
+        const conciseHistoryIntro = recallToolsEnabled
+          ? 'The following is a compact summary of recently processed messages that are no longer in the direct conversation context. For higher-resolution details, use the recall tool with the message ids and part labels below.'
+          : 'The following is a compact summary of recently processed messages that are no longer in the direct conversation context:';
         const continuationText = conciseHistory
-          ? `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>\n\n<concise-history>\nThe following is a compact summary of recently processed messages that are no longer in the direct conversation context:\n${conciseHistory}\n</concise-history>`
+          ? `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>\n\n<concise-history>\n${conciseHistoryIntro}\n${conciseHistory}\n</concise-history>`
           : `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`;
         continuationMessage = {
           id: 'om-continuation',
