@@ -1,5 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/evals';
+import type {
+  ExpectedStep,
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  ScoringInput,
+  TrajectoryExpectation,
+  TrajectoryStep,
+  Trajectory,
+} from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 
 /**
@@ -494,6 +502,61 @@ export const createAgentTestRun = ({
 };
 
 /**
+ * Creates a test run for trajectory scorers where `output` is a `Trajectory`
+ * (pre-extracted by the `runEvals` pipeline).
+ *
+ * @example
+ * ```ts
+ * const testRun = createTrajectoryTestRun({
+ *   inputMessages: [createTestMessage({ content: 'Do X', role: 'user', id: 'u1' })],
+ *   trajectory: {
+ *     steps: [
+ *       { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
+ *     ],
+ *   },
+ * });
+ * ```
+ */
+export const createTrajectoryTestRun = ({
+  inputMessages = [],
+  trajectory,
+  rememberedMessages = [],
+  systemMessages = [],
+  taggedSystemMessages = {},
+  requestContext = new RequestContext(),
+  runId = crypto.randomUUID(),
+  expectedTrajectory,
+}: {
+  inputMessages?: ScorerRunInputForAgent['inputMessages'];
+  trajectory: Trajectory;
+  rememberedMessages?: ScorerRunInputForAgent['rememberedMessages'];
+  systemMessages?: ScorerRunInputForAgent['systemMessages'];
+  taggedSystemMessages?: ScorerRunInputForAgent['taggedSystemMessages'];
+  requestContext?: RequestContext;
+  runId?: string;
+  expectedTrajectory?: TrajectoryExpectation;
+}): {
+  input: ScorerRunInputForAgent;
+  output: Trajectory;
+  requestContext: RequestContext;
+  runId: string;
+  expectedTrajectory?: TrajectoryExpectation;
+} => {
+  return {
+    input: {
+      inputMessages,
+      rememberedMessages,
+      systemMessages,
+      taggedSystemMessages,
+    },
+    output: trajectory,
+    expectedTrajectory,
+    requestContext,
+    runId,
+  };
+};
+
+/**
  * Information about a tool call extracted from scorer output.
  */
 export type ToolCallInfo = {
@@ -653,4 +716,673 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
   }
 
   return results;
+}
+
+// Re-export extractTrajectory from core — it's called automatically by runEvals
+// for trajectory scorers, but users may still want it for custom use cases.
+export { extractTrajectory } from '@mastra/core/evals';
+
+/**
+ * Compares two trajectories and returns detailed comparison results.
+ *
+ * This is the core comparison logic used by trajectory scorers. It supports
+ * strict and non-strict ordering, optional step data comparison, and loop detection.
+ *
+ * @param actual - The trajectory the agent actually took
+ * @param expected - The expected trajectory to compare against
+ * @param options - Comparison configuration options
+ * @returns Detailed comparison results including match scores and diagnostics
+ *
+ * @example
+ * ```ts
+ * const result = compareTrajectories(
+ *   { steps: [{ stepType: 'tool_call', name: 'search' }, { stepType: 'tool_call', name: 'summarize' }] },
+ *   { steps: [{ stepType: 'tool_call', name: 'search' }, { stepType: 'tool_call', name: 'summarize' }] },
+ *   { strictOrder: true }
+ * );
+ * // result.score = 1.0
+ * ```
+ */
+export function compareTrajectories(
+  actual: Trajectory,
+  expected: Trajectory | { steps: ExpectedStep[] },
+  options: {
+    ordering?: 'strict' | 'relaxed' | 'unordered';
+    /** @deprecated Use ordering: 'strict' instead */
+    strictOrder?: boolean;
+    compareStepData?: boolean;
+    allowRepeatedSteps?: boolean;
+  } = {},
+): TrajectoryComparisonResult {
+  const { compareStepData = false, allowRepeatedSteps = true } = options;
+
+  // Normalize expected to ExpectedStep[]. We need to distinguish between
+  // Trajectory (containing TrajectoryStep[]) and { steps: ExpectedStep[] }.
+  // TrajectoryStep variants have fields like toolArgs, toolResult, agentId, modelId, etc.
+  // ExpectedStep has optional data, children (TrajectoryExpectation), and lacks those fields.
+  const trajectoryStepKeys = [
+    'toolArgs',
+    'toolResult',
+    'agentId',
+    'modelId',
+    'durationMs',
+    'success',
+    'promptTokens',
+    'completionTokens',
+  ];
+  const hasTrajectorySteps =
+    expected.steps.length > 0 && expected.steps.some((s: any) => trajectoryStepKeys.some(k => k in s));
+
+  let normalizedExpected: { steps: ExpectedStep[] };
+  if (hasTrajectorySteps) {
+    // Convert TrajectoryStep[] to ExpectedStep[] by extracting step-specific data
+    normalizedExpected = {
+      steps: (expected.steps as TrajectoryStep[]).map((s: TrajectoryStep) => {
+        const stepData = getStepData(s);
+        const data: Record<string, unknown> = {};
+        if (stepData.input !== undefined) data.input = stepData.input;
+        if (stepData.output !== undefined) data.output = stepData.output;
+        return {
+          name: s.name,
+          stepType: s.stepType,
+          ...(Object.keys(data).length > 0 ? { data } : {}),
+        } as ExpectedStep;
+      }),
+    };
+  } else {
+    // Already ExpectedStep[] — use as-is
+    normalizedExpected = expected as { steps: ExpectedStep[] };
+  }
+
+  // Resolve ordering: new `ordering` option takes precedence over deprecated `strictOrder`
+  let ordering: 'strict' | 'relaxed' | 'unordered' = 'relaxed';
+  if (options.ordering) {
+    ordering = options.ordering;
+  } else if (options.strictOrder) {
+    ordering = 'strict';
+  }
+
+  if (normalizedExpected.steps.length === 0) {
+    return {
+      score: actual.steps.length === 0 ? 1 : 0,
+      matchedSteps: 0,
+      totalExpectedSteps: 0,
+      totalActualSteps: actual.steps.length,
+      missingSteps: [],
+      extraSteps: actual.steps.map((s: TrajectoryStep) => s.name),
+      outOfOrderSteps: [],
+      repeatedSteps: [],
+    };
+  }
+
+  const actualNames = actual.steps.map((s: TrajectoryStep) => s.name);
+
+  // Detect repeated steps
+  const nameCounts = new Map<string, number>();
+  for (const name of actualNames) {
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  }
+  const repeatedSteps = [...nameCounts.entries()]
+    .filter(([_, count]: [string, number]) => count > 1)
+    .map(([name]: [string, number]) => name);
+
+  if (ordering === 'strict') {
+    return compareStrictOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+  }
+
+  if (ordering === 'unordered') {
+    return compareUnorderedPresence(actual, normalizedExpected, {
+      compareStepData,
+      allowRepeatedSteps,
+      repeatedSteps,
+    });
+  }
+
+  return compareRelaxedOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+}
+
+/**
+ * Result of comparing two trajectories.
+ */
+export type TrajectoryComparisonResult = {
+  /** Overall match score from 0 to 1 */
+  score: number;
+  /** Number of expected steps that were matched */
+  matchedSteps: number;
+  /** Total number of expected steps */
+  totalExpectedSteps: number;
+  /** Total number of actual steps taken */
+  totalActualSteps: number;
+  /** Expected steps that were not found in the actual trajectory */
+  missingSteps: string[];
+  /** Actual steps that were not in the expected trajectory */
+  extraSteps: string[];
+  /** Steps that appear but not in the expected position */
+  outOfOrderSteps: string[];
+  /** Steps that were repeated (appeared more than once) */
+  repeatedSteps: string[];
+};
+
+function compareStrictOrder(
+  actual: Trajectory,
+  expected: { steps: ExpectedStep[] },
+  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+): TrajectoryComparisonResult {
+  const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
+
+  // Strict: exact same sequence
+  let matchedSteps = 0;
+  const outOfOrderSteps: string[] = [];
+  const matchedExpectedIndices = new Set<number>();
+  const maxLen = Math.max(actualNames.length, expectedNames.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const actualName = actualNames[i];
+    const expectedName = expectedNames[i];
+    if (actualName === expectedName) {
+      if (opts.compareStepData && actual.steps[i] && expected.steps[i]) {
+        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, true)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
+        }
+      } else if (actual.steps[i] && expected.steps[i]) {
+        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, false)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
+        }
+      } else {
+        matchedSteps++;
+        matchedExpectedIndices.add(i);
+      }
+    } else if (actualName && expectedNames.includes(actualName)) {
+      outOfOrderSteps.push(actualName);
+    }
+  }
+
+  // Missing steps = expected steps that were not matched (accounts for stepType/data mismatches)
+  const missingSteps: string[] = expectedNames.filter((_: string, i: number) => !matchedExpectedIndices.has(i));
+  const extraSteps: string[] = actualNames.filter((name: string) => !expectedNames.includes(name));
+
+  let score = matchedSteps / expected.steps.length;
+
+  // Penalize extra steps in strict mode
+  if (actualNames.length > expectedNames.length) {
+    const extraPenalty = (actualNames.length - expectedNames.length) / expectedNames.length;
+    score = Math.max(0, score - extraPenalty * 0.5);
+  }
+
+  // Penalize repeated steps if not allowed
+  if (!opts.allowRepeatedSteps && opts.repeatedSteps.length > 0) {
+    score = Math.max(0, score - opts.repeatedSteps.length * 0.1);
+  }
+
+  return {
+    score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
+    matchedSteps,
+    totalExpectedSteps: expected.steps.length,
+    totalActualSteps: actual.steps.length,
+    missingSteps,
+    extraSteps,
+    outOfOrderSteps,
+    repeatedSteps: opts.repeatedSteps,
+  };
+}
+
+function compareRelaxedOrder(
+  actual: Trajectory,
+  expected: { steps: ExpectedStep[] },
+  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+): TrajectoryComparisonResult {
+  const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
+
+  // Relaxed: expected steps must appear in order but extra steps are allowed
+  let matchedSteps = 0;
+  let lastMatchedIndex = -1;
+  const outOfOrderSteps: string[] = [];
+  const matchedExpectedIndices = new Set<number>();
+
+  for (let i = 0; i < expectedNames.length; i++) {
+    const expectedName = expectedNames[i];
+    let found = false;
+
+    for (let j = lastMatchedIndex + 1; j < actualNames.length; j++) {
+      if (actualNames[j] === expectedName) {
+        if (actual.steps[j] && expected.steps[i]) {
+          if (expectedStepMatches(actual.steps[j]!, expected.steps[i]!, opts.compareStepData)) {
+            matchedSteps++;
+            lastMatchedIndex = j;
+            matchedExpectedIndices.add(i);
+            found = true;
+            break;
+          }
+        } else {
+          matchedSteps++;
+          lastMatchedIndex = j;
+          matchedExpectedIndices.add(i);
+          found = true;
+          break;
+        }
+      }
+    }
+
+    if (!found) {
+      // Check if the step exists but is out of order
+      if (actualNames.includes(expectedName!)) {
+        outOfOrderSteps.push(expectedName!);
+      }
+    }
+  }
+
+  // Missing steps = expected steps that were not matched (by name + stepType + data, not just name)
+  const missingSteps = expectedNames.filter((_, i) => !matchedExpectedIndices.has(i));
+  const expectedSet = new Set(expectedNames);
+  const extraSteps = actualNames.filter(name => !expectedSet.has(name));
+
+  let score = matchedSteps / expected.steps.length;
+
+  // Penalize repeated steps if not allowed
+  if (!opts.allowRepeatedSteps && opts.repeatedSteps.length > 0) {
+    score = Math.max(0, score - opts.repeatedSteps.length * 0.1);
+  }
+
+  return {
+    score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
+    matchedSteps,
+    totalExpectedSteps: expected.steps.length,
+    totalActualSteps: actual.steps.length,
+    missingSteps,
+    extraSteps,
+    outOfOrderSteps,
+    repeatedSteps: opts.repeatedSteps,
+  };
+}
+
+/**
+ * Extract the data fields from a step for comparison purposes.
+ * Returns an object with `input` and `output` fields based on the step type.
+ */
+function getStepData(step: TrajectoryStep): { input?: unknown; output?: unknown } {
+  switch (step.stepType) {
+    case 'tool_call':
+    case 'mcp_tool_call':
+      return { input: step.toolArgs, output: step.toolResult };
+    case 'workflow_step':
+      return { output: step.output };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Check if an actual TrajectoryStep matches an ExpectedStep.
+ * Matches by name, optionally by stepType, and optionally by data fields.
+ */
+function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep, compareData: boolean): boolean {
+  if (actual.name !== expected.name) return false;
+  if (expected.stepType && actual.stepType !== expected.stepType) return false;
+
+  if (compareData && expected.data) {
+    const actualData = getStepData(actual);
+    for (const [key, value] of Object.entries(expected.data)) {
+      const actualField = key === 'input' ? actualData.input : key === 'output' ? actualData.output : undefined;
+      if (actualField === undefined) return false;
+      try {
+        if (JSON.stringify(actualField) !== JSON.stringify(value)) return false;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function compareUnorderedPresence(
+  actual: Trajectory,
+  expected: { steps: ExpectedStep[] },
+  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+): TrajectoryComparisonResult {
+  const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
+  const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
+
+  let matchedSteps = 0;
+  const matchedExpectedIndices = new Set<number>();
+
+  if (opts.compareStepData) {
+    // For data comparison, try to match each expected step to an unused actual step
+    const usedIndices = new Set<number>();
+    for (let i = 0; i < expected.steps.length; i++) {
+      const expectedStep = expected.steps[i]!;
+      for (let j = 0; j < actual.steps.length; j++) {
+        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, true)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
+          usedIndices.add(j);
+          break;
+        }
+      }
+    }
+  } else {
+    // Name + stepType based presence check using expectedStepMatches
+    const usedIndices = new Set<number>();
+    for (let i = 0; i < expected.steps.length; i++) {
+      const expectedStep = expected.steps[i]!;
+      for (let j = 0; j < actual.steps.length; j++) {
+        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, false)) {
+          matchedSteps++;
+          matchedExpectedIndices.add(i);
+          usedIndices.add(j);
+          break;
+        }
+      }
+    }
+  }
+
+  // Missing steps = expected steps that were not matched (accounts for stepType/data mismatches)
+  const missingSteps = expectedNames.filter((_, i) => !matchedExpectedIndices.has(i));
+  const expectedSet = new Set(expectedNames);
+  const extraSteps = actualNames.filter(name => !expectedSet.has(name));
+
+  let score = matchedSteps / expected.steps.length;
+
+  // Penalize repeated steps if not allowed
+  if (!opts.allowRepeatedSteps && opts.repeatedSteps.length > 0) {
+    score = Math.max(0, score - opts.repeatedSteps.length * 0.1);
+  }
+
+  return {
+    score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
+    matchedSteps,
+    totalExpectedSteps: expected.steps.length,
+    totalActualSteps: actual.steps.length,
+    missingSteps,
+    extraSteps,
+    outOfOrderSteps: [], // ordering not checked in unordered mode
+    repeatedSteps: opts.repeatedSteps,
+  };
+}
+
+// ─── Efficiency evaluation ───
+
+/**
+ * Result of checking trajectory efficiency.
+ */
+export type TrajectoryEfficiencyResult = {
+  /** Overall efficiency score from 0 to 1 */
+  score: number;
+  /** Total number of steps taken */
+  totalSteps: number;
+  /** Whether the step budget was exceeded */
+  overStepBudget: boolean;
+  /** Total tokens used across model_generation steps */
+  totalTokens: number;
+  /** Whether the token budget was exceeded */
+  overTokenBudget: boolean;
+  /** Total duration in milliseconds */
+  totalDurationMs: number;
+  /** Whether the duration budget was exceeded */
+  overDurationBudget: boolean;
+  /** Redundant calls detected (same tool + same args consecutively) */
+  redundantCalls: Array<{ name: string; index: number }>;
+};
+
+/**
+ * Evaluate trajectory efficiency against budgets and redundancy checks.
+ */
+export function checkTrajectoryEfficiency(
+  trajectory: Trajectory,
+  options: {
+    maxSteps?: number;
+    maxTotalTokens?: number;
+    maxTotalDurationMs?: number;
+    noRedundantCalls?: boolean;
+  } = {},
+): TrajectoryEfficiencyResult {
+  const { maxSteps, maxTotalTokens, maxTotalDurationMs, noRedundantCalls = true } = options;
+
+  const totalSteps = trajectory.steps.length;
+
+  // Calculate total tokens from model_generation steps
+  let totalTokens = 0;
+  for (const step of trajectory.steps) {
+    if (step.stepType === 'model_generation') {
+      totalTokens += (step.promptTokens ?? 0) + (step.completionTokens ?? 0);
+    }
+  }
+
+  // Calculate total duration
+  const totalDurationMs =
+    trajectory.totalDurationMs ?? trajectory.steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+
+  // Detect redundant calls (same tool name + same args in consecutive calls)
+  const redundantCalls: Array<{ name: string; index: number }> = [];
+  if (noRedundantCalls) {
+    for (let i = 1; i < trajectory.steps.length; i++) {
+      const prev = trajectory.steps[i - 1]!;
+      const curr = trajectory.steps[i]!;
+      if (
+        prev.name === curr.name &&
+        prev.stepType === curr.stepType &&
+        (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
+      ) {
+        const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
+        const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
+        try {
+          if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
+            redundantCalls.push({ name: curr.name, index: i });
+          }
+        } catch {
+          // If serialization fails, don't flag as redundant
+        }
+      }
+    }
+  }
+
+  const overStepBudget = maxSteps !== undefined && totalSteps > maxSteps;
+  const overTokenBudget = maxTotalTokens !== undefined && totalTokens > maxTotalTokens;
+  const overDurationBudget = maxTotalDurationMs !== undefined && totalDurationMs > maxTotalDurationMs;
+
+  // Calculate score: each dimension contributes equally
+  const dimensions: number[] = [];
+
+  if (maxSteps !== undefined) {
+    dimensions.push(overStepBudget ? Math.max(0, 1 - (totalSteps - maxSteps) / maxSteps) : 1);
+  }
+  if (maxTotalTokens !== undefined) {
+    dimensions.push(overTokenBudget ? Math.max(0, 1 - (totalTokens - maxTotalTokens) / maxTotalTokens) : 1);
+  }
+  if (maxTotalDurationMs !== undefined) {
+    dimensions.push(
+      overDurationBudget ? Math.max(0, 1 - (totalDurationMs - maxTotalDurationMs) / maxTotalDurationMs) : 1,
+    );
+  }
+  if (noRedundantCalls) {
+    dimensions.push(redundantCalls.length === 0 ? 1 : Math.max(0, 1 - redundantCalls.length * 0.2));
+  }
+
+  const score = dimensions.length > 0 ? dimensions.reduce((a, b) => a + b, 0) / dimensions.length : 1;
+
+  return {
+    score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
+    totalSteps,
+    overStepBudget,
+    totalTokens,
+    overTokenBudget,
+    totalDurationMs,
+    overDurationBudget,
+    redundantCalls,
+  };
+}
+
+// ─── Blacklist evaluation ───
+
+/**
+ * Result of checking trajectory against a blacklist.
+ */
+export type TrajectoryBlacklistResult = {
+  /** Score: 1.0 if clean, 0.0 if any violation found */
+  score: number;
+  /** Individual blacklisted tools that were found */
+  violatedTools: string[];
+  /** Blacklisted sequences that were found */
+  violatedSequences: string[][];
+};
+
+/**
+ * Check if a trajectory violates any blacklist rules.
+ * Returns score 0.0 if any violation is found (hard fail).
+ */
+export function checkTrajectoryBlacklist(
+  trajectory: Trajectory,
+  options: {
+    blacklistedTools?: string[];
+    blacklistedSequences?: string[][];
+  } = {},
+): TrajectoryBlacklistResult {
+  const { blacklistedTools = [], blacklistedSequences = [] } = options;
+  const violatedTools: string[] = [];
+  const violatedSequences: string[][] = [];
+
+  const stepNames = trajectory.steps.map(s => s.name);
+
+  // Check blacklisted tools
+  for (const forbidden of blacklistedTools) {
+    if (stepNames.includes(forbidden)) {
+      violatedTools.push(forbidden);
+    }
+  }
+
+  // Check blacklisted sequences (contiguous subsequences)
+  for (const sequence of blacklistedSequences) {
+    if (sequence.length === 0) continue;
+    for (let i = 0; i <= stepNames.length - sequence.length; i++) {
+      let match = true;
+      for (let j = 0; j < sequence.length; j++) {
+        if (stepNames[i + j] !== sequence[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        violatedSequences.push(sequence);
+        break; // Only report each sequence once
+      }
+    }
+  }
+
+  const hasViolations = violatedTools.length > 0 || violatedSequences.length > 0;
+
+  return {
+    score: hasViolations ? 0 : 1,
+    violatedTools,
+    violatedSequences,
+  };
+}
+
+// ─── Tool failure analysis ───
+
+/**
+ * A detected tool failure pattern in the trajectory.
+ */
+export type ToolFailurePattern = {
+  /** The tool name that experienced failure */
+  toolName: string;
+  /** Number of consecutive retries (same tool, same or similar args) */
+  retryCount: number;
+  /** Whether the agent fell back to a different tool after failures */
+  fellBackToAlternative: boolean;
+  /** The alternative tool used, if any */
+  alternativeTool?: string;
+  /** Whether any retry eventually succeeded */
+  eventuallySucceeded: boolean;
+};
+
+/**
+ * Result of analyzing tool failure patterns in a trajectory.
+ */
+export type ToolFailureAnalysisResult = {
+  /** Score from 0 to 1 (lower = more failures/retries) */
+  score: number;
+  /** Tool failure patterns detected */
+  patterns: ToolFailurePattern[];
+  /** Total number of retries across all tools */
+  totalRetries: number;
+  /** Tools that exceeded the retry threshold */
+  excessiveRetryTools: string[];
+};
+
+/**
+ * Analyze tool failure and retry patterns in a trajectory.
+ */
+export function analyzeToolFailures(
+  trajectory: Trajectory,
+  options: {
+    maxRetriesPerTool?: number;
+  } = {},
+): ToolFailureAnalysisResult {
+  const { maxRetriesPerTool = 2 } = options;
+  const patterns: ToolFailurePattern[] = [];
+  let totalRetries = 0;
+
+  const toolCallSteps = trajectory.steps.filter(s => s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call');
+
+  if (toolCallSteps.length === 0) {
+    return { score: 1, patterns: [], totalRetries: 0, excessiveRetryTools: [] };
+  }
+
+  // Group consecutive calls to the same tool as potential retry sequences
+  let i = 0;
+  while (i < toolCallSteps.length) {
+    const currentTool = toolCallSteps[i]!;
+    let retryCount = 0;
+    let j = i + 1;
+
+    // Count consecutive calls to the same tool
+    // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
+    while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
+      const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+      if (prevStep.success === false) {
+        retryCount++;
+      }
+      j++;
+    }
+
+    if (retryCount > 0) {
+      // Check if agent fell back to a different tool after retries
+      const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
+      const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+      const lastSuccess = lastRetry.success !== false;
+
+      patterns.push({
+        toolName: currentTool.name,
+        retryCount,
+        fellBackToAlternative: nextDifferentTool !== undefined && !lastSuccess,
+        alternativeTool: nextDifferentTool !== undefined && !lastSuccess ? nextDifferentTool.name : undefined,
+        eventuallySucceeded: lastSuccess,
+      });
+
+      totalRetries += retryCount;
+    }
+
+    i = j;
+  }
+
+  // Score: penalize excessive retries
+  const excessiveRetryTools = patterns.filter(p => p.retryCount > maxRetriesPerTool).map(p => p.toolName);
+
+  let score = 1;
+  if (toolCallSteps.length > 0) {
+    // Each retry beyond the threshold costs more
+    const excessRetries = patterns.reduce((sum, p) => sum + Math.max(0, p.retryCount - maxRetriesPerTool), 0);
+    score = Math.max(0, 1 - excessRetries * 0.2);
+  }
+
+  return {
+    score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
+    patterns,
+    totalRetries,
+    excessiveRetryTools,
+  };
 }
