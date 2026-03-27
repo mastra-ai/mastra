@@ -1649,7 +1649,6 @@ export class Agent<
    */
   __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>) {
     this.#instructions = newInstructions as DynamicArgument<AgentInstructions, TRequestContext>;
-    this.logger.debug('Instructions updated', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1658,7 +1657,6 @@ export class Agent<
    */
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> | ModelFallbacks }) {
     this.model = model;
-    this.logger.debug('Model updated', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1668,7 +1666,6 @@ export class Agent<
    */
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
-    this.logger.debug('Model reset to original', { agent: this.name, model: this.model });
   }
 
   /**
@@ -1701,7 +1698,6 @@ export class Agent<
       const bPos = bIndex === -1 ? Infinity : bIndex;
       return aPos - bPos;
     });
-    this.logger.debug('Models reordered', { agent: this.name });
   }
 
   updateModelInModelList({
@@ -1741,7 +1737,6 @@ export class Agent<
       }
       return mdl;
     });
-    this.logger.debug('Model updated', { agent: this.name, modelId: id });
   }
 
   #primitives?: MastraPrimitives;
@@ -1757,8 +1752,6 @@ export class Agent<
 
     // Store primitives for later use when creating LLM instances
     this.#primitives = p;
-
-    this.logger.debug('Agent initialized', { agent: this.name, model: this.model });
   }
 
   /**
