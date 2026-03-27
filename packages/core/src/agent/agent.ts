@@ -4391,11 +4391,13 @@ export class Agent<
           minMessages,
         } = this.resolveTitleGenerationConfig(config?.generateTitle);
 
-        const messages = messageList.get.all.ui();
+        const uiMessages = messageList.get.all.ui();
+        const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
-          const userMessage = this.getMostRecentUserMessage(messages);
+          const userMessage = this.getMostRecentUserMessage(uiMessages);
+
           if (userMessage) {
             const title = await this.genTitle(
               userMessage,
@@ -4404,6 +4406,7 @@ export class Agent<
               titleModel,
               titleInstructions,
             );
+
             if (title) {
               await memory.createThread({
                 threadId: thread.id,
@@ -4773,7 +4776,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = await (result.result as MastraModelOutput<OUTPUT>).getFullOutput();
+    const fullOutput = await result.result.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -4889,7 +4892,7 @@ export class Agent<
       });
     }
 
-    return result.result as MastraModelOutput<OUTPUT>;
+    return result.result;
   }
 
   /**
@@ -5137,7 +5140,7 @@ export class Agent<
       });
     }
 
-    const fullOutput = (await (result.result as MastraModelOutput<OUTPUT>).getFullOutput()) as Awaited<
+    const fullOutput = (await result.result.getFullOutput()) as Awaited<
       ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
     >;
 
@@ -5355,7 +5358,6 @@ export class Agent<
         shouldGenerate: true,
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
-        minMessages: generateTitleConfig.minMessages,
       };
     }
 
