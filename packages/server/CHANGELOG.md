@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.18.0-alpha.1
+
+### Patch Changes
+
+- Added experiment review summary API endpoint and client SDK method. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+  - **Server**: New `GET /experiments/review-summary` endpoint that returns aggregated review status counts (`needsReview`, `reviewed`, `complete`) per experiment, with totals.
+  - **Client SDK**: New `getExperimentReviewSummary()` method and `ExperimentReviewCounts` type for querying the review pipeline state from the client.
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
 ## 1.18.0-alpha.0
 
 ### Minor Changes

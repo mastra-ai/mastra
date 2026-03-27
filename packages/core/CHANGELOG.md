@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 1.18.0-alpha.1
+
+### Minor Changes
+
+- **Trajectory evaluation**: Added trajectory types and trace-based extraction for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+
+  `TrajectoryStep` models each step in an execution as a typed object — tool calls, model generations, agent runs, workflow steps, and control flow nodes each have their own variant with relevant properties (e.g., `toolArgs`/`toolResult` for tool calls, `modelId`/`promptTokens` for model generations). Steps can be nested via `children` to represent hierarchical execution.
+
+  `TrajectoryExpectation` lets you define what a good trajectory looks like — expected steps, ordering, step/token/duration budgets, blacklisted tools, and retry thresholds. `ExpectedStep` provides a simple way to define expected steps by name and optional stepType, with support for nested expectations via `children` to set different evaluation rules at each level of the hierarchy.
+
+  **Trace-based extraction:** `extractTrajectoryFromTrace()` builds hierarchical trajectories from observability trace spans. The `runEvals` pipeline automatically uses this when storage is configured, capturing the full execution tree including nested agent runs and tool calls. Falls back to `extractTrajectory` (agents) or `extractWorkflowTrajectory` (workflows) when storage is unavailable.
+
+  **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
+
+### Patch Changes
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
 ## 1.18.0-alpha.0
 
 ### Minor Changes

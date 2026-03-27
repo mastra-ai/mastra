@@ -1,5 +1,21 @@
 # mastra
 
+## 1.3.16-alpha.4
+
+### Patch Changes
+
+- Restructured Studio sidebar navigation into section-based layout with overview pages. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+  - **Section headers**: Sidebar now groups links under "Primitives", "Evaluation", and "Observability" section headers. Headers are clickable and link to overview pages.
+  - **Sub-link indentation**: Links within each section are visually indented when the sidebar is expanded.
+  - **Overview pages**: New overview pages for Primitives (`/primitives`), Observability (`/observability-overview`), and Resources (`/resources`) showing clickable cards for each sub-section.
+  - **Evaluation tab bar removed**: Scorers, Datasets, and Experiments are now navigated via sidebar sub-links instead of in-page tabs.
+  - **Layout cleanup**: Removed grey `bg-surface2` panel styling from the main content area, applying the dark background universally. Cleaned up experimental UI gating code.
+  - **Sidebar bottom**: Removed "Share" button (moved to Resources page) and "Templates" link. Sidebar bottom now only shows the version footer.
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/deployer@1.18.0-alpha.1
+
 ## 1.3.16-alpha.3
 
 ### Patch Changes
