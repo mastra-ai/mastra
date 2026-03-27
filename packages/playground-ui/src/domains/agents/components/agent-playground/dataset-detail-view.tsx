@@ -363,7 +363,8 @@ export function DatasetDetailView({
                         <button
                           type="button"
                           onClick={() => handleDetachScorer(id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-neutral3 hover:text-red-500 p-0.5"
+                          aria-label={`Detach "${name}" from this dataset`}
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-neutral3 hover:text-red-500 p-0.5"
                           title="Detach scorer"
                         >
                           <Icon size="sm">
