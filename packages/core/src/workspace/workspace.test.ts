@@ -1632,12 +1632,10 @@ Line 3 conclusion`;
         autoIndexPaths: ['docs'],
       });
 
-      // Spy on the search engine's index method to make it throw
       const searchEngine = (workspace as any)._searchEngine;
-      const originalIndex = searchEngine.index.bind(searchEngine);
-      searchEngine.index = vi.fn().mockRejectedValue(new Error('embedder failed'));
+      vi.spyOn(searchEngine, 'index').mockRejectedValue(new Error('embedder failed'));
 
-      // Set up a mock logger to capture warnings
+      // __setLogger is normally called by Mastra; we call it directly for unit testing
       const mockLogger = {
         debug: vi.fn(),
         info: vi.fn(),
@@ -1648,17 +1646,13 @@ Line 3 conclusion`;
 
       await workspace.init();
 
-      // Init should still succeed
       expect(workspace.status).toBe('ready');
-
-      // A warning should have been logged for the indexing failure
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to index file'),
         expect.objectContaining({ error: expect.any(Error) }),
       );
 
-      // Restore original index for cleanup
-      searchEngine.index = originalIndex;
+      vi.restoreAllMocks();
       await workspace.destroy();
     });
   });
