@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 20.0.0-alpha.7
+
+### Patch Changes
+
+- Changed the Editor tab URL from /agents/:agentId/playground to /agents/:agentId/editor in Mastra Studio ([#14795](https://github.com/mastra-ai/mastra/pull/14795))
+
 ## 20.0.0-alpha.6
 
 ### Patch Changes
