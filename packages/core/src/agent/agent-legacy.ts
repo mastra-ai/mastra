@@ -153,11 +153,7 @@ export interface AgentLegacyCapabilities {
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | {
-          model: DynamicArgument<MastraModelConfig>;
-          instructions?: DynamicArgument<string>;
-          minMessages?: number;
-        }
+      | { model?: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number }
       | undefined,
   ): {
     shouldGenerate: boolean;

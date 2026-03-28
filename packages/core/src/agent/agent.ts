@@ -5340,7 +5340,7 @@ export class Agent<
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number }
+      | { model?: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number }
       | undefined,
   ): {
     shouldGenerate: boolean;
