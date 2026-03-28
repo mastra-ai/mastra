@@ -296,6 +296,9 @@ export class AgentBrowser extends MastraBrowser {
     } else {
       // For 'none' isolation or default thread, the shared browser is gone
       this.browserManager = null;
+      // Also clear the shared manager in the thread manager so getManagerForThread
+      // doesn't return the dead manager
+      this.threadManager.clearSharedManager();
     }
 
     super.handleBrowserDisconnected();
@@ -437,8 +440,14 @@ export class AgentBrowser extends MastraBrowser {
         return url;
       }
 
+      // For 'none' isolation, use the shared manager
       const manager = await this.getManagerForThread(threadId);
-      return manager.getPage().url();
+      const url = manager.getPage().url();
+      // Save URL for potential restore on relaunch (before external close)
+      if (url && url !== 'about:blank') {
+        this.lastUrl = url;
+      }
+      return url;
     } catch {
       return null;
     }

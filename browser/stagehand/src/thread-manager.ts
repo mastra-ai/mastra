@@ -65,6 +65,13 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   }
 
   /**
+   * Clear the shared Stagehand instance (called when browser disconnects).
+   */
+  clearStagehand(): void {
+    this.sharedStagehand = null;
+  }
+
+  /**
    * Set the factory function for creating new Stagehand instances.
    * Required for 'browser' isolation mode.
    */

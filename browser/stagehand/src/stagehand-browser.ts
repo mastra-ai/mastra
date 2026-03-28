@@ -282,6 +282,7 @@ export class StagehandBrowser extends MastraBrowser {
     } else {
       // For 'none' isolation or default thread, the shared stagehand is gone
       this.stagehand = null;
+      this.threadManager.clearStagehand();
     }
 
     super.handleBrowserDisconnected();
@@ -750,7 +751,12 @@ export class StagehandBrowser extends MastraBrowser {
     if (!page) return null;
 
     try {
-      return page.url();
+      const url = page.url();
+      // Save URL for potential restore on relaunch (before external close)
+      if (url && url !== 'about:blank') {
+        this.lastUrl = url;
+      }
+      return url;
     } catch {
       return null;
     }

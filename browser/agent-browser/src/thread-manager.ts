@@ -62,6 +62,13 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   }
 
   /**
+   * Clear the shared browser manager (called when browser disconnects).
+   */
+  clearSharedManager(): void {
+    this.sharedManager = null;
+  }
+
+  /**
    * Get the shared browser manager.
    */
   protected getSharedManager(): BrowserManager {
