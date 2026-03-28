@@ -31,6 +31,8 @@ export interface StagehandThreadSession extends ThreadSession {
 export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
   /** Function to create a new Stagehand instance (for 'browser' mode) */
   createStagehand?: () => Promise<V3>;
+  /** Callback when a new browser/Stagehand instance is created for a thread */
+  onBrowserCreated?: (stagehand: V3, threadId: string) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   private sharedStagehand: V3 | null = null;
   protected override sessions: Map<string, StagehandThreadSession> = new Map();
   private createStagehand?: () => Promise<V3>;
+  private onBrowserCreated?: (stagehand: V3, threadId: string) => void;
 
   /** Map of thread ID to dedicated Stagehand instance (for 'browser' mode) */
   private readonly threadStagehands = new Map<string, V3>();
@@ -51,6 +54,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   constructor(config: StagehandThreadManagerConfig) {
     super(config);
     this.createStagehand = config.createStagehand;
+    this.onBrowserCreated = config.onBrowserCreated;
   }
 
   /**
@@ -112,9 +116,13 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    * Create a new session for a thread.
    */
   protected override async createSession(threadId: string): Promise<StagehandThreadSession> {
+    // Check for saved lastUrl before creating new session (for browser restore)
+    const savedUrl = this.getSavedLastUrl(threadId);
+
     const session: StagehandThreadSession = {
       threadId,
       createdAt: Date.now(),
+      lastUrl: savedUrl, // Restore saved URL
     };
 
     if (this.isolation === 'browser') {
@@ -127,6 +135,22 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       const stagehand = await this.createStagehand();
       session.stagehand = stagehand;
       this.threadStagehands.set(threadId, stagehand);
+
+      // Notify parent browser so it can set up close listeners
+      this.onBrowserCreated?.(stagehand, threadId);
+
+      // Restore last URL if available
+      if (savedUrl) {
+        this.logger?.debug?.(`Restoring URL for thread ${threadId}: ${savedUrl}`);
+        try {
+          const page = stagehand.context.activePage();
+          if (page) {
+            await page.goto(savedUrl, { waitUntil: 'domcontentloaded' });
+          }
+        } catch (error) {
+          this.logger?.warn?.(`Failed to restore URL for thread ${threadId}: ${error}`);
+        }
+      }
     }
     // For 'none' isolation, no session setup needed - all threads share the instance
 
@@ -192,5 +216,30 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    */
   hasActiveThreadStagehands(): boolean {
     return this.threadStagehands.size > 0;
+  }
+
+  /**
+   * Clear all session tracking without closing browsers.
+   * Used when browsers have been externally closed and we just need to reset state.
+   */
+  clearAllSessions(): void {
+    this.threadStagehands.clear();
+    this.sessions.clear();
+  }
+
+  /**
+   * Clear a specific thread's session without closing the browser.
+   * Used when a thread's browser has been externally closed.
+   * Preserves the lastUrl for potential restoration.
+   * @param threadId - The thread ID to clear
+   */
+  clearSession(threadId: string): void {
+    // Save the lastUrl before clearing so it can be restored on relaunch
+    const session = this.sessions.get(threadId);
+    if (session?.lastUrl) {
+      this.savedLastUrls.set(threadId, session.lastUrl);
+    }
+    this.threadStagehands.delete(threadId);
+    this.sessions.delete(threadId);
   }
 }

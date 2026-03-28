@@ -65,6 +65,10 @@ export class StagehandBrowser extends MastraBrowser {
         // for threads that just started using the browser
         this.notifyBrowserReady();
       },
+      // When a new browser is created for a thread, set up close listener
+      onBrowserCreated: (stagehand, threadId) => {
+        this.setupCloseListenerForThread(stagehand, threadId);
+      },
     });
   }
 
@@ -183,6 +187,31 @@ export class StagehandBrowser extends MastraBrowser {
     }
   }
 
+  /**
+   * Set up close event listener for a thread's Stagehand instance.
+   * This handles the case where a thread's browser is closed externally.
+   */
+  private setupCloseListenerForThread(stagehand: Stagehand, threadId: string): void {
+    const context = stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
+    if (context?.on) {
+      context.on('close', () => {
+        this.logger.debug?.(`Browser context closed for thread: ${threadId}`);
+        this.handleThreadBrowserDisconnected(threadId);
+      });
+    }
+  }
+
+  /**
+   * Handle browser disconnection for a specific thread.
+   * Called when a thread's browser is closed externally.
+   */
+  private handleThreadBrowserDisconnected(threadId: string): void {
+    this.threadManager.clearSession(threadId);
+    this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
+    // Notify base class - this will trigger notifyBrowserClosed()
+    super.handleBrowserDisconnected();
+  }
+
   protected override async doClose(): Promise<void> {
     // Clean up all thread Stagehand instances first
     await this.threadManager.destroyAll();
@@ -240,9 +269,21 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Handle browser disconnection by clearing internal state and calling base class.
+   * For 'browser' isolation, only clears the current thread's session (not all threads).
    */
   override handleBrowserDisconnected(): void {
-    this.stagehand = null;
+    const isolation = this.threadManager.getIsolationMode();
+    const threadId = this.getCurrentThread();
+
+    if (isolation === 'browser' && threadId !== DEFAULT_THREAD_ID) {
+      // Only clear the specific thread's session - other threads have independent browsers
+      this.threadManager.clearSession(threadId);
+      this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
+    } else {
+      // For 'none' isolation or default thread, the shared stagehand is gone
+      this.stagehand = null;
+    }
+
     super.handleBrowserDisconnected();
   }
 
@@ -290,13 +331,9 @@ export class StagehandBrowser extends MastraBrowser {
     let stagehand = this.threadManager.getStagehandForThread(threadId);
     if (!stagehand) {
       // Create session which creates the Stagehand instance
+      // The onBrowserCreated callback will set up the close listener
       await this.threadManager.getManagerForThread(threadId);
       stagehand = this.threadManager.getStagehandForThread(threadId);
-
-      // Set up close listener for the new instance
-      if (stagehand) {
-        this.setupCloseListener(stagehand);
-      }
     }
 
     return stagehand ?? null;
@@ -700,7 +737,12 @@ export class StagehandBrowser extends MastraBrowser {
         return null; // No session yet, don't create one
       }
       const page = stagehand.context.activePage() as V3Page | null;
-      return page?.url() ?? null;
+      const url = page?.url() ?? null;
+      // Save URL for potential restore on relaunch (before external close)
+      if (url && url !== 'about:blank') {
+        this.threadManager.updateLastUrl(effectiveThreadId, url);
+      }
+      return url;
     }
 
     // For 'none' isolation, use the shared page

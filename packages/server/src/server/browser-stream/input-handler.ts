@@ -121,7 +121,7 @@ export function handleInputMessage(
       });
       break;
     case 'relaunch':
-      void relaunchBrowser(toolset).catch(err => {
+      void relaunchBrowser(toolset, threadId).catch(err => {
         console.warn('[InputHandler] Browser relaunch error:', err);
       });
       break;
@@ -174,9 +174,14 @@ function notifyBrowserClosed(toolset: MastraBrowser): void {
  * This is triggered when the user clicks the "Browser Closed" overlay.
  * If there was a previous URL, navigate back to it.
  */
-async function relaunchBrowser(toolset: MastraBrowser): Promise<void> {
-  const lastUrl = toolset.getLastUrl();
+async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promise<void> {
+  const lastUrl = toolset.getLastUrl(threadId);
   console.info(`[InputHandler] Relaunching browser...${lastUrl ? ` (restoring: ${lastUrl})` : ''}`);
+
+  // Set the current thread before ensuring ready so the session is created for this thread
+  if (threadId) {
+    toolset.setCurrentThread(threadId);
+  }
 
   await toolset.ensureReady();
 

@@ -74,6 +74,10 @@ export class AgentBrowser extends MastraBrowser {
         // for threads that just started using the browser
         this.notifyBrowserReady();
       },
+      // When a new browser is created for a thread, set up close listener
+      onBrowserCreated: (manager, threadId) => {
+        this.setupCloseListenerForThread(manager, threadId);
+      },
     });
   }
 
@@ -113,7 +117,21 @@ export class AgentBrowser extends MastraBrowser {
    * Delegates to ThreadManager for isolation handling.
    */
   async getManagerForThread(threadId?: string): Promise<BrowserManager> {
-    return this.threadManager.getManagerForThread(threadId ?? this.getCurrentThread());
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const isolation = this.threadManager.getIsolationMode();
+
+    // In 'browser' isolation, if no specific threadId, use the shared manager
+    // (which IS launched, unlike in DEFAULT_THREAD_ID case which would return placeholder)
+    if (isolation === 'browser' && (!effectiveThreadId || effectiveThreadId === DEFAULT_THREAD_ID)) {
+      // Check if we have any active thread sessions
+      const existingManager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+      if (existingManager) {
+        return existingManager;
+      }
+      // Fall through to create a session for DEFAULT_THREAD_ID
+    }
+
+    return this.threadManager.getManagerForThread(effectiveThreadId);
   }
 
   /**
@@ -170,19 +188,17 @@ export class AgentBrowser extends MastraBrowser {
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.browserManager);
 
-    // Listen for browser context close events to detect external closure
-    // Cast to access Playwright's BrowserContext.on() which the underlying library wraps
+    // Listen for browser disconnect to detect external closure (user closes browser window)
     try {
-      const page = this.browserManager.getPage();
-      const context = page.context() as unknown as { on?: (event: string, cb: () => void) => void };
-      if (context?.on) {
-        context.on('close', () => {
-          this.logger.debug?.('Browser context closed event received');
+      const browser = this.browserManager.getBrowser();
+      if (browser) {
+        browser.on('disconnected', () => {
+          this.logger.debug?.('Browser disconnected event received (none isolation)');
           this.handleBrowserDisconnected();
         });
       }
     } catch {
-      // Ignore errors getting page/context during launch
+      // Ignore errors setting up close listener
     }
   }
 
@@ -267,9 +283,54 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Handle browser disconnection by clearing internal state and calling base class.
+   * For 'browser' isolation, only clears the current thread's session (not all threads).
    */
   override handleBrowserDisconnected(): void {
-    this.browserManager = null;
+    const isolation = this.threadManager.getIsolationMode();
+    const threadId = this.getCurrentThread();
+
+    if (isolation === 'browser' && threadId !== DEFAULT_THREAD_ID) {
+      // Only clear the specific thread's session - other threads have independent browsers
+      this.threadManager.clearSession(threadId);
+      this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+    } else {
+      // For 'none' isolation or default thread, the shared browser is gone
+      this.browserManager = null;
+    }
+
+    super.handleBrowserDisconnected();
+  }
+
+  /**
+   * Set up close event listener for a thread's browser manager.
+   * This handles the case where a thread's browser is closed externally.
+   */
+  private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
+    try {
+      // Use getBrowser() to listen for browser disconnection
+      const browser = manager.getBrowser();
+      if (browser) {
+        browser.on('disconnected', () => {
+          this.logger.debug?.(`Browser disconnected for thread: ${threadId}`);
+          this.handleThreadBrowserDisconnected(threadId);
+        });
+        this.logger.debug?.(`Set up close listener for thread: ${threadId}`);
+      } else {
+        this.logger.warn?.(`No browser available to set up close listener for thread: ${threadId}`);
+      }
+    } catch (error) {
+      this.logger.warn?.(`Failed to set up close listener for thread ${threadId}: ${error}`);
+    }
+  }
+
+  /**
+   * Handle browser disconnection for a specific thread.
+   * Called when a thread's browser is closed externally.
+   */
+  private handleThreadBrowserDisconnected(threadId: string): void {
+    this.threadManager.clearSession(threadId);
+    this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+    // Notify base class - this will trigger notifyBrowserClosed()
     super.handleBrowserDisconnected();
   }
 
@@ -358,6 +419,24 @@ export class AgentBrowser extends MastraBrowser {
       return null;
     }
     try {
+      const effectiveThreadId = threadId ?? this.getCurrentThread();
+      const isolation = this.threadManager.getIsolationMode();
+
+      // For 'browser' isolation, check if we have an existing session first
+      // Don't create a new session just to get the URL
+      if (isolation === 'browser' && effectiveThreadId) {
+        const manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+        if (!manager) {
+          return null; // No session yet, don't create one
+        }
+        const url = manager.getPage().url();
+        // Save URL for potential restore on relaunch (before external close)
+        if (url && url !== 'about:blank') {
+          this.threadManager.updateLastUrl(effectiveThreadId, url);
+        }
+        return url;
+      }
+
       const manager = await this.getManagerForThread(threadId);
       return manager.getPage().url();
     } catch {

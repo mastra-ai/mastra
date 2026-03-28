@@ -596,9 +596,17 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Get the last known URL before the browser was closed.
    * Useful for restoring state on relaunch.
+   * @param threadId - Optional thread ID for thread-isolated sessions
    * @returns The last URL string, or undefined if not available
    */
-  getLastUrl(): string | undefined {
+  getLastUrl(threadId?: string): string | undefined {
+    // For thread isolation, check thread manager first
+    if (threadId && this.threadManager) {
+      const savedUrl = this.threadManager.getSavedLastUrl(threadId);
+      if (savedUrl) {
+        return savedUrl;
+      }
+    }
     return this.lastUrl;
   }
 

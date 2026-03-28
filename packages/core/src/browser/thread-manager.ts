@@ -54,6 +54,9 @@ export abstract class ThreadManager<TManager = unknown> {
   protected readonly sessions = new Map<string, ThreadSession>();
   protected activeThreadId: string = DEFAULT_THREAD_ID;
 
+  /** Preserved lastUrl values that survive session clears (for browser restore) */
+  protected readonly savedLastUrls = new Map<string, string>();
+
   private readonly onSessionCreated?: (session: ThreadSession) => void;
   private readonly onSessionDestroyed?: (threadId: string) => void;
 
@@ -176,12 +179,30 @@ export abstract class ThreadManager<TManager = unknown> {
 
   /**
    * Update the last URL for a thread session.
+   * Also saves to persistent storage so URL survives session clears.
    */
   updateLastUrl(threadId: string, url: string): void {
-    const session = this.sessions.get(threadId);
-    if (session && url && url !== 'about:blank') {
-      session.lastUrl = url;
+    if (url && url !== 'about:blank') {
+      const session = this.sessions.get(threadId);
+      if (session) {
+        session.lastUrl = url;
+      }
+      // Also save to persistent map so it survives session clears
+      this.savedLastUrls.set(threadId, url);
     }
+  }
+
+  /**
+   * Get the saved last URL for a thread (survives session clears).
+   */
+  getSavedLastUrl(threadId: string): string | undefined {
+    // First check current session
+    const session = this.sessions.get(threadId);
+    if (session?.lastUrl) {
+      return session.lastUrl;
+    }
+    // Fall back to saved URL
+    return this.savedLastUrls.get(threadId);
   }
 
   // ---------------------------------------------------------------------------
