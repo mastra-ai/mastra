@@ -1,7 +1,7 @@
 {
   "name": "@mastra/evm",
   "version": "0.0.1-alpha.0",
-  "description": "EVM blockchain integration for Mastra — read contracts, check balances, send transactions, and resolve ENS names",
+  "description": "EVM blockchain integration for Mastra — read contracts, check balances, query transactions, and resolve ENS names",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

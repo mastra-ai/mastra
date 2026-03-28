@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getPublicClient } from '../client';
+import { wrapError } from '../utils';
 
 export const getBlock = createTool({
   id: 'evm-get-block',
@@ -22,22 +23,26 @@ export const getBlock = createTool({
     chainId: z.number(),
   }),
   execute: async ({ blockNumber, chainId, rpcUrl }) => {
-    const client = getPublicClient(chainId, rpcUrl);
+    try {
+      const client = getPublicClient(chainId, rpcUrl);
 
-    const block = blockNumber !== undefined
-      ? await client.getBlock({ blockNumber: BigInt(blockNumber) })
-      : await client.getBlock();
+      const block = blockNumber !== undefined
+        ? await client.getBlock({ blockNumber: BigInt(blockNumber) })
+        : await client.getBlock();
 
-    return {
-      number: block.number?.toString() || '0',
-      hash: block.hash ?? null,
-      timestamp: block.timestamp.toString(),
-      timestampDate: new Date(Number(block.timestamp) * 1000).toISOString(),
-      gasUsed: block.gasUsed.toString(),
-      gasLimit: block.gasLimit.toString(),
-      baseFeePerGas: block.baseFeePerGas?.toString() ?? null,
-      transactionCount: block.transactions.length,
-      chainId,
-    };
+      return {
+        number: block.number?.toString() || '0',
+        hash: block.hash ?? null,
+        timestamp: block.timestamp.toString(),
+        timestampDate: new Date(Number(block.timestamp) * 1000).toISOString(),
+        gasUsed: block.gasUsed.toString(),
+        gasLimit: block.gasLimit.toString(),
+        baseFeePerGas: block.baseFeePerGas?.toString() ?? null,
+        transactionCount: block.transactions.length,
+        chainId,
+      };
+    } catch (error) {
+      wrapError(`Failed to get block ${blockNumber ?? 'latest'} on chain ${chainId}`, error);
+    }
   },
 });

@@ -1,8 +1,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { type Address } from 'viem';
+import { isAddress, getAddress, type Address } from 'viem';
 import { normalize } from 'viem/ens';
 import { getPublicClient } from '../client';
+import { wrapError } from '../utils';
 
 export const resolveEns = createTool({
   id: 'evm-resolve-ens',
@@ -18,24 +19,27 @@ export const resolveEns = createTool({
     direction: z.string(),
   }),
   execute: async ({ nameOrAddress, rpcUrl }) => {
-    const client = getPublicClient(1, rpcUrl);
+    try {
+      const client = getPublicClient(1, rpcUrl);
 
-    const isAddress = nameOrAddress.startsWith('0x') && nameOrAddress.length === 42;
+      if (isAddress(nameOrAddress)) {
+        const addr = getAddress(nameOrAddress);
+        const name = await client.getEnsName({ address: addr as Address });
+        return {
+          name: name ?? null,
+          address: addr,
+          direction: 'reverse',
+        };
+      }
 
-    if (isAddress) {
-      const name = await client.getEnsName({ address: nameOrAddress as Address });
+      const address = await client.getEnsAddress({ name: normalize(nameOrAddress) });
       return {
-        name: name ?? null,
-        address: nameOrAddress,
-        direction: 'reverse',
+        name: nameOrAddress,
+        address: address ?? null,
+        direction: 'forward',
       };
+    } catch (error) {
+      wrapError(`Failed to resolve ENS for "${nameOrAddress}"`, error);
     }
-
-    const address = await client.getEnsAddress({ name: normalize(nameOrAddress) });
-    return {
-      name: nameOrAddress,
-      address: address ?? null,
-      direction: 'forward',
-    };
   },
 });

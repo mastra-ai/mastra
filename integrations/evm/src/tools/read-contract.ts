@@ -1,15 +1,25 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { type Address } from 'viem';
 import { getPublicClient } from '../client';
+import { validateAddress, serializeBigInts, wrapError } from '../utils';
+
+const abiEntrySchema = z
+  .object({
+    type: z.string(),
+    name: z.string().optional(),
+    inputs: z.array(z.record(z.unknown())).optional(),
+    outputs: z.array(z.record(z.unknown())).optional(),
+    stateMutability: z.string().optional(),
+  })
+  .passthrough();
 
 export const readContract = createTool({
   id: 'evm-read-contract',
   description:
-    'Read data from any smart contract by calling a view/pure function. Provide the contract address, function ABI, and arguments.',
+    'Read data from any smart contract by calling a view/pure function. Provide the contract address, the ABI for the function you want to call, and its arguments.',
   inputSchema: z.object({
     contractAddress: z.string().describe('The smart contract address (0x format)'),
-    abi: z.array(z.record(z.unknown())).describe('The contract ABI (array of function definitions). Only include the function you want to call.'),
+    abi: z.array(abiEntrySchema).max(10).describe('The contract ABI entries. Only include the function you want to call. Each entry needs at minimum: type, name, inputs, outputs, stateMutability.'),
     functionName: z.string().describe('The function name to call'),
     args: z.array(z.unknown()).default([]).describe('Function arguments as an ordered array'),
     chainId: z.number().default(1).describe('Chain ID'),
@@ -22,20 +32,25 @@ export const readContract = createTool({
     chainId: z.number(),
   }),
   execute: async ({ contractAddress, abi, functionName, args, chainId, rpcUrl }) => {
-    const client = getPublicClient(chainId, rpcUrl);
+    try {
+      const addr = validateAddress(contractAddress);
+      const client = getPublicClient(chainId, rpcUrl);
 
-    const result = await client.readContract({
-      address: contractAddress as Address,
-      abi,
-      functionName,
-      args,
-    });
+      const result = await client.readContract({
+        address: addr,
+        abi,
+        functionName,
+        args,
+      });
 
-    return {
-      result: typeof result === 'bigint' ? result.toString() : result,
-      contractAddress,
-      functionName,
-      chainId,
-    };
+      return {
+        result: serializeBigInts(result),
+        contractAddress: addr,
+        functionName,
+        chainId,
+      };
+    } catch (error) {
+      wrapError(`Failed to call ${functionName}() on ${contractAddress} (chain ${chainId})`, error);
+    }
   },
 });

@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { type Address, formatUnits } from 'viem';
+import { formatUnits } from 'viem';
 import { getPublicClient } from '../client';
+import { validateAddress, wrapError } from '../utils';
 
 const ERC20_ABI = [
   {
@@ -55,26 +56,30 @@ export const getTokenBalance = createTool({
     chainId: z.number(),
   }),
   execute: async ({ address, tokenAddress, chainId, rpcUrl }) => {
-    const client = getPublicClient(chainId, rpcUrl);
-    const addr = address as Address;
-    const token = tokenAddress as Address;
+    try {
+      const addr = validateAddress(address);
+      const token = validateAddress(tokenAddress);
+      const client = getPublicClient(chainId, rpcUrl);
 
-    const [balance, decimals, symbol, name] = await Promise.all([
-      client.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
-      client.readContract({ address: token, abi: ERC20_ABI, functionName: 'decimals' }),
-      client.readContract({ address: token, abi: ERC20_ABI, functionName: 'symbol' }),
-      client.readContract({ address: token, abi: ERC20_ABI, functionName: 'name' }),
-    ]);
+      const [balance, decimals, symbol, name] = await Promise.all([
+        client.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+        client.readContract({ address: token, abi: ERC20_ABI, functionName: 'decimals' }),
+        client.readContract({ address: token, abi: ERC20_ABI, functionName: 'symbol' }),
+        client.readContract({ address: token, abi: ERC20_ABI, functionName: 'name' }),
+      ]);
 
-    return {
-      address,
-      tokenAddress,
-      balanceRaw: balance.toString(),
-      balanceFormatted: formatUnits(balance, decimals),
-      decimals,
-      symbol,
-      name,
-      chainId,
-    };
+      return {
+        address: addr,
+        tokenAddress: token,
+        balanceRaw: balance.toString(),
+        balanceFormatted: formatUnits(balance, decimals),
+        decimals,
+        symbol,
+        name,
+        chainId,
+      };
+    } catch (error) {
+      wrapError(`Failed to get token balance for ${address} (token: ${tokenAddress}) on chain ${chainId}`, error);
+    }
   },
 });

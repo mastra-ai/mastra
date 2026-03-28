@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { formatEther, type Hash } from 'viem';
+import { formatUnits, type Hash } from 'viem';
 import { getPublicClient } from '../client';
+import { wrapError } from '../utils';
 
 export const getTransaction = createTool({
   id: 'evm-get-transaction',
@@ -17,35 +18,43 @@ export const getTransaction = createTool({
     to: z.string().nullable(),
     value: z.string(),
     valueFormatted: z.string(),
+    symbol: z.string(),
     gasPrice: z.string().nullable(),
     blockNumber: z.string().nullable(),
     status: z.string(),
     chainId: z.number(),
   }),
   execute: async ({ hash, chainId, rpcUrl }) => {
-    const client = getPublicClient(chainId, rpcUrl);
-    const txHash = hash as Hash;
+    try {
+      const client = getPublicClient(chainId, rpcUrl);
+      const txHash = hash as Hash;
+      const decimals = client.chain?.nativeCurrency.decimals ?? 18;
+      const symbol = client.chain?.nativeCurrency.symbol || 'ETH';
 
-    const [tx, receipt] = await Promise.all([
-      client.getTransaction({ hash: txHash }),
-      client.getTransactionReceipt({ hash: txHash }).catch(() => null),
-    ]);
+      const [tx, receipt] = await Promise.all([
+        client.getTransaction({ hash: txHash }),
+        client.getTransactionReceipt({ hash: txHash }).catch(() => null),
+      ]);
 
-    let status = 'pending';
-    if (receipt) {
-      status = receipt.status === 'success' ? 'success' : 'reverted';
+      let status = 'pending';
+      if (receipt) {
+        status = receipt.status === 'success' ? 'success' : 'reverted';
+      }
+
+      return {
+        hash: tx.hash,
+        from: tx.from,
+        to: tx.to ?? null,
+        value: tx.value.toString(),
+        valueFormatted: formatUnits(tx.value, decimals),
+        symbol,
+        gasPrice: tx.gasPrice?.toString() ?? null,
+        blockNumber: tx.blockNumber?.toString() ?? null,
+        status,
+        chainId,
+      };
+    } catch (error) {
+      wrapError(`Failed to get transaction ${hash} on chain ${chainId}`, error);
     }
-
-    return {
-      hash: tx.hash,
-      from: tx.from,
-      to: tx.to ?? null,
-      value: tx.value.toString(),
-      valueFormatted: formatEther(tx.value),
-      gasPrice: tx.gasPrice?.toString() ?? null,
-      blockNumber: tx.blockNumber?.toString() ?? null,
-      status,
-      chainId,
-    };
   },
 });

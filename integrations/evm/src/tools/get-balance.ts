@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { formatEther, type Address } from 'viem';
+import { formatUnits } from 'viem';
 import { getPublicClient } from '../client';
+import { validateAddress, wrapError } from '../utils';
 
 export const getBalance = createTool({
   id: 'evm-get-balance',
@@ -21,16 +22,22 @@ export const getBalance = createTool({
     chainName: z.string(),
   }),
   execute: async ({ address, chainId, rpcUrl }) => {
-    const client = getPublicClient(chainId, rpcUrl);
-    const balance = await client.getBalance({ address: address as Address });
+    try {
+      const addr = validateAddress(address);
+      const client = getPublicClient(chainId, rpcUrl);
+      const balance = await client.getBalance({ address: addr });
+      const decimals = client.chain?.nativeCurrency.decimals ?? 18;
 
-    return {
-      address,
-      balanceWei: balance.toString(),
-      balanceFormatted: formatEther(balance),
-      symbol: client.chain?.nativeCurrency.symbol || 'ETH',
-      chainId,
-      chainName: client.chain?.name || 'Unknown',
-    };
+      return {
+        address: addr,
+        balanceWei: balance.toString(),
+        balanceFormatted: formatUnits(balance, decimals),
+        symbol: client.chain?.nativeCurrency.symbol || 'ETH',
+        chainId,
+        chainName: client.chain?.name || 'Unknown',
+      };
+    } catch (error) {
+      wrapError(`Failed to get balance for ${address} on chain ${chainId}`, error);
+    }
   },
 });
