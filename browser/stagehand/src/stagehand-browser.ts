@@ -17,7 +17,7 @@ import type {
   KeyboardEventParams,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
+import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, TabsInput } from './schemas';
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
@@ -32,8 +32,8 @@ type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePa
  * natural language instructions for all interactions.
  *
  * Supports thread isolation via the threadIsolation config:
- * - 'none': All threads share the same page (default)
- * - 'context': Each thread gets its own page/tab
+ * - 'none': All threads share the same Stagehand instance
+ * - 'browser': Each thread gets its own Stagehand instance (separate browser)
  */
 export class StagehandBrowser extends MastraBrowser {
   override readonly id: string;
@@ -46,13 +46,16 @@ export class StagehandBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: StagehandThreadManager;
 
+  /** Active screencast stream for reconnection on tab changes */
+  private activeScreencastStream: ScreencastStreamImpl | null = null;
+
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
 
     // Initialize thread manager
-    // Default to 'context' isolation so each thread gets its own browser page
+    // Default to 'browser' isolation so each thread gets its own browser instance
     this.threadManager = new StagehandThreadManager({
       isolation: config.threadIsolation ?? 'browser',
       logger: this.logger,
@@ -67,17 +70,22 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Ensure browser is ready and thread session exists.
-   * Creates a new page for the current thread if needed.
+   * For 'browser' isolation, this creates a dedicated Stagehand instance for the thread.
    */
   override async ensureReady(): Promise<void> {
+    // Always ensure the factory is set before any thread operations
+    // This must happen before super.ensureReady() which may trigger doLaunch()
+    this.threadManager.setCreateStagehand(() => this.createStagehandInstance());
+
+    // Call super first - this will trigger doLaunch() if not already launched
     await super.ensureReady();
 
-    // Ensure thread session exists for the current thread
+    // For 'browser' isolation, ensure thread session exists after browser is ready
     const isolation = this.getThreadIsolationMode();
     const threadId = this.getCurrentThread();
-    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
-      // This will create the session/page if it doesn't exist
-      await this.getPageForThread(threadId);
+    if (isolation === 'browser' && threadId && threadId !== DEFAULT_THREAD_ID) {
+      // This will create the Stagehand instance for this thread if needed
+      await this.getStagehandForThread(threadId);
     }
   }
 
@@ -85,12 +93,12 @@ export class StagehandBrowser extends MastraBrowser {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  protected override async doLaunch(): Promise<void> {
-    const { Stagehand } = await import('@browserbasehq/stagehand');
-
+  /**
+   * Build Stagehand options from config.
+   */
+  private async buildStagehandOptions(): Promise<any> {
     const config = this.stagehandConfig;
 
-    // Build Stagehand v3 configuration
     const stagehandOptions: any = {
       env: config.env ?? 'LOCAL',
       // v3 uses "provider/model" format
@@ -123,15 +131,50 @@ export class StagehandBrowser extends MastraBrowser {
       };
     }
 
-    this.stagehand = new Stagehand(stagehandOptions);
-    await this.stagehand.init();
+    return stagehandOptions;
+  }
+
+  /**
+   * Create a new Stagehand instance with the current config.
+   * Used by thread manager for 'browser' isolation mode.
+   */
+  private async createStagehandInstance(): Promise<Stagehand> {
+    const { Stagehand } = await import('@browserbasehq/stagehand');
+    const stagehandOptions = await this.buildStagehandOptions();
+    const stagehand = new Stagehand(stagehandOptions);
+    await stagehand.init();
+    return stagehand;
+  }
+
+  protected override async doLaunch(): Promise<void> {
+    const isolation = this.getThreadIsolationMode();
+
+    // Set up the thread manager's factory function for creating new Stagehand instances
+    this.threadManager.setCreateStagehand(() => this.createStagehandInstance());
+
+    if (isolation === 'browser') {
+      // For 'browser' isolation, don't launch a shared browser here.
+      // Each thread will get its own Stagehand instance via getStagehandForThread().
+      // We still need a placeholder so the base class knows we're "launched".
+      this.logger.debug?.('Browser isolation mode - skipping shared browser launch');
+      return;
+    }
+
+    // For 'none' isolation, launch a shared Stagehand instance
+    this.stagehand = await this.createStagehandInstance();
 
     // Register the Stagehand instance with the thread manager
     this.threadManager.setStagehand(this.stagehand as any);
 
     // Listen for browser/context close events to detect external closure
-    // Cast to access Playwright's BrowserContext.on() which Stagehand wraps
-    const context = this.stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
+    this.setupCloseListener(this.stagehand);
+  }
+
+  /**
+   * Set up close event listener for a Stagehand instance.
+   */
+  private setupCloseListener(stagehand: Stagehand): void {
+    const context = stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
     if (context?.on) {
       context.on('close', () => {
         this.logger.debug?.('Browser context closed event received');
@@ -141,9 +184,10 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
-    // Clean up all thread pages first
+    // Clean up all thread Stagehand instances first
     await this.threadManager.destroyAll();
 
+    // Close the shared Stagehand instance if it exists
     if (this.stagehand) {
       await this.stagehand.close();
       this.stagehand = null;
@@ -158,6 +202,14 @@ export class StagehandBrowser extends MastraBrowser {
    * Called by base class ensureReady() to detect externally closed browsers.
    */
   protected async checkBrowserAlive(): Promise<boolean> {
+    const isolation = this.getThreadIsolationMode();
+
+    if (isolation === 'browser') {
+      // For 'browser' isolation, check if any thread browsers are running
+      return this.threadManager.hasActiveThreadStagehands();
+    }
+
+    // For 'none' isolation, check the shared Stagehand instance
     if (!this.stagehand) {
       return false;
     }
@@ -218,41 +270,77 @@ export class StagehandBrowser extends MastraBrowser {
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Get the Stagehand instance for a thread, creating it if needed.
+   * For 'browser' isolation, this creates a dedicated Stagehand instance.
+   * For 'none' isolation, returns the shared instance.
+   */
+  private async getStagehandForThread(threadId: string | undefined): Promise<Stagehand | null> {
+    const isolation = this.getThreadIsolationMode();
+
+    if (isolation === 'none') {
+      return this.stagehand;
+    }
+
+    if (!threadId || threadId === DEFAULT_THREAD_ID) {
+      return this.stagehand;
+    }
+
+    // For 'browser' isolation, get or create the thread's Stagehand instance
+    let stagehand = this.threadManager.getStagehandForThread(threadId);
+    if (!stagehand) {
+      // Create session which creates the Stagehand instance
+      await this.threadManager.getManagerForThread(threadId);
+      stagehand = this.threadManager.getStagehandForThread(threadId);
+
+      // Set up close listener for the new instance
+      if (stagehand) {
+        this.setupCloseListener(stagehand);
+      }
+    }
+
+    return stagehand ?? null;
+  }
+
+  /**
+   * Require a Stagehand instance for the current thread.
+   * Throws if no instance is available.
+   */
   private requireStagehand(): Stagehand {
-    if (!this.stagehand) {
+    const threadId = this.getCurrentThread();
+    const stagehand = this.threadManager.getStagehandForThread(threadId ?? '') ?? this.stagehand;
+
+    if (!stagehand) {
       throw new Error('Browser not launched');
     }
-    return this.stagehand;
+    return stagehand;
   }
 
   /**
    * Get the current page from Stagehand v3, respecting thread isolation.
-   * In v3, pages are accessed via stagehand.context.pages()
    */
   private getPage(): V3Page | null {
-    if (!this.stagehand) return null;
-
     const isolation = this.getThreadIsolationMode();
     const threadId = this.getCurrentThread();
 
-    // If using thread isolation, get the page for the current thread
-    if (isolation !== 'none' && threadId !== DEFAULT_THREAD_ID) {
-      const threadPage = this.threadManager.getPageForThread(threadId);
-      if (threadPage) {
-        return threadPage as V3Page;
+    // For 'browser' isolation, get the thread's Stagehand's active page
+    if (isolation === 'browser' && threadId && threadId !== DEFAULT_THREAD_ID) {
+      const stagehand = this.threadManager.getStagehandForThread(threadId);
+      if (stagehand?.context) {
+        return stagehand.context.activePage() as V3Page | null;
       }
+      return null;
     }
 
-    // Fall back to the active page
+    // For 'none' isolation, use the shared Stagehand instance
+    if (!this.stagehand) return null;
+
     try {
       const context = this.stagehand.context;
       if (context) {
-        // Try activePage() if available (Stagehand v3)
-        if (typeof context.activePage === 'function') {
-          const activePage = context.activePage();
-          if (activePage) {
-            return activePage as V3Page;
-          }
+        const activePage = context.activePage();
+        if (activePage) {
+          return activePage as V3Page;
         }
         // Fall back to first page if no active page
         const pages = context.pages();
@@ -268,39 +356,22 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Get the page for a specific thread, creating it if needed.
-   * This is an async version that ensures the thread session exists.
+   * Get the page for a specific thread, creating session if needed.
    */
   async getPageForThread(threadId: string): Promise<V3Page | null> {
-    if (!this.stagehand) return null;
-
     const isolation = this.threadManager.getIsolationMode();
 
     if (isolation === 'none') {
       return this.getPage();
     }
 
-    // Get the manager for the thread (creates session if needed)
-    const result = await this.threadManager.getManagerForThread(threadId);
-    if (result) {
-      // Result is either a V3Page (for context mode) or the Stagehand instance
-      // Check if it's a page by looking for page-specific methods
-      if (typeof (result as any).url === 'function') {
-        return result as V3Page;
-      }
+    // For 'browser' isolation, get the thread's Stagehand instance
+    const stagehand = await this.getStagehandForThread(threadId);
+    if (stagehand?.context) {
+      return stagehand.context.activePage() as V3Page | null;
     }
 
-    // Fall back to the active page
-    return this.getPage();
-  }
-
-  /**
-   * Get a CDP session for the current page.
-   * In Stagehand v3, we access the CDP session via page.getSessionForFrame()
-   */
-  private getCdpSession(): any {
-    const page = this.getPage();
-    return this.getCdpSessionForPage(page);
+    return null;
   }
 
   /**
@@ -320,14 +391,6 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     return null;
-  }
-
-  /**
-   * Get a CDP session for a specific thread's page.
-   */
-  private async getCdpSessionForThread(threadId: string): Promise<any> {
-    const page = await this.getPageForThread(threadId);
-    return this.getCdpSessionForPage(page);
   }
 
   // ---------------------------------------------------------------------------
@@ -499,10 +562,148 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
+  // Tab Management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Manage browser tabs - list, create, switch, close
+   */
+  async tabs(
+    input: TabsInput,
+  ): Promise<
+    | { success: true; tabs?: Array<{ index: number; url: string; title: string; active: boolean }>; hint: string }
+    | { success: true; index?: number; url?: string; title?: string; remaining?: number; hint: string }
+    | BrowserToolError
+  > {
+    const stagehand = this.requireStagehand();
+    const context = stagehand.context;
+
+    if (!context) {
+      return this.createError('browser_error', 'Browser context not available.', 'Ensure the browser is launched.');
+    }
+
+    try {
+      switch (input.action) {
+        case 'list': {
+          const pages = context.pages();
+          const activePage = context.activePage();
+          const tabs = await Promise.all(
+            pages.map(async (page, index) => ({
+              index,
+              url: page.url(),
+              title: await page.title(),
+              active: page === activePage,
+            })),
+          );
+          return {
+            success: true,
+            tabs,
+            hint: 'Use stagehand_tabs with action:"switch" and index to change tabs.',
+          };
+        }
+
+        case 'new': {
+          const newPage = await context.newPage(input.url);
+          // newPage automatically becomes active in Stagehand
+          // NOTE: Screencast does not auto-update for new tabs (Stagehand limitation)
+          return {
+            success: true,
+            index: context.pages().length - 1,
+            url: newPage.url(),
+            title: await newPage.title(),
+            hint: 'New tab opened. Use stagehand_observe to discover actions.',
+          };
+        }
+
+        case 'switch': {
+          if (input.index === undefined) {
+            return this.createError(
+              'browser_error',
+              'Tab index required for switch action.',
+              'Provide index parameter.',
+            );
+          }
+          const pages = context.pages();
+          if (input.index < 0 || input.index >= pages.length) {
+            return this.createError(
+              'browser_error',
+              `Invalid tab index: ${input.index}. Valid range: 0-${pages.length - 1}`,
+              'Use stagehand_tabs with action:"list" to see available tabs.',
+            );
+          }
+          const targetPage = pages[input.index]!;
+          context.setActivePage(targetPage);
+          // NOTE: Screencast does not auto-update for tab switches (Stagehand limitation)
+          return {
+            success: true,
+            index: input.index,
+            url: targetPage.url(),
+            title: await targetPage.title(),
+            hint: 'Tab switched. Use stagehand_observe to discover actions.',
+          };
+        }
+
+        case 'close': {
+          const pages = context.pages();
+          const indexToClose = input.index ?? pages.findIndex(p => p === context.activePage());
+          if (indexToClose < 0 || indexToClose >= pages.length) {
+            return this.createError(
+              'browser_error',
+              `Invalid tab index: ${indexToClose}`,
+              'Use stagehand_tabs with action:"list" to see available tabs.',
+            );
+          }
+          const pageToClose = pages[indexToClose]!;
+          await pageToClose.close();
+          // NOTE: Screencast does not auto-update for tab closes (Stagehand limitation)
+          const remainingPages = context.pages();
+          return {
+            success: true,
+            remaining: remainingPages.length,
+            hint:
+              remainingPages.length > 0 ? 'Tab closed. Use stagehand_observe to see current tab.' : 'All tabs closed.',
+          };
+        }
+
+        default:
+          return this.createError(
+            'browser_error',
+            `Unknown tabs action: ${(input as any).action}`,
+            'Use "list", "new", "switch", or "close".',
+          );
+      }
+    } catch (error) {
+      return this.createErrorFromException(error, 'Tabs');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // URL Tracking (for Studio browser view)
   // ---------------------------------------------------------------------------
 
-  override async getCurrentUrl(_threadId?: string): Promise<string | null> {
+  override async getCurrentUrl(threadId?: string): Promise<string | null> {
+    // Don't try to get URL if browser isn't running - this can be called
+    // before launch (e.g., by BrowserContextProcessor)
+    if (!this.isBrowserRunning()) {
+      return null;
+    }
+
+    // Use the thread-specific page if provided
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+
+    // For 'browser' isolation, check if we have an existing session first
+    // Don't create a new session just to get the URL
+    const isolation = this.threadManager.getIsolationMode();
+    if (isolation === 'browser' && effectiveThreadId) {
+      const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+      if (!stagehand?.context) {
+        return null; // No session yet, don't create one
+      }
+      const page = stagehand.context.activePage() as V3Page | null;
+      return page?.url() ?? null;
+    }
+
+    // For 'none' isolation, use the shared page
     const page = this.getPage();
     if (!page) return null;
 
@@ -537,36 +738,51 @@ export class StagehandBrowser extends MastraBrowser {
 
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
     const threadId = options?.threadId;
-    const isolation = this.threadManager.getIsolationMode();
 
-    // Only use thread-specific page if thread already has a session
-    const hasExistingSession =
-      isolation !== 'none' && threadId && threadId !== DEFAULT_THREAD_ID && this.threadManager.hasSession(threadId);
-
-    // Get CDP session - use thread-specific page if session exists
-    const cdpSession = hasExistingSession ? await this.getCdpSessionForThread(threadId) : this.getCdpSession();
-
-    if (!cdpSession) {
-      throw new Error('No CDP session available for screencast');
-    }
-
-    // Create a CDP session provider adapter
+    // Create a CDP session provider that gets a fresh session for the current page
     const provider = {
-      getCdpSession: async () => cdpSession,
+      getCdpSession: async () => {
+        const page = await this.getPageForThread(threadId ?? '');
+        if (!page) {
+          throw new Error('No page available for screencast');
+        }
+        return this.getCdpSessionForPage(page);
+      },
       isBrowserRunning: () => this.isBrowserRunning(),
     };
 
     const stream = new ScreencastStreamImpl(provider, options);
+
+    // Store the stream for potential future reconnection
+    this.activeScreencastStream = stream;
+
     await stream.start();
+
+    // Clean up when screencast stops
+    stream.once('stop', () => {
+      if (this.activeScreencastStream === stream) {
+        this.activeScreencastStream = null;
+      }
+    });
+
     return stream as unknown as ScreencastStream;
   }
+
+  // NOTE: Manual tab switching detection is not currently supported.
+  // Stagehand v3 does not track pages opened via browser UI (only pages created through its API).
+  // We've requested this feature from Browserbase - see Notion doc for details.
+  // For now, only agent-initiated tab operations (via stagehand_tabs tool) work reliably.
 
   // ---------------------------------------------------------------------------
   // Event Injection (for Studio live view interactivity)
   // ---------------------------------------------------------------------------
 
-  override async injectMouseEvent(event: MouseEventParams, _threadId?: string): Promise<void> {
-    const cdpSession = this.getCdpSession();
+  override async injectMouseEvent(event: MouseEventParams, threadId?: string): Promise<void> {
+    // Use the provided threadId, or fall back to the current thread
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const page = await this.getPageForThread(effectiveThreadId ?? '');
+    const cdpSession = this.getCdpSessionForPage(page);
+
     if (!cdpSession) {
       throw new Error('No CDP session available');
     }
@@ -591,8 +807,12 @@ export class StagehandBrowser extends MastraBrowser {
     });
   }
 
-  override async injectKeyboardEvent(event: KeyboardEventParams, _threadId?: string): Promise<void> {
-    const cdpSession = this.getCdpSession();
+  override async injectKeyboardEvent(event: KeyboardEventParams, threadId?: string): Promise<void> {
+    // Use the provided threadId, or fall back to the current thread
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const page = await this.getPageForThread(effectiveThreadId ?? '');
+    const cdpSession = this.getCdpSessionForPage(page);
+
     if (!cdpSession) {
       throw new Error('No CDP session available');
     }

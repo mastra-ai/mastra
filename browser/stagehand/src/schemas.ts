@@ -83,6 +83,23 @@ export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
 export const closeInputSchema = z.object({});
 export type CloseInput = z.output<typeof closeInputSchema>;
 
+/**
+ * stagehand_tabs - Manage browser tabs
+ */
+export const tabsInputSchema = z.object({
+  action: z
+    .enum(['list', 'new', 'switch', 'close'])
+    .describe('Action to perform: list all tabs, open new tab, switch to tab, or close tab'),
+  index: z
+    .number()
+    .optional()
+    .describe(
+      'Tab index for switch/close actions (0-based). Required for switch, optional for close (defaults to current).',
+    ),
+  url: z.string().optional().describe('URL to navigate to after opening new tab (optional, for "new" action only)'),
+});
+export type TabsInput = z.output<typeof tabsInputSchema>;
+
 // =============================================================================
 // All Schemas
 // =============================================================================
@@ -95,5 +112,6 @@ export const stagehandSchemas = {
   // Navigation & State
   navigate: navigateInputSchema,
   screenshot: screenshotInputSchema,
+  tabs: tabsInputSchema,
   close: closeInputSchema,
 } as const;

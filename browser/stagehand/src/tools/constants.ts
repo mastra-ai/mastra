@@ -10,6 +10,7 @@ export const STAGEHAND_TOOLS = {
   // Navigation & State
   NAVIGATE: 'stagehand_navigate',
   SCREENSHOT: 'stagehand_screenshot',
+  TABS: 'stagehand_tabs',
   CLOSE: 'stagehand_close',
 } as const;
 

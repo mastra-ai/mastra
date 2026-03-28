@@ -4250,11 +4250,17 @@ export class Agent<
 
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
+      // Get threadId early for browser context - can come from requestContext, options, or snapshot
+      const browserThreadId =
+        (requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+        options.memory?.thread ||
+        snapshotMemoryInfo?.threadId;
+
       const browserCtx: BrowserContext = {
         provider: this.#browser.provider,
         sessionId: this.#browser.id,
         headless: (this.#browser as any).config?.headless,
-        currentUrl: (await this.#browser.getCurrentUrl()) ?? undefined,
+        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
         isRunning: this.#browser.isBrowserRunning(),
       };
       requestContext.set('browser', browserCtx);
