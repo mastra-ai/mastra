@@ -66,6 +66,23 @@ describe('handleSubagentsCommand', () => {
     await promise;
   });
 
+  it('falls back to built-in subagent types when subagents is an empty array', async () => {
+    const { ctx } = createContext([]);
+
+    const promise = handleSubagentsCommand(ctx);
+
+    expect(askQuestionMock).toHaveBeenCalledTimes(1);
+    const question = askQuestionMock.mock.calls[0]?.[0];
+    expect(question.options).toEqual([
+      { label: 'Explore', description: 'Read-only codebase exploration' },
+      { label: 'Plan', description: 'Read-only analysis and planning' },
+      { label: 'Execute', description: 'Task execution with write access' },
+    ]);
+
+    question.onCancel();
+    await promise;
+  });
+
   it('renders configured subagents from the harness config', async () => {
     const { ctx } = createContext([
       {
