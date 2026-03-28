@@ -146,6 +146,33 @@ describe('buildCapabilities', () => {
       expect(result.login!.type).toBe('credentials');
     });
 
+    it('should enable SSO-only login without a license', async () => {
+      // Provider with only SSO (no credentials) — matches the reported scenario
+      const auth = {
+        getLoginUrl: (redirectUri: string, _state: string) =>
+          `https://auth0.example.com/authorize?redirect_uri=${redirectUri}`,
+        handleCallback: async (_code: string, _state: string) => ({
+          user: { id: 'user-1', email: 'test@example.com', name: 'Test User' },
+          tokens: { accessToken: 'token-123' },
+        }),
+        getLoginButtonConfig: () => ({ provider: 'auth0', text: 'Sign in with Auth0' }),
+        getCurrentUser: async () => ({ id: 'user-1', email: 'test@example.com', name: 'Test User' }),
+        getUser: async () => ({ id: 'user-1', email: 'test@example.com', name: 'Test User' }),
+        createSession: async () => ({ id: 's-1', userId: 'user-1', expiresAt: new Date() }),
+        getSession: async () => ({ id: 's-1', userId: 'user-1', expiresAt: new Date() }),
+        deleteSession: async () => {},
+        getSessionCookie: () => 'session=abc',
+      } as any;
+
+      const result = await buildCapabilities(auth, createMockRequest());
+
+      expect(result.enabled).toBe(true);
+      expect(result.login).not.toBeNull();
+      expect(result.login!.type).toBe('sso');
+      expect(result.login!.sso).toBeDefined();
+      expect(result.login!.sso!.provider).toBe('auth0');
+    });
+
     it('should resolve the current user without a license', async () => {
       const auth = createMockAuthProvider();
       const result = (await buildCapabilities(auth, createMockRequest())) as AuthenticatedCapabilities;
