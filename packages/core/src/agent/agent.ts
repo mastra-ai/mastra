@@ -5357,6 +5357,7 @@ export class Agent<
         shouldGenerate: true,
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
+        minMessages: generateTitleConfig.minMessages,
       };
     }
 
