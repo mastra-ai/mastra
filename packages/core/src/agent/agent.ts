@@ -4406,7 +4406,6 @@ export class Agent<
               titleModel,
               titleInstructions,
             );
-
             if (title) {
               await memory.createThread({
                 threadId: thread.id,
