@@ -51,18 +51,20 @@ export interface AuthenticatedUser {
 }
 
 /**
- * Capability flags indicating which EE features are available.
+ * Capability flags indicating which features are available.
+ * SSO, session, and user are OSS features (no license required).
+ * RBAC and ACL are EE features (require license in production).
  */
 export interface CapabilityFlags {
-  /** IUserProvider is implemented and licensed */
+  /** IUserProvider is implemented */
   user: boolean;
-  /** ISessionProvider is implemented and licensed */
+  /** ISessionProvider is implemented */
   session: boolean;
-  /** ISSOProvider is implemented and licensed */
+  /** ISSOProvider is implemented */
   sso: boolean;
-  /** IRBACProvider is implemented and licensed */
+  /** IRBACProvider is implemented and licensed (EE) */
   rbac: boolean;
-  /** IACLProvider is implemented and licensed */
+  /** IACLProvider is implemented and licensed (EE) */
   acl: boolean;
 }
 
@@ -184,8 +186,9 @@ export async function buildCapabilities(
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;
 
-  const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud;
-  const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn') && isLicensedOrCloud;
+  // SSO and credentials are OSS features — no license required
+  const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl');
+  const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn');
 
   // Build SSO login URL using the configured prefix (default: /api)
   const raw = (options?.apiPrefix || '/api').trim();
@@ -229,9 +232,9 @@ export async function buildCapabilities(
     };
   }
 
-  // Try to get current user (requires session)
+  // Try to get current user (requires session) — user retrieval is an OSS feature
   let user: EEUser | null = null;
-  if (implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud) {
+  if (implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
     try {
       user = await auth.getCurrentUser(request);
     } catch {
@@ -250,10 +253,11 @@ export async function buildCapabilities(
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
 
   // Build capability flags
+  // SSO, session, and user are OSS — only RBAC and ACL require a license
   const capabilities: CapabilityFlags = {
-    user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
-    session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
-    sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
+    user: implementsInterface<IUserProvider>(auth, 'getCurrentUser'),
+    session: implementsInterface<ISessionProvider>(auth, 'createSession'),
+    sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl'),
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
   };
