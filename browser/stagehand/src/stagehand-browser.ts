@@ -740,13 +740,48 @@ export class StagehandBrowser extends MastraBrowser {
     const threadId = options?.threadId;
 
     // Create a CDP session provider that gets a fresh session for the current page
+    // On reconnect, this will get a fresh CDP session for whatever page is currently active
     const provider = {
       getCdpSession: async () => {
+        // Try Stagehand's page tracking first
         const page = await this.getPageForThread(threadId ?? '');
-        if (!page) {
-          throw new Error('No page available for screencast');
+        if (page) {
+          return this.getCdpSessionForPage(page);
         }
-        return this.getCdpSessionForPage(page);
+
+        // Fallback: use CDP directly to find the active target
+        // This handles cases where Stagehand doesn't track the page (e.g., target="_blank" links)
+        const stagehand = await this.getStagehandForThread(threadId);
+        if (!stagehand?.context) {
+          throw new Error('No Stagehand context available');
+        }
+
+        const context = stagehand.context as any;
+        const conn = context._conn ?? context.conn ?? context.connection;
+        if (!conn) {
+          throw new Error('No CDP connection available');
+        }
+
+        // Get all page targets and use the most recent one
+        const { targetInfos } = await conn.send('Target.getTargets');
+        const pageTargets = targetInfos.filter((t: any) => t.type === 'page' && t.attached);
+
+        if (pageTargets.length === 0) {
+          throw new Error('No page targets available');
+        }
+
+        // Use the last page target (most recently created)
+        const targetInfo = pageTargets[pageTargets.length - 1];
+
+        // Attach to this target to get a CDP session
+        const { sessionId } = await conn.send('Target.attachToTarget', {
+          targetId: targetInfo.targetId,
+          flatten: true,
+        });
+
+        // Return the session
+        const session = conn.getSession?.(sessionId) ?? conn;
+        return session;
       },
       isBrowserRunning: () => this.isBrowserRunning(),
     };
