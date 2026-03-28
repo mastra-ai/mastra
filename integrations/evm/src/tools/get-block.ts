@@ -1,0 +1,43 @@
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { getPublicClient } from '../client';
+
+export const getBlock = createTool({
+  id: 'evm-get-block',
+  description: 'Get block information by block number or tag (latest, earliest, pending). Returns timestamp, gas used, transaction count, and base fee.',
+  inputSchema: z.object({
+    blockNumber: z.number().optional().describe('Block number to query. Omit to get the latest block.'),
+    chainId: z.number().default(1).describe('Chain ID'),
+    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL'),
+  }),
+  outputSchema: z.object({
+    number: z.string(),
+    hash: z.string().nullable(),
+    timestamp: z.string(),
+    timestampDate: z.string(),
+    gasUsed: z.string(),
+    gasLimit: z.string(),
+    baseFeePerGas: z.string().nullable(),
+    transactionCount: z.number(),
+    chainId: z.number(),
+  }),
+  execute: async ({ blockNumber, chainId, rpcUrl }) => {
+    const client = getPublicClient(chainId, rpcUrl);
+
+    const block = blockNumber !== undefined
+      ? await client.getBlock({ blockNumber: BigInt(blockNumber) })
+      : await client.getBlock();
+
+    return {
+      number: block.number?.toString() || '0',
+      hash: block.hash ?? null,
+      timestamp: block.timestamp.toString(),
+      timestampDate: new Date(Number(block.timestamp) * 1000).toISOString(),
+      gasUsed: block.gasUsed.toString(),
+      gasLimit: block.gasLimit.toString(),
+      baseFeePerGas: block.baseFeePerGas?.toString() ?? null,
+      transactionCount: block.transactions.length,
+      chainId,
+    };
+  },
+});
