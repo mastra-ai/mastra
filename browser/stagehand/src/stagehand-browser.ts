@@ -888,7 +888,7 @@ export class StagehandBrowser extends MastraBrowser {
       }
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
-        this.reconnectScreencast('new tab');
+        void this.reconnectScreencast('new tab');
       }, 300);
     };
 
@@ -901,7 +901,7 @@ export class StagehandBrowser extends MastraBrowser {
       }
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
-        this.reconnectScreencast('tab closed');
+        void this.reconnectScreencast('tab closed');
       }, 300);
     };
 

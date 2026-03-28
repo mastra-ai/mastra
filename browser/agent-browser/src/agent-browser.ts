@@ -188,13 +188,37 @@ export class AgentBrowser extends MastraBrowser {
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.browserManager);
 
-    // Listen for browser disconnect to detect external closure (user closes browser window)
+    // Set up close listeners to detect external browser closure
+    this.setupCloseListenerForNoneIsolation(this.browserManager);
+  }
+
+  /**
+   * Set up close event listeners for 'none' isolation shared browser.
+   * This handles the case where the shared browser is closed externally.
+   */
+  private setupCloseListenerForNoneIsolation(manager: BrowserManager): void {
     try {
-      const browser = this.browserManager.getBrowser();
-      if (browser) {
-        browser.on('disconnected', () => {
-          this.logger.debug?.('Browser disconnected event received (none isolation)');
-          this.handleBrowserDisconnected();
+      let disconnectHandled = false;
+      const handleDisconnect = () => {
+        if (disconnectHandled) return;
+        disconnectHandled = true;
+        this.handleBrowserDisconnected();
+      };
+
+      // Listen for context close (fires when browser window is closed)
+      const context = manager.getContext();
+      if (context) {
+        context.on('close', handleDisconnect);
+      }
+
+      // Listen for last page closing (primary detection method)
+      const pages = manager.getPages();
+      for (const page of pages) {
+        page.on('close', () => {
+          const remainingPages = manager.getPages();
+          if (remainingPages.length === 0) {
+            handleDisconnect();
+          }
         });
       }
     } catch {
@@ -310,19 +334,31 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
     try {
-      // Use getBrowser() to listen for browser disconnection
-      const browser = manager.getBrowser();
-      if (browser) {
-        browser.on('disconnected', () => {
-          this.logger.debug?.(`Browser disconnected for thread: ${threadId}`);
-          this.handleThreadBrowserDisconnected(threadId);
-        });
-        this.logger.debug?.(`Set up close listener for thread: ${threadId}`);
-      } else {
-        this.logger.warn?.(`No browser available to set up close listener for thread: ${threadId}`);
+      let disconnectHandled = false;
+      const handleDisconnect = () => {
+        if (disconnectHandled) return;
+        disconnectHandled = true;
+        this.handleThreadBrowserDisconnected(threadId);
+      };
+
+      // Listen for context close (fires when browser window is closed)
+      const context = manager.getContext();
+      if (context) {
+        context.on('close', handleDisconnect);
       }
-    } catch (error) {
-      this.logger.warn?.(`Failed to set up close listener for thread ${threadId}: ${error}`);
+
+      // Listen for last page closing (primary detection method)
+      const pages = manager.getPages();
+      for (const page of pages) {
+        page.on('close', () => {
+          const remainingPages = manager.getPages();
+          if (remainingPages.length === 0) {
+            handleDisconnect();
+          }
+        });
+      }
+    } catch {
+      // Ignore errors setting up close listener
     }
   }
 
@@ -1234,7 +1270,7 @@ export class AgentBrowser extends MastraBrowser {
           // Small delay to let agent-browser update its internal state
           setTimeout(() => {
             if (stream.isActive() && browserManager.getPages().length > 0) {
-              stream.reconnect().catch(err => {
+              stream.reconnect().catch((err: unknown) => {
                 console.error('[AgentBrowser] Failed to reconnect screencast after page close:', err);
               });
             }
@@ -1279,8 +1315,6 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   override async injectMouseEvent(event: MouseEventParams, threadId?: string): Promise<void> {
-    // Get the appropriate manager based on isolation mode
-    // Use passed threadId (from input handler) or fall back to current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const manager = await this.getManagerForThread(effectiveThreadId);
     await manager.injectMouseEvent(event);
