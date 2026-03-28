@@ -59,7 +59,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         handleAgentEnd(ectx);
       }
 
-      while (state.pendingQueuedActions.length > 0) {
+      if (state.pendingQueuedActions.length > 0) {
         const action = state.pendingQueuedActions.shift();
 
         if (action === 'message') {
@@ -93,13 +93,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           const msg = state.pendingFollowUpMessages.shift();
           if (msg) {
             ectx.fireMessage(msg.content, msg.images);
-          }
-        }
-
-        if (action === 'slash') {
-          const cmd = state.pendingSlashCommands.shift();
-          if (cmd) {
-            await ectx.handleSlashCommand(cmd);
           }
         }
       }
