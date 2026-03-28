@@ -482,6 +482,7 @@ export type ProviderModelsMap = {
     'ideogramai/ideogram-v2a',
     'ideogramai/ideogram-v2a-turbo',
     'lumalabs/ray2',
+    'novita/deepseek-v3.2',
     'novita/glm-4.6',
     'novita/glm-4.6v',
     'novita/glm-4.7',
@@ -554,6 +555,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast-reasoning',
     'xai/grok-4.1-fast-non-reasoning',
     'xai/grok-4.1-fast-reasoning',
+    'xai/grok-4.20-multi-agent',
     'xai/grok-code-fast-1',
   ];
   readonly opencode: readonly [

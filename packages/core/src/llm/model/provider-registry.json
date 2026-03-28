@@ -660,6 +660,7 @@
         "ideogramai/ideogram-v2a",
         "ideogramai/ideogram-v2a-turbo",
         "lumalabs/ray2",
+        "novita/deepseek-v3.2",
         "novita/glm-4.6",
         "novita/glm-4.6v",
         "novita/glm-4.7",
@@ -732,6 +733,7 @@
         "xai/grok-4-fast-reasoning",
         "xai/grok-4.1-fast-non-reasoning",
         "xai/grok-4.1-fast-reasoning",
+        "xai/grok-4.20-multi-agent",
         "xai/grok-code-fast-1"
       ],
       "docUrl": "https://creator.poe.com/docs/external-applications/openai-compatible-api",
@@ -4945,6 +4947,7 @@
       "ideogramai/ideogram-v2a",
       "ideogramai/ideogram-v2a-turbo",
       "lumalabs/ray2",
+      "novita/deepseek-v3.2",
       "novita/glm-4.6",
       "novita/glm-4.6v",
       "novita/glm-4.7",
@@ -5017,6 +5020,7 @@
       "xai/grok-4-fast-reasoning",
       "xai/grok-4.1-fast-non-reasoning",
       "xai/grok-4.1-fast-reasoning",
+      "xai/grok-4.20-multi-agent",
       "xai/grok-code-fast-1"
     ],
     "opencode": [
