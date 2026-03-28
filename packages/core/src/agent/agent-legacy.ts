@@ -588,7 +588,6 @@ export class AgentLegacyHandler {
 
             // Add title generation to promises if needed
             const config = memory.getMergedThreadConfig(memoryConfig);
-            const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
             const {
               shouldGenerate,
@@ -597,26 +596,32 @@ export class AgentLegacyHandler {
               minMessages,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            const messages = messageList.get.all.ui();
+            const uiMessages = messageList.get.all.ui();
+            const messages = messageList.get.all.core();
             const requiredMessages = minMessages ?? 1;
 
-            if (shouldGenerate && !thread.title && userMessage && messages.length >= requiredMessages) {
-              const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-              promises.push(
-                this.capabilities
-                  .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                  .then(title => {
-                    if (title) {
-                      return memory.createThread({
-                        threadId: thread.id,
-                        resourceId,
-                        memoryConfig,
-                        title,
-                        metadata: thread.metadata,
-                      });
-                    }
-                  }),
-              );
+            if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+              const userMessage = this.capabilities.getMostRecentUserMessage(uiMessages);
+
+              if (userMessage) {
+                const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
+                promises.push(
+                  this.capabilities
+                    .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
+                    .then(title => {
+                      if (title) {
+                        return memory.createThread({
+                          threadId: thread.id,
+                          resourceId,
+                          memoryConfig,
+                          title,
+                          metadata: thread.metadata,
+                        });
+                      }
+                    }),
+                );
+              }
             }
 
             if (promises.length > 0) {
