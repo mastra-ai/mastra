@@ -58,6 +58,25 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       } else {
         handleAgentEnd(ectx);
       }
+
+      while (state.pendingQueuedActions.length > 0) {
+        const action = state.pendingQueuedActions.shift();
+
+        if (action === 'message') {
+          const msg = state.pendingFollowUpMessages.shift();
+          if (msg) {
+            ectx.fireMessage(msg.content, msg.images);
+          }
+        }
+
+        if (action === 'slash') {
+          const cmd = state.pendingSlashCommands.shift();
+          if (cmd) {
+            await ectx.handleSlashCommand(cmd);
+          }
+        }
+      }
+
       break;
 
     case 'message_start':
@@ -66,6 +85,25 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'message_update':
       handleMessageUpdate(ectx, event.message);
+
+      if (state.pendingQueuedActions.length > 0 && state.harness.isRunning()) {
+        const action = state.pendingQueuedActions.shift();
+
+        if (action === 'message') {
+          const msg = state.pendingFollowUpMessages.shift();
+          if (msg) {
+            ectx.fireMessage(msg.content, msg.images);
+          }
+        }
+
+        if (action === 'slash') {
+          const cmd = state.pendingSlashCommands.shift();
+          if (cmd) {
+            await ectx.handleSlashCommand(cmd);
+          }
+        }
+      }
+
       break;
 
     case 'message_end':
