@@ -605,7 +605,7 @@ export class StagehandBrowser extends MastraBrowser {
         case 'new': {
           const newPage = await context.newPage(input.url);
           // newPage automatically becomes active in Stagehand
-          // NOTE: Screencast does not auto-update for new tabs (Stagehand limitation)
+          await this.reconnectScreencast('new tab via tool');
           return {
             success: true,
             index: context.pages().length - 1,
@@ -633,7 +633,7 @@ export class StagehandBrowser extends MastraBrowser {
           }
           const targetPage = pages[input.index]!;
           context.setActivePage(targetPage);
-          // NOTE: Screencast does not auto-update for tab switches (Stagehand limitation)
+          await this.reconnectScreencast('tab switch via tool');
           return {
             success: true,
             index: input.index,
@@ -655,7 +655,7 @@ export class StagehandBrowser extends MastraBrowser {
           }
           const pageToClose = pages[indexToClose]!;
           await pageToClose.close();
-          // NOTE: Screencast does not auto-update for tab closes (Stagehand limitation)
+          await this.reconnectScreencast('tab close via tool');
           const remainingPages = context.pages();
           return {
             success: true,
@@ -793,6 +793,9 @@ export class StagehandBrowser extends MastraBrowser {
 
     await stream.start();
 
+    // Set up tab change detection
+    await this.setupTabChangeDetection(threadId, stream);
+
     // Clean up when screencast stops
     stream.once('stop', () => {
       if (this.activeScreencastStream === stream) {
@@ -803,10 +806,104 @@ export class StagehandBrowser extends MastraBrowser {
     return stream as unknown as ScreencastStream;
   }
 
-  // NOTE: Manual tab switching detection is not currently supported.
+  /** Debounce timer for tab change reconnection */
+  private tabChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Set up listeners to detect tab changes and reconnect the screencast.
+   * Uses CDP Target events since Stagehand doesn't expose page lifecycle events.
+   */
+  private async setupTabChangeDetection(threadId: string | undefined, stream: ScreencastStreamImpl): Promise<void> {
+    const stagehand = await this.getStagehandForThread(threadId);
+    if (!stagehand?.context) return;
+
+    // Access the root CDP connection from the context
+    const context = stagehand.context as any;
+    const connection = context._conn ?? context.conn ?? context.connection ?? context._connection;
+
+    if (!connection) {
+      this.logger.debug?.('No CDP connection available for tab change detection');
+      return;
+    }
+
+    this.logger.debug?.('Setting up tab change detection via CDP');
+
+    // Listen for new tab creation
+    const onTargetCreated = (params: { targetInfo: { type: string; targetId: string; url: string } }) => {
+      if (params.targetInfo.type !== 'page') return;
+
+      this.logger.debug?.(`New page target created: ${params.targetInfo.url}`);
+
+      // Debounce to avoid rapid reconnects
+      if (this.tabChangeDebounceTimer) {
+        clearTimeout(this.tabChangeDebounceTimer);
+      }
+      this.tabChangeDebounceTimer = setTimeout(() => {
+        this.tabChangeDebounceTimer = null;
+        this.reconnectScreencast('new tab');
+      }, 300);
+    };
+
+    // Listen for tab destruction
+    const onTargetDestroyed = (_params: { targetId: string }) => {
+      this.logger.debug?.('Page target destroyed');
+
+      if (this.tabChangeDebounceTimer) {
+        clearTimeout(this.tabChangeDebounceTimer);
+      }
+      this.tabChangeDebounceTimer = setTimeout(() => {
+        this.tabChangeDebounceTimer = null;
+        this.reconnectScreencast('tab closed');
+      }, 300);
+    };
+
+    try {
+      connection.on?.('Target.targetCreated', onTargetCreated);
+      connection.on?.('Target.targetDestroyed', onTargetDestroyed);
+
+      // Clean up listeners when stream stops
+      stream.once('stop', () => {
+        if (this.tabChangeDebounceTimer) {
+          clearTimeout(this.tabChangeDebounceTimer);
+          this.tabChangeDebounceTimer = null;
+        }
+        connection.off?.('Target.targetCreated', onTargetCreated);
+        connection.off?.('Target.targetDestroyed', onTargetDestroyed);
+      });
+    } catch (error) {
+      this.logger.debug?.('Failed to set up tab change detection', error);
+    }
+  }
+
+  /**
+   * Reconnect the active screencast to pick up tab changes.
+   */
+  private async reconnectScreencast(reason: string): Promise<void> {
+    const stream = this.activeScreencastStream;
+    if (!stream || !stream.isActive()) {
+      return;
+    }
+
+    // Check if browser is still running before attempting reconnect
+    if (!this.isBrowserRunning()) {
+      this.logger.debug?.('Skipping screencast reconnect - browser not running');
+      return;
+    }
+
+    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
+
+    try {
+      // Small delay to let tab state settle
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await stream.reconnect();
+    } catch (error) {
+      this.logger.debug?.('Screencast reconnect failed', error);
+    }
+  }
+
+  // NOTE: Manual tab switching in browser UI is not fully supported.
   // Stagehand v3 does not track pages opened via browser UI (only pages created through its API).
   // We've requested this feature from Browserbase - see Notion doc for details.
-  // For now, only agent-initiated tab operations (via stagehand_tabs tool) work reliably.
 
   // ---------------------------------------------------------------------------
   // Event Injection (for Studio live view interactivity)
