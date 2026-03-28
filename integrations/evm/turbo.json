@@ -10,8 +10,10 @@
         "tsconfig.json",
         "package.json",
         "!**/*.md",
+        "!**/*.md",
         "!**/*.test.ts",
-        "!**/*.spec.ts"
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
       ],
       "outputs": ["dist/**"]
     },
