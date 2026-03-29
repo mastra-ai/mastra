@@ -793,6 +793,31 @@ describe('GCSFilesystem SDK Operations', () => {
       const result = await fs.isDirectory('/');
       expect(result).toBe(true);
     });
+
+    it('exists(".") is treated the same as "/" (root)', async () => {
+      // "." should resolve to root — toKey(".") must not produce "." as a GCS key
+      const result = await fs.exists('.');
+      expect(result).toBe(true);
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+
+    it('readdir(".") lists root directory', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [{ name: 'file.txt', metadata: { size: 42 } }],
+      ]);
+
+      const entries = await fs.readdir('.');
+      expect(entries).toEqual([{ name: 'file.txt', type: 'file', size: 42 }]);
+    });
+
+    it('readdir("./subdir") works like readdir("/subdir")', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [{ name: 'subdir/a.txt', metadata: { size: 10 } }],
+      ]);
+
+      const entries = await fs.readdir('./subdir');
+      expect(entries).toEqual([{ name: 'a.txt', type: 'file', size: 10 }]);
+    });
   });
 
   describe('exists()', () => {
