@@ -37,6 +37,27 @@ describe('Server App Access via createHonoServer', () => {
     expect(typeof adapter?.getApp).toBe('function');
   });
 
+  it('should forward server.mcpOptions to the server adapter', async () => {
+    const sessionIdGenerator = () => 'session-id';
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        mcpOptions: {
+          serverless: true,
+          sessionIdGenerator,
+        },
+      },
+    });
+
+    await createHonoServer(mastra, { tools: {} });
+
+    const adapter = mastra.getMastraServer() as any;
+
+    expect(adapter).toBeDefined();
+    expect(adapter.mcpOptions?.serverless).toBe(true);
+    expect(adapter.mcpOptions?.sessionIdGenerator).toBe(sessionIdGenerator);
+  });
+
   it('should allow calling routes directly via app.fetch() - the primary use case', async () => {
     const mastra = new Mastra({
       logger: false,
