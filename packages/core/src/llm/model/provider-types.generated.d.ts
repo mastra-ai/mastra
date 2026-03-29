@@ -1737,7 +1737,7 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-super-120b-a12b',
-    'nvidia/nemotron-3-super-120b-a12b-free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -3414,6 +3414,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7',
     'zai-org/glm-4.7-flash',
     'zai-org/glm-5',
+    'zai-org/glm-5.1',
+    'zai-org/glm-5.1:thinking',
     'zai-org/glm-5:thinking',
   ];
   readonly clarifai: readonly [
