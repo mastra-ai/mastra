@@ -429,6 +429,9 @@ describe('Structured output stream memory persistence (#14659)', () => {
 
     await response.consumeStream();
 
+    // Ensure at least one assistant message was persisted so the loop below is not vacuous.
+    expect(savedTexts.length).toBeGreaterThan(0);
+
     // If any assistant message was persisted, it must not contain "[object Object]".
     // Before the fix, outputText was computed as `.map(m => m.content).join('\n')`
     // which serialized content objects, producing "[object Object]\n[object Object]\n...".
