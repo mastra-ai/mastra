@@ -280,6 +280,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5.1',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -481,6 +482,7 @@ export type ProviderModelsMap = {
     'ideogramai/ideogram-v2a',
     'ideogramai/ideogram-v2a-turbo',
     'lumalabs/ray2',
+    'novita/deepseek-v3.2',
     'novita/glm-4.6',
     'novita/glm-4.6v',
     'novita/glm-4.7',
@@ -553,6 +555,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast-reasoning',
     'xai/grok-4.1-fast-non-reasoning',
     'xai/grok-4.1-fast-reasoning',
+    'xai/grok-4.20-multi-agent',
     'xai/grok-code-fast-1',
   ];
   readonly opencode: readonly [
@@ -771,7 +774,6 @@ export type ProviderModelsMap = {
     'gemini-3-1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
-    'glm-5',
     'gpt-4o',
     'gpt-5-3-codex',
     'gpt-5-4',
@@ -784,6 +786,7 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'kimi-k2.5',
     'minimax-m2-5',
+    'zai-glm-5',
   ];
   readonly google: readonly [
     'gemini-1.5-flash',
@@ -816,6 +819,11 @@ export type ProviderModelsMap = {
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
     'gemini-live-2.5-flash-preview-native-audio',
+    'gemma-3-12b-it',
+    'gemma-3-27b-it',
+    'gemma-3-4b-it',
+    'gemma-3n-e2b-it',
+    'gemma-3n-e4b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -2587,15 +2595,23 @@ export type ProviderModelsMap = {
     'veo-3.1-generate-preview',
   ];
   readonly groq: readonly [
+    'allam-2-7b',
+    'canopylabs/orpheus-arabic-saudi',
+    'canopylabs/orpheus-v1-english',
+    'groq/compound',
+    'groq/compound-mini',
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
-    'meta-llama/llama-4-maverick-17b-128e-instruct',
     'meta-llama/llama-4-scout-17b-16e-instruct',
-    'meta-llama/llama-guard-4-12b',
+    'meta-llama/llama-prompt-guard-2-22m',
+    'meta-llama/llama-prompt-guard-2-86m',
     'moonshotai/kimi-k2-instruct-0905',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'openai/gpt-oss-safeguard-20b',
     'qwen/qwen3-32b',
+    'whisper-large-v3',
+    'whisper-large-v3-turbo',
   ];
   readonly aihubmix: readonly [
     'Kimi-K2-0905',
@@ -3565,6 +3581,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5.1',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
