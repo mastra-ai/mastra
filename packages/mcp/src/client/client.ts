@@ -740,6 +740,7 @@ export class InternalMastraMCPClient extends MastraBase {
               const executeToolCall = async () => {
                 this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
                 const userMeta = context?._meta;
+                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
                 const progressMeta = this.enableProgressTracking
                   ? { progressToken: context?.runId || crypto.randomUUID() }
                   : undefined;
