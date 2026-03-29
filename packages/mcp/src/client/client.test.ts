@@ -1033,7 +1033,7 @@ describe('MastraMCPClient - Custom _meta', () => {
   it('should forward custom _meta to callTool', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-client',
-      server: { url: testServer.baseUrl },
+      server: { url: testServer.baseUrl, enableProgressTracking: false },
     });
     await client.connect();
 
