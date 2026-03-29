@@ -774,7 +774,6 @@ export type ProviderModelsMap = {
     'gemini-3-1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
-    'glm-5',
     'gpt-4o',
     'gpt-5-3-codex',
     'gpt-5-4',
@@ -787,6 +786,7 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'kimi-k2.5',
     'minimax-m2-5',
+    'zai-glm-5',
   ];
   readonly google: readonly [
     'gemini-1.5-flash',
@@ -819,6 +819,11 @@ export type ProviderModelsMap = {
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
     'gemini-live-2.5-flash-preview-native-audio',
+    'gemma-3-12b-it',
+    'gemma-3-27b-it',
+    'gemma-3-4b-it',
+    'gemma-3n-e2b-it',
+    'gemma-3n-e4b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
