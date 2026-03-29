@@ -8,6 +8,7 @@
         "src/**",
         "tsup.config.ts",
         "tsconfig.json",
+        "tsconfig.build.json",
         "package.json",
         "!**/*.md",
         "!**/*.md",

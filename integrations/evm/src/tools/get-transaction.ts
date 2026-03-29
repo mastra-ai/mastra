@@ -10,7 +10,7 @@ export const getTransaction = createTool({
   inputSchema: z.object({
     hash: z.string().describe('The transaction hash (0x format)'),
     chainId: z.number().default(1).describe('Chain ID'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL'),
   }),
   outputSchema: z.object({
     hash: z.string(),

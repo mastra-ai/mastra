@@ -23,7 +23,7 @@ export const readContract = createTool({
     functionName: z.string().describe('The function name to call'),
     args: z.array(z.unknown()).default([]).describe('Function arguments as an ordered array'),
     chainId: z.number().default(1).describe('Chain ID'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL'),
   }),
   outputSchema: z.object({
     result: z.unknown(),

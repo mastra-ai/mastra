@@ -53,7 +53,9 @@ describe('EVM Tools - Schema Validation', () => {
 
 describe('EVM Tools - Chain Support', () => {
   it('getBalance defaults to chainId 1', () => {
-    const schema = getBalance.inputSchema;
-    expect(schema).toBeDefined();
+    const parsed = getBalance.inputSchema.parse({
+      address: '0x0000000000000000000000000000000000000000',
+    });
+    expect(parsed.chainId).toBe(1);
   });
 });

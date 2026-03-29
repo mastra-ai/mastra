@@ -11,7 +11,7 @@ export const getBalance = createTool({
   inputSchema: z.object({
     address: z.string().describe('The wallet address to check (0x format)'),
     chainId: z.number().default(1).describe('Chain ID (1=Ethereum, 137=Polygon, 42161=Arbitrum, 8453=Base, etc.)'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL. Uses public RPC if omitted.'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL. Uses public RPC if omitted.'),
   }),
   outputSchema: z.object({
     address: z.string(),

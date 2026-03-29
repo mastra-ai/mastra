@@ -43,7 +43,7 @@ export const getTokenBalance = createTool({
     address: z.string().describe('The wallet address to check (0x format)'),
     tokenAddress: z.string().describe('The ERC-20 token contract address (0x format)'),
     chainId: z.number().default(1).describe('Chain ID'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL'),
   }),
   outputSchema: z.object({
     address: z.string(),
@@ -61,12 +61,22 @@ export const getTokenBalance = createTool({
       const token = validateAddress(tokenAddress);
       const client = getPublicClient(chainId, rpcUrl);
 
-      const [balance, decimals, symbol, name] = await Promise.all([
-        client.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+      const balance = await client.readContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [addr],
+      });
+
+      const [decimalsResult, symbolResult, nameResult] = await Promise.allSettled([
         client.readContract({ address: token, abi: ERC20_ABI, functionName: 'decimals' }),
         client.readContract({ address: token, abi: ERC20_ABI, functionName: 'symbol' }),
         client.readContract({ address: token, abi: ERC20_ABI, functionName: 'name' }),
       ]);
+
+      const decimals = decimalsResult.status === 'fulfilled' ? Number(decimalsResult.value) : 18;
+      const symbol = symbolResult.status === 'fulfilled' ? String(symbolResult.value) : 'UNKNOWN';
+      const name = nameResult.status === 'fulfilled' ? String(nameResult.value) : 'Unknown Token';
 
       return {
         address: addr,

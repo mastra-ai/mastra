@@ -31,6 +31,7 @@ pnpm add @mastra/evm
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 import { getBalance, getTokenBalance, readContract, resolveEns } from '@mastra/evm';
 
 const agent = new Agent({

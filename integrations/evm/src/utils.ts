@@ -2,7 +2,7 @@ import { isAddress, getAddress } from 'viem';
 
 export function validateAddress(input: string): `0x${string}` {
   if (!isAddress(input)) {
-    throw new Error(`Invalid EVM address: "${input}". Expected a 0x-prefixed hex string (42 characters).`);
+    throw new Error(`Invalid EVM address: "${input}". Expected a valid 0x-prefixed address (42 hex characters) with correct checksum when mixed-case.`);
   }
   return getAddress(input);
 }

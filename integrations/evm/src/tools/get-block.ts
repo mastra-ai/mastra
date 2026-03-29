@@ -5,11 +5,11 @@ import { wrapError } from '../utils';
 
 export const getBlock = createTool({
   id: 'evm-get-block',
-  description: 'Get block information by block number or tag (latest, earliest, pending). Returns timestamp, gas used, transaction count, and base fee.',
+  description: 'Get block information by block number. Omit blockNumber to get the latest block. Returns timestamp, gas used, transaction count, and base fee.',
   inputSchema: z.object({
     blockNumber: z.number().optional().describe('Block number to query. Omit to get the latest block.'),
     chainId: z.number().default(1).describe('Chain ID'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL'),
   }),
   outputSchema: z.object({
     number: z.string(),
@@ -25,6 +25,10 @@ export const getBlock = createTool({
   execute: async ({ blockNumber, chainId, rpcUrl }) => {
     try {
       const client = getPublicClient(chainId, rpcUrl);
+
+      if (blockNumber !== undefined && (!Number.isInteger(blockNumber) || blockNumber < 0)) {
+        throw new Error('blockNumber must be a non-negative integer');
+      }
 
       const block = blockNumber !== undefined
         ? await client.getBlock({ blockNumber: BigInt(blockNumber) })

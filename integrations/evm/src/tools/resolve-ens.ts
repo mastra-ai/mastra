@@ -11,7 +11,7 @@ export const resolveEns = createTool({
     'Resolve an ENS name to an Ethereum address, or reverse-resolve an address to its ENS name. Works on Ethereum mainnet.',
   inputSchema: z.object({
     nameOrAddress: z.string().describe('Either an ENS name (e.g. "vitalik.eth") or an Ethereum address (0x format)'),
-    rpcUrl: z.string().optional().describe('Custom RPC endpoint URL for Ethereum mainnet'),
+    rpcUrl: z.string().url().optional().describe('Custom RPC endpoint URL for Ethereum mainnet'),
   }),
   outputSchema: z.object({
     name: z.string().nullable(),
