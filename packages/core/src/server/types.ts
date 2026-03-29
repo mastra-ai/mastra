@@ -224,6 +224,17 @@ export type ServerConfig = {
   bodySizeLimit?: number;
 
   /**
+   * MCP transport options applied to all MCP HTTP and SSE routes.
+   * Use this to enable serverless mode for stateless environments.
+   */
+  mcpOptions?: {
+    /** When true, runs in stateless mode without session management. */
+    serverless?: boolean;
+    /** Custom session ID generator function. */
+    sessionIdGenerator?: () => string;
+  };
+
+  /**
    * Authentication configuration for the server.
    *
    * Handles WHO the user is (authentication only).
