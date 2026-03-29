@@ -582,6 +582,40 @@ describe('S3Filesystem', () => {
       const key2 = (fs as any).toKey('///multi-slash.txt');
       expect(key2).toBe('multi-slash.txt');
     });
+
+    it('toKey resolves "." to empty string (root)', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+      });
+
+      expect((fs as any).toKey('.')).toBe('');
+      expect((fs as any).toKey('./')).toBe('');
+      expect((fs as any).toKey('./subdir')).toBe('subdir');
+    });
+
+    it('toKey resolves "." with prefix to prefix root', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: 'workspace',
+      });
+
+      expect((fs as any).toKey('.')).toBe('workspace/');
+      expect((fs as any).toKey('./')).toBe('workspace/');
+      expect((fs as any).toKey('./file.txt')).toBe('workspace/file.txt');
+    });
+
+    it('toKey does not alter dotfiles', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+      });
+
+      expect((fs as any).toKey('.hidden')).toBe('.hidden');
+      expect((fs as any).toKey('.env')).toBe('.env');
+      expect((fs as any).toKey('/.gitignore')).toBe('.gitignore');
+    });
   });
 
   describe('Prefix Handling', () => {
@@ -1075,6 +1109,35 @@ describe('S3Filesystem SDK Operations', () => {
     it('isDirectory("/") returns true', async () => {
       const result = await fs.isDirectory('/');
       expect(result).toBe(true);
+    });
+
+    it('exists(".") resolves to root and returns true', async () => {
+      mockSend.mockClear();
+      const result = await fs.exists('.');
+      expect(result).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('stat(".") returns directory stat', async () => {
+      const stat = await fs.stat('.');
+      expect(stat.type).toBe('directory');
+    });
+
+    it('isDirectory(".") returns true', async () => {
+      const result = await fs.isDirectory('.');
+      expect(result).toBe(true);
+    });
+
+    it('isFile(".") returns false', async () => {
+      const result = await fs.isFile('.');
+      expect(result).toBe(false);
+    });
+
+    it('exists("./") resolves to root and returns true', async () => {
+      mockSend.mockClear();
+      const result = await fs.exists('./');
+      expect(result).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
