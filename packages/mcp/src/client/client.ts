@@ -727,21 +727,29 @@ export class InternalMastraMCPClient extends MastraBase {
           },
           execute: async (
             input: any,
-            context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
+            context?: {
+              requestContext?: RequestContext | null;
+              runId?: string;
+              abortSignal?: AbortSignal;
+              _meta?: Record<string, unknown>;
+            },
           ) => {
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
                 this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+                const userMeta = context?._meta;
+                const progressMeta = this.enableProgressTracking
+                  ? { progressToken: context?.runId || crypto.randomUUID() }
+                  : undefined;
+                const combinedMeta = userMeta || progressMeta ? { ...userMeta, ...progressMeta } : undefined;
+
                 const res = await this.client.callTool(
                   {
                     name: tool.name,
                     arguments: input,
-                    // Use runId as progress token if available, otherwise generate a random UUID
-                    ...(this.enableProgressTracking
-                      ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
-                      : {}),
+                    ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
                   CallToolResultSchema,
                   {
