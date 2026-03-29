@@ -1395,6 +1395,52 @@ describe('DatadogExporter', () => {
       // All metadata stays in metadata when requestContextKeys is empty
       expect(annotateCall?.metadata).toMatchObject({ tenantId: 'tenant-123' });
     });
+
+    it('promotes matching keys from span.attributes to flat tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId', 'agentId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        // Keys stored in span.attributes rather than span.metadata
+        attributes: { tenantId: 'tenant-from-attrs', agentId: 'agent-from-attrs', otherAttr: 'stays' },
+        metadata: { someKey: 'some-value' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // Keys from attributes are promoted to flat tags
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-from-attrs', agentId: 'agent-from-attrs' });
+      // Promoted attribute keys are NOT duplicated in metadata
+      expect(annotateCall?.metadata).not.toHaveProperty('tenantId');
+      expect(annotateCall?.metadata).not.toHaveProperty('agentId');
+      // Non-promoted attribute keys and metadata stay in metadata
+      expect(annotateCall?.metadata).toMatchObject({ otherAttr: 'stays', someKey: 'some-value' });
+    });
+
+    it('metadata wins over attributes when both have the same requestContextKey', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        attributes: { tenantId: 'tenant-from-attrs' },
+        metadata: { tenantId: 'tenant-from-metadata' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // metadata value wins
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-from-metadata' });
+    });
   });
 
   describe('timer cancellation on new activity', () => {

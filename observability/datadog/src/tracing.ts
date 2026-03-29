@@ -304,10 +304,10 @@ export class DatadogExporter extends BaseExporter {
     const knownFields = ['usage', 'model', 'provider', 'parameters'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
-    // Separate requestContextKeys from span.metadata:
+    // Separate requestContextKeys from span.metadata AND span.attributes:
     // - Keys listed in this.config.requestContextKeys are promoted to flat LLM Obs tags,
     //   making them indexable and filterable in the Datadog UI (e.g. tenantId, agentId).
-    // - All remaining metadata keys stay nested in annotations.metadata as before.
+    // - All remaining keys stay nested in annotations.metadata as before.
     const contextKeySet = new Set(this.config.requestContextKeys ?? []);
     const flatContextTags: Record<string, any> = {};
     const remainingMetadata: Record<string, any> = {};
@@ -320,12 +320,26 @@ export class DatadogExporter extends BaseExporter {
       }
     }
 
+    // Also promote matching keys from span.attributes so requestContextKeys
+    // are consistently elevated regardless of where the caller stored them.
+    const remainingAttributes: Record<string, any> = {};
+    for (const [key, value] of Object.entries(otherAttributes)) {
+      if (contextKeySet.has(key)) {
+        // Only promote if not already set from span.metadata (metadata wins)
+        if (!(key in flatContextTags)) {
+          flatContextTags[key] = value;
+        }
+      } else {
+        remainingAttributes[key] = value;
+      }
+    }
+
     // Merge remaining span.metadata + span attributes into metadata
     // Error message goes into metadata (not tags) because tags get normalized/truncated
     // which mangles free-form error text (e.g. colons split into key/value, spaces become underscores)
     const combinedMetadata: Record<string, any> = {
       ...remainingMetadata,
-      ...otherAttributes,
+      ...remainingAttributes,
     };
     if (span.errorInfo) {
       combinedMetadata['error.message'] = span.errorInfo.message;
