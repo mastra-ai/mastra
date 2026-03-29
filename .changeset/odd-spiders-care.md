@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fix `mcpOptions` being ignored when creating `MastraServer` through the deployer path. The deployer now forwards `server.mcpOptions` so `serverless` mode and custom `sessionIdGenerator` are applied correctly.
+Fixed an issue where MCP server options in Mastra server config were not applied when using the deployer, so serverless mode and custom session IDs now work as expected.
