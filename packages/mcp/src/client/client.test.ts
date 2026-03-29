@@ -1077,6 +1077,30 @@ describe('MastraMCPClient - Custom _meta', () => {
     expect(callArgs._meta.progressToken).toBe('run-42');
   });
 
+  it('should give managed progressToken precedence over user-supplied progressToken in _meta', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-precedence-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: true },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.(
+      { msg: 'hi' },
+      { runId: 'run-42', _meta: { progressToken: 'user-token', traceId: 'trace-1' } },
+    );
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta.progressToken).toBe('run-42');
+    expect(callArgs._meta.traceId).toBe('trace-1');
+  });
+
   it('should not include _meta when neither custom _meta nor progress tracking is provided', async () => {
     client = new InternalMastraMCPClient({
       name: 'no-meta-client',
