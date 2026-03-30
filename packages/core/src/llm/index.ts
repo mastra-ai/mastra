@@ -147,7 +147,13 @@ export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined 
   DefaultLLMStreamObjectOptions;
 
 export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
-export { MastraModelGateway, NetlifyGateway, ModelsDevGateway, AzureOpenAIGateway } from './model/gateways';
-export type { AzureOpenAIGatewayConfig } from './model/gateways';
+export {
+  MastraModelGateway,
+  NetlifyGateway,
+  ModelsDevGateway,
+  AzureOpenAIGateway,
+  MastraProxyGateway,
+} from './model/gateways';
+export type { AzureOpenAIGatewayConfig, MastraProxyGatewayConfig } from './model/gateways';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

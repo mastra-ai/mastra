@@ -74,11 +74,21 @@ describe('getDynamicMemory', () => {
     expect(omConfig.enabled).toBe(true);
   });
 
-  it('returns undefined when memory gateway API key is stored (gateway handles everything)', () => {
+  it('returns undefined when memory gateway API key is stored and env var is set', () => {
+    process.env.ENABLE_MASTRA_MEMORY_GATEWAY = 'true';
     mockGetStoredApiKey.mockReturnValue('mg-key-abc');
 
     const factory = getDynamicMemory({} as any);
     expect(factory).toBeUndefined();
+    delete process.env.ENABLE_MASTRA_MEMORY_GATEWAY;
+  });
+
+  it('returns a memory factory when memory gateway API key is stored but env var is not set', () => {
+    delete process.env.ENABLE_MASTRA_MEMORY_GATEWAY;
+    mockGetStoredApiKey.mockReturnValue('mg-key-abc');
+
+    const factory = getDynamicMemory({} as any);
+    expect(factory).toBeDefined();
   });
 
   it('returns a memory factory when memory gateway key is not present (defaults)', () => {

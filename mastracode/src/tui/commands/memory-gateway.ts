@@ -126,7 +126,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   if (!action) return;
 
   if (action === 'apikey') {
-    const key = await askText(ctx, 'Memory gateway API key');
+    const key = await askText(ctx, 'Memory gateway API key (empty to clear)', undefined, true);
     if (key === null) return; // cancelled
 
     if (key) {

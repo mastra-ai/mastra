@@ -62,17 +62,27 @@ vi.mock('ai', () => ({
   })),
 }));
 
-// Mock ModelRouterLanguageModel
+// Mock ModelRouterLanguageModel and MastraProxyGateway
 vi.mock('@mastra/core/llm', () => ({
   ModelRouterLanguageModel: vi.fn(function (
     this: Record<string, unknown>,
     config: string | { id: string; url?: string; apiKey?: string; headers?: Record<string, string> },
+    customGateways?: Array<{ baseUrl: string; headers?: Record<string, string> }>,
   ) {
     this.__provider = 'model-router';
     this.modelId = typeof config === 'string' ? config : config.id;
     this.url = typeof config === 'string' ? undefined : config.url;
     this.apiKey = typeof config === 'string' ? undefined : config.apiKey;
     this.headers = typeof config === 'string' ? undefined : config.headers;
+    this.customGateways = customGateways;
+  }),
+  MastraProxyGateway: vi.fn(function (
+    this: Record<string, unknown>,
+    config: { baseUrl: string; headers?: Record<string, string> },
+  ) {
+    this.__type = 'proxy-gateway';
+    this.baseUrl = config.baseUrl;
+    this.headers = config.headers;
   }),
 }));
 
@@ -395,7 +405,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes proxy baseUrl to model router for unknown providers', () => {
+    it('passes proxy gateway to model router for unknown providers', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         llmProxy: {
@@ -407,10 +417,15 @@ describe('resolveModel', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
-      expect(result.url).toBe('https://proxy.corp.com');
+      // Proxy is now passed as a custom gateway, not as url
+      expect(result.url).toBeUndefined();
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].__type).toBe('proxy-gateway');
+      expect(gateways![0].baseUrl).toBe('https://proxy.corp.com');
     });
 
-    it('merges proxy headers with harness headers (harness wins on conflict)', () => {
+    it('passes proxy headers via gateway and harness headers via config', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         llmProxy: {
@@ -423,9 +438,15 @@ describe('resolveModel', () => {
         requestContext: makeRequestContext({ threadId: 'harness-thread' }),
       }) as Record<string, unknown>;
 
+      // Harness headers go on config; proxy headers are in the gateway
       expect(result.headers).toEqual({
-        'X-Proxy-Auth': 'token-789',
         'x-thread-id': 'harness-thread',
+      });
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].headers).toEqual({
+        'x-thread-id': 'proxy-thread',
+        'X-Proxy-Auth': 'token-789',
       });
     });
 
@@ -480,7 +501,15 @@ describe('resolveModel', () => {
   });
 
   describe('memory gateway', () => {
-    it('uses memory gateway URL and X-Mastra-Authorization when apiKey is stored', () => {
+    beforeEach(() => {
+      process.env.ENABLE_MASTRA_MEMORY_GATEWAY = 'true';
+    });
+
+    afterEach(() => {
+      delete process.env.ENABLE_MASTRA_MEMORY_GATEWAY;
+    });
+
+    it('uses memory gateway as proxy gateway when apiKey is stored', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
@@ -490,8 +519,13 @@ describe('resolveModel', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
-      expect(result.url).toBe('https://server.mastra.ai/v1');
-      expect(result.headers).toEqual({
+      // No url on config — routing is handled by the proxy gateway
+      expect(result.url).toBeUndefined();
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].__type).toBe('proxy-gateway');
+      expect(gateways![0].baseUrl).toBe('https://server.mastra.ai/v1');
+      expect(gateways![0].headers).toEqual({
         'X-Mastra-Authorization': 'Bearer msk_test123',
       });
     });
@@ -505,8 +539,10 @@ describe('resolveModel', () => {
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
 
-      expect(result.url).toBe('https://custom-gw.example.com');
-      expect(result.headers).toEqual({
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].baseUrl).toBe('https://custom-gw.example.com');
+      expect(gateways![0].headers).toEqual({
         'X-Mastra-Authorization': 'Bearer msk_test123',
       });
     });
@@ -522,13 +558,15 @@ describe('resolveModel', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
 
       // Memory gateway wins — llm-proxy URL and headers are ignored
-      expect(result.url).toBe('https://server.mastra.ai/v1');
-      expect(result.headers).toEqual({
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].baseUrl).toBe('https://server.mastra.ai/v1');
+      expect(gateways![0].headers).toEqual({
         'X-Mastra-Authorization': 'Bearer msk_test123',
       });
     });
 
-    it('merges X-Mastra-Authorization with harness headers', () => {
+    it('passes X-Mastra-Authorization via gateway and harness headers via config', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
@@ -539,9 +577,15 @@ describe('resolveModel', () => {
         requestContext: makeRequestContext({ threadId: 'thread-1' }),
       }) as Record<string, unknown>;
 
+      // Harness headers on config
       expect(result.headers).toEqual({
-        'X-Mastra-Authorization': 'Bearer msk_test123',
         'x-thread-id': 'thread-1',
+      });
+      // Proxy headers on gateway
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].headers).toEqual({
+        'X-Mastra-Authorization': 'Bearer msk_test123',
       });
     });
 
@@ -578,7 +622,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('falls back to llm-proxy when no memory gateway apiKey is stored', () => {
+    it('falls back to llm-proxy gateway when no memory gateway apiKey is stored', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
       mockLoadSettings.mockReturnValue({
         customProviders: [],
@@ -588,8 +632,26 @@ describe('resolveModel', () => {
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
 
-      expect(result.url).toBe('https://proxy.corp.com');
-      expect(result.headers).toEqual({ 'X-Proxy': 'yes' });
+      expect(result.url).toBeUndefined();
+      const gateways = result.customGateways as Array<Record<string, unknown>> | undefined;
+      expect(gateways).toHaveLength(1);
+      expect(gateways![0].baseUrl).toBe('https://proxy.corp.com');
+      expect(gateways![0].headers).toEqual({ 'X-Proxy': 'yes' });
+    });
+
+    it('ignores memory gateway when ENABLE_MASTRA_MEMORY_GATEWAY is not set', () => {
+      delete process.env.ENABLE_MASTRA_MEMORY_GATEWAY;
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { baseUrl: null },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      // Falls through to model router with no proxy gateway
+      expect(result.__provider).toBe('model-router');
+      expect(result.customGateways).toBeUndefined();
     });
   });
 });

@@ -57,7 +57,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   // NOTE: Checked once at startup; runtime toggles require restart because
   // Harness/Agent DynamicArgument<MastraMemory> doesn't accept undefined from the factory.
   const mgApiKey = new AuthStorage().getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
-  if (mgApiKey) return undefined;
+  if (mgApiKey && process.env.ENABLE_MASTRA_MEMORY_GATEWAY === 'true') return undefined;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);

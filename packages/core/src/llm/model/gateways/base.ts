@@ -44,6 +44,15 @@ export abstract class MastraModelGateway {
   }
 
   /**
+   * Check if this gateway handles a given model ID.
+   * Override to return `true` for catch-all gateways (e.g., proxy gateways).
+   * When a gateway returns `true`, it takes priority over prefix-based matching.
+   */
+  matchesModel(_modelId: string): boolean {
+    return false;
+  }
+
+  /**
    * Fetch provider configurations from the gateway
    * Should return providers in the standard format
    */

@@ -76,6 +76,17 @@ export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getSt
  */
 export const gateways = defaultGateways;
 
+/**
+ * Gateways that don't use a prefix in the model ID.
+ * models.dev is a provider registry (e.g., "openai/gpt-4o" not "models.dev/openai/gpt-4o").
+ * Catch-all gateways (matchesModel returns true) also don't use prefixes.
+ */
+function getGatewayPrefix(gateway: MastraModelGateway, modelId: string): string | undefined {
+  if (gateway.id === 'models.dev') return undefined;
+  if (gateway.matchesModel(modelId)) return undefined;
+  return gateway.id;
+}
+
 export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly specificationVersion = 'v2' as const;
   readonly defaultObjectGenerationMode = 'json' as const;
@@ -142,8 +153,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Resolve gateway once using the normalized ID
     this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
     // Extract provider from id if present
-    // Gateway ID is used as prefix (except for models.dev which is a provider registry)
-    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    // Gateway ID is used as prefix (except for models.dev and catch-all gateways)
+    const gatewayPrefix = getGatewayPrefix(this.gateway, normalizedConfig.id);
     const parsed = parseModelRouterId(normalizedConfig.id, gatewayPrefix);
 
     this.provider = parsed.providerId || 'openai-compatible';
@@ -202,7 +213,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     }
 
     try {
-      const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+      const gatewayPrefix = getGatewayPrefix(this.gateway, this.config.routerId);
       const model = await this.resolveLanguageModel({
         apiKey,
         headers: this.config.headers,
@@ -285,7 +296,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const gatewayPrefix = getGatewayPrefix(this.gateway, this.config.routerId);
     const model = await this.resolveLanguageModel({
       apiKey,
       headers: this.config.headers,
@@ -328,7 +339,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const gatewayPrefix = getGatewayPrefix(this.gateway, this.config.routerId);
     const { transport, websocket } = getOpenAITransport(options.providerOptions as ProviderOptions | undefined);
     const requestedTransport: OpenAITransport = transport === 'auto' ? 'websocket' : transport;
     const allowWebSocket =

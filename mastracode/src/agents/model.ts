@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import { MastraProxyGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
@@ -147,27 +147,33 @@ export function resolveModel(
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
 
-  // Memory gateway supersedes llm-proxy when enabled
+  // Build a proxy gateway from memory gateway or llm-proxy settings.
+  // Memory gateway supersedes llm-proxy when enabled.
   const mg: MemoryGatewaySettings = settings.memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
-  const mgEnabled = !!mgApiKey;
+  const mgEnabled = !!mgApiKey && process.env.ENABLE_MASTRA_MEMORY_GATEWAY === 'true';
 
-  let effectiveBaseUrl: string | undefined;
-  let effectiveProxyHeaders: ModelRequestHeaders | undefined;
+  let proxyGateway: MastraProxyGateway | undefined;
+  let proxyBaseUrl: string | undefined;
+  let proxyHeaders: ModelRequestHeaders | undefined;
 
   if (mgEnabled) {
-    effectiveBaseUrl = mg.baseUrl ?? MEMORY_GATEWAY_DEFAULT_URL;
-    effectiveProxyHeaders = { 'X-Mastra-Authorization': `Bearer ${mgApiKey}` };
+    proxyBaseUrl = mg.baseUrl ?? MEMORY_GATEWAY_DEFAULT_URL;
+    proxyHeaders = { 'X-Mastra-Authorization': `Bearer ${mgApiKey}` };
+    proxyGateway = new MastraProxyGateway({ baseUrl: proxyBaseUrl, headers: proxyHeaders });
   } else {
     const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
-    effectiveBaseUrl = proxy.baseUrl ?? undefined;
-    // Only forward proxy headers when a proxy base URL is configured
-    effectiveProxyHeaders = effectiveBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
+    proxyBaseUrl = proxy.baseUrl ?? undefined;
+    proxyHeaders =
+      proxyBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
+    if (proxyBaseUrl) {
+      proxyGateway = new MastraProxyGateway({ baseUrl: proxyBaseUrl, headers: proxyHeaders });
+    }
   }
 
-  // Merge effective proxy headers → harness headers (harness wins on conflict)
+  // Merge proxy headers → harness headers (harness wins on conflict)
   const headers: ModelRequestHeaders | undefined =
-    effectiveProxyHeaders || harnessHeaders ? { ...effectiveProxyHeaders, ...harnessHeaders } : undefined;
+    proxyHeaders || harnessHeaders ? { ...proxyHeaders, ...harnessHeaders } : undefined;
 
   const customProvider =
     providerId && modelName
@@ -198,7 +204,7 @@ export function resolveModel(
     }
     return createAnthropic({
       apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: effectiveBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
+      baseURL: proxyBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
       headers,
     })(modelId.substring('moonshotai/'.length));
@@ -208,21 +214,21 @@ export function resolveModel(
 
     // Primary path: explicit OAuth credential
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { baseURL: effectiveBaseUrl, headers });
+      return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, effectiveBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, proxyBaseUrl);
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers, effectiveBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { baseURL: effectiveBaseUrl, headers });
+    return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
@@ -231,27 +237,25 @@ export function resolveModel(
       const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
-        baseURL: effectiveBaseUrl,
+        baseURL: proxyBaseUrl,
         headers,
       });
     }
 
     const apiKey = getOpenAIApiKey();
     if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers, effectiveBaseUrl);
+      return openaiApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
     }
 
-    return new ModelRouterLanguageModel({
-      id: modelId as `${string}/${string}`,
-      ...(effectiveBaseUrl ? { url: effectiveBaseUrl } : {}),
-      headers,
-    });
+    return new ModelRouterLanguageModel(
+      { id: modelId as `${string}/${string}`, headers: harnessHeaders },
+      proxyGateway ? [proxyGateway] : undefined,
+    );
   } else {
-    return new ModelRouterLanguageModel({
-      id: modelId as `${string}/${string}`,
-      ...(effectiveBaseUrl ? { url: effectiveBaseUrl } : {}),
-      headers,
-    });
+    return new ModelRouterLanguageModel(
+      { id: modelId as `${string}/${string}`, headers: harnessHeaders },
+      proxyGateway ? [proxyGateway] : undefined,
+    );
   }
 }
 
