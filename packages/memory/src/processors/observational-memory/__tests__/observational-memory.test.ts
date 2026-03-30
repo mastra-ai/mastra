@@ -13666,15 +13666,11 @@ describe('Message ordering regressions', () => {
       }
     }
 
-    // Find last tool-invocation and first text in the flattened parts
-    let lastToolIdx = -1;
-    let firstTextIdx = -1;
-    for (let i = allParts.length - 1; i >= 0; i--) {
-      if (allParts[i]!.type === 'tool-invocation' && lastToolIdx === -1) lastToolIdx = i;
-    }
-    for (let i = 0; i < allParts.length; i++) {
-      if (allParts[i]!.type === 'text' && firstTextIdx === -1) firstTextIdx = i;
-    }
+    const lastToolIdx = allParts.map(p => p.type).lastIndexOf('tool-invocation');
+    const lastTextIdx = allParts.map(p => p.type).lastIndexOf('text');
+    expect(lastToolIdx).not.toBe(-1);
+    expect(lastTextIdx).not.toBe(-1);
+    expect(lastToolIdx).toBeLessThan(lastTextIdx);
 
     // All message IDs should be unique
     const ids = stored.map(m => m.id);
