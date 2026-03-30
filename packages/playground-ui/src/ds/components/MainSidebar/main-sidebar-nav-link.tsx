@@ -53,7 +53,7 @@ export function MainSidebarNavLink({
           '[&>a]:text-neutral5 [&>a]:bg-surface3': isActive,
           '[&_svg]:text-neutral5': isActive,
           // Active indicator bar
-          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-accent1 before:rounded-r-full before:transition-all before:duration-normal':
+          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-white before:rounded-r-full before:transition-all before:duration-normal':
             isActive && !isCollapsed,
           '[&>a]:justify-start': !isCollapsed,
           '[&_svg]:text-neutral3': isCollapsed,

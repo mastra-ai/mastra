@@ -28,7 +28,7 @@ export function MainSidebarNavHeader({
       <header
         className={cn('text-ui-xs uppercase tracking-widest', {
           'pl-3': isDefaultState,
-          'text-accent1 font-semibold': isActive,
+          'text-white font-semibold': isActive,
           'text-neutral3/75': !isActive,
         })}
       >
@@ -37,7 +37,7 @@ export function MainSidebarNavHeader({
             href={href}
             className={cn('transition-colors duration-normal', {
               'hover:text-neutral5': !isActive,
-              'text-accent1': isActive,
+              'text-white': isActive,
             })}
           >
             {labelContent}
