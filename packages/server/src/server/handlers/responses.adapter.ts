@@ -16,6 +16,10 @@ export type ResponseExecutionMessage = {
   content: string;
 };
 
+/**
+ * Flattens Responses API message content into the plain-text shape Mastra agent
+ * execution expects today.
+ */
 function normalizeMessageContent(content: ResponseInputMessage['content']): string {
   if (typeof content === 'string') {
     return content;
@@ -24,6 +28,9 @@ function normalizeMessageContent(content: ResponseInputMessage['content']): stri
   return content.map(part => part.text).join('');
 }
 
+/**
+ * Extracts the human-readable text represented by a persisted Mastra message.
+ */
 function getMessageText(message: MastraDBMessage): string {
   const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
   return parts
@@ -40,10 +47,19 @@ function getMessageRole(message: MastraDBMessage): string {
   return (message as { role?: string }).role ?? '';
 }
 
+/**
+ * Creates a stable fallback key for tool items when a tool call id is missing
+ * from the stored message payload.
+ */
 function getToolKey(toolCallId: string | null, messageId: string, partIndex: number) {
   return toolCallId ?? `${messageId}:${partIndex}`;
 }
 
+/**
+ * Normalizes tool parameter schemas so the Responses API always exposes the
+ * plain JSON Schema object regardless of whether the source tool came from a
+ * provider-defined tool or a Mastra/Zod tool definition.
+ */
 function normalizeToolParameters(schema: unknown): unknown {
   if (!isRecord(schema)) {
     return schema;
@@ -215,7 +231,8 @@ function collectToolResultCallIds(messages: MastraDBMessage[]) {
 }
 
 /**
- * Maps one Mastra message into Responses tool items while preserving thread order.
+ * Maps one persisted Mastra message into the tool-related Responses items that
+ * it contributes to the conversation timeline.
  */
 function mapMastraMessageToResponseToolItems({
   message,
@@ -331,7 +348,8 @@ export function mapMastraMessagesToConversationItems(messages: MastraDBMessage[]
 }
 
 /**
- * Maps Mastra response-turn messages into Responses API output items.
+ * Maps the stored Mastra messages for one response turn back into OpenAI-style
+ * `response.output` items, preserving tool/message ordering from the thread.
  */
 export function mapMastraMessagesToResponseOutputItems({
   messages,

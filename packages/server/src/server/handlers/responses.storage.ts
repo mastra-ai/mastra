@@ -140,7 +140,11 @@ function writeResponseTurnRecordMetadata(
 }
 
 /**
- * Looks up a stored response-turn record by assistant message ID.
+ * Looks up a stored response-turn record by response id.
+ *
+ * Response ids are assistant message ids, so this reconstructs the record by
+ * loading that persisted assistant message, reading its response metadata, then
+ * reloading the full set of stored turn messages referenced by the metadata.
  */
 export async function findResponseTurnRecord({
   mastra,
@@ -184,6 +188,10 @@ export async function findResponseTurnRecord({
   return { metadata, message, messages: orderedMessages, thread, memoryStore };
 }
 
+/**
+ * Creates a synthetic assistant message for responses that did not emit any
+ * persisted DB messages but still need a durable response-turn record.
+ */
 function createSyntheticResponseMessage({
   responseId,
   text,
@@ -236,7 +244,12 @@ export async function resolveResponseTurnMessagesForStorage({
 }
 
 /**
- * Persists a response-turn record and writes its metadata onto the final assistant message.
+ * Persists a response-turn record by anchoring it on the final assistant
+ * message in the stored turn.
+ *
+ * The response id becomes that assistant message id, and the response-specific
+ * metadata is written onto the assistant message so later retrieval can rebuild
+ * the Responses object from thread-backed storage.
  */
 export async function persistResponseTurnRecord({
   mastra,
