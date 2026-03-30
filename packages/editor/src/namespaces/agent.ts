@@ -92,6 +92,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
 
           if (!version) return null;
+          if (version.agentId !== id) {
+            throw new Error(`Version "${version.id}" does not belong to agent "${id}"`);
+          }
 
           const {
             id: versionId,
