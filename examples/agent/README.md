@@ -7,7 +7,7 @@ This directory contains example agents demonstrating various Mastra features.
 1. Install dependencies (from the repository root):
 
    ```bash
-   pnpm install
+   pnpm install --ignore-workspace
    ```
 
 2. Set up environment variables:
