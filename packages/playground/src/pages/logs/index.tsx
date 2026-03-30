@@ -5,7 +5,6 @@ import {
   LogsToolbar,
   isValidLogsDatePreset,
   useLogsFilters,
-  useExperimentalFeatures,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
 import { LogsIcon } from 'lucide-react';
@@ -27,7 +26,6 @@ const PRESET_TO_MS: Record<string, number> = {
 };
 
 export default function Logs() {
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
@@ -103,10 +101,6 @@ export default function Logs() {
     filteredLogs,
   } = useLogsFilters(logs as LogRecord[]);
 
-  if (!experimentalFeaturesEnabled) {
-    return null;
-  }
-
   return (
     <EntityListPageLayout className="max-w-none">
       <EntityListPageLayout.Top>
@@ -128,6 +122,13 @@ export default function Logs() {
           onRemoveFilterGroup={removeFilterGroup}
           onClearAllFilters={clearAllFilters}
           onFilterGroupsChange={updateFilterGroups}
+          onReset={() => {
+            setSearchQuery('');
+            clearAllFilters();
+            handleTimePeriodChange('24h');
+          }}
+          isLoading={isLoadingLogs}
+          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
         />
       </EntityListPageLayout.Top>
 

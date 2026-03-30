@@ -1,10 +1,10 @@
-import { CalendarIcon, ChevronDownIcon } from 'lucide-react';
+import { CalendarIcon, ChevronDownIcon, XIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { FilterGroup, FilterColumn } from '../hooks/use-logs-filters';
 import type { LogsDatePreset } from './logs-date-range-selector';
 import { Button } from '@/ds/components/Button';
-import type { DataFilterCategory, DataFilterState } from '@/ds/components/DataFilter';
-import { DataFilter } from '@/ds/components/DataFilter';
+import type { SelectDataFilterCategory, SelectDataFilterState } from '@/ds/components/DataFilter';
+import { SelectDataFilter } from '@/ds/components/DataFilter';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { ListSearch } from '@/ds/components/ListSearch/list-search';
 
@@ -26,6 +26,9 @@ export interface LogsToolbarProps {
   onRemoveFilterGroup: (id: string) => void;
   onClearAllFilters: () => void;
   onFilterGroupsChange: (next: Record<string, string[]>) => void;
+  onReset?: () => void;
+  isLoading?: boolean;
+  hasActiveFilters?: boolean;
 }
 
 export function LogsToolbar({
@@ -38,8 +41,11 @@ export function LogsToolbar({
   onRemoveFilterGroup,
   onClearAllFilters,
   onFilterGroupsChange,
+  onReset,
+  isLoading,
+  hasActiveFilters,
 }: LogsToolbarProps) {
-  const categories: DataFilterCategory[] = useMemo(
+  const categories: SelectDataFilterCategory[] = useMemo(
     () =>
       filterColumns.map(col => ({
         id: col.field,
@@ -50,8 +56,8 @@ export function LogsToolbar({
     [filterColumns],
   );
 
-  const filterState: DataFilterState = useMemo(() => {
-    const state: DataFilterState = {};
+  const filterState: SelectDataFilterState = useMemo(() => {
+    const state: SelectDataFilterState = {};
     for (const group of filterGroups) {
       state[group.field] = group.values;
     }
@@ -76,10 +82,16 @@ export function LogsToolbar({
             ))}
           </DropdownMenu.Content>
         </DropdownMenu>
-        <DataFilter categories={categories} value={filterState} onChange={onFilterGroupsChange} align="end" />
+        <SelectDataFilter categories={categories} value={filterState} onChange={onFilterGroupsChange} align="end" disabled={isLoading} />
+        {onReset && hasActiveFilters && (
+          <Button variant="outline" size="md" disabled={isLoading} onClick={onReset} className="ml-auto">
+            <XIcon />
+            Reset
+          </Button>
+        )}
       </div>
 
-      {filterGroups.length > 0 && (
+      {/* {filterGroups.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {filterGroups.map(group => {
             const col = filterColumns.find(c => c.field === group.field);
@@ -113,7 +125,7 @@ export function LogsToolbar({
             Clear all
           </button>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

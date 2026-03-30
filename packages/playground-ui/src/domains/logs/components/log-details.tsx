@@ -41,8 +41,6 @@ export function LogDetails({
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const date = toDate(log.timestamp);
 
-  console.log({ log });
-
   return (
     <DataDetailsPanel collapsed={collapsed}>
       <DataDetailsPanel.Header>
@@ -75,92 +73,88 @@ export function LogDetails({
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <div className="px-4 py-4">
-            <p className="text-ui-md text-neutral4 font-mono break-words whitespace-pre-wrap">{log.message}</p>
+          <p className="text-ui-md text-neutral4 font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
 
-            {/* Identifiers */}
-            {(log.traceId || log.spanId) && (
-              <div className={cn('grid gap-2 my-8', '[&>button]:justify-between [&>button]:overflow-hidden')}>
-                {log.traceId && (
-                  <ButtonsGroup spacing="close" className="min-w-0 w-full">
-                    <Button
-                      size="md"
-                      className="min-w-0 flex-1 overflow-hidden"
-                      onClick={() => onTraceClick?.(log.traceId!)}
-                    >
-                      <ArrowRightIcon />
-                      <span>Trace</span>
-                      <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.traceId}</span>
-                    </Button>
-                    <CopyButton content={log.traceId!} size="md" tooltip="Copy Trace ID to clipboard" />
-                  </ButtonsGroup>
-                )}
-                {log.spanId && (
-                  <ButtonsGroup spacing="close" className="min-w-0 w-full">
-                    <Button
-                      size="md"
-                      className="min-w-0 flex-1 overflow-hidden"
-                      onClick={() => log.traceId && onSpanClick?.(log.traceId, log.spanId!)}
-                    >
-                      <ArrowRightIcon />
-                      <span>Span</span>
-                      <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.spanId}</span>
-                    </Button>
-                    <CopyButton content={log.spanId!} size="md" tooltip="Copy Span ID to clipboard" />
-                  </ButtonsGroup>
-                )}
-              </div>
+          {(log.traceId || log.spanId) && (
+            <div className={cn('grid gap-2 my-8', '[&>button]:justify-between [&>button]:overflow-hidden')}>
+              {log.traceId && (
+                <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                  <Button
+                    size="md"
+                    className="min-w-0 flex-1 overflow-hidden"
+                    onClick={() => onTraceClick?.(log.traceId!)}
+                  >
+                    <ArrowRightIcon />
+                    <span>Trace</span>
+                    <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.traceId}</span>
+                  </Button>
+                  <CopyButton content={log.traceId!} size="md" tooltip="Copy Trace ID to clipboard" />
+                </ButtonsGroup>
+              )}
+              {log.spanId && (
+                <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                  <Button
+                    size="md"
+                    className="min-w-0 flex-1 overflow-hidden"
+                    onClick={() => log.traceId && onSpanClick?.(log.traceId, log.spanId!)}
+                  >
+                    <ArrowRightIcon />
+                    <span>Span</span>
+                    <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {log.spanId}</span>
+                  </Button>
+                  <CopyButton content={log.spanId!} size="md" tooltip="Copy Span ID to clipboard" />
+                </ButtonsGroup>
+              )}
+            </div>
+          )}
+
+          <KV className="mb-6">
+            {log.entityType && (
+              <>
+                <KV.Key>Entity Type</KV.Key>
+                <KV.Value>{log.entityType}</KV.Value>
+              </>
             )}
-
-            <KV className="mb-6">
-              {log.entityType && (
-                <>
-                  <KV.Key>Entity Type</KV.Key>
-                  <KV.Value>{log.entityType}</KV.Value>
-                </>
-              )}
-              {log.entityName && (
-                <>
-                  <KV.Key>Entity Name</KV.Key>
-                  <KV.Value>{log.entityName}</KV.Value>
-                </>
-              )}
-              {log.serviceName && (
-                <>
-                  <KV.Key>Service</KV.Key>
-                  <KV.Value>{log.serviceName}</KV.Value>
-                </>
-              )}
-              {log.environment && (
-                <>
-                  <KV.Key>Environment</KV.Key>
-                  <KV.Value>{log.environment}</KV.Value>
-                </>
-              )}
-              {log.source && (
-                <>
-                  <KV.Key>Source</KV.Key>
-                  <KV.Value>{log.source}</KV.Value>
-                </>
-              )}
-              {log.metadata && Object.keys(log.metadata).length > 0 && (
-                <>
-                  <KV.Header>Metadata</KV.Header>
-                  {Object.entries(log.metadata).map(([key, value]) => (
-                    <Fragment key={key}>
-                      <KV.Key>{key}</KV.Key>
-                      <KV.Value>{String(value)}</KV.Value>
-                    </Fragment>
-                  ))}
-                </>
-              )}
-            </KV>
-
-            {/* Data */}
-            {log.data && Object.keys(log.data).length > 0 && (
-              <DataDetailsPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
+            {log.entityName && (
+              <>
+                <KV.Key>Entity Name</KV.Key>
+                <KV.Value>{log.entityName}</KV.Value>
+              </>
             )}
-          </div>
+            {log.serviceName && (
+              <>
+                <KV.Key>Service</KV.Key>
+                <KV.Value>{log.serviceName}</KV.Value>
+              </>
+            )}
+            {log.environment && (
+              <>
+                <KV.Key>Environment</KV.Key>
+                <KV.Value>{log.environment}</KV.Value>
+              </>
+            )}
+            {log.source && (
+              <>
+                <KV.Key>Source</KV.Key>
+                <KV.Value>{log.source}</KV.Value>
+              </>
+            )}
+            {log.metadata && Object.keys(log.metadata).length > 0 && (
+              <>
+                <KV.Header>Metadata</KV.Header>
+                {Object.entries(log.metadata).map(([key, value]) => (
+                  <Fragment key={key}>
+                    <KV.Key>{key}</KV.Key>
+                    <KV.Value>{String(value)}</KV.Value>
+                  </Fragment>
+                ))}
+              </>
+            )}
+          </KV>
+
+          {log.data && Object.keys(log.data).length > 0 && (
+            <DataDetailsPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
+          )}
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

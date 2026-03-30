@@ -12,16 +12,16 @@ import { cn } from '@/lib/utils';
 // ---------------------------------------------------------------------------
 
 /** A single selectable value within a filter category */
-export type DataFilterValue = {
+export type SelectDataFilterValue = {
   value: string;
   label: string;
 };
 
 /** Selection mode for a filter category */
-export type DataFilterMode = 'single' | 'multi';
+export type SelectDataFilterMode = 'single' | 'multi';
 
 /** A filter category that appears in the filter dropdown */
-export type DataFilterCategory = {
+export type SelectDataFilterCategory = {
   /** Unique identifier */
   id: string;
   /** Display label */
@@ -29,21 +29,21 @@ export type DataFilterCategory = {
   /** Optional group header (categories with the same group are nested under it) */
   group?: string;
   /** Available values to pick from */
-  values: DataFilterValue[];
+  values: SelectDataFilterValue[];
   /** 'single' = radio, 'multi' = checkboxes. Defaults to 'multi'. */
-  mode?: DataFilterMode;
+  mode?: SelectDataFilterMode;
 };
 
 /** Current selected state: category id -> selected value(s) */
-export type DataFilterState = Record<string, string[]>;
+export type SelectDataFilterState = Record<string, string[]>;
 
-export type DataFilterProps = {
+export type SelectDataFilterProps = {
   /** Filter categories to display */
-  categories: DataFilterCategory[];
+  categories: SelectDataFilterCategory[];
   /** Current filter selections */
-  value: DataFilterState;
+  value: SelectDataFilterState;
   /** Called when selections change */
-  onChange: (next: DataFilterState) => void;
+  onChange: (next: SelectDataFilterState) => void;
   /** Disable the trigger button */
   disabled?: boolean;
   /** Override the trigger label */
@@ -113,7 +113,7 @@ function SubMenuSearch({
 // Component
 // ---------------------------------------------------------------------------
 
-export function DataFilter({
+export function SelectDataFilter({
   categories,
   value,
   onChange,
@@ -121,16 +121,13 @@ export function DataFilter({
   label = 'Filter',
   align = 'end',
   searchThreshold = SUBMENU_SEARCH_THRESHOLD,
-}: DataFilterProps) {
+}: SelectDataFilterProps) {
   const [filterSearch, setFilterSearch] = useState('');
   const [subSearch, setSubSearch] = useState('');
 
-  const resetSubSearch = useCallback(
-    (open: boolean) => {
-      if (!open) setSubSearch('');
-    },
-    [],
-  );
+  const resetSubSearch = useCallback((open: boolean) => {
+    if (!open) setSubSearch('');
+  }, []);
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -144,9 +141,9 @@ export function DataFilter({
   // Group categories
   const grouped = useMemo(() => {
     const q = filterSearch.toLowerCase();
-    const groups: { key: string; label?: string; items: DataFilterCategory[] }[] = [];
-    const groupMap = new Map<string, DataFilterCategory[]>();
-    const ungrouped: DataFilterCategory[] = [];
+    const groups: { key: string; label?: string; items: SelectDataFilterCategory[] }[] = [];
+    const groupMap = new Map<string, SelectDataFilterCategory[]>();
+    const ungrouped: SelectDataFilterCategory[] = [];
 
     for (const cat of categories) {
       if (cat.values.length === 0) continue;
@@ -180,7 +177,7 @@ export function DataFilter({
     return groups;
   }, [categories, filterSearch]);
 
-  const handleSelect = (categoryId: string, selectedValue: string, mode: DataFilterMode) => {
+  const handleSelect = (categoryId: string, selectedValue: string, mode: SelectDataFilterMode) => {
     const current = value[categoryId] ?? [];
     let next: string[];
 
@@ -197,7 +194,7 @@ export function DataFilter({
     onChange({});
   };
 
-  const renderCategory = (cat: DataFilterCategory) => {
+  const renderCategory = (cat: SelectDataFilterCategory) => {
     const mode = cat.mode ?? 'multi';
     const selected = value[cat.id] ?? [];
     const selectedCount = selected.length;
@@ -213,10 +210,7 @@ export function DataFilter({
             <SubMenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
           )}
           {mode === 'single' ? (
-            <DropdownMenu.RadioGroup
-              value={selected[0] ?? ''}
-              onValueChange={val => handleSelect(cat.id, val, mode)}
-            >
+            <DropdownMenu.RadioGroup value={selected[0] ?? ''} onValueChange={val => handleSelect(cat.id, val, mode)}>
               {cat.values
                 .filter(v => !subSearch || v.label.toLowerCase().includes(subSearch.toLowerCase()))
                 .map(v => (
@@ -247,7 +241,7 @@ export function DataFilter({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenu.Trigger asChild>
-        <Button variant="outline" size="md" disabled={disabled}>
+        <Button variant="outline" disabled={disabled}>
           <FilterIcon />
           {label}
           {activeFilterCount > 0 && (

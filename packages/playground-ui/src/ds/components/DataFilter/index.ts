@@ -1,8 +1,8 @@
-export { DataFilter } from './data-filter';
+export { SelectDataFilter } from './select-data-filter';
 export type {
-  DataFilterCategory,
-  DataFilterMode,
-  DataFilterProps,
-  DataFilterState,
-  DataFilterValue,
-} from './data-filter';
+  SelectDataFilterCategory,
+  SelectDataFilterMode,
+  SelectDataFilterProps,
+  SelectDataFilterState,
+  SelectDataFilterValue,
+} from './select-data-filter';
