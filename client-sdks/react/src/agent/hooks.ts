@@ -88,9 +88,7 @@ export const useChat = ({
     const formattedMessages = resolveInitialMessages(initialMessages || []);
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
-    if (propsRequestContext) {
-      _requestContext.current = propsRequestContext;
-    }
+    _requestContext.current = propsRequestContext;
   }, [initialMessages, propsRequestContext]);
 
   const generate = async ({
@@ -115,7 +113,8 @@ export const useChat = ({
       maxSteps,
       requireToolApproval,
     } = modelSettings || {};
-    _requestContext.current = requestContext;
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -143,7 +142,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
@@ -217,7 +216,8 @@ export const useChat = ({
       requireToolApproval,
     } = modelSettings || {};
 
-    _requestContext.current = requestContext;
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -244,7 +244,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -279,7 +279,8 @@ export const useChat = ({
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
-    _requestContext.current = requestContext;
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -305,7 +306,7 @@ export const useChat = ({
         topP,
       },
       runId,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
