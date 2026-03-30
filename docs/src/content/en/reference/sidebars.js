@@ -90,6 +90,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
+        { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
         { type: 'doc', id: 'client-js/mastra-client', label: 'Mastra Client SDK' },

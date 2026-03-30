@@ -98,6 +98,7 @@ describe('Conversation Handlers', () => {
   });
 
   it('preserves tool items in conversation order', async () => {
+    const baseTimestamp = Date.UTC(2024, 0, 1, 12, 0, 0);
     const thread = await memory.createThread({
       threadId: 'conv_tools',
       resourceId: 'conv_tools',
@@ -111,7 +112,7 @@ describe('Conversation Handlers', () => {
           resourceId: thread.resourceId,
           role: 'user',
           type: 'text',
-          createdAt: new Date(),
+          createdAt: new Date(baseTimestamp),
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Check release status' }],
@@ -123,7 +124,7 @@ describe('Conversation Handlers', () => {
           resourceId: thread.resourceId,
           role: 'assistant',
           type: 'text',
-          createdAt: new Date(),
+          createdAt: new Date(baseTimestamp + 1_000),
           content: {
             format: 2,
             parts: [
@@ -145,7 +146,7 @@ describe('Conversation Handlers', () => {
           resourceId: thread.resourceId,
           role: 'tool',
           type: 'text',
-          createdAt: new Date(),
+          createdAt: new Date(baseTimestamp + 2_000),
           content: {
             format: 2,
             parts: [
@@ -167,7 +168,7 @@ describe('Conversation Handlers', () => {
           resourceId: thread.resourceId,
           role: 'assistant',
           type: 'text',
-          createdAt: new Date(),
+          createdAt: new Date(baseTimestamp + 3_000),
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Release is green.' }],

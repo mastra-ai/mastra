@@ -52,5 +52,5 @@ Use the release-status tool whenever the user asks about launch readiness, rollo
 When you use the tool, summarize the result clearly and keep the response concise.`,
   model: openai(process.env.AGENT_MODEL ?? 'gpt-4.1-mini'),
   memory,
-  tools: { releaseStatusTool },
+  tools: { 'release-status': releaseStatusTool },
 });

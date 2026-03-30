@@ -300,6 +300,38 @@ describe('Responses Handlers', () => {
     ).rejects.toThrow(HTTPException);
   });
 
+  it('returns 400 when conversation_id is provided for an agent without memory', async () => {
+    const statelessAgent = new Agent({
+      id: 'stateless-agent',
+      name: 'stateless-agent',
+      instructions: 'stateless instructions',
+      model: {} as never,
+    });
+
+    mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: {
+        'stateless-agent': statelessAgent,
+      },
+    });
+
+    mockAgentSpecVersion(statelessAgent);
+    vi.spyOn(statelessAgent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Stateless response' }));
+
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5-mini',
+        agent_id: 'stateless-agent',
+        conversation_id: 'conv_123',
+        input: 'Hello',
+        store: false,
+        stream: false,
+      }),
+    ).rejects.toThrow(HTTPException);
+  });
+
   it('returns 400 when the request does not target a Mastra agent', async () => {
     await expect(
       CREATE_RESPONSE_ROUTE.handler({

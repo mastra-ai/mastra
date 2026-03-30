@@ -5035,9 +5035,20 @@ export class Agent<
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions;
 
-    const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
-    });
+    const modelOverride = (
+      mergedStreamOptions as AgentExecutionOptions<any> & {
+        model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+      }
+    ).model;
+
+    const llm = modelOverride
+      ? await this.getLLMByModel({
+          requestContext: mergedStreamOptions.requestContext,
+          model: modelOverride,
+        })
+      : await this.getLLM({
+          requestContext: mergedStreamOptions.requestContext,
+        });
 
     if (!isSupportedLanguageModel(llm.getModel())) {
       const modelInfo = llm.getModel();
@@ -5156,9 +5167,18 @@ export class Agent<
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions;
 
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-    });
+    const modelOverride = (
+      mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig, TRequestContext> }
+    ).model;
+
+    const llm = modelOverride
+      ? await this.getLLMByModel({
+          requestContext: mergedOptions.requestContext,
+          model: modelOverride,
+        })
+      : await this.getLLM({
+          requestContext: mergedOptions.requestContext,
+        });
 
     const modelInfo = llm.getModel();
 

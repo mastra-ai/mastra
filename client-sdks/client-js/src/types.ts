@@ -178,8 +178,13 @@ export type ResponsesResponse = {
   status: 'in_progress' | 'completed' | 'incomplete';
   output: ResponseOutputItem[];
   usage: ResponseUsage | null;
-  error?: null;
-  incomplete_details?: null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+  incomplete_details?: {
+    reason?: string;
+  } | null;
   instructions?: string | null;
   previous_response_id?: string | null;
   conversation_id?: string | null;

@@ -15,7 +15,8 @@ type ResponsePayload = Omit<ResponsesResponse, 'output_text'>;
 function getOutputText(output: ResponseOutputItem[]): string {
   return output
     .flatMap(item => (item.type === 'message' ? item.content : []))
-    .map(part => part.text)
+    .map(part => (typeof part?.text === 'string' ? part.text : ''))
+    .filter(Boolean)
     .join('');
 }
 

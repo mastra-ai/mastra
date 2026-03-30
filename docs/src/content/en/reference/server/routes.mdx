@@ -86,7 +86,8 @@ GET /api/agents/my-agent?versionId=abc123
 
 ```typescript prettier:false
 {
-  model: string;                    // Required. Mastra agent ID.
+  model: string;                    // Required. Underlying provider/model, such as "openai/gpt-5".
+  agent_id: string;                 // Required on initial requests. Mastra agent ID.
   input: string | Array<{
     role: 'system' | 'developer' | 'user' | 'assistant';
     content: string | Array<{
@@ -94,10 +95,10 @@ GET /api/agents/my-agent?versionId=abc123
       text: string;
     }>;
   }>;
-  instructions?: string;            // Override the agent instructions
+  instructions?: string;            // Optional request-scoped instructions for this response
   stream?: boolean;                 // Return SSE events instead of JSON
-  store?: boolean;                  // Persist the response when the agent has memory configured
-  previous_response_id?: string;    // Continue a stored conversation thread
+  store?: boolean;                  // Persist the response through the selected agent's memory
+  previous_response_id?: string;    // Continue a previously stored response chain
 }
 ```
 

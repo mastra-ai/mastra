@@ -162,12 +162,18 @@ async function resolveThreadExecutionContext({
   const effectiveThreadId = getEffectiveThreadId(requestContext, undefined);
   const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
-  if (!store && !effectiveThreadId && !effectiveResourceId) {
+  if (!store && !conversationId && !effectiveThreadId) {
     return null;
   }
 
   const memory = await agent.getMemory({ requestContext });
   if (!memory) {
+    if (conversationId) {
+      throw new HTTPException(400, {
+        message: 'conversation_id requires the target agent to have memory configured',
+      });
+    }
+
     return null;
   }
 
@@ -184,7 +190,24 @@ async function resolveThreadExecutionContext({
     };
   }
 
-  const threadId = effectiveThreadId ?? randomUUID();
+  if (!effectiveThreadId) {
+    if (!store) {
+      return null;
+    }
+
+    const threadId = randomUUID();
+    const createdThread = await memory.createThread({
+      threadId,
+      resourceId: effectiveResourceId ?? threadId,
+    });
+
+    return {
+      threadId: createdThread.id,
+      resourceId: createdThread.resourceId,
+    };
+  }
+
+  const threadId = effectiveThreadId;
   const existingThread = await memory.getThreadById({ threadId });
   if (existingThread) {
     await validateThreadOwnership(existingThread, effectiveResourceId);
@@ -192,6 +215,10 @@ async function resolveThreadExecutionContext({
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
     };
+  }
+
+  if (!store) {
+    return null;
   }
 
   const resourceId = effectiveResourceId ?? threadId;

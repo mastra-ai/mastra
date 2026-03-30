@@ -56,6 +56,7 @@ type _GetThreads = RouteContract<'GET /memory/threads'>;
 type _CreateConversation = RouteContract<'POST /v1/conversations'>;
 type _GetConversation = RouteContract<'GET /v1/conversations/:conversationId'>;
 type _GetConversationItems = RouteContract<'GET /v1/conversations/:conversationId/items'>;
+type _DeleteConversation = RouteContract<'DELETE /v1/conversations/:conversationId'>;
 
 // Auth routes
 type _AuthCapabilities = RouteContract<'GET /auth/capabilities'>;

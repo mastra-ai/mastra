@@ -209,13 +209,18 @@ export function ProviderBackedResponsesExample() {
   }, [activeRequest]);
 
   async function submit(nextMode: 'json' | 'stream') {
+    if (mode !== 'idle' || activeRequest) {
+      return;
+    }
+
     const prompt = input.trim();
 
     if (!prompt) {
       return;
     }
 
-    const previousProviderResponseId = turns.at(-1)?.providerResponseId ?? null;
+    const previousProviderResponseId =
+      [...turns].reverse().find(turn => turn.providerResponseId)?.providerResponseId ?? null;
     const entryId = createEntryId();
     const startedAt = performance.now();
 
@@ -359,7 +364,7 @@ export function ProviderBackedResponsesExample() {
     }
   }
 
-  const currentAnchor = turns.at(-1)?.providerResponseId ?? null;
+  const currentAnchor = [...turns].reverse().find(turn => turn.providerResponseId)?.providerResponseId ?? null;
 
   return (
     <section className="demo-main">
@@ -507,6 +512,7 @@ export function ProviderBackedResponsesExample() {
             className="demo-textarea"
             rows={3}
             value={input}
+            aria-label="Write your prompt"
             placeholder="Write a one-sentence bedtime story about a unicorn..."
             onBlur={() => setIsInputFocused(false)}
             onChange={event => setInput(event.target.value)}
@@ -518,7 +524,9 @@ export function ProviderBackedResponsesExample() {
 
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                void submit('json');
+                if (mode === 'idle') {
+                  void submit('json');
+                }
               }
             }}
           />

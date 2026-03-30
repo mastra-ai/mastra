@@ -210,13 +210,17 @@ export function AgentResponsesExample() {
   }, [activeRequest]);
 
   async function submit(nextMode: 'json' | 'stream') {
+    if (mode !== 'idle' || activeRequest) {
+      return;
+    }
+
     const prompt = input.trim();
 
     if (!prompt) {
       return;
     }
 
-    const previousResponseId = turns.at(-1)?.responseId ?? null;
+    const previousResponseId = [...turns].reverse().find(turn => turn.responseId)?.responseId ?? null;
     const entryId = createEntryId();
     const startedAt = performance.now();
 
@@ -354,7 +358,10 @@ export function AgentResponsesExample() {
     }
   }
 
-  const currentAnchor = turns.at(-1)?.responseId ?? turns.at(-1)?.previousResponseId ?? null;
+  const currentAnchor =
+    [...turns].reverse().find(turn => turn.responseId)?.responseId ??
+    [...turns].reverse().find(turn => turn.previousResponseId)?.previousResponseId ??
+    null;
 
   return (
     <section className="demo-main">
@@ -502,6 +509,7 @@ export function AgentResponsesExample() {
             className="demo-textarea"
             rows={3}
             value={input}
+            aria-label="Write your prompt"
             placeholder="Write a one-sentence bedtime story about a unicorn..."
             onBlur={() => setIsInputFocused(false)}
             onChange={event => setInput(event.target.value)}
@@ -513,7 +521,9 @@ export function AgentResponsesExample() {
 
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                void submit('json');
+                if (mode === 'idle') {
+                  void submit('json');
+                }
               }
             }}
           />

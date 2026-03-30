@@ -1,8 +1,8 @@
 'use client';
 
-import type { CreateResponseParams, ResponsesStreamEvent } from '@mastra/client-js';
+import type { ConversationItem, CreateResponseParams, ResponsesStreamEvent } from '@mastra/client-js';
 import { MastraClient } from '@mastra/client-js';
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 
 const client = new MastraClient({
   baseUrl: process.env.NEXT_PUBLIC_MASTRA_BASE_URL ?? 'http://localhost:4111',
@@ -211,7 +211,7 @@ function getConversationTitle(prompt: string) {
   return trimmed.length > 52 ? `${trimmed.slice(0, 49)}...` : trimmed;
 }
 
-function buildTurnsFromItems(items: any[]) {
+function buildTurnsFromItems(items: ConversationItem[]) {
   const turns: Turn[] = [];
   let pendingPrompt = '';
   const pendingTools = new Map<string, ToolCall>();
@@ -311,6 +311,7 @@ export function ConversationsExample() {
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
+  const isCreatingConversationRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -407,10 +408,11 @@ export function ConversationsExample() {
   }, [activeRequest]);
 
   async function createConversation() {
-    if (mode !== 'idle' || isCreatingConversation) {
+    if (mode !== 'idle' || isCreatingConversationRef.current) {
       return;
     }
 
+    isCreatingConversationRef.current = true;
     setIsCreatingConversation(true);
     setError(null);
 
@@ -428,6 +430,7 @@ export function ConversationsExample() {
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create conversation.');
     } finally {
+      isCreatingConversationRef.current = false;
       setIsCreatingConversation(false);
     }
   }
@@ -458,13 +461,17 @@ export function ConversationsExample() {
   }
 
   async function submit(nextMode: 'json' | 'stream') {
+    if (mode !== 'idle' || activeRequest || isCreatingConversationRef.current) {
+      return;
+    }
+
     const prompt = input.trim();
 
     if (!prompt) {
       return;
     }
 
-    const previousResponseId = turns.at(-1)?.responseId ?? null;
+    const previousResponseId = [...turns].reverse().find(turn => turn.responseId)?.responseId ?? null;
     const entryId = createEntryId();
     const startedAt = performance.now();
 
@@ -490,31 +497,39 @@ export function ConversationsExample() {
     ]);
     setInput('');
 
-    let conversationId = activeConversationId;
-
-    if (!conversationId) {
-      const conversation = await client.conversations.create({
-        agent_id: 'support-agent',
-        title: getConversationTitle(prompt),
-      });
-
-      const summary = summarizeThread(conversation.thread, 0);
-      setConversations(current => [summary, ...current.filter(item => item.id !== summary.id)]);
-      setActiveConversationId(conversation.id);
-      conversationId = conversation.id;
-    }
-
-    const request = {
-      model: `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`,
-      agent_id: 'support-agent',
-      input: prompt,
-      instructions: 'You are a memory-backed Mastra agent. Keep the conversation coherent across stored turns.',
-      store: true,
-      conversation_id: conversationId,
-      previous_response_id: previousResponseId ?? undefined,
-    } satisfies CreateResponseParams;
-
     try {
+      let conversationId = activeConversationId;
+
+      if (!conversationId) {
+        isCreatingConversationRef.current = true;
+        setIsCreatingConversation(true);
+
+        try {
+          const conversation = await client.conversations.create({
+            agent_id: 'support-agent',
+            title: getConversationTitle(prompt),
+          });
+
+          const summary = summarizeThread(conversation.thread, 0);
+          setConversations(current => [summary, ...current.filter(item => item.id !== summary.id)]);
+          setActiveConversationId(conversation.id);
+          conversationId = conversation.id;
+        } finally {
+          isCreatingConversationRef.current = false;
+          setIsCreatingConversation(false);
+        }
+      }
+
+      const request = {
+        model: `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`,
+        agent_id: 'support-agent',
+        input: prompt,
+        instructions: 'You are a memory-backed Mastra agent. Keep the conversation coherent across stored turns.',
+        store: true,
+        conversation_id: conversationId,
+        previous_response_id: previousResponseId ?? undefined,
+      } satisfies CreateResponseParams;
+
       if (nextMode === 'json') {
         const response = await client.responses.create({
           ...request,
@@ -643,7 +658,7 @@ export function ConversationsExample() {
     }
   }
 
-  const currentAnchor = turns.at(-1)?.responseId ?? null;
+  const currentAnchor = [...turns].reverse().find(turn => turn.responseId)?.responseId ?? null;
 
   return (
     <>
@@ -796,6 +811,7 @@ export function ConversationsExample() {
               className="demo-textarea"
               rows={3}
               value={input}
+              aria-label="Write your prompt"
               placeholder="Write a one-sentence bedtime story about a unicorn..."
               onBlur={() => setIsInputFocused(false)}
               onChange={event => setInput(event.target.value)}
@@ -807,7 +823,9 @@ export function ConversationsExample() {
 
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
-                  void submit('json');
+                  if (mode === 'idle') {
+                    void submit('json');
+                  }
                 }
               }}
             />
