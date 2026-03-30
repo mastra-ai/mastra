@@ -157,7 +157,7 @@ export class MastraLLMVNext extends MastraBase {
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
-        messages: [...messageList.getAllSystemMessages(), ...messages],
+        messages: [...messageList.serializeForSpan().systemMessages, ...messages],
       },
       attributes: {
         model: firstModel.modelId,
