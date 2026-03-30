@@ -154,6 +154,7 @@ export class AgentChat {
       adapters: this.adapters,
       state: this.stateAdapter,
       userName: this.userName,
+      concurrency: { strategy: 'queue' },
     });
 
     const handler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
@@ -201,16 +202,12 @@ export class AgentChat {
         // Update the approval card to remove buttons
         if (event.messageId) {
           const titleText = storedArgsSummary
-            ? `**${storedToolName}** \`${storedArgsSummary}\``
-            : `**${storedToolName}**`;
+            ? `**${storedToolName}** \`${storedArgsSummary}\` ⋯`
+            : `**${storedToolName}** ⋯`;
           if (approved) {
-            // Show "Running..." while the tool executes; consumeAgentStream will replace with the result
+            // Show ⋯ while the tool executes; consumeAgentStream will replace with the result
             try {
-              await adapter.editMessage(
-                sdkThread.id,
-                event.messageId,
-                Card({ children: [CardText(titleText), CardText('Running...')] }),
-              );
+              await adapter.editMessage(sdkThread.id, event.messageId, Card({ children: [CardText(titleText)] }));
             } catch {
               // best-effort
             }
@@ -518,6 +515,7 @@ export class AgentChat {
       toolName: string;
       args: Record<string, unknown>;
       argsSummary: string;
+      startedAt: number;
       sentMessage?: SentMessage;
     }
     const toolCalls = new Map<string, TrackedToolCall>();
@@ -546,14 +544,17 @@ export class AgentChat {
           ? undefined
           : await sdkThread.post(
               Card({
-                children: [
-                  CardText(argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`),
-                  CardText('Running...'),
-                ],
+                children: [CardText(argsSummary ? `**${displayName}** \`${argsSummary}\` ⋯` : `**${displayName}** ⋯`)],
               }),
             );
 
-        toolCalls.set(chunk.payload.toolCallId, { toolName: displayName, args: rawArgs, argsSummary, sentMessage });
+        toolCalls.set(chunk.payload.toolCallId, {
+          toolName: displayName,
+          args: rawArgs,
+          argsSummary,
+          startedAt: Date.now(),
+          sentMessage,
+        });
       } else if (chunk.type === 'tool-result') {
         const entry = toolCalls.get(chunk.payload.toolCallId);
         const displayName = entry?.toolName ?? stripToolPrefix(chunk.payload.toolName);
@@ -573,7 +574,14 @@ export class AgentChat {
           }
         } else {
           const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-          const resultCard = buildToolResultCard(displayName, argsSummary, resultText, chunk.payload.isError);
+          const durationMs = entry?.startedAt != null ? Date.now() - entry.startedAt : undefined;
+          const resultCard = buildToolResultCard(
+            displayName,
+            argsSummary,
+            resultText,
+            chunk.payload.isError,
+            durationMs,
+          );
 
           // Try to edit the existing message (call message or approval card) into the result card
           const editTarget = entry?.sentMessage ?? (approvalContext ? null : undefined);
@@ -903,13 +911,20 @@ function formatResult(result: unknown, isError?: boolean): string {
  * Build a Card for a tool result.
  * Title = tool name, subtitle = first arg in inline code, body = result in code block.
  */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function buildToolResultCard(
   toolName: string,
   argsSummary: string,
   resultText: string,
   isError?: boolean,
+  durationMs?: number,
 ): CardElement {
-  const header = argsSummary ? `**${toolName}** \`${argsSummary}\`` : `**${toolName}**`;
+  const status = durationMs != null ? ` ${formatDuration(durationMs)} ${isError ? '✗' : '✓'}` : '';
+  const header = argsSummary ? `**${toolName}** \`${argsSummary}\`${status}` : `**${toolName}**${status}`;
   const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
   return Card({
     children: [CardText(header), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],

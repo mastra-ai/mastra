@@ -1,4 +1,4 @@
-import type { Lock, StateAdapter } from 'chat';
+import type { Lock, QueueEntry, StateAdapter } from 'chat';
 
 import type { MemoryStorage } from '../storage/domains/memory/base';
 
@@ -21,10 +21,11 @@ export class MastraStateAdapter implements StateAdapter {
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
-  // In-memory ephemeral state (cache, locks, lists)
+  // In-memory ephemeral state (cache, locks, lists, queues)
   private readonly cache = new Map<string, CachedValue>();
   private readonly locks = new Map<string, Lock>();
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
+  private readonly queues = new Map<string, QueueEntry[]>();
 
   constructor(memoryStore: MemoryStorage) {
     this.memoryStore = memoryStore;
@@ -46,6 +47,7 @@ export class MastraStateAdapter implements StateAdapter {
     this.cache.clear();
     this.locks.clear();
     this.lists.clear();
+    this.queues.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -190,6 +192,33 @@ export class MastraStateAdapter implements StateAdapter {
 
   async forceReleaseLock(threadId: string): Promise<void> {
     this.locks.delete(threadId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Queue — in-memory (for concurrency strategies)
+  // ---------------------------------------------------------------------------
+
+  async enqueue(threadId: string, entry: QueueEntry, maxSize: number): Promise<number> {
+    let queue = this.queues.get(threadId);
+    if (!queue) {
+      queue = [];
+      this.queues.set(threadId, queue);
+    }
+    queue.push(entry);
+    if (queue.length > maxSize) {
+      queue.splice(0, queue.length - maxSize);
+    }
+    return queue.length;
+  }
+
+  async dequeue(threadId: string): Promise<QueueEntry | null> {
+    const queue = this.queues.get(threadId);
+    if (!queue || queue.length === 0) return null;
+    return queue.shift()!;
+  }
+
+  async queueDepth(threadId: string): Promise<number> {
+    return this.queues.get(threadId)?.length ?? 0;
   }
 
   // ---------------------------------------------------------------------------
