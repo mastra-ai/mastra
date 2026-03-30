@@ -311,17 +311,23 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           options: Object.keys(options).length > 0 ? options : undefined,
         })
         .catch((e: unknown) => {
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                error: { code: -32603, message: 'Internal server error' },
-                id: null,
-              }),
-            );
+          this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+          try {
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  error: { code: -32603, message: 'Internal server error' },
+                  id: null,
+                }),
+              );
+            }
+          } catch {
+            // Response stream already closed or destroyed - nothing more to do
           }
-          console.error('[MCP HTTP] Error in background startHTTP:', e);
         });
 
       return await toFetchResponse(res);
