@@ -88,8 +88,11 @@ export const useChat = ({
     const formattedMessages = resolveInitialMessages(initialMessages || []);
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+  }, [initialMessages]);
+
+  useEffect(() => {
     _requestContext.current = propsRequestContext;
-  }, [initialMessages, propsRequestContext]);
+  }, [propsRequestContext]);
 
   const generate = async ({
     coreUserMessages,
