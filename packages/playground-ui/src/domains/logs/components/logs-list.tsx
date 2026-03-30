@@ -30,6 +30,8 @@ function getLogIds(logs: LogRecord[]): Map<LogRecord, string> {
   return ids;
 }
 
+const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) minmax(5rem,1fr)';
+
 export interface FeaturedIds {
   logId?: string | null;
   traceId?: string | null;
@@ -39,6 +41,9 @@ export interface FeaturedIds {
 export interface LogsListProps {
   logs: LogRecord[];
   isLoading?: boolean;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
   error?: Error | null;
   hasActiveFilters?: boolean;
   featuredLogId?: string | null;
@@ -50,6 +55,9 @@ export interface LogsListProps {
 export function LogsList({
   logs,
   isLoading,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
   error,
   hasActiveFilters,
   featuredLogId: controlledLogId,
@@ -186,7 +194,7 @@ export function LogsList({
   }
 
   if (isLoading) {
-    return <LogsDataListSkeleton columns="auto auto auto auto minmax(0,1fr)" />;
+    return <LogsDataListSkeleton columns={COLUMNS} />;
   }
 
   const hasSidePanel = !!featuredLog;
@@ -196,7 +204,7 @@ export function LogsList({
       className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="h-full overflow-auto">
-        <LogsDataList columns={'auto auto auto auto minmax(5rem,1fr) minmax(5rem,1fr)'} className="min-w-0">
+        <LogsDataList columns={COLUMNS} className="min-w-0">
           <LogsDataList.Top>
             <LogsDataList.TopCell>Date</LogsDataList.TopCell>
             <LogsDataList.TopCell>Time</LogsDataList.TopCell>
@@ -229,6 +237,11 @@ export function LogsList({
               );
             })
           )}
+          <LogsDataList.NextPageLoading
+            isLoading={isFetchingNextPage}
+            hasMore={hasNextPage}
+            setEndOfListElement={setEndOfListElement}
+          />
         </LogsDataList>
       </div>
 

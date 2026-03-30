@@ -1,3 +1,5 @@
+import type { LogRecord } from '@mastra/playground-ui';
+import { useMemo } from 'react';
 import {
   MainHeader,
   LogsList,
@@ -68,7 +70,28 @@ export default function Logs() {
     [setSearchParams],
   );
 
-  const { data: logs = [] } = useLogs();
+  const PRESET_TO_MS: Record<string, number> = {
+    '24h': 24 * 60 * 60 * 1000,
+    '3d': 3 * 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '14d': 14 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+  };
+
+  const logsFilters = useMemo(() => {
+    const ms = PRESET_TO_MS[datePreset];
+    if (!ms) return undefined;
+    return { timestamp: { start: new Date(Date.now() - ms) } };
+  }, [datePreset]);
+
+  const {
+    data: logs = [],
+    isLoading: isLoadingLogs,
+    error: logsError,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useLogs({ filters: logsFilters });
 
   const {
     searchQuery,
@@ -79,7 +102,7 @@ export default function Logs() {
     removeFilterGroup,
     clearAllFilters,
     filteredLogs,
-  } = useLogsFilters(logs);
+  } = useLogsFilters(logs as LogRecord[]);
 
   if (!experimentalFeaturesEnabled) {
     return null;
@@ -110,6 +133,11 @@ export default function Logs() {
 
       <LogsList
         logs={filteredLogs}
+        isLoading={isLoadingLogs}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        error={logsError instanceof Error ? logsError : null}
         hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
         featuredLogId={featuredLogId}
         featuredTraceId={featuredTraceId}

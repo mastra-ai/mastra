@@ -138,7 +138,7 @@ export interface LogsDataListDataCellProps {
 
 export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
   if (!data || Object.keys(data).length === 0) {
-    return <DataListCell height="compact" />;
+    return <DataListCell height="compact">{null}</DataListCell>;
   }
 
   const summary = Object.entries(data)
