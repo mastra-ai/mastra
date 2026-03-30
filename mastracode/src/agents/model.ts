@@ -155,11 +155,16 @@ export function resolveModel(
       : undefined;
 
   if (customProvider) {
+    // Precedence: proxy < customProvider < harness
+    const customHeaders: ModelRequestHeaders | undefined =
+      proxyHeaders || customProvider.headers || harnessHeaders
+        ? { ...proxyHeaders, ...customProvider.headers, ...harnessHeaders }
+        : undefined;
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
       url: customProvider.url,
       apiKey: customProvider.apiKey,
-      headers: { ...customProvider.headers, ...headers },
+      headers: customHeaders,
     });
   }
 

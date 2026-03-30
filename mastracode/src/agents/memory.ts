@@ -51,16 +51,16 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
  * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+  // Read once at factory creation — avoids synchronous file I/O on every request
+  const mg = loadSettings().memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
+  const omEnabled = !mg.apiKey;
+
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
-
-    // When a memory gateway API key is set, the gateway handles memory — disable local OM
-    const mg = loadSettings().memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
-    const omEnabled = !mg.apiKey;
 
     const observerPreviousObservationTokens = 1000;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${omEnabled}`;
