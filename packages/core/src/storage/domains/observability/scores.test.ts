@@ -23,6 +23,10 @@ describe('Score Schemas', () => {
         score: 0.85,
         reason: 'Highly relevant response',
         experimentId: 'exp-1',
+        entityType: 'agent',
+        userId: 'user-123',
+        executionSource: 'cloud',
+        tags: ['prod'],
         metadata: { model: 'gpt-4' },
         createdAt: now,
         updatedAt: now,
@@ -63,12 +67,14 @@ describe('Score Schemas', () => {
     it('accepts valid user input', () => {
       const input = scoreInputSchema.parse({
         scorerId: 'relevance',
+        source: 'manual',
         score: 0.85,
         reason: 'Good match',
         metadata: { threshold: 0.8 },
         experimentId: 'exp-1',
       });
       expect(input.scorerId).toBe('relevance');
+      expect(input.source).toBe('manual');
     });
 
     it('accepts minimal input', () => {
@@ -118,10 +124,16 @@ describe('Score Schemas', () => {
         traceId: 'trace-1',
         spanId: 'span-1',
         scorerId: ['relevance', 'accuracy'],
+        scoreSource: 'manual',
         experimentId: 'exp-1',
+        userId: 'user-123',
+        tags: ['prod'],
         environment: 'production',
+        executionSource: 'cloud',
       });
       expect(filter.scorerId).toEqual(['relevance', 'accuracy']);
+      expect(filter.scoreSource).toBe('manual');
+      expect(filter.executionSource).toBe('cloud');
     });
 
     it('accepts single scorer ID as string', () => {
@@ -161,6 +173,7 @@ describe('Score Schemas', () => {
             traceId: 'trace-1',
             scorerId: 'relevance',
             score: 0.85,
+            userId: 'user-123',
             createdAt: now,
             updatedAt: null,
           },
