@@ -4,6 +4,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import {
   agentBrowserAgent,
   stagehandAgent,
+  browserUseAgent,
   workspaceAgentBrowserAgent,
   workspaceBrowserUseAgent,
 } from './agents/index.js';
@@ -12,6 +13,7 @@ export const mastra = new Mastra({
   agents: {
     agentBrowserAgent,
     stagehandAgent,
+    browserUseAgent,
     workspaceAgentBrowserAgent,
     workspaceBrowserUseAgent,
   },

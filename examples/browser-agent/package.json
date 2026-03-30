@@ -7,6 +7,7 @@
   "dependencies": {
     "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
     "@mastra/agent-browser": "latest",
+    "@mastra/browser-use": "latest",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
@@ -19,6 +20,7 @@
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/agent-browser": "link:../../browser/agent-browser",
+      "@mastra/browser-use": "link:../../browser/browser-use",
       "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
