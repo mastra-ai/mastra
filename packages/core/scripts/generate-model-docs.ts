@@ -79,7 +79,15 @@ function cleanDocumentationUrl(url: string | undefined): string | undefined {
 function extractEnvVarsFromUrl(url?: string): string[] {
   if (!url) return [];
 
-  return Array.from(url.matchAll(/\$\{([^}]+)\}/g), match => match[1]);
+  const envVars: string[] = [];
+
+  for (const match of url.matchAll(/\$\{([^}]+)\}/g)) {
+    if (match[1]) {
+      envVars.push(match[1]);
+    }
+  }
+
+  return envVars;
 }
 
 function getRequiredEnvVars(provider: ProviderInfo): string[] {
