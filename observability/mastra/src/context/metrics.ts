@@ -23,6 +23,12 @@ import type { CardinalityFilter } from '../metrics/cardinality';
 
 /** Configuration for creating a MetricsContextImpl. */
 export interface MetricsContextConfig {
+  /** Top-level trace identity for emitted metric events */
+  traceId?: string;
+
+  /** Top-level span identity for emitted metric events */
+  spanId?: string;
+
   /** Canonical correlation context derived from the current span */
   correlationContext?: CorrelationContext;
 
@@ -41,6 +47,8 @@ export interface MetricsContextConfig {
  * ObservabilityBus.emit() after validation and cardinality filtering.
  */
 export class MetricsContextImpl implements MetricsContext {
+  private traceId?: string;
+  private spanId?: string;
   private correlationContext?: CorrelationContext;
   private metadata?: Record<string, unknown>;
   private cardinalityFilter: CardinalityFilter;
@@ -51,6 +59,8 @@ export class MetricsContextImpl implements MetricsContext {
    * copied so mutations after construction do not affect emitted metrics.
    */
   constructor(config: MetricsContextConfig) {
+    this.traceId = config.traceId;
+    this.spanId = config.spanId;
     this.correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
     this.metadata = config.metadata ? structuredClone(config.metadata) : undefined;
     this.cardinalityFilter = config.cardinalityFilter;
@@ -68,6 +78,8 @@ export class MetricsContextImpl implements MetricsContext {
 
     const exportedMetric: ExportedMetric = {
       timestamp: new Date(),
+      traceId: this.traceId,
+      spanId: this.spanId,
       name,
       value,
       labels: filteredLabels,

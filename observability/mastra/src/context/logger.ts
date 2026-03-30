@@ -10,6 +10,12 @@ import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext
 import type { ObservabilityBus } from '../bus';
 
 export interface LoggerContextConfig {
+  /** Top-level trace identity for emitted log events */
+  traceId?: string;
+
+  /** Top-level span identity for emitted log events */
+  spanId?: string;
+
   /** Canonical correlation context for log correlation */
   correlationContext?: CorrelationContext;
 
@@ -42,6 +48,8 @@ export class LoggerContextImpl implements LoggerContext {
   constructor(config: LoggerContextConfig) {
     this.config = {
       ...config,
+      traceId: config.traceId,
+      spanId: config.spanId,
       correlationContext: config.correlationContext ? { ...config.correlationContext } : undefined,
       metadata: config.metadata ? structuredClone(config.metadata) : undefined,
     };
@@ -86,6 +94,8 @@ export class LoggerContextImpl implements LoggerContext {
       level,
       message,
       data,
+      traceId: this.config.traceId,
+      spanId: this.config.spanId,
       correlationContext: this.config.correlationContext,
       metadata: this.config.metadata,
     };
