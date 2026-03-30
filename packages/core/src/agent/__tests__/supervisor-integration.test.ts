@@ -270,6 +270,118 @@ describe('Supervisor Pattern Integration Tests', () => {
       );
     });
 
+    it('propagates abortSignal to sub-agent when supervisor uses generate (#14820)', async () => {
+      const abortController = new AbortController();
+      let subAgentAbortSignal: AbortSignal | undefined;
+
+      const subAgent = new Agent({
+        id: 'sub-abort-prop',
+        name: 'sub-abort-prop',
+        description: 'Sub',
+        instructions: 'You are a helpful sub-agent.',
+        model: new MockLanguageModelV2({
+          doGenerate: async options => {
+            subAgentAbortSignal = options.abortSignal;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Sub agent reply',
+              content: [{ type: 'text', text: 'Sub agent reply' }],
+              warnings: [],
+            };
+          },
+        }),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor-abort-prop',
+        name: 'supervisor-abort-prop',
+        instructions: 'You orchestrate sub-agents.',
+        model: makeSupervisorModel('subAbortProp', 'Do the task'),
+        agents: { subAbortProp: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('User task', {
+        maxSteps: 4,
+        abortSignal: abortController.signal,
+      });
+
+      expect(subAgentAbortSignal).toBe(abortController.signal);
+    });
+
+    it('aborting the supervisor fires abort on the sub-agent signal', async () => {
+      const abortController = new AbortController();
+      let resolveSubAgentEntered!: () => void;
+      const subAgentEntered = new Promise<void>(resolve => {
+        resolveSubAgentEntered = resolve;
+      });
+      let heardAbortOnSubAgentSignal = false;
+
+      const subAgent = new Agent({
+        id: 'sub-abort-inflight',
+        name: 'sub-abort-inflight',
+        description: 'Sub',
+        instructions: 'You are a helpful sub-agent.',
+        model: new MockLanguageModelV2({
+          doGenerate: async ({ abortSignal }) => {
+            resolveSubAgentEntered();
+            expect(abortSignal).toBe(abortController.signal);
+            await new Promise<void>(resolve => {
+              const signal = abortSignal;
+              if (!signal) {
+                throw new Error('expected sub-agent doGenerate to receive abortSignal');
+              }
+              if (signal.aborted) {
+                heardAbortOnSubAgentSignal = true;
+                resolve();
+                return;
+              }
+              signal.addEventListener(
+                'abort',
+                () => {
+                  heardAbortOnSubAgentSignal = true;
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              text: 'after parent abort heard',
+              content: [{ type: 'text', text: 'after parent abort heard' }],
+              warnings: [],
+            };
+          },
+        }),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor-abort-inflight',
+        name: 'supervisor-abort-inflight',
+        instructions: 'You orchestrate sub-agents.',
+        model: makeSupervisorModel('subAbortInflight', 'Long task'),
+        agents: { subAbortInflight: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const genPromise = supervisorAgent.generate('User task', {
+        maxSteps: 4,
+        abortSignal: abortController.signal,
+      });
+
+      await subAgentEntered;
+      abortController.abort();
+
+      await genPromise;
+
+      expect(abortController.signal.aborted).toBe(true);
+      expect(heardAbortOnSubAgentSignal).toBe(true);
+    });
+
     it('should trigger onDelegationComplete with the sub-agent result', async () => {
       const onDelegationComplete = vi.fn(() => undefined);
       const subAgent = makeSubAgent('writer-agent', 'Here is the final report.');
