@@ -246,4 +246,32 @@ describe('MetricsContextImpl', () => {
       entityType: EntityType.AGENT,
     });
   });
+
+  it('should prefer top-level traceId and spanId over deprecated correlationContext values', () => {
+    setupBus();
+    const cardinalityFilter = new CardinalityFilter();
+
+    const metrics = new MetricsContextImpl({
+      cardinalityFilter,
+      observabilityBus: bus,
+      traceId: 'top-level-trace',
+      spanId: 'top-level-span',
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        entityType: EntityType.AGENT,
+      },
+    });
+
+    metrics.emit('calls', 1);
+
+    const metric = emittedEvents[0]!.metric;
+    expect(metric.traceId).toBe('top-level-trace');
+    expect(metric.spanId).toBe('top-level-span');
+    expect(metric.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      entityType: EntityType.AGENT,
+    });
+  });
 });
