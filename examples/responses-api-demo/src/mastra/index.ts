@@ -3,7 +3,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { supportAgent, toolAgent } from './agents';
 
 const storage = new LibSQLStore({
-  id: 'openai-responses-migration-storage',
+  id: 'responses-api-demo-storage',
   url: 'file:./mastra.db',
 });
 

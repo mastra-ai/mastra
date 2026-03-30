@@ -1,5 +1,5 @@
 {
-  "name": "examples-openai-responses-migration",
+  "name": "examples-responses-api-demo",
   "type": "module",
   "private": true,
   "version": "0.0.1",
@@ -17,6 +17,7 @@
     "@mastra/memory": "latest",
     "mastra": "latest",
     "next": "^15.5.12",
+    "openai": "^6.33.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
