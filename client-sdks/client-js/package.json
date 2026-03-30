@@ -44,11 +44,11 @@
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
-    "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -56,6 +56,7 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",

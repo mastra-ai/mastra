@@ -85,7 +85,6 @@ describe.for(
   it.skipIf(
     pkgJson.name === 'mastra' ||
       pkgJson.name === 'create-mastra' ||
-      pkgJson.name === '@mastra/client-js' ||
       pkgJson.name === '@mastra/opencode' ||
       pkgJson.name === 'mastracode' ||
       !pkgJson.name.startsWith('@mastra/'),
