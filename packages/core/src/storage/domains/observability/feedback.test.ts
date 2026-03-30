@@ -18,18 +18,23 @@ describe('Feedback Schemas', () => {
         timestamp: now,
         traceId: 'trace-1',
         spanId: 'span-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
         comment: 'Great response!',
         experimentId: 'exp-1',
-        userId: 'user-123',
+        userId: 'trace-user-123',
+        feedbackUserId: 'user-123',
+        entityType: 'agent',
+        executionSource: 'cloud',
+        tags: ['prod'],
         metadata: { page: '/chat' },
       });
-      expect(record.source).toBe('user');
+      expect(record.feedbackSource).toBe('user');
       expect(record.feedbackType).toBe('thumbs');
       expect(record.value).toBe(1);
-      expect(record.userId).toBe('user-123');
+      expect(record.feedbackUserId).toBe('user-123');
+      expect(record.userId).toBe('trace-user-123');
     });
 
     it('accepts string value', () => {
@@ -37,7 +42,7 @@ describe('Feedback Schemas', () => {
         id: 'fb-2',
         timestamp: now,
         traceId: 'trace-1',
-        source: 'qa',
+        feedbackSource: 'qa',
         feedbackType: 'correction',
         value: 'The correct answer is 42',
         createdAt: now,
@@ -51,7 +56,7 @@ describe('Feedback Schemas', () => {
         id: 'fb-3',
         timestamp: now,
         traceId: 'trace-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'rating',
         value: 4,
         createdAt: now,
@@ -66,7 +71,7 @@ describe('Feedback Schemas', () => {
         feedbackRecordSchema.parse({
           id: 'fb-4',
           timestamp: now,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           createdAt: now,
@@ -83,12 +88,12 @@ describe('Feedback Schemas', () => {
         feedbackType: 'thumbs',
         value: 1,
         comment: 'Helpful',
-        userId: 'user-123',
+        feedbackUserId: 'user-123',
         metadata: { page: '/chat' },
         experimentId: 'exp-1',
       });
       expect(input.source).toBe('user');
-      expect(input.userId).toBe('user-123');
+      expect(input.feedbackUserId).toBe('user-123');
     });
 
     it('accepts minimal input', () => {
@@ -98,7 +103,7 @@ describe('Feedback Schemas', () => {
         value: 3,
       });
       expect(input.comment).toBeUndefined();
-      expect(input.userId).toBeUndefined();
+      expect(input.feedbackUserId).toBeUndefined();
     });
   });
 
@@ -107,7 +112,7 @@ describe('Feedback Schemas', () => {
       const record = createFeedbackRecordSchema.parse({
         timestamp: now,
         traceId: 'trace-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
       });
@@ -122,13 +127,13 @@ describe('Feedback Schemas', () => {
         feedback: {
           timestamp: now,
           traceId: 'trace-1',
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
         },
       });
       expect(args.feedback.traceId).toBe('trace-1');
-      expect(args.feedback.source).toBe('user');
+      expect(args.feedback.feedbackSource).toBe('user');
       expect(args.feedback.value).toBe(1);
     });
   });
@@ -140,13 +145,17 @@ describe('Feedback Schemas', () => {
         traceId: 'trace-1',
         spanId: 'span-1',
         feedbackType: ['thumbs', 'rating'],
-        source: 'user',
+        feedbackSource: 'user',
         experimentId: 'exp-1',
-        userId: 'user-123',
+        userId: 'trace-user-123',
+        feedbackUserId: 'user-123',
+        tags: ['prod'],
         environment: 'production',
+        executionSource: 'cloud',
       });
       expect(filter.feedbackType).toEqual(['thumbs', 'rating']);
-      expect(filter.source).toBe('user');
+      expect(filter.feedbackSource).toBe('user');
+      expect(filter.executionSource).toBe('cloud');
     });
 
     it('accepts single feedback type as string', () => {
@@ -185,7 +194,7 @@ describe('Feedback Schemas', () => {
             id: 'fb-1',
             timestamp: now,
             traceId: 'trace-1',
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             createdAt: now,

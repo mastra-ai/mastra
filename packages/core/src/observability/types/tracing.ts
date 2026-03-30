@@ -659,13 +659,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -678,7 +678,7 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -701,13 +701,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
