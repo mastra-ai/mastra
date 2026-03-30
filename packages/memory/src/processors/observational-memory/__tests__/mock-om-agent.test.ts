@@ -19,7 +19,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Mock Model: Multi-step execution via tool call

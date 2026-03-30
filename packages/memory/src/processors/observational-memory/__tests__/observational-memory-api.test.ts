@@ -396,19 +396,17 @@ describe('observe()', () => {
         onObservationEnd: vi.fn(),
       };
 
-      // observe() should not throw — errors are caught internally
-      const result = await failOm.observe({
-        threadId,
-        messages: createBulkMessages(10, threadId),
-        hooks,
-      });
+      // Sync observation propagates observer errors; hooks still run in finally.
+      await expect(
+        failOm.observe({
+          threadId,
+          messages: createBulkMessages(10, threadId),
+          hooks,
+        }),
+      ).rejects.toThrow(/Observer failed/);
 
-      // Hooks are called in the finally block regardless of observer errors
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
-      // The observation flow completes (error is caught inside doSynchronousObservation)
-      // so observed=true even though the observer model failed
-      expect(result.observed).toBe(true);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {

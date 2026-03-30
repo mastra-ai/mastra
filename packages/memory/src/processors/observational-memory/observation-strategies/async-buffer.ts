@@ -26,6 +26,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   get needsReflection() {
     return false;
   }
+  get rethrowOnFailure() {
+    return false;
+  }
 
   protected override generateCycleId(): string {
     return this.cycleId;

@@ -33,6 +33,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
   get needsReflection() {
     return true;
   }
+  get rethrowOnFailure() {
+    return true;
+  }
 
   async prepare() {
     const { record, threadId, messages } = this.opts;
