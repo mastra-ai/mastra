@@ -185,6 +185,7 @@ export function opencodeClaudeMaxProvider(
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
       apiKey: 'test-api-key',
+      headers: options?.headers,
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
@@ -213,10 +214,11 @@ export function opencodeClaudeMaxProvider(
       throw new Error('Not logged in to Anthropic. Run /login first.');
     }
 
-    // Make request with OAuth headers
+    // Make request with OAuth headers, merging in any harness headers
     return fetch(url, {
       ...init,
       headers: {
+        ...options?.headers,
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':
           'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
