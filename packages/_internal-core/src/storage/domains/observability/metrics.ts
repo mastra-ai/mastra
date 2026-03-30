@@ -1,9 +1,20 @@
 import { z } from 'zod/v4';
 import {
+  aggregateResponseFields,
+  aggregationIntervalSchema,
+  aggregationTypeSchema,
+  aggregatedValueField,
+  bucketTimestampField,
+  comparePeriodSchema,
   commonFilterFields,
   contextFields,
+  dimensionsField,
+  groupBySchema,
   paginationArgsSchema,
   paginationInfoSchema,
+  percentileField,
+  percentileBucketValueField,
+  percentilesSchema,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -117,20 +128,12 @@ export type BatchCreateMetricsArgs = z.infer<typeof batchCreateMetricsArgsSchema
 // Metric Aggregation Schemas
 // ============================================================================
 
-/** Aggregation type schema */
-export const aggregationTypeSchema = z.enum(['sum', 'avg', 'min', 'max', 'count', 'last']);
-export type AggregationType = z.infer<typeof aggregationTypeSchema>;
-
-/** Aggregation interval schema */
-export const aggregationIntervalSchema = z.enum(['1m', '5m', '15m', '1h', '1d']);
-export type AggregationInterval = z.infer<typeof aggregationIntervalSchema>;
-
 /** Schema for metric aggregation configuration */
 export const metricsAggregationSchema = z
   .object({
-    type: aggregationTypeSchema.describe('Aggregation function'),
-    interval: aggregationIntervalSchema.optional().describe('Time bucket interval'),
-    groupBy: z.array(z.string()).optional().describe('Label keys to group by'),
+    type: aggregationTypeSchema,
+    interval: aggregationIntervalSchema.optional(),
+    groupBy: groupBySchema.optional(),
   })
   .describe('Metrics aggregation configuration');
 
@@ -181,7 +184,7 @@ export const metricsOrderBySchema = z
 /** Schema for listMetrics operation arguments */
 export const listMetricsArgsSchema = z
   .object({
-    filters: metricsFilterSchema.optional().describe('Optional filters to apply'),
+    filters: metricsFilterSchema.optional(),
     pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
     orderBy: metricsOrderBySchema
       .default({ field: 'timestamp', direction: 'DESC' })
@@ -205,39 +208,32 @@ export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
 // OLAP Query Schemas
 // ============================================================================
 
-/** Compare period for aggregate queries with period-over-period comparison */
-export const comparePeriodSchema = z
-  .enum(['previous_period', 'previous_day', 'previous_week'])
-  .describe('Comparison period for aggregate queries');
-
 // --- getMetricAggregate ---
 
 export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
-    comparePeriod: comparePeriodSchema.optional().describe('Optional comparison period'),
+    aggregation: aggregationTypeSchema,
+    filters: metricsFilterSchema.optional(),
+    comparePeriod: comparePeriodSchema.optional(),
   })
   .describe('Arguments for getting a metric aggregate');
 
 export type GetMetricAggregateArgs = z.infer<typeof getMetricAggregateArgsSchema>;
 
 export const getMetricAggregateResponseSchema = z.object({
-  value: z.number().nullable().describe('Aggregated value'),
+  ...aggregateResponseFields,
   estimatedCost: z.number().nullable().optional().describe('Aggregated estimated cost from the same filtered row set'),
   costUnit: z
     .string()
     .nullable()
     .optional()
     .describe('Shared cost unit for the aggregated rows, or null when mixed/unknown'),
-  previousValue: z.number().nullable().optional().describe('Value from comparison period'),
   previousEstimatedCost: z
     .number()
     .nullable()
     .optional()
     .describe('Aggregated estimated cost from the comparison period'),
-  changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
   costChangePercent: z
     .number()
     .nullable()
@@ -252,9 +248,9 @@ export type GetMetricAggregateResponse = z.infer<typeof getMetricAggregateRespon
 export const getMetricBreakdownArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
-    groupBy: z.array(z.string()).min(1).describe('Fields to group by'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
+    groupBy: groupBySchema,
+    aggregation: aggregationTypeSchema,
+    filters: metricsFilterSchema.optional(),
   })
   .describe('Arguments for getting a metric breakdown');
 
@@ -263,8 +259,8 @@ export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema
 export const getMetricBreakdownResponseSchema = z.object({
   groups: z.array(
     z.object({
-      dimensions: z.record(z.string(), z.string().nullable()).describe('Dimension values for this group'),
-      value: z.number().describe('Aggregated value for this group'),
+      dimensions: dimensionsField,
+      value: aggregatedValueField,
       estimatedCost: z.number().nullable().optional().describe('Summed estimated cost for this group'),
       costUnit: z
         .string()
@@ -282,10 +278,10 @@ export type GetMetricBreakdownResponse = z.infer<typeof getMetricBreakdownRespon
 export const getMetricTimeSeriesArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s)'),
-    interval: aggregationIntervalSchema.describe('Time bucket interval'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
-    groupBy: z.array(z.string()).optional().describe('Optional fields to group by'),
+    interval: aggregationIntervalSchema,
+    aggregation: aggregationTypeSchema,
+    filters: metricsFilterSchema.optional(),
+    groupBy: groupBySchema.optional(),
   })
   .describe('Arguments for getting metric time series');
 
@@ -302,8 +298,8 @@ export const getMetricTimeSeriesResponseSchema = z.object({
         .describe('Shared cost unit for this series, or null when mixed/unknown'),
       points: z.array(
         z.object({
-          timestamp: z.date().describe('Bucket timestamp'),
-          value: z.number().describe('Aggregated value'),
+          timestamp: bucketTimestampField,
+          value: aggregatedValueField,
           estimatedCost: z.number().nullable().optional().describe('Summed estimated cost in this bucket'),
         }),
       ),
@@ -318,9 +314,9 @@ export type GetMetricTimeSeriesResponse = z.infer<typeof getMetricTimeSeriesResp
 export const getMetricPercentilesArgsSchema = z
   .object({
     name: z.string().describe('Metric name'),
-    percentiles: z.array(z.number().min(0).max(1)).describe('Percentile values (0-1)'),
-    interval: aggregationIntervalSchema.describe('Time bucket interval'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
+    percentiles: percentilesSchema,
+    interval: aggregationIntervalSchema,
+    filters: metricsFilterSchema.optional(),
   })
   .describe('Arguments for getting metric percentiles');
 
@@ -329,11 +325,11 @@ export type GetMetricPercentilesArgs = z.infer<typeof getMetricPercentilesArgsSc
 export const getMetricPercentilesResponseSchema = z.object({
   series: z.array(
     z.object({
-      percentile: z.number().describe('Percentile value'),
+      percentile: percentileField,
       points: z.array(
         z.object({
-          timestamp: z.date().describe('Bucket timestamp'),
-          value: z.number().describe('Percentile value at this bucket'),
+          timestamp: bucketTimestampField,
+          value: percentileBucketValueField,
         }),
       ),
     }),
