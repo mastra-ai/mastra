@@ -518,9 +518,66 @@ describe('ObservabilityInMemory', () => {
     expect(percentiles.series).toEqual([
       {
         percentile: 0.5,
-        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.8 }],
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.7 }],
       },
     ]);
+  });
+
+  it('score last aggregation uses the latest timestamp, not insertion order', async () => {
+    await storage.batchCreateScores({
+      scores: [
+        {
+          timestamp: new Date('2026-01-02T12:30:00.000Z'),
+          traceId: 'trace-last-1',
+          scorerId: 'relevance',
+          score: 0.3,
+        },
+        {
+          timestamp: new Date('2026-01-02T12:45:00.000Z'),
+          traceId: 'trace-last-2',
+          scorerId: 'relevance',
+          score: 0.9,
+        },
+        {
+          timestamp: new Date('2026-01-02T12:15:00.000Z'),
+          traceId: 'trace-last-3',
+          scorerId: 'relevance',
+          score: 0.1,
+        },
+      ],
+    });
+
+    expect(
+      await storage.getScoreAggregate({
+        scorerId: 'relevance',
+        aggregation: 'last',
+      }),
+    ).toEqual({ value: 0.9 });
+
+    expect(
+      await storage.getScoreBreakdown({
+        scorerId: 'relevance',
+        aggregation: 'last',
+        groupBy: ['scorerId'],
+      }),
+    ).toEqual({
+      groups: [{ dimensions: { scorerId: 'relevance' }, value: 0.9 }],
+    });
+
+    expect(
+      await storage.getScoreTimeSeries({
+        scorerId: 'relevance',
+        aggregation: 'last',
+        interval: '1h',
+      }),
+    ).toEqual({
+      series: [
+        {
+          name: 'relevance',
+          points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.9 }],
+        },
+      ],
+    });
   });
 
   it('feedback OLAP queries key by feedbackType and optionally feedbackSource, ignoring non-numeric values', async () => {
@@ -601,7 +658,7 @@ describe('ObservabilityInMemory', () => {
     expect(percentiles.series).toEqual([
       {
         percentile: 0.5,
-        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 5 }],
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 4.5 }],
       },
     ]);
   });

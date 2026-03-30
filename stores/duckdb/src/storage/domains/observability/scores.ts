@@ -91,6 +91,20 @@ function getIntervalSql(interval: AggregationInterval): string {
   }
 }
 
+function getValidatedPercentiles(percentiles: number[]): number[] {
+  if (!Array.isArray(percentiles) || percentiles.length === 0) {
+    throw new Error('Percentiles must include at least one value between 0 and 1.');
+  }
+
+  return percentiles.map(percentile => {
+    if (!Number.isFinite(percentile) || percentile < 0 || percentile > 1) {
+      throw new Error('Percentiles must be finite numbers between 0 and 1.');
+    }
+
+    return percentile;
+  });
+}
+
 function buildScoreWhereClause(args: Pick<GetScoreAggregateArgs, 'scorerId' | 'scoreSource' | 'filters'>): {
   clause: string;
   params: unknown[];
@@ -465,9 +479,10 @@ export async function getScorePercentiles(
 ): Promise<GetScorePercentilesResponse> {
   const intervalSql = getIntervalSql(args.interval);
   const { clause, params } = buildScoreWhereClause(args);
+  const percentiles = getValidatedPercentiles(args.percentiles);
 
   const series = [];
-  for (const percentile of args.percentiles) {
+  for (const percentile of percentiles) {
     const rows = await db.query<Record<string, unknown>>(
       `
         SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,

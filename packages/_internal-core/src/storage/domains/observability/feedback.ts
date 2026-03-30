@@ -33,7 +33,7 @@ const feedbackValueField = z
 const feedbackCommentField = z.string().describe('Additional comment or context');
 const feedbackUserIdField = z.string().describe('User who provided the feedback');
 
-function normalizeLegacyFeedbackActor<T>(input: T): T {
+export function normalizeLegacyFeedbackActor<T>(input: T): T {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return input;
   }
@@ -180,7 +180,7 @@ export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSche
 // ============================================================================
 
 /** Schema for filtering feedback in list queries */
-const feedbackFilterObjectSchema = z.object({
+export const feedbackFilterObjectSchema = z.object({
   ...commonFilterFields,
 
   // Feedback-specific filters
@@ -197,7 +197,7 @@ const feedbackFilterObjectSchema = z.object({
 });
 
 export const feedbackFilterSchema = z
-  .object(feedbackFilterObjectSchema.shape)
+  .preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema)
   .describe('Filters for querying feedback');
 
 /** Filters for querying feedback */

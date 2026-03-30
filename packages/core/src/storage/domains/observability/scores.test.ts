@@ -257,6 +257,16 @@ describe('Score Schemas', () => {
       expect(args.percentiles).toEqual([0.5, 0.95]);
     });
 
+    it('getScorePercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getScorePercentilesArgsSchema.parse({
+          scorerId: 'relevance',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
+    });
+
     it('getScorePercentilesResponseSchema validates', () => {
       const response = getScorePercentilesResponseSchema.parse({
         series: [{ percentile: 0.5, points: [{ timestamp: now, value: 0.8 }] }],

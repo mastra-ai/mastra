@@ -587,7 +587,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private aggregate(values: number[], type: AggregationType): number | null {
+  private aggregate(values: number[], type: AggregationType, timestamps?: number[]): number | null {
     if (values.length === 0) return null;
     switch (type) {
       case 'sum':
@@ -600,11 +600,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return Math.max(...values);
       case 'count':
         return values.length;
-      case 'last':
-        return values[values.length - 1]!;
+      case 'last': {
+        if (!timestamps || timestamps.length !== values.length) {
+          return values[values.length - 1]!;
+        }
+
+        let latestIndex = 0;
+        let latestTimestamp = timestamps[0]!;
+
+        for (let i = 1; i < timestamps.length; i++) {
+          const timestamp = timestamps[i]!;
+          if (timestamp >= latestTimestamp) {
+            latestTimestamp = timestamp;
+            latestIndex = i;
+          }
+        }
+
+        return values[latestIndex]!;
+      }
       default:
         return values.reduce((a, b) => a + b, 0);
     }
+  }
+
+  private interpolatePercentile(sortedValues: number[], percentile: number): number {
+    if (sortedValues.length === 0) return 0;
+
+    const position = percentile * (sortedValues.length - 1);
+    const lowerIndex = Math.floor(position);
+    const upperIndex = Math.ceil(position);
+    const lowerValue = sortedValues[lowerIndex]!;
+    const upperValue = sortedValues[upperIndex]!;
+
+    if (lowerIndex === upperIndex) {
+      return lowerValue;
+    }
+
+    return lowerValue + (upperValue - lowerValue) * (position - lowerIndex);
   }
 
   /**
@@ -1131,25 +1163,28 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const value = this.aggregate(
       filtered.map(score => score.score),
       args.aggregation,
+      filtered.map(score => score.timestamp.getTime()),
     );
 
     if (args.comparePeriod && args.filters?.timestamp) {
       const previousRange = this.getComparisonDateRange(args.comparePeriod, args.filters.timestamp);
       if (previousRange) {
+        const previousFiltered = this.db.scoreRecords
+          .filter(score =>
+            this.scoreMatchesFilters(score, {
+              ...(args.filters ?? {}),
+              timestamp: previousRange,
+            }),
+          )
+          .filter(score => score.scorerId === args.scorerId)
+          .filter(score =>
+            args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true,
+          );
+
         const previousValue = this.aggregate(
-          this.db.scoreRecords
-            .filter(score =>
-              this.scoreMatchesFilters(score, {
-                ...(args.filters ?? {}),
-                timestamp: previousRange,
-              }),
-            )
-            .filter(score => score.scorerId === args.scorerId)
-            .filter(score =>
-              args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true,
-            )
-            .map(score => score.score),
+          previousFiltered.map(score => score.score),
           args.aggregation,
+          previousFiltered.map(score => score.timestamp.getTime()),
         );
 
         let changePercent: number | null = null;
@@ -1188,6 +1223,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         this.aggregate(
           records.map(record => record.score),
           args.aggregation,
+          records.map(record => record.timestamp.getTime()),
         ) ?? 0,
     }));
     groups.sort((a, b) => b.value - a.value);
@@ -1233,6 +1269,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                 this.aggregate(
                   records.map(record => record.score),
                   args.aggregation,
+                  records.map(record => record.timestamp.getTime()),
                 ) ?? 0,
             })),
         })),
@@ -1258,6 +1295,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                 this.aggregate(
                   records.map(record => record.score),
                   args.aggregation,
+                  records.map(record => record.timestamp.getTime()),
                 ) ?? 0,
             })),
         },
@@ -1286,8 +1324,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         percentile,
         points: sortedBuckets.map(([ts, values]) => {
           const sorted = [...values].sort((a, b) => a - b);
-          const idx = Math.min(Math.floor(percentile * sorted.length), sorted.length - 1);
-          return { timestamp: new Date(ts), value: sorted[idx] ?? 0 };
+          return { timestamp: new Date(ts), value: this.interpolatePercentile(sorted, percentile) };
         }),
       })),
     };
@@ -1396,15 +1433,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       .filter(feedback =>
         args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
       );
-    const values = filtered
-      .map(feedback => this.getNumericFeedbackValue(feedback.value))
-      .filter((value): value is number => value !== null);
-    const value = this.aggregate(values, args.aggregation);
+    const numericEntries = filtered.flatMap(feedback => {
+      const numericValue = this.getNumericFeedbackValue(feedback.value);
+      return numericValue === null ? [] : [{ numericValue, timestamp: feedback.timestamp.getTime() }];
+    });
+    const value = this.aggregate(
+      numericEntries.map(entry => entry.numericValue),
+      args.aggregation,
+      numericEntries.map(entry => entry.timestamp),
+    );
 
     if (args.comparePeriod && args.filters?.timestamp) {
       const previousRange = this.getComparisonDateRange(args.comparePeriod, args.filters.timestamp);
       if (previousRange) {
-        const previousValues = this.db.feedbackRecords
+        const previousNumericEntries = this.db.feedbackRecords
           .filter(feedback =>
             this.feedbackMatchesFilters(feedback, {
               ...(args.filters ?? {}),
@@ -1415,10 +1457,16 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           .filter(feedback =>
             args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
           )
-          .map(feedback => this.getNumericFeedbackValue(feedback.value))
-          .filter((numericValue): numericValue is number => numericValue !== null);
+          .flatMap(feedback => {
+            const numericValue = this.getNumericFeedbackValue(feedback.value);
+            return numericValue === null ? [] : [{ numericValue, timestamp: feedback.timestamp.getTime() }];
+          });
 
-        const previousValue = this.aggregate(previousValues, args.aggregation);
+        const previousValue = this.aggregate(
+          previousNumericEntries.map(entry => entry.numericValue),
+          args.aggregation,
+          previousNumericEntries.map(entry => entry.timestamp),
+        );
         let changePercent: number | null = null;
         if (previousValue !== null && previousValue !== 0 && value !== null) {
           changePercent = ((value - previousValue) / Math.abs(previousValue)) * 100;
@@ -1454,13 +1502,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     const groups = Array.from(groupMap.entries()).map(([key, records]) => ({
       dimensions: JSON.parse(key) as Record<string, string | null>,
-      value:
-        this.aggregate(
-          records
-            .map(record => this.getNumericFeedbackValue(record.value))
-            .filter((value): value is number => value !== null),
-          args.aggregation,
-        ) ?? 0,
+      value: (() => {
+        const numericEntries = records.flatMap(record => {
+          const numericValue = this.getNumericFeedbackValue(record.value);
+          return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+        });
+
+        return (
+          this.aggregate(
+            numericEntries.map(entry => entry.numericValue),
+            args.aggregation,
+            numericEntries.map(entry => entry.timestamp),
+          ) ?? 0
+        );
+      })(),
     }));
     groups.sort((a, b) => b.value - a.value);
 
@@ -1504,13 +1559,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
             .sort(([a], [b]) => a - b)
             .map(([ts, records]) => ({
               timestamp: new Date(ts),
-              value:
-                this.aggregate(
-                  records
-                    .map(record => this.getNumericFeedbackValue(record.value))
-                    .filter((value): value is number => value !== null),
-                  args.aggregation,
-                ) ?? 0,
+              value: (() => {
+                const numericEntries = records.flatMap(record => {
+                  const numericValue = this.getNumericFeedbackValue(record.value);
+                  return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+                });
+
+                return (
+                  this.aggregate(
+                    numericEntries.map(entry => entry.numericValue),
+                    args.aggregation,
+                    numericEntries.map(entry => entry.timestamp),
+                  ) ?? 0
+                );
+              })(),
             })),
         })),
       };
@@ -1531,13 +1593,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
             .sort(([a], [b]) => a - b)
             .map(([ts, records]) => ({
               timestamp: new Date(ts),
-              value:
-                this.aggregate(
-                  records
-                    .map(record => this.getNumericFeedbackValue(record.value))
-                    .filter((value): value is number => value !== null),
-                  args.aggregation,
-                ) ?? 0,
+              value: (() => {
+                const numericEntries = records.flatMap(record => {
+                  const numericValue = this.getNumericFeedbackValue(record.value);
+                  return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+                });
+
+                return (
+                  this.aggregate(
+                    numericEntries.map(entry => entry.numericValue),
+                    args.aggregation,
+                    numericEntries.map(entry => entry.timestamp),
+                  ) ?? 0
+                );
+              })(),
             })),
         },
       ],
@@ -1569,8 +1638,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         percentile,
         points: sortedBuckets.map(([ts, values]) => {
           const sorted = [...values].sort((a, b) => a - b);
-          const idx = Math.min(Math.floor(percentile * sorted.length), sorted.length - 1);
-          return { timestamp: new Date(ts), value: sorted[idx] ?? 0 };
+          return { timestamp: new Date(ts), value: this.interpolatePercentile(sorted, percentile) };
         }),
       })),
     };

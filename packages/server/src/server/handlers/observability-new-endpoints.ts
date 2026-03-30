@@ -19,6 +19,7 @@ import {
   getScorePercentilesResponseSchema,
   // Feedback
   feedbackFilterSchema,
+  feedbackFilterObjectSchema,
   feedbackOrderBySchema,
   listFeedbackResponseSchema,
   createFeedbackBodySchema,
@@ -90,7 +91,7 @@ function createNewRoute<
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       if (!coreFeatures.has('observability:v1.13.2')) {
         throw new HTTPException(501, {
-          message: 'New observability endpoints require @mastra/core >= 1.13.3, please upgrade.',
+          message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
         });
       }
 
@@ -201,11 +202,11 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: wrapSchemaForQueryParams(
-    feedbackFilterSchema.extend(paginationArgsSchema.shape).extend(feedbackOrderBySchema.shape).partial(),
+    feedbackFilterObjectSchema.extend(paginationArgsSchema.shape).extend(feedbackOrderBySchema.shape).partial(),
   ),
   responseSchema: listFeedbackResponseSchema,
   handler: async ({ mastra, ...params }) => {
-    const filters = pickParams(feedbackFilterSchema, params);
+    const filters = feedbackFilterSchema.parse(pickParams(feedbackFilterObjectSchema, params));
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(feedbackOrderBySchema, params);
 

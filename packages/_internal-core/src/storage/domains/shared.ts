@@ -106,7 +106,7 @@ export const groupBySchema = z.array(z.string()).min(1).describe('Fields to grou
 export type GroupBy = z.infer<typeof groupBySchema>;
 
 /** Shared percentiles schema for percentile queries. */
-export const percentilesSchema = z.array(z.number().min(0).max(1)).describe('Percentile values (0-1)');
+export const percentilesSchema = z.array(z.number().min(0).max(1)).min(1).describe('Percentile values (0-1)');
 export type Percentiles = z.infer<typeof percentilesSchema>;
 
 /** Shared fields for aggregate OLAP responses across observability signals. */

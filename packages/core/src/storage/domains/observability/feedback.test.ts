@@ -175,6 +175,12 @@ describe('Feedback Schemas', () => {
       const filter = feedbackFilterSchema.parse({});
       expect(filter).toEqual({});
     });
+
+    it('maps deprecated userId filter to feedbackUserId', () => {
+      const filter = feedbackFilterSchema.parse({ userId: 'user-123' });
+      expect(filter.feedbackUserId).toBe('user-123');
+      expect(filter).not.toHaveProperty('userId');
+    });
   });
 
   describe('listFeedbackArgsSchema', () => {
@@ -192,12 +198,12 @@ describe('Feedback Schemas', () => {
       expect(args.pagination.perPage).toBe(25);
     });
 
-    it('keeps trace user and feedback actor filters distinct', () => {
+    it('rewrites deprecated feedback actor alias inside filters', () => {
       const args = listFeedbackArgsSchema.parse({
         filters: { userId: 'trace-user-123' },
       });
-      expect(args.filters?.userId).toBe('trace-user-123');
-      expect(args.filters?.feedbackUserId).toBeUndefined();
+      expect(args.filters?.feedbackUserId).toBe('trace-user-123');
+      expect(args.filters).not.toHaveProperty('userId');
     });
   });
 
@@ -285,6 +291,17 @@ describe('Feedback Schemas', () => {
         interval: '1h',
       });
       expect(args.percentiles).toEqual([0.5, 0.95]);
+    });
+
+    it('getFeedbackPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getFeedbackPercentilesArgsSchema.parse({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
     });
 
     it('getFeedbackPercentilesResponseSchema validates', () => {
