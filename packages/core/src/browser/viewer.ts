@@ -877,10 +877,19 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
     this._screencastStream = new ScreencastStream(this, options ?? this.config.screencast);
 
-    // Update URL cache on each frame so getCurrentUrl() returns fresh data
-    this._screencastStream.on('frame', () => {
-      // Fire and forget - don't block frame delivery
-      this.getCurrentUrl().catch(() => {});
+    // Listen for navigation events (URL changes) via CDP
+    const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
+      // Only emit URL for main frame navigations (no parentId)
+      if (!params.frame.parentId && params.frame.url) {
+        this.lastUrl = params.frame.url;
+        this._screencastStream?.emitUrl(params.frame.url);
+      }
+    };
+    this.cdpClient.on('Page.frameNavigated', onFrameNavigated);
+
+    // Clean up listener when stream stops
+    this._screencastStream.once('stop', () => {
+      this.cdpClient?.off?.('Page.frameNavigated', onFrameNavigated);
     });
 
     await this._screencastStream.start();

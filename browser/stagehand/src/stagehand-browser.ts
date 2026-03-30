@@ -891,6 +891,8 @@ export class StagehandBrowser extends MastraBrowser {
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
         void this.reconnectScreencast('new tab');
+        // Re-setup navigation listener for the new active page
+        void setupPageNavigationListener();
       }, 300);
     };
 
@@ -907,9 +909,56 @@ export class StagehandBrowser extends MastraBrowser {
       }, 300);
     };
 
+    // Listen for navigation events (URL changes) on the PAGE-specific CDP session
+    const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
+
+      // Only emit URL for main frame navigations (no parentId)
+      if (!params.frame.parentId && params.frame.url) {
+        this.logger.debug?.(`Frame navigated to: ${params.frame.url}`);
+        stream.emitUrl(params.frame.url);
+      }
+    };
+
+    // Track the page session for cleanup
+    let pageSession: { on?: (event: string, handler: (...args: unknown[]) => void) => void; off?: (event: string, handler: (...args: unknown[]) => void) => void } | null = null;
+
+    // Set up page-level navigation listener
+    const setupPageNavigationListener = async () => {
+      try {
+        // Clean up previous page session listener if any
+        if (pageSession?.off) {
+          pageSession.off('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
+        }
+
+        const page = stagehand.context?.activePage();
+        if (!page) return;
+
+        // Get PAGE-specific CDP session (not browser-level connection)
+        const session = page.getSessionForFrame(page.mainFrameId());
+        if (!session) return;
+
+        pageSession = session as typeof pageSession;
+        await session.send('Page.enable');
+        session.on('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
+
+
+        // Emit the current URL immediately (since framenavigated won't fire for already-loaded pages)
+        const currentUrl = page.url();
+        if (currentUrl && currentUrl !== 'about:blank') {
+
+          stream.emitUrl(currentUrl);
+        }
+      } catch (error) {
+        this.logger.debug?.('Failed to set up page navigation listener', error);
+      }
+    };
+
     try {
       connection.on?.('Target.targetCreated', onTargetCreated);
       connection.on?.('Target.targetDestroyed', onTargetDestroyed);
+
+      // Set up navigation listener on the current page
+      await setupPageNavigationListener();
 
       // Clean up listeners when stream stops
       stream.once('stop', () => {
@@ -919,6 +968,10 @@ export class StagehandBrowser extends MastraBrowser {
         }
         connection.off?.('Target.targetCreated', onTargetCreated);
         connection.off?.('Target.targetDestroyed', onTargetDestroyed);
+        // Clean up page session listener
+        if (pageSession?.off) {
+          pageSession.off('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
+        }
       });
     } catch (error) {
       this.logger.debug?.('Failed to set up tab change detection', error);

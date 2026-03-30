@@ -328,15 +328,15 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
       this.screencasts.set(viewerKey, stream);
 
-      // Wire up frame events + viewport/URL tracking
+      // Wire up frame events + viewport tracking
       stream.on('frame', frame => {
         this.broadcastFrame(viewerKey, frame.data);
         this.broadcastViewportIfChanged(viewerKey, frame.viewport);
-        // Fire and forget - don't block frame delivery
-        // Pass threadId to get URL from the correct browser session
-        void toolset.getCurrentUrl(threadId).then(url => {
-          this.broadcastUrlIfChanged(viewerKey, url);
-        });
+      });
+
+      // Wire up URL change events (emitted by browser providers on navigation)
+      stream.on('url', (url: string) => {
+        this.broadcastUrlIfChanged(viewerKey, url);
       });
 
       // Wire up stop events

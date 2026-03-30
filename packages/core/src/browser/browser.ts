@@ -141,6 +141,9 @@ export interface ScreencastStream {
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): this;
   on(event: 'stop', handler: (reason: string) => void): this;
   on(event: 'error', handler: (error: Error) => void): this;
+  on(event: 'url', handler: (url: string) => void): this;
+  /** Emit a URL update (called by browser providers on navigation) */
+  emitUrl(url: string): void;
 }
 
 // =============================================================================

@@ -54,6 +54,8 @@ export interface ScreencastEvents {
   stop: (reason: 'manual' | 'browser_closed' | 'error') => void;
   /** Emitted on errors */
   error: (error: Error) => void;
+  /** Emitted when the page URL changes (navigation detected) */
+  url: (url: string) => void;
   /** Index signature for TypedEmitter compatibility */
   [key: string]: (...args: any[]) => void;
 }

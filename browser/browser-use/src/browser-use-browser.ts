@@ -327,7 +327,8 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   }
 
   /**
-   * Set up listeners for tab creation/destruction to reconnect screencast.
+   * Set up listeners for tab creation/destruction to reconnect screencast,
+   * and navigation events for URL updates.
    */
   private setupTabChangeDetection(): void {
     if (!this.cdpClient) return;
@@ -341,13 +342,32 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
       this.scheduleScreencastReconnect('tab closed');
     };
 
+    // Listen for navigation events (URL changes)
+    const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
+
+      // Only emit URL for main frame navigations (no parentId)
+      if (!params.frame.parentId && params.frame.url) {
+        this.lastUrl = params.frame.url;
+        // Emit URL update to screencast stream
+        if (this._screencastStream?.isActive()) {
+          this._screencastStream.emitUrl(params.frame.url);
+        }
+      }
+    };
+
     // CDP events for target management
     this.cdpClient.on('Target.targetCreated', onTargetCreated);
     this.cdpClient.on('Target.targetDestroyed', onTargetDestroyed);
+    this.cdpClient.on('Page.frameNavigated', onFrameNavigated);
 
     // Enable target discovery to receive these events
     this.cdpClient.send('Target.setDiscoverTargets', { discover: true }).catch(() => {
       // Some CDP endpoints may not support this - that's okay
+    });
+
+    // Enable Page domain to receive frameNavigated events
+    this.cdpClient.send('Page.enable', {}).catch(() => {
+      // May already be enabled or not supported
     });
   }
 
@@ -620,10 +640,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
     const stream = new ScreencastStreamImpl(this, options ?? this.config.screencast);
     this._screencastStream = stream;
 
-    // Update URL cache on each frame
-    stream.on('frame', () => {
-      this.getCurrentUrl().catch(() => {});
-    });
+    // URL updates are handled by Page.frameNavigated listener in setupTabChangeDetection()
 
     await stream.start();
     await this.getCurrentUrl();

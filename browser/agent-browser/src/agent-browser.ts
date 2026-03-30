@@ -1263,10 +1263,33 @@ export class AgentBrowser extends MastraBrowser {
       // Track page close handlers so we can clean them up
       const pageCloseHandlers = new Map<Page, () => void>();
 
-      // Add close listener to all existing pages
-      const setupPageCloseListener = (page: Page) => {
+      // Track framenavigated handlers for URL updates
+      const frameNavigatedHandlers = new Map<
+        Page,
+        (frame: { url: () => string; parentFrame: () => unknown }) => void
+      >();
+
+      // Add close listener and framenavigated listener to all existing pages
+      const setupPageListeners = (page: Page) => {
+        // Navigation listener for URL updates
+        const onFrameNavigated = (frame: { url: () => string; parentFrame: () => unknown }) => {
+          // Only emit URL for main frame navigations
+          if (!frame.parentFrame()) {
+            stream.emitUrl(frame.url());
+          }
+        };
+        page.on('framenavigated', onFrameNavigated);
+        frameNavigatedHandlers.set(page, onFrameNavigated);
+
+        // Close listener
         const onClose = () => {
           pageCloseHandlers.delete(page);
+          // Clean up framenavigated handler
+          const navHandler = frameNavigatedHandlers.get(page);
+          if (navHandler) {
+            page.off('framenavigated', navHandler);
+            frameNavigatedHandlers.delete(page);
+          }
           // Small delay to let agent-browser update its internal state
           setTimeout(() => {
             if (stream.isActive() && browserManager.getPages().length > 0) {
@@ -1280,6 +1303,9 @@ export class AgentBrowser extends MastraBrowser {
         pageCloseHandlers.set(page, onClose);
       };
 
+      // Alias for backwards compatibility in the code below
+      const setupPageCloseListener = setupPageListeners;
+
       // Set up listeners for existing pages
       for (const page of browserManager.getPages()) {
         setupPageCloseListener(page);
@@ -1288,6 +1314,11 @@ export class AgentBrowser extends MastraBrowser {
       // Also set up listener for new pages
       const onNewPageWithCloseListener = (newPage: Page) => {
         setupPageCloseListener(newPage);
+        // Emit the new page's current URL immediately (since framenavigated won't fire for the initial load)
+        const url = newPage.url();
+        if (url && url !== 'about:blank') {
+          stream.emitUrl(url);
+        }
         onNewPage(newPage);
       };
 
@@ -1302,6 +1333,11 @@ export class AgentBrowser extends MastraBrowser {
           page.off('close', handler);
         }
         pageCloseHandlers.clear();
+        // Remove framenavigated handlers from all pages
+        for (const [page, handler] of frameNavigatedHandlers) {
+          page.off('framenavigated', handler);
+        }
+        frameNavigatedHandlers.clear();
         this.activeScreencastStream = null;
       });
     }

@@ -185,6 +185,14 @@ export class ScreencastStream extends EventEmitter {
   }
 
   /**
+   * Emit a URL update event.
+   * Browser providers call this when navigation is detected.
+   */
+  emitUrl(url: string): void {
+    this.emit('url', url);
+  }
+
+  /**
    * Reconnect the screencast by stopping and restarting.
    * Use this when the active page/tab changes.
    *
