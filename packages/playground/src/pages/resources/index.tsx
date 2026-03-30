@@ -52,7 +52,7 @@ export default function Resources() {
         </MainHeader>
       </EntityListPageLayout.Top>
 
-      <div className="px-6 pt-6">
+      <div className="px-6 pt-6 overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
           {resources.map(resource => (
             <a
