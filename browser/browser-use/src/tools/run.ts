@@ -21,6 +21,7 @@ export function createRunTool(browser: BrowserUseBrowser) {
     outputSchema: runOutputSchema,
     execute: async (input, { agent }) => {
       browser.setCurrentThread(agent?.threadId);
+      await browser.ensureReady();
 
       // Get the SDK client from the browser
       const client = browser.getClient();
@@ -28,8 +29,15 @@ export function createRunTool(browser: BrowserUseBrowser) {
         throw new Error('Browser Use SDK client not available. Ensure browser is initialized.');
       }
 
-      // Run the AI agent task via the SDK
+      // Get the current session ID so the AI agent runs in our existing browser
+      const sessionInfo = browser.getSessionInfo();
+      if (!sessionInfo?.id) {
+        throw new Error('No active browser session. Ensure browser is launched first.');
+      }
+
+      // Run the AI agent task via the SDK, reusing our existing browser session
       const taskRun = client.run(input.task, {
+        sessionId: sessionInfo.id,
         startUrl: input.startUrl,
         maxSteps: input.maxSteps,
         llm: input.llm,

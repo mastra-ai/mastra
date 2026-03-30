@@ -652,6 +652,122 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   }
 
   // ---------------------------------------------------------------------------
+  // Tab Management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Manage browser tabs via CDP.
+   */
+  async tabs(input: { action: 'list' | 'new' | 'switch' | 'close'; index?: number; url?: string }): Promise<{
+    tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
+    activeTab?: number;
+    success?: boolean;
+    hint?: string;
+  }> {
+    const client = await this.getCdpClientForThread();
+
+    // Get all targets (pages)
+    const response = (await client.send('Target.getTargets')) as {
+      targetInfos: Array<{
+        targetId: string;
+        type: string;
+        title: string;
+        url: string;
+        attached: boolean;
+      }>;
+    };
+
+    const pageTargets = response.targetInfos.filter(t => t.type === 'page');
+
+    switch (input.action) {
+      case 'list': {
+        const tabs = pageTargets.map((target, index) => ({
+          index,
+          url: target.url,
+          title: target.title,
+          active: target.attached,
+        }));
+        const activeTab = tabs.findIndex(t => t.active);
+        return { tabs, activeTab: activeTab >= 0 ? activeTab : 0 };
+      }
+
+      case 'new': {
+        // Create a new target (tab)
+        const createResponse = (await client.send('Target.createTarget', {
+          url: input.url || 'about:blank',
+        })) as { targetId: string };
+
+        // Reconnect screencast to the new tab
+        if (this._screencastStream && this.cdpHost) {
+          this.scheduleScreencastReconnect('new tab opened');
+        }
+
+        return {
+          success: true,
+          hint: `Opened new tab${input.url ? ` with URL: ${input.url}` : ''}. Target ID: ${createResponse.targetId}`,
+        };
+      }
+
+      case 'switch': {
+        if (input.index === undefined) {
+          return { success: false, hint: 'Index required for switch action' };
+        }
+        if (input.index < 0 || input.index >= pageTargets.length) {
+          return { success: false, hint: `Invalid tab index. Available: 0-${pageTargets.length - 1}` };
+        }
+
+        const targetId = pageTargets[input.index]?.targetId;
+        if (!targetId) {
+          return { success: false, hint: 'Target not found' };
+        }
+
+        // Activate the target
+        await client.send('Target.activateTarget', { targetId });
+
+        // Reconnect screencast to the new active tab
+        if (this._screencastStream && this.cdpHost) {
+          this.scheduleScreencastReconnect('tab switched');
+        }
+
+        return {
+          success: true,
+          activeTab: input.index,
+          hint: `Switched to tab ${input.index}: ${pageTargets[input.index]?.title || 'Unknown'}`,
+        };
+      }
+
+      case 'close': {
+        if (input.index === undefined) {
+          return { success: false, hint: 'Index required for close action' };
+        }
+        if (input.index < 0 || input.index >= pageTargets.length) {
+          return { success: false, hint: `Invalid tab index. Available: 0-${pageTargets.length - 1}` };
+        }
+
+        const targetId = pageTargets[input.index]?.targetId;
+        if (!targetId) {
+          return { success: false, hint: 'Target not found' };
+        }
+
+        await client.send('Target.closeTarget', { targetId });
+
+        // Reconnect screencast if needed
+        if (this._screencastStream && this.cdpHost) {
+          this.scheduleScreencastReconnect('tab closed');
+        }
+
+        return {
+          success: true,
+          hint: `Closed tab ${input.index}`,
+        };
+      }
+
+      default:
+        return { success: false, hint: `Unknown action: ${input.action}` };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Tools
   // ---------------------------------------------------------------------------
 

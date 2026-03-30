@@ -122,6 +122,34 @@ export const closeOutputSchema = z.object({
   success: z.boolean(),
 });
 
+/**
+ * browser_use_tabs - Manage browser tabs
+ */
+export const tabsInputSchema = z.object({
+  action: z.enum(['list', 'new', 'switch', 'close']).describe('Tab action to perform'),
+  index: z.number().optional().describe('Tab index for switch/close actions (0-based)'),
+  url: z.string().optional().describe('URL to open in new tab'),
+});
+export type TabsInput = z.output<typeof tabsInputSchema>;
+
+export const tabsOutputSchema = z.object({
+  tabs: z
+    .array(
+      z.object({
+        index: z.number(),
+        url: z.string(),
+        title: z.string(),
+        active: z.boolean(),
+      }),
+    )
+    .optional()
+    .describe('List of tabs (for list action)'),
+  activeTab: z.number().optional().describe('Index of the active tab'),
+  success: z.boolean().optional(),
+  hint: z.string().optional(),
+});
+export type TabsOutput = z.output<typeof tabsOutputSchema>;
+
 // =============================================================================
 // All Schemas
 // =============================================================================
@@ -135,4 +163,5 @@ export const browserUseSchemas = {
   getUrl: getUrlInputSchema,
   sessionInfo: sessionInfoInputSchema,
   close: closeInputSchema,
+  tabs: tabsInputSchema,
 } as const;

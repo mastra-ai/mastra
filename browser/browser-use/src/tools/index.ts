@@ -14,6 +14,7 @@ import { createNavigateTool } from './navigate';
 import { createRunTool } from './run';
 import { createScreenshotTool } from './screenshot';
 import { createSessionInfoTool } from './session-info';
+import { createTabsTool } from './tabs';
 
 export { BROWSER_USE_TOOLS, type BrowserUseToolName } from './constants';
 
@@ -31,5 +32,6 @@ export function createBrowserUseTools(browser: BrowserUseBrowser): Record<string
     [BROWSER_USE_TOOLS.GET_URL]: createGetUrlTool(browser),
     [BROWSER_USE_TOOLS.SESSION_INFO]: createSessionInfoTool(browser),
     [BROWSER_USE_TOOLS.CLOSE]: createCloseTool(browser),
+    [BROWSER_USE_TOOLS.TABS]: createTabsTool(browser),
   };
 }

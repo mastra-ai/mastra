@@ -11,6 +11,7 @@ export const BROWSER_USE_TOOLS = {
   GET_URL: 'browser_use_get_url',
   SESSION_INFO: 'browser_use_session_info',
   CLOSE: 'browser_use_close',
+  TABS: 'browser_use_tabs',
 } as const;
 
 export type BrowserUseToolName = (typeof BROWSER_USE_TOOLS)[keyof typeof BROWSER_USE_TOOLS];
