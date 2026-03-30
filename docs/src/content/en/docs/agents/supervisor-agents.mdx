@@ -75,7 +75,8 @@ for await (const chunk of stream.textStream) {
 
 ## Cancellation
 
-Passing `abortSignal` to the supervisor's [`stream()`](/reference/streaming/agents/stream) or [`generate()`](/reference/agents/generate) call, Mastra forwards that same signal into delegated subagent runs. Aborting the supervisor (for example with `AbortController.abort()` or when a client disconnects and your route forwards the request signal) cancels in-flight subagent `generate`, `stream`, `resumeGenerate`, and `resumeStream` work for that run.
+When you pass `abortSignal` to the supervisor's [`stream()`](/reference/streaming/agents/stream) or [`generate()`](/reference/agents/generate) call, Mastra forwards that same signal into delegated subagent runs.
+Aborting the supervisor (for example with `AbortController.abort()` or when a client disconnects and your route forwards the request signal) cancels in-flight subagent `generate`, `stream`, `resumeGenerate`, and `resumeStream` work for that run.
 
 ## Delegation hooks
 
