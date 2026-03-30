@@ -105,11 +105,14 @@ describe('parseHeadlessArgs', () => {
       '600',
       '--format',
       'json',
+      '--model',
+      'anthropic/claude-sonnet-4-20250514',
     ]);
     expect(args.prompt).toBe('Run tests');
     expect(args.continue_).toBe(true);
     expect(args.timeout).toBe(600);
     expect(args.format).toBe('json');
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
   });
 
   it('returns defaults when only prompt provided', () => {
@@ -127,6 +130,21 @@ describe('parseHeadlessArgs', () => {
   it('returns undefined prompt when --prompt flag has no value', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '--prompt']);
     expect(args.prompt).toBeUndefined();
+  });
+
+  it('parses --model with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--model', 'anthropic/claude-sonnet-4-20250514']);
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+  });
+
+  it('parses -m shorthand', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '-m', 'anthropic/claude-sonnet-4-20250514']);
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+  });
+
+  it('returns undefined model when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.model).toBeUndefined();
   });
 });
 

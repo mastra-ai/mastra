@@ -15,6 +15,7 @@ export interface HeadlessArgs {
   timeout?: number;
   format: 'default' | 'json';
   continue_: boolean;
+  model?: string;
 }
 
 /** Returns true if argv contains --prompt or -p, indicating headless mode. */
@@ -27,6 +28,7 @@ const headlessOptions = {
   continue: { type: 'boolean', short: 'c', default: false },
   timeout: { type: 'string' }, // parsed to number after validation
   format: { type: 'string', default: 'default' },
+  model: { type: 'string', short: 'm' },
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
@@ -55,12 +57,14 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   }
 
   const prompt = typeof values.prompt === 'string' ? values.prompt : positionals[0];
+  const model = typeof values.model === 'string' ? values.model : undefined;
 
   return {
     prompt,
     timeout,
     format: format as 'default' | 'json',
     continue_: Boolean(values.continue),
+    model,
   };
 }
 
@@ -78,6 +82,7 @@ Headless (non-interactive) mode options:
   --continue, -c        Resume the most recent thread instead of creating a new one
   --timeout <seconds>   Exit with code 2 if not complete within timeout
   --format <type>       Output format: "default" or "json" (default: "default")
+  --model, -m <id>      Model to use (e.g., "anthropic/claude-sonnet-4-20250514")
 
 Exit codes:
   0  Agent completed successfully
@@ -89,6 +94,7 @@ Examples:
   mastracode --prompt "Add tests" --timeout 300
   mastracode -c --prompt "Continue where you left off"
   mastracode --prompt "Refactor utils" --format json
+  mastracode --prompt "Fix the bug" --model anthropic/claude-sonnet-4-20250514
   echo "task description" | mastracode --prompt -
 
 Run without --prompt for the interactive TUI.
@@ -233,6 +239,28 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     } else if (!emit) {
       process.stderr.write(`[info] No existing threads found, starting new thread\n`);
     }
+  }
+
+  if (args.model) {
+    const available = await harness.listAvailableModels();
+    const match = available.find(m => m.id === args.model);
+    if (!match) {
+      const msg = `Unknown model: "${args.model}"`;
+      if (emit) emit({ type: 'error', error: { message: msg } });
+      else process.stderr.write(`Error: ${msg}\n`);
+      if (timeoutId) clearTimeout(timeoutId);
+      return 1;
+    }
+    if (!match.hasApiKey) {
+      const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+      const msg = `Model "${args.model}" has no API key configured.${keyHint}`;
+      if (emit) emit({ type: 'error', error: { message: msg } });
+      else process.stderr.write(`Error: ${msg}\n`);
+      if (timeoutId) clearTimeout(timeoutId);
+      return 1;
+    }
+    await harness.switchModel({ modelId: args.model });
+    if (!emit) process.stderr.write(`[model] ${args.model}\n`);
   }
 
   await harness.sendMessage({ content: args.prompt });
