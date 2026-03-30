@@ -156,6 +156,13 @@ export class AuthStorage {
   }
 
   /**
+   * Remove a stored API key for a provider.
+   */
+  removeStoredApiKey(provider: string): void {
+    this.remove(`apikey:${provider}`);
+  }
+
+  /**
    * Load all stored API keys into process.env.
    * Called at startup so model resolution can find stored keys.
    * Only sets env vars that aren't already set (env vars take precedence).

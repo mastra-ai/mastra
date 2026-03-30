@@ -1,7 +1,23 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+const mockAuthStorageInstance = vi.hoisted(() => ({
+  hasStoredApiKey: vi.fn().mockReturnValue(false),
+  getStoredApiKey: vi.fn<(provider: string) => string | undefined>().mockReturnValue(undefined),
+  setStoredApiKey: vi.fn(),
+  removeStoredApiKey: vi.fn(),
+}));
+
+vi.mock('../../auth/storage.js', () => ({
+  AuthStorage: class MockAuthStorage {
+    hasStoredApiKey = mockAuthStorageInstance.hasStoredApiKey;
+    getStoredApiKey = mockAuthStorageInstance.getStoredApiKey;
+    setStoredApiKey = mockAuthStorageInstance.setStoredApiKey;
+    removeStoredApiKey = mockAuthStorageInstance.removeStoredApiKey;
+  },
+}));
 
 import {
   getCustomProviderId,
@@ -46,7 +62,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       },
     ],
     llmProxy: { baseUrl: null, headers: {} },
-    memoryGateway: { apiKey: null, baseUrl: null },
+    memoryGateway: { baseUrl: null },
     modelUseCounts: {},
     updateDismissedVersion: null,
     ...overrides,
@@ -331,7 +347,7 @@ describe('llmProxy parsing/persistence', () => {
       const loaded = loadSettings(filePath);
       expect(loaded.llmProxy).toEqual({
         baseUrl: 'https://proxy.example.com',
-        headers: { 'X-Custom': 'value', Authorization: 'Bearer tok' },
+        headers: { 'x-custom': 'value', authorization: 'Bearer tok' },
       });
     });
   });
@@ -365,32 +381,36 @@ describe('llmProxy parsing/persistence', () => {
 });
 
 describe('memoryGateway parsing/persistence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthStorageInstance.hasStoredApiKey.mockReturnValue(false);
+    mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+  });
+
   it('returns defaults when memoryGateway is missing from settings file', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
       const settings = loadSettings(filePath);
-      expect(settings.memoryGateway).toEqual({ apiKey: null, baseUrl: null });
+      expect(settings.memoryGateway).toEqual({ baseUrl: null });
     });
   });
 
-  it('round-trips memoryGateway with apiKey and baseUrl', () => {
+  it('round-trips memoryGateway baseUrl', () => {
     withTempSettingsFile(filePath => {
       const initial = createSettings({
         memoryGateway: {
-          apiKey: 'mg-key-123',
           baseUrl: 'https://custom-memory.example.com/v1',
         },
       });
       saveSettings(initial, filePath);
       const loaded = loadSettings(filePath);
       expect(loaded.memoryGateway).toEqual({
-        apiKey: 'mg-key-123',
         baseUrl: 'https://custom-memory.example.com/v1',
       });
     });
   });
 
-  it('trims apiKey whitespace and normalizes empty to null', () => {
+  it('migrates legacy apiKey from settings.json to AuthStorage', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
@@ -399,12 +419,44 @@ describe('memoryGateway parsing/persistence', () => {
           models: {},
           preferences: {},
           storage: {},
-          memoryGateway: { apiKey: '   ', baseUrl: null },
+          memoryGateway: { apiKey: 'mg-key-123', baseUrl: 'https://custom.example.com' },
         }),
         'utf-8',
       );
+      mockAuthStorageInstance.hasStoredApiKey.mockReturnValue(false);
       const loaded = loadSettings(filePath);
-      expect(loaded.memoryGateway.apiKey).toBeNull();
+
+      // apiKey should have been migrated to AuthStorage
+      expect(mockAuthStorageInstance.setStoredApiKey).toHaveBeenCalledWith('memory-gateway', 'mg-key-123');
+      // apiKey should no longer be in settings
+      expect((loaded.memoryGateway as any).apiKey).toBeUndefined();
+      // baseUrl should be preserved
+      expect(loaded.memoryGateway.baseUrl).toBe('https://custom.example.com');
+
+      // Verify settings.json no longer contains apiKey
+      const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+      expect(raw.memoryGateway.apiKey).toBeUndefined();
+    });
+  });
+
+  it('does not overwrite existing AuthStorage key during migration', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          memoryGateway: { apiKey: 'old-key', baseUrl: null },
+        }),
+        'utf-8',
+      );
+      mockAuthStorageInstance.hasStoredApiKey.mockReturnValue(true);
+      loadSettings(filePath);
+
+      // Should NOT overwrite — AuthStorage already has a key
+      expect(mockAuthStorageInstance.setStoredApiKey).not.toHaveBeenCalled();
     });
   });
 
@@ -417,13 +469,12 @@ describe('memoryGateway parsing/persistence', () => {
           models: {},
           preferences: {},
           storage: {},
-          memoryGateway: { apiKey: 'key', baseUrl: '  ' },
+          memoryGateway: { baseUrl: '  ' },
         }),
         'utf-8',
       );
       const loaded = loadSettings(filePath);
       expect(loaded.memoryGateway.baseUrl).toBeNull();
-      expect(loaded.memoryGateway.apiKey).toBe('key');
     });
   });
 });
@@ -445,7 +496,7 @@ describe('legacy gateway → llmProxy migration', () => {
       const loaded = loadSettings(filePath);
       expect(loaded.llmProxy).toEqual({
         baseUrl: 'https://old-gw.example.com',
-        headers: { 'X-Old': 'val' },
+        headers: { 'x-old': 'val' },
       });
       // stale gateway key should be removed after migration save
       const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
@@ -471,7 +522,7 @@ describe('legacy gateway → llmProxy migration', () => {
       const loaded = loadSettings(filePath);
       expect(loaded.llmProxy).toEqual({
         baseUrl: 'https://new-proxy.example.com',
-        headers: { 'X-New': 'v' },
+        headers: { 'x-new': 'v' },
       });
     });
   });

@@ -3,11 +3,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.hoisted(() => vi.resetModules());
 
-const mockLoadSettings = vi.hoisted(() => vi.fn<() => Record<string, unknown>>());
+const mockGetStoredApiKey = vi.hoisted(() => vi.fn<(provider: string) => string | undefined>());
+
+vi.mock('../../auth/storage.js', () => ({
+  AuthStorage: class MockAuthStorage {
+    getStoredApiKey = mockGetStoredApiKey;
+  },
+}));
 
 vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: mockLoadSettings,
-  MEMORY_GATEWAY_DEFAULTS: { apiKey: null, baseUrl: null },
+  MEMORY_GATEWAY_PROVIDER: 'memory-gateway',
 }));
 
 vi.mock('../../utils/project', () => ({
@@ -56,8 +61,8 @@ describe('getDynamicMemory', () => {
     memoryCalls.length = 0;
   });
 
-  it('returns a memory factory with OM enabled when memoryGateway.apiKey is null', () => {
-    mockLoadSettings.mockReturnValue({ memoryGateway: { apiKey: null, baseUrl: null } });
+  it('returns a memory factory with OM enabled when no memory gateway API key stored', () => {
+    mockGetStoredApiKey.mockReturnValue(undefined);
 
     const factory = getDynamicMemory({} as any);
     expect(factory).toBeDefined();
@@ -69,15 +74,15 @@ describe('getDynamicMemory', () => {
     expect(omConfig.enabled).toBe(true);
   });
 
-  it('returns undefined when memoryGateway.apiKey is set (gateway handles everything)', () => {
-    mockLoadSettings.mockReturnValue({ memoryGateway: { apiKey: 'mg-key-abc', baseUrl: null } });
+  it('returns undefined when memory gateway API key is stored (gateway handles everything)', () => {
+    mockGetStoredApiKey.mockReturnValue('mg-key-abc');
 
     const factory = getDynamicMemory({} as any);
     expect(factory).toBeUndefined();
   });
 
-  it('returns a memory factory when memoryGateway is missing from settings (defaults)', () => {
-    mockLoadSettings.mockReturnValue({});
+  it('returns a memory factory when memory gateway key is not present (defaults)', () => {
+    mockGetStoredApiKey.mockReturnValue(undefined);
 
     const factory = getDynamicMemory({} as any);
     expect(factory).toBeDefined();

@@ -10,6 +10,7 @@ import {
   LLM_PROXY_DEFAULTS,
   MEMORY_GATEWAY_DEFAULTS,
   MEMORY_GATEWAY_DEFAULT_URL,
+  MEMORY_GATEWAY_PROVIDER,
   getCustomProviderId,
   loadSettings,
 } from '../onboarding/settings.js';
@@ -148,20 +149,20 @@ export function resolveModel(
 
   // Memory gateway supersedes llm-proxy when enabled
   const mg: MemoryGatewaySettings = settings.memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
-  const mgEnabled = !!mg.apiKey;
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const mgEnabled = !!mgApiKey;
 
   let effectiveBaseUrl: string | undefined;
   let effectiveProxyHeaders: ModelRequestHeaders | undefined;
 
   if (mgEnabled) {
     effectiveBaseUrl = mg.baseUrl ?? MEMORY_GATEWAY_DEFAULT_URL;
-    effectiveProxyHeaders = { 'X-Mastra-Authorization': `Bearer ${mg.apiKey}` };
+    effectiveProxyHeaders = { 'X-Mastra-Authorization': `Bearer ${mgApiKey}` };
   } else {
     const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
     effectiveBaseUrl = proxy.baseUrl ?? undefined;
     // Only forward proxy headers when a proxy base URL is configured
-    effectiveProxyHeaders =
-      effectiveBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
+    effectiveProxyHeaders = effectiveBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
   }
 
   // Merge effective proxy headers → harness headers (harness wins on conflict)
@@ -176,11 +177,9 @@ export function resolveModel(
       : undefined;
 
   if (customProvider) {
-    // Precedence: proxy < customProvider < harness
+    // Custom providers use their own URL — don't leak proxy/gateway headers
     const customHeaders: ModelRequestHeaders | undefined =
-      effectiveProxyHeaders || customProvider.headers || harnessHeaders
-        ? { ...effectiveProxyHeaders, ...customProvider.headers, ...harnessHeaders }
-        : undefined;
+      customProvider.headers || harnessHeaders ? { ...customProvider.headers, ...harnessHeaders } : undefined;
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
       url: customProvider.url,

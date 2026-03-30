@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { AuthStorage } from '../auth/storage.js';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -72,16 +73,16 @@ export const LLM_PROXY_DEFAULTS: LlmProxySettings = {
 
 /** Mastra cloud memory gateway configuration. */
 export interface MemoryGatewaySettings {
-  /** API key for the Mastra memory gateway service. */
-  apiKey: string | null;
   /** Base URL override — when set, overrides the default Mastra platform URL. */
   baseUrl: string | null;
 }
 
 export const MEMORY_GATEWAY_DEFAULTS: MemoryGatewaySettings = {
-  apiKey: null,
   baseUrl: null,
 };
+
+/** Provider key used to store the memory gateway API key in AuthStorage. */
+export const MEMORY_GATEWAY_PROVIDER = 'memory-gateway';
 
 export const MEMORY_GATEWAY_DEFAULT_URL = 'https://server.mastra.ai/v1';
 
@@ -284,7 +285,10 @@ function parseHeaders(raw: unknown): Record<string, string> | undefined {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (typeof value === 'string') {
-      result[key] = value;
+      const normalizedKey = key.trim().toLowerCase();
+      if (normalizedKey.length > 0) {
+        result[normalizedKey] = value;
+      }
     }
   }
   return Object.keys(result).length > 0 ? result : undefined;
@@ -304,10 +308,21 @@ function parseMemoryGateway(raw: unknown): MemoryGatewaySettings {
   if (!raw || typeof raw !== 'object') return { ...MEMORY_GATEWAY_DEFAULTS };
   const candidate = raw as Record<string, unknown>;
   return {
-    apiKey: typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : null,
     baseUrl:
       typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
   };
+}
+
+/**
+ * Extract a legacy apiKey from the raw memoryGateway object in settings.json.
+ * Returns the key if present, undefined otherwise.
+ */
+function extractLegacyMemoryGatewayApiKey(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const candidate = raw as Record<string, unknown>;
+  return typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0
+    ? candidate.apiKey.trim()
+    : undefined;
 }
 
 /**
@@ -472,8 +487,21 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
-    // Migrate legacy gateway → llmProxy (remove stale key from persisted data)
+    // Migrate legacy memoryGateway.apiKey → AuthStorage secret store
     let settingsChanged = false;
+    const legacyMgApiKey = extractLegacyMemoryGatewayApiKey(raw.memoryGateway);
+    if (legacyMgApiKey) {
+      const authStore = new AuthStorage();
+      if (!authStore.hasStoredApiKey(MEMORY_GATEWAY_PROVIDER)) {
+        authStore.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, legacyMgApiKey);
+      }
+      // Remove from persisted settings — only baseUrl remains
+      delete (raw.memoryGateway as Record<string, unknown>)?.apiKey;
+      settings.memoryGateway = parseMemoryGateway(raw.memoryGateway);
+      settingsChanged = true;
+    }
+
+    // Migrate legacy gateway → llmProxy (remove stale key from persisted data)
     if (raw.gateway && !raw.llmProxy) {
       delete (settings as any).gateway;
       settingsChanged = true;

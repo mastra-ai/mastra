@@ -81,12 +81,19 @@ function isValidUrl(value: string): boolean {
   }
 }
 
+// RFC 7230 tchar: ALPHA / DIGIT / "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+const VALID_HEADER_NAME = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
+// Reject control chars (0x00-0x1F, 0x7F) — specifically CR/LF which enable header injection
+const INVALID_HEADER_VALUE = /[\x00-\x1f\x7f]/;
+
 function parseHeadersJson(raw: string): Record<string, string> | null {
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof k !== 'string' || typeof v !== 'string') return null;
+      if (!VALID_HEADER_NAME.test(k)) return null;
+      if (INVALID_HEADER_VALUE.test(v)) return null;
     }
     return parsed as Record<string, string>;
   } catch {
@@ -151,7 +158,7 @@ export async function handleLlmProxyCommand(ctx: SlashCommandContext): Promise<v
 
     const parsed = parseHeadersJson(raw);
     if (!parsed) {
-      ctx.showError('Invalid JSON. Must be a JSON object of string key-value pairs.');
+      ctx.showError('Invalid headers. Must be a JSON object with valid HTTP header names and values.');
       return;
     }
 

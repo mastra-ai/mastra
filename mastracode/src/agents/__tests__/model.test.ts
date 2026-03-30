@@ -11,6 +11,7 @@ const mockAuthStorageInstance = vi.hoisted(() => ({
   reload: vi.fn(),
   get: vi.fn(),
   isLoggedIn: vi.fn().mockReturnValue(false),
+  getStoredApiKey: vi.fn<(provider: string) => string | undefined>().mockReturnValue(undefined),
 }));
 
 vi.mock('../../auth/storage.js', () => {
@@ -19,6 +20,7 @@ vi.mock('../../auth/storage.js', () => {
       reload = mockAuthStorageInstance.reload;
       get = mockAuthStorageInstance.get;
       isLoggedIn = mockAuthStorageInstance.isLoggedIn;
+      getStoredApiKey = mockAuthStorageInstance.getStoredApiKey;
     },
   };
 });
@@ -79,7 +81,7 @@ const mockLoadSettings = vi.hoisted(() =>
     () => {
       customProviders: Array<{ name: string; url: string; apiKey?: string; headers?: Record<string, string> }>;
       llmProxy?: { baseUrl: string | null; headers: Record<string, string> };
-      memoryGateway?: { apiKey: string | null; baseUrl: string | null };
+      memoryGateway?: { baseUrl: string | null };
     }
   >(() => ({
     customProviders: [],
@@ -94,8 +96,9 @@ vi.mock('../../onboarding/settings.js', () => ({
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
   LLM_PROXY_DEFAULTS: { baseUrl: null, headers: {} },
-  MEMORY_GATEWAY_DEFAULTS: { apiKey: null, baseUrl: null },
+  MEMORY_GATEWAY_DEFAULTS: { baseUrl: null },
   MEMORY_GATEWAY_DEFAULT_URL: 'https://server.mastra.ai/v1',
+  MEMORY_GATEWAY_PROVIDER: 'memory-gateway',
 }));
 
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
@@ -117,6 +120,7 @@ describe('resolveModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadSettings.mockReturnValue({ customProviders: [] });
+    mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
   });
@@ -299,6 +303,48 @@ describe('resolveModel', () => {
         'x-resource-id': 'resource-456',
       });
     });
+
+    it('does not leak proxy headers to custom provider URLs', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+        llmProxy: {
+          baseUrl: 'https://proxy.corp.com',
+          headers: { 'X-Proxy-Auth': 'token-789' },
+        },
+      });
+
+      const result = resolveModel('acme/reasoner-v1') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.headers).toBeUndefined();
+    });
+
+    it('does not leak memory gateway headers to custom provider URLs', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+        memoryGateway: { baseUrl: null },
+      });
+
+      const result = resolveModel('acme/reasoner-v1') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.headers).toBeUndefined();
+    });
   });
 
   describe('LLM proxy configuration', () => {
@@ -434,10 +480,11 @@ describe('resolveModel', () => {
   });
 
   describe('memory gateway', () => {
-    it('uses memory gateway URL and X-Mastra-Authorization when apiKey is set', () => {
+    it('uses memory gateway URL and X-Mastra-Authorization when apiKey is stored', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
@@ -450,9 +497,10 @@ describe('resolveModel', () => {
     });
 
     it('uses custom memory gateway baseUrl when set', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: 'https://custom-gw.example.com' },
+        memoryGateway: { baseUrl: 'https://custom-gw.example.com' },
       });
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
@@ -464,10 +512,11 @@ describe('resolveModel', () => {
     });
 
     it('supersedes llm-proxy when both are configured', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         llmProxy: { baseUrl: 'https://proxy.corp.com', headers: { 'X-Proxy': 'yes' } },
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
@@ -480,9 +529,10 @@ describe('resolveModel', () => {
     });
 
     it('merges X-Mastra-Authorization with harness headers', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
 
       const result = resolveModel('google/gemini-2.0-flash', {
@@ -496,9 +546,10 @@ describe('resolveModel', () => {
     });
 
     it('passes memory gateway URL to Anthropic OAuth provider', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
       mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth' });
 
@@ -511,9 +562,10 @@ describe('resolveModel', () => {
     });
 
     it('passes memory gateway URL to OpenAI OAuth provider', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_test123');
       mockLoadSettings.mockReturnValue({
         customProviders: [],
-        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
       mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth' });
 
@@ -526,11 +578,12 @@ describe('resolveModel', () => {
       });
     });
 
-    it('falls back to llm-proxy when memory gateway apiKey is null', () => {
+    it('falls back to llm-proxy when no memory gateway apiKey is stored', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         llmProxy: { baseUrl: 'https://proxy.corp.com', headers: { 'X-Proxy': 'yes' } },
-        memoryGateway: { apiKey: null, baseUrl: null },
+        memoryGateway: { baseUrl: null },
       });
 
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;

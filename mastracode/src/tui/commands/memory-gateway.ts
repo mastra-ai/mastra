@@ -1,7 +1,9 @@
 import { Spacer } from '@mariozechner/pi-tui';
+import { AuthStorage } from '../../auth/storage.js';
 import {
   MEMORY_GATEWAY_DEFAULTS,
   MEMORY_GATEWAY_DEFAULT_URL,
+  MEMORY_GATEWAY_PROVIDER,
   loadSettings,
   saveSettings,
 } from '../../onboarding/settings.js';
@@ -94,13 +96,15 @@ function maskApiKey(key: string): string {
 export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Promise<void> {
   const settings = loadSettings();
   const mg = settings.memoryGateway ?? { ...MEMORY_GATEWAY_DEFAULTS };
+  const authStore = new AuthStorage();
 
-  const hasApiKey = !!mg.apiKey;
+  const storedApiKey = authStore.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const hasApiKey = !!storedApiKey;
   const baseUrlDisplay = mg.baseUrl ?? `(default: ${MEMORY_GATEWAY_DEFAULT_URL})`;
 
   const statusParts: string[] = [];
   if (hasApiKey) {
-    statusParts.push(`Key: ${maskApiKey(mg.apiKey!)}`);
+    statusParts.push(`Key: ${maskApiKey(storedApiKey!)}`);
     statusParts.push(baseUrlDisplay);
   }
   const status = hasApiKey ? statusParts.join(' · ') : 'Not configured';
@@ -109,7 +113,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     {
       label: 'Set API key',
       value: 'apikey',
-      description: hasApiKey ? maskApiKey(mg.apiKey!) : 'Enable Mastra cloud memory',
+      description: hasApiKey ? maskApiKey(storedApiKey!) : 'Enable Mastra cloud memory',
     },
     {
       label: 'Set base URL',
@@ -125,12 +129,11 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     const key = await askText(ctx, 'Memory gateway API key');
     if (key === null) return; // cancelled
 
-    settings.memoryGateway = { ...mg, apiKey: key || null };
-    saveSettings(settings);
-
     if (key) {
+      authStore.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, key);
       ctx.showInfo(`Memory gateway API key set: ${maskApiKey(key)}`);
     } else {
+      authStore.removeStoredApiKey(MEMORY_GATEWAY_PROVIDER);
       ctx.showInfo('Memory gateway API key cleared.');
     }
   } else if (action === 'url') {
@@ -156,6 +159,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
       ctx.showInfo(`Memory gateway base URL reset to default (${MEMORY_GATEWAY_DEFAULT_URL}).`);
     }
   } else if (action === 'clear') {
+    authStore.removeStoredApiKey(MEMORY_GATEWAY_PROVIDER);
     settings.memoryGateway = { ...MEMORY_GATEWAY_DEFAULTS };
     saveSettings(settings);
     ctx.showInfo('Memory gateway configuration cleared.');

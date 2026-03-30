@@ -4,8 +4,9 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
+import { AuthStorage } from '../auth/storage.js';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
-import { MEMORY_GATEWAY_DEFAULTS, loadSettings } from '../onboarding/settings.js';
+import { MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
@@ -51,12 +52,10 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
  * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
-  // Read once at factory creation — avoids synchronous file I/O on every request
-  const mg = loadSettings().memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
-
   // When memory gateway is enabled, the gateway handles all message persistence
   // and observational memory server-side — skip local Memory entirely.
-  if (mg.apiKey) return undefined;
+  const mgApiKey = new AuthStorage().getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  if (mgApiKey) return undefined;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
