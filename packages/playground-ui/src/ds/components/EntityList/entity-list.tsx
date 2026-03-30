@@ -11,6 +11,7 @@ export const EntityList = Object.assign(EntityListRoot, {
   TopCell: EntityListTopCell,
   TopCellWithTooltip: EntityListTopCellWithTooltip,
   TopCellSmart: EntityListTopCellSmart,
+  Rows: EntityListRows,
   Row: EntityListRow,
   RowLink: EntityListRowLink,
   Cell: EntityListCell,

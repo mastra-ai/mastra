@@ -2,8 +2,6 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   contextFields,
-  observabilitySignalFilterFields,
-  tagsField,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
@@ -51,6 +49,10 @@ export const metricRecordSchema = z
 
     // Context (entity hierarchy, identity, correlation, deployment, experimentation)
     ...contextFields,
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().nullish().describe('Execution source'),
 
     // Canonical costing fields
     provider: providerField.nullish(),
@@ -60,9 +62,6 @@ export const metricRecordSchema = z
     estimatedCost: estimatedCostField.nullish(),
     costUnit: costUnitField.nullish(),
     costMetadata: costMetadField.nullish(),
-
-    // Filtering
-    tags: tagsField.nullish(),
 
     // User-defined labels used for filtering
     labels: labelsField.default({}),
@@ -146,10 +145,14 @@ export type MetricsAggregation = z.infer<typeof metricsAggregationSchema>;
 export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
-    ...observabilitySignalFilterFields,
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),
+
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().optional().describe('Filter by execution source'),
 
     // Canonical costing filters
     provider: providerField.optional(),

@@ -10,6 +10,23 @@ function persistOmModelOverride(modelId: string): void {
   saveSettings(settings);
 }
 
+function persistOmThresholds({
+  observationThreshold,
+  reflectionThreshold,
+}: {
+  observationThreshold?: number;
+  reflectionThreshold?: number;
+}): void {
+  const settings = loadSettings();
+  if (observationThreshold !== undefined) {
+    settings.models.omObservationThreshold = observationThreshold;
+  }
+  if (reflectionThreshold !== undefined) {
+    settings.models.omReflectionThreshold = reflectionThreshold;
+  }
+  saveSettings(settings);
+}
+
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.harness.listAvailableModels();
   const modelById = new Map(availableModels.map(model => [model.id, model] as const));
@@ -47,11 +64,15 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
           persistOmModelOverride(modelId);
           ctx.showInfo(`Reflector model → ${modelId}`);
         },
-        onObservationThresholdChange: value => {
-          ctx.state.harness.setState({ observationThreshold: value } as any);
+        onObservationThresholdChange: async value => {
+          await ctx.state.harness.setState({ observationThreshold: value } as any);
+          await ctx.state.harness.setThreadSetting({ key: 'observationThreshold', value });
+          persistOmThresholds({ observationThreshold: value });
         },
-        onReflectionThresholdChange: value => {
-          ctx.state.harness.setState({ reflectionThreshold: value } as any);
+        onReflectionThresholdChange: async value => {
+          await ctx.state.harness.setState({ reflectionThreshold: value } as any);
+          await ctx.state.harness.setThreadSetting({ key: 'reflectionThreshold', value });
+          persistOmThresholds({ reflectionThreshold: value });
         },
         onClose: () => {
           ctx.state.ui.hideOverlay();

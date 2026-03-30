@@ -108,7 +108,7 @@ export function SkillFolder({
                 <img
                   src={selectedFileContent}
                   alt={selectedFileName}
-                  className="max-w-full max-h-[300px] rounded-md object-contain"
+                  className="max-w-full max-h-dropdown-max-height rounded-md object-contain"
                 />
               </div>
             ) : (
