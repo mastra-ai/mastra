@@ -88,7 +88,6 @@ export const HEAD = handle(app);
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
-      themeToggle: `'false'`,
       experimentalUI: `'false'`,
     });
 

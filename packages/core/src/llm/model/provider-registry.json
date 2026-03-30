@@ -4102,7 +4102,7 @@
     },
     "cloudflare-workers-ai": {
       "url": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-      "apiKeyEnvVar": "CLOUDFLARE_ACCOUNT_ID",
+      "apiKeyEnvVar": "CLOUDFLARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Cloudflare Workers AI",
       "models": [
