@@ -1,6 +1,6 @@
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
-import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 import { HTTPException } from '../http-exception';
 import {
@@ -20,47 +20,28 @@ import { handleError } from './error';
 import { validateBody } from './utils';
 
 /**
- * Resolves a schema value that may be a lazy function (as used by AI SDK provider tools).
- * Provider tools use lazy schemas: `inputSchema` is a function that returns an AI SDK Schema
- * object with `{ jsonSchema, validate, _type }`.
+ * Resolves a schema that may be a lazy function (e.g. AI SDK provider tools).
+ * Recursively resolves until a non-function value is returned.
  */
-function resolveSchema(schema: unknown): unknown {
+function resolveLazySchema(schema: unknown): unknown {
   if (typeof schema === 'function') {
-    try {
-      return schema();
-    } catch {
-      return undefined;
-    }
+    return resolveLazySchema(schema());
   }
   return schema;
 }
 
-/**
- * Serializes a schema for API responses, handling StandardSchemaWithJSON (e.g. MCP tools),
- * lazy AI SDK schemas, and Zod schemas.
- */
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
+}
+
 function serializeSchema(schema: unknown): string | undefined {
-  if (!schema) return undefined;
-
-  // StandardSchemaWithJSON (e.g. MCP tools, JSON Schema-backed tools, workspace tools)
-  if (isStandardSchemaWithJSON(schema)) {
-    return stringify(standardSchemaToJSONSchema(schema));
-  }
-
-  // Lazy AI SDK schemas (provider-defined tools)
-  if (typeof schema === 'function') {
-    try {
-      const resolved = schema();
-      if (resolved && typeof resolved === 'object' && 'jsonSchema' in resolved) {
-        return stringify(resolved.jsonSchema);
-      }
-    } catch {
-      return undefined;
-    }
-  }
-
-  // Zod schemas (legacy — schemas not yet wrapped in StandardSchemaWithJSON)
-  return stringify(zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0]));
+  const jsonSchema = schemaToJsonSchema(resolveLazySchema(schema) as PublicSchema<unknown> | undefined);
+  if (jsonSchema === undefined) return undefined;
+  return stringify(jsonSchema);
 }
 
 /**
@@ -72,8 +53,8 @@ function serializeTool(tool: any): any {
   // have lazy inputSchema functions that return AI SDK Schema objects, not Zod schemas.
   // We resolve them and use the jsonSchema property directly.
   if (isProviderDefinedTool(tool)) {
-    const resolvedInput = resolveSchema(tool.inputSchema);
-    const resolvedOutput = resolveSchema(tool.outputSchema);
+    const resolvedInput = resolveLazySchema(tool.inputSchema);
+    const resolvedOutput = resolveLazySchema(tool.outputSchema);
     return {
       ...tool,
       inputSchema:

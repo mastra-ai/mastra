@@ -7,6 +7,7 @@ import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { getSerializedAgentTools } from './agents';
 import { createTestServerContext } from './test-utils';
 import {
   LIST_TOOLS_ROUTE,
@@ -407,6 +408,27 @@ describe('Tools Handlers', () => {
         });
         expect(result).toHaveProperty('id', 'mcp-calculator');
         expect(result.inputSchema).toBeDefined();
+      });
+    });
+
+    describe('getSerializedAgentTools', () => {
+      it('should serialize agent tools with JSON Schema inputSchema without crashing', async () => {
+        const result = await getSerializedAgentTools({
+          [jsonSchemaTool.id]: jsonSchemaTool as any,
+        });
+        expect(result).toHaveProperty('mcp-calculator');
+        expect(result['mcp-calculator']).toHaveProperty('id', 'mcp-calculator');
+        expect(result['mcp-calculator'].inputSchema).toBeDefined();
+      });
+
+      it('should serialize a mix of Zod and JSON Schema agent tools', async () => {
+        const result = await getSerializedAgentTools({
+          [mockTool.id]: mockTool as any,
+          [jsonSchemaTool.id]: jsonSchemaTool as any,
+        });
+        expect(result).toHaveProperty(mockTool.id);
+        expect(result).toHaveProperty('mcp-calculator');
+        expect(result['mcp-calculator'].inputSchema).toBeDefined();
       });
     });
   });
