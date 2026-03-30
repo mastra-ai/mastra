@@ -5,7 +5,8 @@
  * Each thread can have its own cloud browser session with CDP access.
  */
 
-import { ThreadManager, type ThreadSession, type ThreadManagerConfig } from '@mastra/core/browser';
+import { ThreadManager   } from '@mastra/core/browser';
+import type {ThreadSession, ThreadManagerConfig} from '@mastra/core/browser';
 import { BrowserUse } from 'browser-use-sdk';
 import type { BrowserConfig, BrowserSessionInfo } from './types';
 

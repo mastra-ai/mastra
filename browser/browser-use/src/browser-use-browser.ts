@@ -229,7 +229,6 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
       if (!existingSession) {
         // Create a new cloud session for this thread
-        this.logger.debug?.(`Creating cloud session for thread: ${threadId}`);
         const sessionInfo = await this.threadManager.getManagerForThread(threadId);
         this.sessionInfo = sessionInfo;
 
@@ -297,6 +296,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Connect to a browser via CDP WebSocket URL.
    */
   private async connectToCdp(cdpUrl: string): Promise<void> {
+    console.log(`[BrowserUseBrowser] connectToCdp: input URL = ${cdpUrl}`);
     // Get page-level CDP URL (not browser-level)
     const pageCdpUrl = await this.getPageCdpUrl(cdpUrl);
 
@@ -304,7 +304,9 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
     await this.cdpClient.connect(pageCdpUrl);
 
     // Handle disconnection
-    this.cdpClient.on('close', () => this.handleDisconnect());
+    this.cdpClient.on('close', () => {
+      this.handleDisconnect();
+    });
 
     // Fetch initial URL
     await this.getCurrentUrl();
@@ -314,12 +316,22 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
   /**
    * Convert a browser-level CDP URL to a page-level CDP URL.
+   * Browser Use returns https:// URLs that need to be converted to wss://
+   * and we need to discover the actual page target via /json endpoint.
    */
   private async getPageCdpUrl(browserCdpUrl: string): Promise<string> {
-    // Extract host and port from the browser CDP URL
-    const match = browserCdpUrl.match(/^wss?:\/\/([^/]+)/);
+    // Convert http(s):// to ws(s)://
+    let wsUrl = browserCdpUrl;
+    if (browserCdpUrl.startsWith('https://')) {
+      wsUrl = browserCdpUrl.replace('https://', 'wss://');
+    } else if (browserCdpUrl.startsWith('http://')) {
+      wsUrl = browserCdpUrl.replace('http://', 'ws://');
+    }
+
+    // Extract host from the URL to query /json endpoint
+    const match = wsUrl.match(/^wss?:\/\/([^/]+)/);
     if (!match) {
-      return browserCdpUrl;
+      return wsUrl;
     }
 
     const hostPort = match[1];
@@ -328,7 +340,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
     try {
       const response = await fetch(jsonUrl);
       if (!response.ok) {
-        return browserCdpUrl;
+        return wsUrl;
       }
 
       const targets = (await response.json()) as Array<{
@@ -337,7 +349,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
         webSocketDebuggerUrl?: string;
       }>;
 
-      // Find a page target
+      // Find a page target (prefer non-chrome:// pages)
       const pageTargets = targets.filter(t => t.type === 'page');
       const regularPage = pageTargets.find(t => !t.url.startsWith('chrome://'));
       const target = regularPage || pageTargets[0];
@@ -415,6 +427,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
     // For 'browser' isolation, get or create session for thread
     const sessionInfo = this.threadManager.getExistingSessionForThread(effectiveThreadId);
+
     if (!sessionInfo) {
       // Create session if needed
       await this.threadManager.getManagerForThread(effectiveThreadId);
@@ -422,11 +435,16 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
       if (!newSessionInfo?.cdpUrl) {
         throw new Error(`No CDP URL for thread: ${effectiveThreadId}`);
       }
-      // TODO: Connect CDP client for this thread (would need per-thread clients)
-      throw new Error('Per-thread CDP connections not yet implemented');
+      // Connect to CDP for this session
+      if (!this.cdpClient?.isConnected) {
+        await this.connectToCdp(newSessionInfo.cdpUrl);
+      }
+    } else if (!this.cdpClient?.isConnected && sessionInfo.cdpUrl) {
+      // Session exists but CDP not connected - connect now
+      await this.connectToCdp(sessionInfo.cdpUrl);
     }
 
-    // For now, use the shared client (simplified implementation)
+    // Use the shared client
     if (!this.cdpClient?.isConnected) {
       throw new Error('Not connected to browser');
     }
