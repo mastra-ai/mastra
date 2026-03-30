@@ -26,7 +26,7 @@ export function Processors() {
           <MainHeader.Column className="flex justify-end gap-2">
             <ButtonWithTooltip
               as="a"
-              href="https://mastra.ai/docs/agents/processors"
+              href="https://mastra.ai/en/docs/agents/processors"
               target="_blank"
               rel="noopener noreferrer"
               tooltipContent="Go to Processors documentation"
