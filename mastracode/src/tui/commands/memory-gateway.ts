@@ -22,7 +22,7 @@ function askText(
         onSubmit: answer => {
           ctx.state.activeInlineQuestion = undefined;
           const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
+          resolve(trimmed.length > 0 ? trimmed : allowEmptyInput ? '' : null);
         },
         onCancel: () => {
           ctx.state.activeInlineQuestion = undefined;
@@ -134,7 +134,12 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
       ctx.showInfo('Memory gateway API key cleared.');
     }
   } else if (action === 'url') {
-    const url = await askText(ctx, `Memory gateway base URL (default: ${MEMORY_GATEWAY_DEFAULT_URL})`, mg.baseUrl ?? undefined, true);
+    const url = await askText(
+      ctx,
+      `Memory gateway base URL (default: ${MEMORY_GATEWAY_DEFAULT_URL})`,
+      mg.baseUrl ?? undefined,
+      true,
+    );
     if (url === null) return; // cancelled
 
     if (url && !isValidUrl(url)) {

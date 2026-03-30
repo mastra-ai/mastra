@@ -17,7 +17,7 @@ function askText(
         onSubmit: answer => {
           ctx.state.activeInlineQuestion = undefined;
           const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
+          resolve(trimmed.length > 0 ? trimmed : allowEmptyInput ? '' : null);
         },
         onCancel: () => {
           ctx.state.activeInlineQuestion = undefined;

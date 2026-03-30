@@ -127,9 +127,10 @@ async function askOptionalText(
   ctx: SlashCommandContext,
   question: string,
   defaultValue?: string,
-): Promise<string | undefined> {
+): Promise<string | undefined | null> {
   const answer = await askText(ctx, `${question} (leave blank to skip)`, defaultValue, true);
-  return answer || undefined;
+  if (answer === null) return null; // cancelled — caller should preserve existing
+  return answer || undefined; // '' → undefined (cleared), 'value' → 'value'
 }
 
 function askSelect(
@@ -182,7 +183,9 @@ async function createProviderFlow(ctx: SlashCommandContext): Promise<void> {
     return;
   }
 
-  const apiKey = await askOptionalText(ctx, 'API key');
+  const apiKeyResult = await askOptionalText(ctx, 'API key');
+  if (apiKeyResult === null) return; // cancelled
+  const apiKey = apiKeyResult;
 
   let headers: Record<string, string> | undefined;
   const headersRaw = await askText(ctx, 'Custom headers (JSON, leave blank to skip)', undefined, true);
@@ -228,7 +231,8 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
     return;
   }
 
-  const apiKey = await askOptionalText(ctx, 'API key', provider.apiKey);
+  const apiKeyResult = await askOptionalText(ctx, 'API key', provider.apiKey);
+  const apiKey = apiKeyResult === null ? provider.apiKey : apiKeyResult; // null = cancelled, preserve existing
 
   let headers: Record<string, string> | undefined = provider.headers;
   const headersRaw = await askText(

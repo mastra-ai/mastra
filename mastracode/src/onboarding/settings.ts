@@ -304,8 +304,7 @@ function parseMemoryGateway(raw: unknown): MemoryGatewaySettings {
   if (!raw || typeof raw !== 'object') return { ...MEMORY_GATEWAY_DEFAULTS };
   const candidate = raw as Record<string, unknown>;
   return {
-    apiKey:
-      typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : null,
+    apiKey: typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : null,
     baseUrl:
       typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
   };

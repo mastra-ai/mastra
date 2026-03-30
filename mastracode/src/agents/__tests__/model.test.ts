@@ -1,3 +1,4 @@
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -94,7 +95,6 @@ vi.mock('../../onboarding/settings.js', () => ({
   LLM_PROXY_DEFAULTS: { baseUrl: null, headers: {} },
 }));
 
-import { createAnthropic } from '@ai-sdk/anthropic';
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
 import { openaiCodexProvider } from '../../providers/openai-codex.js';
 import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
@@ -365,7 +365,7 @@ describe('resolveModel', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         llmProxy: {
-          baseUrl: null,
+          baseUrl: 'https://proxy.corp.com',
           headers: { 'x-thread-id': 'proxy-thread', 'X-Proxy-Auth': 'token-789' },
         },
       });
@@ -376,6 +376,24 @@ describe('resolveModel', () => {
 
       expect(result.headers).toEqual({
         'X-Proxy-Auth': 'token-789',
+        'x-thread-id': 'harness-thread',
+      });
+    });
+
+    it('ignores proxy headers when proxy baseUrl is null', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: null,
+          headers: { 'X-Proxy-Auth': 'token-789' },
+        },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash', {
+        requestContext: makeRequestContext({ threadId: 'harness-thread' }),
+      }) as Record<string, unknown>;
+
+      expect(result.headers).toEqual({
         'x-thread-id': 'harness-thread',
       });
     });

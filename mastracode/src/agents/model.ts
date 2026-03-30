@@ -140,8 +140,9 @@ export function resolveModel(
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
   const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
-  const proxyHeaders = Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
   const proxyBaseUrl = proxy.baseUrl ?? undefined;
+  // Only forward proxy headers when a proxy base URL is configured
+  const proxyHeaders = proxyBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
 
   // Merge proxy headers → harness headers (harness wins on conflict)
   const headers: ModelRequestHeaders | undefined =

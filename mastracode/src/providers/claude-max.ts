@@ -175,10 +175,11 @@ export function opencodeClaudeMaxProvider(
       throw new Error('Not logged in to Anthropic. Run /login first.');
     }
 
-    // Make request with OAuth headers (proxy headers are lowest priority)
+    // Merge headers: init (SDK) < proxy < OAuth (highest priority)
     return fetch(url, {
       ...init,
       headers: {
+        ...(init?.headers as Record<string, string> | undefined),
         ...extraHeaders,
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':
