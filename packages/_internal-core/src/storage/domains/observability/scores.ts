@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   experimentIdField,
+  contextFields,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
@@ -15,7 +16,7 @@ import {
 
 const scorerIdField = z.string().describe('Identifier of the scorer (e.g., relevance, accuracy)');
 const scorerVersionField = z.string().describe('Version of the scorer');
-const sourceField = z.string().describe('Source of the score (e.g., manual, automated, experiment)');
+const scoreSourceField = z.string().describe('Source of the score (e.g., manual, automated, experiment)');
 const scoreValueField = z.number().describe('Score value (range defined by scorer)');
 const scoreReasonField = z.string().describe('Explanation for the score');
 
@@ -38,10 +39,16 @@ export const scoreRecordSchema = z
     // Score data
     scorerId: scorerIdField,
     scorerVersion: scorerVersionField.nullish(),
-    source: sourceField.nullish(),
+    scoreSource: scoreSourceField.nullish(),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
+    source: scoreSourceField.nullish(),
     score: scoreValueField,
     reason: scoreReasonField.nullish(),
-    experimentId: experimentIdField.nullish(),
+
+    // Context (entity hierarchy, identity, correlation, deployment, experimentation)
+    ...contextFields,
 
     /** Trace ID of the scoring run (links to trace that generated this score) */
     scoreTraceId: z.string().nullish().describe('Trace ID of the scoring run for debugging score generation'),
@@ -66,7 +73,11 @@ export const scoreInputSchema = z
   .object({
     scorerId: scorerIdField,
     scorerVersion: scorerVersionField.optional(),
-    source: sourceField.optional(),
+    scoreSource: scoreSourceField.optional(),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
+    source: scoreSourceField.optional(),
     score: scoreValueField,
     reason: scoreReasonField.optional(),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional scorer-specific metadata'),
@@ -138,6 +149,11 @@ export const scoresFilterSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Filter by scorer ID(s)'),
+    scoreSource: scoreSourceField.optional().describe('Filter by score source'),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
+    source: scoreSourceField.optional().describe('Filter by score source'),
   })
   .describe('Filters for querying scores');
 

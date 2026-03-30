@@ -221,7 +221,7 @@ export function PromptBlockEditSidebar({
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="flex-shrink-0 p-4">
+      <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
             <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">

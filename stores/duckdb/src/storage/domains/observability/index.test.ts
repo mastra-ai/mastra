@@ -265,6 +265,117 @@ describe('ObservabilityStorageDuckDB', () => {
     });
   });
 
+  it('adds missing score and feedback columns for legacy tables during init', async () => {
+    const legacyStore = new DuckDBStore({ path: ':memory:' });
+
+    await legacyStore.db.execute(`
+      CREATE TABLE score_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR NOT NULL,
+        spanId VARCHAR,
+        experimentId VARCHAR,
+        scoreTraceId VARCHAR,
+        scorerId VARCHAR NOT NULL,
+        scorerVersion VARCHAR,
+        source VARCHAR,
+        score DOUBLE NOT NULL,
+        reason VARCHAR,
+        metadata JSON
+      )
+    `);
+
+    await legacyStore.db.execute(`
+      CREATE TABLE feedback_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR NOT NULL,
+        spanId VARCHAR,
+        experimentId VARCHAR,
+        userId VARCHAR,
+        source VARCHAR,
+        feedbackType VARCHAR NOT NULL,
+        value VARCHAR NOT NULL,
+        comment VARCHAR,
+        metadata JSON
+      )
+    `);
+
+    await legacyStore.observability.init();
+
+    await legacyStore.observability.batchCreateScores({
+      scores: [
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'legacy-trace',
+          spanId: 'legacy-span',
+          scorerId: 'legacy-scorer',
+          scoreSource: 'manual',
+          score: 0.7,
+          entityType: EntityType.AGENT,
+          entityName: 'legacy-agent',
+          executionSource: 'cloud',
+          scope: { phase: 'test' },
+          metadata: { migrated: true },
+        },
+      ],
+    });
+
+    await legacyStore.observability.batchCreateFeedback({
+      feedbacks: [
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'legacy-trace',
+          feedbackType: 'thumbs',
+          value: 1,
+          feedbackSource: 'user',
+          feedbackUserId: 'user-1',
+          entityType: EntityType.AGENT,
+          entityName: 'legacy-agent',
+          executionSource: 'cloud',
+          scope: { phase: 'test' },
+          metadata: { migrated: true },
+        },
+      ],
+    });
+
+    const scores = await legacyStore.observability.listScores({
+      filters: { traceId: 'legacy-trace' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    const feedback = await legacyStore.observability.listFeedback({
+      filters: { traceId: 'legacy-trace' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    expect(scores.scores[0]).toMatchObject({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      scorerId: 'legacy-scorer',
+      scoreSource: 'manual',
+      source: 'manual',
+      executionSource: 'cloud',
+      entityType: EntityType.AGENT,
+      entityName: 'legacy-agent',
+      scope: { phase: 'test' },
+    });
+
+    expect(feedback.feedback[0]).toMatchObject({
+      traceId: 'legacy-trace',
+      feedbackType: 'thumbs',
+      feedbackSource: 'user',
+      source: 'user',
+      feedbackUserId: 'user-1',
+      executionSource: 'cloud',
+      entityType: EntityType.AGENT,
+      entityName: 'legacy-agent',
+      scope: { phase: 'test' },
+    });
+
+    await legacyStore.db.close();
+  });
+
   // ==========================================================================
   // Logs
   // ==========================================================================
@@ -767,6 +878,31 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores).toHaveLength(1);
       expect(filtered.scores[0]!.score).toBe(0.85);
     });
+
+    it('supports deprecated source aliases for scores', async () => {
+      await storage.createScore({
+        score: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-score',
+          spanId: null,
+          scorerId: 'legacy',
+          source: 'manual',
+          score: 1,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listScores({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.scores).toHaveLength(1);
+      expect(filtered.scores[0]!.traceId).toBe('trace-legacy-score');
+      expect(filtered.scores[0]!.source).toBe('manual');
+      expect(filtered.scores[0]!.scoreSource).toBe('manual');
+    });
   });
 
   // ==========================================================================
@@ -780,12 +916,12 @@ describe('ObservabilityStorageDuckDB', () => {
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Great!',
           experimentId: null,
-          userId: 'user-1',
+          feedbackUserId: 'user-1',
           sourceId: 'source-1',
           metadata: null,
         },
@@ -796,12 +932,12 @@ describe('ObservabilityStorageDuckDB', () => {
           timestamp: new Date(),
           traceId: 'trace-2',
           spanId: null,
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
           experimentId: 'exp-1',
-          userId: 'user-2',
+          feedbackUserId: 'user-2',
           sourceId: 'source-2',
           metadata: null,
         },
@@ -811,12 +947,38 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback).toHaveLength(2);
 
       const filtered = await storage.listFeedback({
-        filters: { source: 'user' },
+        filters: { feedbackSource: 'user' },
       });
       expect(filtered.feedback).toHaveLength(1);
       expect(filtered.feedback[0]!.value).toBe(1);
-      expect(filtered.feedback[0]!.userId).toBe('user-1');
+      expect(filtered.feedback[0]!.feedbackUserId).toBe('user-1');
       expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+    });
+
+    it('supports deprecated source aliases for feedback', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-feedback',
+          spanId: null,
+          source: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listFeedback({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.feedback).toHaveLength(1);
+      expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
+      expect(filtered.feedback[0]!.source).toBe('manual');
+      expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('batch creates and lists feedback', async () => {
@@ -826,12 +988,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'batch-trace-1',
             spanId: null,
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
             experimentId: null,
-            userId: 'user-1',
+            feedbackUserId: 'user-1',
             sourceId: 'source-1',
             metadata: null,
           },
@@ -839,12 +1001,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:01Z'),
             traceId: 'batch-trace-2',
             spanId: 'span-2',
-            source: 'reviewer',
+            feedbackSource: 'reviewer',
             feedbackType: 'rating',
             value: 4,
             comment: null,
             experimentId: 'exp-1',
-            userId: 'user-2',
+            feedbackUserId: 'user-2',
             sourceId: 'source-2',
             metadata: { category: 'quality' },
           },
@@ -852,12 +1014,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:02Z'),
             traceId: 'batch-trace-3',
             spanId: null,
-            source: 'system',
+            feedbackSource: 'system',
             feedbackType: 'flag',
             value: 'needs-review',
             comment: 'Escalated',
             experimentId: null,
-            userId: null,
+            feedbackUserId: null,
             sourceId: 'source-3',
             metadata: { severity: 'high' },
           },
@@ -873,7 +1035,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Helpful',
@@ -882,7 +1044,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-2',
           spanId: 'span-2',
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
@@ -891,7 +1053,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-3',
           spanId: null,
-          source: 'system',
+          feedbackSource: 'system',
           feedbackType: 'flag',
           value: 'needs-review',
           comment: 'Escalated',

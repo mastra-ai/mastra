@@ -93,6 +93,7 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'tags', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'JSONB');
 
@@ -171,6 +172,7 @@ export class DatasetsPG extends DatasetsStorage {
       tags: row.tags ? safelyParseJSON(row.tags) : undefined,
       targetType: (row.targetType as TargetType) || null,
       targetIds: row.targetIds || null,
+      scorerIds: row.scorerIds || null,
       version: row.version as number,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -238,6 +240,7 @@ export class DatasetsPG extends DatasetsStorage {
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
           targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
+          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -254,6 +257,7 @@ export class DatasetsPG extends DatasetsStorage {
         requestContextSchema: input.requestContextSchema ?? undefined,
         targetType: input.targetType ?? null,
         targetIds: input.targetIds ?? null,
+        scorerIds: input.scorerIds ?? null,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -341,6 +345,10 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"targetIds" = $${paramIndex++}`);
         values.push(args.targetIds === null ? null : JSON.stringify(args.targetIds));
       }
+      if (args.scorerIds !== undefined) {
+        setClauses.push(`"scorerIds" = $${paramIndex++}`);
+        values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
+      }
 
       values.push(args.id);
       await this.#db.client.none(
@@ -362,6 +370,7 @@ export class DatasetsPG extends DatasetsStorage {
         tags: (args.tags !== undefined ? args.tags : existing.tags) ?? undefined,
         targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
         updatedAt: new Date(now),
       };
     } catch (error) {
