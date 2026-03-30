@@ -216,6 +216,41 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   }
 
   /**
+   * Ensure browser is ready and thread session exists.
+   * For 'browser' isolation, creates the cloud session and connects CDP before super.ensureReady().
+   */
+  override async ensureReady(): Promise<void> {
+    const isolation = this.getThreadIsolationMode();
+    const threadId = this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+
+    // For 'browser' isolation, create session and connect CDP on-demand
+    if (isolation === 'browser') {
+      const existingSession = this.threadManager.getExistingSessionForThread(threadId);
+
+      if (!existingSession) {
+        // Create a new cloud session for this thread
+        this.logger.debug?.(`Creating cloud session for thread: ${threadId}`);
+        const sessionInfo = await this.threadManager.getManagerForThread(threadId);
+        this.sessionInfo = sessionInfo;
+
+        if (!sessionInfo?.cdpUrl) {
+          throw new Error(`Cloud session created but no CDP URL available for thread: ${threadId}`);
+        }
+
+        // Connect to CDP if not already connected
+        if (!this.cdpClient?.isConnected) {
+          await this.connectToCdp(sessionInfo.cdpUrl);
+        }
+      } else if (!this.cdpClient?.isConnected && existingSession.cdpUrl) {
+        // Session exists but CDP not connected - reconnect
+        await this.connectToCdp(existingSession.cdpUrl);
+      }
+    }
+
+    await super.ensureReady();
+  }
+
+  /**
    * Close the browser by stopping cloud sessions and disconnecting CDP.
    */
   protected override async doClose(): Promise<void> {
