@@ -121,7 +121,7 @@ describe('ObservabilityStorage base class', () => {
             id: 'f1',
             timestamp: new Date(),
             traceId: 't1',
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
           },

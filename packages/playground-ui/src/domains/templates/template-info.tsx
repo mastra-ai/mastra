@@ -52,7 +52,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
             <div className={cn('bg-surface2 border border-surface4 rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
-              <div className="flex-shrink-0 mt-0.5">
+              <div className="shrink-0 mt-0.5">
                 <InfoIcon className="w-[1.1em] h-[1.1em] text-blue-500" />
               </div>
               <div className="flex-1 space-y-2">
