@@ -164,6 +164,12 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   /** Reconnect timer */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Tab change debounce timer */
+  private tabChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** CDP host for fetching targets */
+  private cdpHost: string | null = null;
+
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: BrowserUseThreadManager;
 
@@ -296,6 +302,10 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Connect to a browser via CDP WebSocket URL.
    */
   private async connectToCdp(cdpUrl: string): Promise<void> {
+    // Store the host for later target discovery
+    const hostMatch = cdpUrl.match(/^https?:\/\/([^/]+)/);
+    this.cdpHost = hostMatch?.[1] ?? null;
+
     // Get page-level CDP URL (not browser-level)
     const pageCdpUrl = await this.getPageCdpUrl(cdpUrl);
 
@@ -307,10 +317,94 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
       this.handleDisconnect();
     });
 
+    // Set up tab change detection via CDP Target events
+    this.setupTabChangeDetection();
+
     // Fetch initial URL
     await this.getCurrentUrl();
 
     this.notifyBrowserReady();
+  }
+
+  /**
+   * Set up listeners for tab creation/destruction to reconnect screencast.
+   */
+  private setupTabChangeDetection(): void {
+    if (!this.cdpClient) return;
+
+    // Listen for target events (new tabs, closed tabs)
+    const onTargetCreated = () => {
+      this.scheduleScreencastReconnect('new tab created');
+    };
+
+    const onTargetDestroyed = () => {
+      this.scheduleScreencastReconnect('tab closed');
+    };
+
+    // CDP events for target management
+    this.cdpClient.on('Target.targetCreated', onTargetCreated);
+    this.cdpClient.on('Target.targetDestroyed', onTargetDestroyed);
+
+    // Enable target discovery to receive these events
+    this.cdpClient.send('Target.setDiscoverTargets', { discover: true }).catch(() => {
+      // Some CDP endpoints may not support this - that's okay
+    });
+  }
+
+  /**
+   * Schedule a screencast reconnect with debouncing.
+   */
+  private scheduleScreencastReconnect(reason: string): void {
+    if (this.tabChangeDebounceTimer) {
+      clearTimeout(this.tabChangeDebounceTimer);
+    }
+
+    this.tabChangeDebounceTimer = setTimeout(() => {
+      this.tabChangeDebounceTimer = null;
+      void this.reconnectScreencastToActiveTab(reason);
+    }, 300);
+  }
+
+  /**
+   * Reconnect screencast to the currently active tab.
+   */
+  private async reconnectScreencastToActiveTab(reason: string): Promise<void> {
+    const stream = this._screencastStream;
+    if (!stream || !stream.isActive()) {
+      return;
+    }
+
+    if (!this.isBrowserRunning()) {
+      return;
+    }
+
+    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
+
+    try {
+      // Reconnect to get fresh CDP session for active page
+      if (this.sessionInfo?.cdpUrl) {
+        const newPageUrl = await this.getPageCdpUrl(this.sessionInfo.cdpUrl);
+
+        // Disconnect old client and create new one for active page
+        await this.cdpClient?.detach();
+        this.cdpClient = new CdpClient();
+        await this.cdpClient.connect(newPageUrl);
+
+        // Re-setup tab detection on new client
+        this.setupTabChangeDetection();
+
+        // Handle disconnection
+        this.cdpClient.on('close', () => {
+          this.handleDisconnect();
+        });
+      }
+
+      // Small delay to let state settle
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await stream.reconnect();
+    } catch {
+      this.logger.debug?.('Screencast reconnect failed');
+    }
   }
 
   /**
