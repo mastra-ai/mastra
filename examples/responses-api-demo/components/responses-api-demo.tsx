@@ -28,7 +28,25 @@ const EXAMPLE_BY_ID = Object.fromEntries(EXAMPLES.map(example => [example.id, ex
 export function ResponsesApiDemo() {
   const [activeExampleId, setActiveExampleId] = useState<ExampleId>('agent-memory');
   const activeExample = EXAMPLE_BY_ID[activeExampleId];
-  const ActiveComponent = activeExample.Component;
+  let ActiveComponent: ComponentType;
+
+  switch (activeExampleId) {
+    case 'agent-memory':
+      ActiveComponent = AgentResponsesExample;
+      break;
+    case 'agent-tools':
+      ActiveComponent = AgentToolResponsesExample;
+      break;
+    case 'conversations':
+      ActiveComponent = ConversationsExample;
+      break;
+    case 'openai-sdk':
+      ActiveComponent = OpenAISDKResponsesExample;
+      break;
+    case 'provider-backed':
+      ActiveComponent = ProviderBackedResponsesExample;
+      break;
+  }
 
   return (
     <main className={`demo-shell demo-shell--with-sidebar${activeExample.withConversations ? ' demo-shell--with-conversations' : ''}`}>

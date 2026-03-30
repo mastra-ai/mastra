@@ -620,17 +620,22 @@ export function extractTextDelta(value: unknown): string | null {
 
   const chunk = value as { type: string; payload?: { text?: string }; textDelta?: string; text?: string };
 
-  if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
-    return chunk.payload.text;
-  }
+  switch (chunk.type) {
+    case 'text-delta':
+      if (typeof chunk.payload?.text === 'string') {
+        return chunk.payload.text;
+      }
 
-  if (chunk.type === 'text-delta' && typeof chunk.textDelta === 'string') {
-    return chunk.textDelta;
-  }
+      if (typeof chunk.textDelta === 'string') {
+        return chunk.textDelta;
+      }
 
-  if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
-    return chunk.text;
-  }
+      if (typeof chunk.text === 'string') {
+        return chunk.text;
+      }
 
-  return null;
+      return null;
+    default:
+      return null;
+  }
 }

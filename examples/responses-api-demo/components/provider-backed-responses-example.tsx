@@ -147,24 +147,31 @@ function getToolCalls(payload: unknown): ToolCall[] {
       continue;
     }
 
-    if (item.type === 'function_call' && typeof item.call_id === 'string' && typeof item.name === 'string') {
-      calls.set(item.call_id, {
-        id: item.call_id,
-        name: item.name,
-        arguments: typeof item.arguments === 'string' ? parseJson(item.arguments) : undefined,
-        output: calls.get(item.call_id)?.output,
-      });
-    }
+    switch (item.type) {
+      case 'function_call':
+        if (typeof item.call_id === 'string' && typeof item.name === 'string') {
+          calls.set(item.call_id, {
+            id: item.call_id,
+            name: item.name,
+            arguments: typeof item.arguments === 'string' ? parseJson(item.arguments) : undefined,
+            output: calls.get(item.call_id)?.output,
+          });
+        }
+        break;
+      case 'function_call_output':
+        if (typeof item.call_id === 'string') {
+          const existing = calls.get(item.call_id);
 
-    if (item.type === 'function_call_output' && typeof item.call_id === 'string') {
-      const existing = calls.get(item.call_id);
-
-      calls.set(item.call_id, {
-        id: item.call_id,
-        name: existing?.name ?? 'Tool',
-        arguments: existing?.arguments,
-        output: typeof item.output === 'string' ? parseJson(item.output) : item.output,
-      });
+          calls.set(item.call_id, {
+            id: item.call_id,
+            name: existing?.name ?? 'Tool',
+            arguments: existing?.arguments,
+            output: typeof item.output === 'string' ? parseJson(item.output) : item.output,
+          });
+        }
+        break;
+      default:
+        break;
     }
   }
 
@@ -287,28 +294,36 @@ export function ProviderBackedResponsesExample() {
       let tools: ToolCall[] = [];
 
       for await (const event of stream as AsyncIterable<ResponsesStreamEvent>) {
-        if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
-          text += event.delta;
-        }
-
-        if (
-          (event.type === 'response.created' || event.type === 'response.in_progress' || event.type === 'response.completed') &&
-          isRecord(event.response)
-        ) {
-          responseId = typeof event.response.id === 'string' ? event.response.id : responseId;
-          providerResponseId = getProviderResponseId(event.response) ?? providerResponseId;
-          responseModel = getModel(event.response);
-          tools = getToolCalls(event.response);
-
-          if (event.type === 'response.completed') {
-            const completedText = getOutputText(event.response);
-
-            if (completedText) {
-              text = completedText;
+        switch (event.type) {
+          case 'response.output_text.delta':
+            if (typeof event.delta === 'string') {
+              text += event.delta;
+            }
+            break;
+          case 'response.created':
+          case 'response.in_progress':
+          case 'response.completed':
+            if (!isRecord(event.response)) {
+              break;
             }
 
-            raw = JSON.stringify(event.response, null, 2);
-          }
+            responseId = typeof event.response.id === 'string' ? event.response.id : responseId;
+            providerResponseId = getProviderResponseId(event.response) ?? providerResponseId;
+            responseModel = getModel(event.response);
+            tools = getToolCalls(event.response);
+
+            if (event.type === 'response.completed') {
+              const completedText = getOutputText(event.response);
+
+              if (completedText) {
+                text = completedText;
+              }
+
+              raw = JSON.stringify(event.response, null, 2);
+            }
+            break;
+          default:
+            break;
         }
 
         startTransition(() => {
