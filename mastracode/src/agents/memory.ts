@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
-import { GATEWAY_DEFAULTS, loadSettings } from '../onboarding/settings.js';
+import { MEMORY_GATEWAY_DEFAULTS, loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
@@ -56,9 +56,9 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
-    // When a gateway baseUrl is configured, the gateway handles memory — disable local OM
-    const gw = loadSettings().gateway ?? GATEWAY_DEFAULTS;
-    const omEnabled = !gw.baseUrl;
+    // When a memory gateway API key is set, the gateway handles memory — disable local OM
+    const mg = loadSettings().memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
+    const omEnabled = !mg.apiKey;
 
     const observerPreviousObservationTokens = 1000;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${omEnabled}`;

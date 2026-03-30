@@ -108,7 +108,7 @@ function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddlewar
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel },
+  options?: { thinkingLevel?: ThinkingLevel; baseURL?: string; headers?: Record<string, string> },
 ): MastraModelConfig {
   // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
   // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
@@ -129,7 +129,9 @@ export function openaiCodexProvider(
     });
   }
 
-  // Custom fetch that handles OAuth and URL rewriting
+  // Custom fetch that handles OAuth, URL rewriting, and optional proxy headers
+  const extraHeaders = options?.headers;
+  const proxyBaseURL = options?.baseURL;
   const oauthFetch = async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const authStorage = getAuthStorage();
 
@@ -159,8 +161,17 @@ export function openaiCodexProvider(
     // Get accountId from credentials
     const accountId = (cred as any).accountId as string | undefined;
 
-    // Build headers - remove any existing authorization header first
+    // Build headers - start with proxy headers (lowest priority), then init headers, then OAuth
     const headers = new Headers();
+
+    // Proxy headers first (lowest priority)
+    if (extraHeaders) {
+      for (const [key, value] of Object.entries(extraHeaders)) {
+        headers.set(key, value);
+      }
+    }
+
+    // Then SDK-provided headers (skip authorization — we set our own)
     if (init?.headers) {
       if (init.headers instanceof Headers) {
         init.headers.forEach((value, key) => {
@@ -183,7 +194,7 @@ export function openaiCodexProvider(
       }
     }
 
-    // Set authorization header with access token
+    // OAuth headers win (highest priority)
     headers.set('Authorization', `Bearer ${accessToken}`);
 
     // Set ChatGPT-Account-Id header for organization subscriptions
@@ -191,11 +202,24 @@ export function openaiCodexProvider(
       headers.set('ChatGPT-Account-Id', accountId);
     }
 
-    // Rewrite URL to Codex endpoint if it's a chat/responses request
+    // Rewrite URL to Codex endpoint.
+    // When a proxy baseURL is configured, always send the request there so the
+    // proxy can handle the OpenAI-compatible path mapping itself.
     const parsed = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
 
-    const shouldRewrite = parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
-    const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
+    const shouldRewriteToCodex =
+      parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
+    const finalUrl = proxyBaseURL
+      ? (() => {
+          const proxyUrl = new URL(proxyBaseURL);
+          if (proxyUrl.pathname === '/v1' || proxyUrl.pathname === '/v1/') {
+            proxyUrl.pathname = '/v1/responses';
+          }
+          return proxyUrl;
+        })()
+      : shouldRewriteToCodex
+        ? new URL(CODEX_API_ENDPOINT)
+        : parsed;
 
     return fetch(finalUrl, {
       ...init,

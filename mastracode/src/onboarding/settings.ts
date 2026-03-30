@@ -57,18 +57,33 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
-/** Global gateway configuration for routing LLM calls through a proxy. */
-export interface GatewaySettings {
+/** LLM proxy configuration for routing model calls through a custom endpoint. */
+export interface LlmProxySettings {
   /** Base URL override — when set, all model router calls go through this URL. */
   baseUrl: string | null;
-  /** Custom headers sent with every LLM request through the gateway. */
+  /** Custom headers sent with every LLM request through the proxy. */
   headers: Record<string, string>;
 }
 
-export const GATEWAY_DEFAULTS: GatewaySettings = {
+export const LLM_PROXY_DEFAULTS: LlmProxySettings = {
   baseUrl: null,
   headers: {},
 };
+
+/** Mastra cloud memory gateway configuration. */
+export interface MemoryGatewaySettings {
+  /** API key for the Mastra memory gateway service. */
+  apiKey: string | null;
+  /** Base URL override — when set, overrides the default Mastra platform URL. */
+  baseUrl: string | null;
+}
+
+export const MEMORY_GATEWAY_DEFAULTS: MemoryGatewaySettings = {
+  apiKey: null,
+  baseUrl: null,
+};
+
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://platform.mastra.ai/v1';
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -117,8 +132,10 @@ export interface GlobalSettings {
   };
   // Storage backend configuration
   storage: StorageSettings;
-  // Global gateway configuration for LLM proxy routing
-  gateway: GatewaySettings;
+  // LLM proxy configuration for routing model calls through a custom endpoint
+  llmProxy: LlmProxySettings;
+  // Mastra cloud memory gateway configuration
+  memoryGateway: MemoryGatewaySettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
   // User-created custom providers with custom models
@@ -159,7 +176,8 @@ const DEFAULTS: GlobalSettings = {
     quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
-  gateway: { ...GATEWAY_DEFAULTS },
+  llmProxy: { ...LLM_PROXY_DEFAULTS },
+  memoryGateway: { ...MEMORY_GATEWAY_DEFAULTS },
   customModelPacks: [],
   customProviders: [],
   modelUseCounts: {},
@@ -266,13 +284,24 @@ function parseHeaders(raw: unknown): Record<string, string> | undefined {
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function parseGateway(raw: unknown): GatewaySettings {
-  if (!raw || typeof raw !== 'object') return { ...GATEWAY_DEFAULTS };
+function parseLlmProxy(raw: unknown): LlmProxySettings {
+  if (!raw || typeof raw !== 'object') return { ...LLM_PROXY_DEFAULTS };
   const candidate = raw as Record<string, unknown>;
   return {
     baseUrl:
       typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
     headers: parseHeaders(candidate.headers) ?? {},
+  };
+}
+
+function parseMemoryGateway(raw: unknown): MemoryGatewaySettings {
+  if (!raw || typeof raw !== 'object') return { ...MEMORY_GATEWAY_DEFAULTS };
+  const candidate = raw as Record<string, unknown>;
+  return {
+    apiKey:
+      typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : null,
+    baseUrl:
+      typeof candidate.baseUrl === 'string' && candidate.baseUrl.trim().length > 0 ? candidate.baseUrl.trim() : null,
   };
 }
 
@@ -311,7 +340,8 @@ function migrateFromAuth(settingsPath: string): boolean {
           libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
           pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
         },
-        gateway: parseGateway(raw.gateway),
+        llmProxy: parseLlmProxy(raw.llmProxy ?? raw.gateway),
+        memoryGateway: parseMemoryGateway(raw.memoryGateway),
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
@@ -428,7 +458,8 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
         pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
       },
-      gateway: parseGateway(raw.gateway),
+      llmProxy: parseLlmProxy(raw.llmProxy ?? raw.gateway),
+      memoryGateway: parseMemoryGateway(raw.memoryGateway),
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
@@ -436,8 +467,14 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
-    // Migrate legacy omModelId → omModelOverride
+    // Migrate legacy gateway → llmProxy (remove stale key from persisted data)
     let settingsChanged = false;
+    if (raw.gateway && !raw.llmProxy) {
+      delete (settings as any).gateway;
+      settingsChanged = true;
+    }
+
+    // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

@@ -45,6 +45,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     ],
+    llmProxy: { baseUrl: null, headers: {} },
+    memoryGateway: { apiKey: null, baseUrl: null },
     modelUseCounts: {},
     updateDismissedVersion: null,
     ...overrides,
@@ -304,6 +306,173 @@ describe('migrateLegacyVariedPack', () => {
       plan: 'openai/gpt-5.4',
       build: 'anthropic/claude-sonnet-4-5',
       fast: 'anthropic/claude-haiku-4-5',
+    });
+  });
+});
+
+describe('llmProxy parsing/persistence', () => {
+  it('returns defaults when llmProxy is missing from settings file', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
+      const settings = loadSettings(filePath);
+      expect(settings.llmProxy).toEqual({ baseUrl: null, headers: {} });
+    });
+  });
+
+  it('round-trips llmProxy with baseUrl and headers', () => {
+    withTempSettingsFile(filePath => {
+      const initial = createSettings({
+        llmProxy: {
+          baseUrl: 'https://proxy.example.com',
+          headers: { 'X-Custom': 'value', Authorization: 'Bearer tok' },
+        },
+      });
+      saveSettings(initial, filePath);
+      const loaded = loadSettings(filePath);
+      expect(loaded.llmProxy).toEqual({
+        baseUrl: 'https://proxy.example.com',
+        headers: { 'X-Custom': 'value', Authorization: 'Bearer tok' },
+      });
+    });
+  });
+
+  it('trims baseUrl whitespace and normalizes empty to null', () => {
+    withTempSettingsFile(filePath => {
+      const initial = createSettings({ llmProxy: { baseUrl: '   ', headers: {} } });
+      saveSettings(initial, filePath);
+      const loaded = loadSettings(filePath);
+      expect(loaded.llmProxy.baseUrl).toBeNull();
+    });
+  });
+
+  it('drops non-string header values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          llmProxy: { baseUrl: null, headers: { good: 'ok', bad: 123, also_bad: true } },
+        }),
+        'utf-8',
+      );
+      const loaded = loadSettings(filePath);
+      expect(loaded.llmProxy.headers).toEqual({ good: 'ok' });
+    });
+  });
+});
+
+describe('memoryGateway parsing/persistence', () => {
+  it('returns defaults when memoryGateway is missing from settings file', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
+      const settings = loadSettings(filePath);
+      expect(settings.memoryGateway).toEqual({ apiKey: null, baseUrl: null });
+    });
+  });
+
+  it('round-trips memoryGateway with apiKey and baseUrl', () => {
+    withTempSettingsFile(filePath => {
+      const initial = createSettings({
+        memoryGateway: {
+          apiKey: 'mg-key-123',
+          baseUrl: 'https://custom-memory.example.com/v1',
+        },
+      });
+      saveSettings(initial, filePath);
+      const loaded = loadSettings(filePath);
+      expect(loaded.memoryGateway).toEqual({
+        apiKey: 'mg-key-123',
+        baseUrl: 'https://custom-memory.example.com/v1',
+      });
+    });
+  });
+
+  it('trims apiKey whitespace and normalizes empty to null', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          memoryGateway: { apiKey: '   ', baseUrl: null },
+        }),
+        'utf-8',
+      );
+      const loaded = loadSettings(filePath);
+      expect(loaded.memoryGateway.apiKey).toBeNull();
+    });
+  });
+
+  it('trims baseUrl whitespace and normalizes empty to null', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          memoryGateway: { apiKey: 'key', baseUrl: '  ' },
+        }),
+        'utf-8',
+      );
+      const loaded = loadSettings(filePath);
+      expect(loaded.memoryGateway.baseUrl).toBeNull();
+      expect(loaded.memoryGateway.apiKey).toBe('key');
+    });
+  });
+});
+
+describe('legacy gateway → llmProxy migration', () => {
+  it('migrates old gateway field into llmProxy when llmProxy is absent', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          gateway: { baseUrl: 'https://old-gw.example.com', headers: { 'X-Old': 'val' } },
+        }),
+        'utf-8',
+      );
+      const loaded = loadSettings(filePath);
+      expect(loaded.llmProxy).toEqual({
+        baseUrl: 'https://old-gw.example.com',
+        headers: { 'X-Old': 'val' },
+      });
+      // stale gateway key should be removed after migration save
+      const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+      expect(raw.gateway).toBeUndefined();
+      expect(raw.llmProxy).toBeDefined();
+    });
+  });
+
+  it('prefers llmProxy over gateway when both are present', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          gateway: { baseUrl: 'https://old-gw.example.com', headers: {} },
+          llmProxy: { baseUrl: 'https://new-proxy.example.com', headers: { 'X-New': 'v' } },
+        }),
+        'utf-8',
+      );
+      const loaded = loadSettings(filePath);
+      expect(loaded.llmProxy).toEqual({
+        baseUrl: 'https://new-proxy.example.com',
+        headers: { 'X-New': 'v' },
+      });
     });
   });
 });

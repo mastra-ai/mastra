@@ -74,7 +74,12 @@ vi.mock('@mastra/core/llm', () => ({
 }));
 
 const mockLoadSettings = vi.hoisted(() =>
-  vi.fn<() => { customProviders: Array<{ name: string; url: string; apiKey?: string }> }>(() => ({
+  vi.fn<
+    () => {
+      customProviders: Array<{ name: string; url: string; apiKey?: string; headers?: Record<string, string> }>;
+      llmProxy?: { baseUrl: string | null; headers: Record<string, string> };
+    }
+  >(() => ({
     customProviders: [],
   })),
 );
@@ -86,9 +91,10 @@ vi.mock('../../onboarding/settings.js', () => ({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
-  GATEWAY_DEFAULTS: { baseUrl: null, headers: {} },
+  LLM_PROXY_DEFAULTS: { baseUrl: null, headers: {} },
 }));
 
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
 import { openaiCodexProvider } from '../../providers/openai-codex.js';
 import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
@@ -289,6 +295,120 @@ describe('resolveModel', () => {
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
       });
+    });
+  });
+
+  describe('LLM proxy configuration', () => {
+    it('passes proxy baseUrl and headers to Anthropic OAuth provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: 'https://proxy.corp.com',
+          headers: { 'X-Proxy-Auth': 'token-123' },
+        },
+      });
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514');
+
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        baseURL: 'https://proxy.corp.com',
+        headers: { 'X-Proxy-Auth': 'token-123' },
+      });
+    });
+
+    it('passes proxy baseUrl and headers to OpenAI OAuth provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: 'https://proxy.corp.com',
+          headers: { 'X-Proxy-Auth': 'token-456' },
+        },
+      });
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('openai/gpt-4o');
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-4o', {
+        thinkingLevel: undefined,
+        baseURL: 'https://proxy.corp.com',
+        headers: { 'X-Proxy-Auth': 'token-456' },
+      });
+    });
+
+    it('passes proxy baseUrl to model router for unknown providers', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: 'https://proxy.corp.com',
+          headers: {},
+        },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.url).toBe('https://proxy.corp.com');
+    });
+
+    it('merges proxy headers with harness headers (harness wins on conflict)', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: null,
+          headers: { 'x-thread-id': 'proxy-thread', 'X-Proxy-Auth': 'token-789' },
+        },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash', {
+        requestContext: makeRequestContext({ threadId: 'harness-thread' }),
+      }) as Record<string, unknown>;
+
+      expect(result.headers).toEqual({
+        'X-Proxy-Auth': 'token-789',
+        'x-thread-id': 'harness-thread',
+      });
+    });
+
+    it('does not set url when proxy baseUrl is null', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: { baseUrl: null, headers: {} },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.url).toBeUndefined();
+    });
+
+    it('passes proxy baseUrl to Anthropic API key provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: {
+          baseUrl: 'https://proxy.corp.com',
+          headers: {},
+        },
+      });
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-test-key' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514');
+
+      expect(vi.mocked(createAnthropic)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'https://proxy.corp.com',
+        }),
+      );
     });
   });
 });

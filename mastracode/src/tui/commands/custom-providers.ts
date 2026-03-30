@@ -100,7 +100,7 @@ function askText(
         onSubmit: answer => {
           ctx.state.activeInlineQuestion = undefined;
           const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
+          resolve(trimmed.length > 0 ? trimmed : allowEmptyInput ? '' : null);
         },
         onCancel: () => {
           ctx.state.activeInlineQuestion = undefined;
@@ -129,7 +129,7 @@ async function askOptionalText(
   defaultValue?: string,
 ): Promise<string | undefined> {
   const answer = await askText(ctx, `${question} (leave blank to skip)`, defaultValue, true);
-  return answer?.trim() || undefined;
+  return answer || undefined;
 }
 
 function askSelect(
@@ -185,7 +185,7 @@ async function createProviderFlow(ctx: SlashCommandContext): Promise<void> {
   const apiKey = await askOptionalText(ctx, 'API key');
 
   let headers: Record<string, string> | undefined;
-  const headersRaw = await askOptionalText(ctx, 'Custom headers (JSON, e.g. {"X-Key":"val"})');
+  const headersRaw = await askText(ctx, 'Custom headers (JSON, leave blank to skip)', undefined, true);
   if (headersRaw) {
     const parsed = parseHeadersJson(headersRaw);
     if (!parsed) {
@@ -231,21 +231,24 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
   const apiKey = await askOptionalText(ctx, 'API key', provider.apiKey);
 
   let headers: Record<string, string> | undefined = provider.headers;
-  const headersRaw = await askOptionalText(
+  const headersRaw = await askText(
     ctx,
-    'Custom headers (JSON, e.g. {"X-Key":"val"})',
+    'Custom headers (JSON, leave blank to clear)',
     headersToJsonString(provider.headers),
+    true,
   );
-  if (headersRaw) {
+  if (headersRaw === null) {
+    // cancelled — preserve existing headers
+  } else if (headersRaw === '') {
+    // explicitly cleared
+    headers = undefined;
+  } else {
     const parsed = parseHeadersJson(headersRaw);
     if (!parsed) {
       ctx.showError('Invalid JSON. Headers must be a JSON object of string key-value pairs.');
       return;
     }
     headers = parsed;
-  } else if (headersRaw === undefined) {
-    // User explicitly cleared → remove headers
-    headers = undefined;
   }
 
   upsertCustomProviderInSettings(

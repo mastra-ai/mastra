@@ -1,5 +1,10 @@
 import { Spacer } from '@mariozechner/pi-tui';
-import { GATEWAY_DEFAULTS, loadSettings, saveSettings } from '../../onboarding/settings.js';
+import {
+  MEMORY_GATEWAY_DEFAULTS,
+  MEMORY_GATEWAY_DEFAULT_URL,
+  loadSettings,
+  saveSettings,
+} from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -81,47 +86,55 @@ function isValidUrl(value: string): boolean {
   }
 }
 
-function parseHeadersJson(raw: string): Record<string, string> | null {
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof k !== 'string' || typeof v !== 'string') return null;
-    }
-    return parsed as Record<string, string>;
-  } catch {
-    return null;
-  }
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return '••••••••';
+  return key.slice(0, 4) + '••••' + key.slice(-4);
 }
 
-export async function handleGatewayCommand(ctx: SlashCommandContext): Promise<void> {
+export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Promise<void> {
   const settings = loadSettings();
-  const gw = settings.gateway ?? { ...GATEWAY_DEFAULTS };
+  const mg = settings.memoryGateway ?? { ...MEMORY_GATEWAY_DEFAULTS };
 
-  const hasGateway = !!gw.baseUrl;
-  const headerCount = Object.keys(gw.headers).length;
+  const hasApiKey = !!mg.apiKey;
+  const baseUrlDisplay = mg.baseUrl ?? `(default: ${MEMORY_GATEWAY_DEFAULT_URL})`;
 
   const statusParts: string[] = [];
-  if (hasGateway) {
-    statusParts.push(gw.baseUrl!);
-    if (headerCount > 0) statusParts.push(`${headerCount} header(s)`);
+  if (hasApiKey) {
+    statusParts.push(`Key: ${maskApiKey(mg.apiKey!)}`);
+    statusParts.push(baseUrlDisplay);
   }
-  const status = hasGateway ? statusParts.join(' · ') : 'Not configured';
+  const status = hasApiKey ? statusParts.join(' · ') : 'Not configured';
 
-  const action = await askSelect(ctx, `Gateway: ${status}`, [
-    { label: 'Set base URL', value: 'url', description: gw.baseUrl ?? 'Route LLM calls through a proxy' },
+  const action = await askSelect(ctx, `Memory Gateway: ${status}`, [
     {
-      label: 'Set headers',
-      value: 'headers',
-      description: headerCount > 0 ? `${headerCount} configured` : 'Custom headers for gateway requests',
+      label: 'Set API key',
+      value: 'apikey',
+      description: hasApiKey ? maskApiKey(mg.apiKey!) : 'Enable Mastra cloud memory',
     },
-    { label: 'Clear gateway', value: 'clear', description: 'Remove gateway configuration' },
+    {
+      label: 'Set base URL',
+      value: 'url',
+      description: mg.baseUrl ?? `Default: ${MEMORY_GATEWAY_DEFAULT_URL}`,
+    },
+    { label: 'Clear', value: 'clear', description: 'Remove memory gateway configuration' },
   ]);
 
   if (!action) return;
 
-  if (action === 'url') {
-    const url = await askText(ctx, 'Gateway base URL', gw.baseUrl ?? undefined, true);
+  if (action === 'apikey') {
+    const key = await askText(ctx, 'Memory gateway API key');
+    if (key === null) return; // cancelled
+
+    settings.memoryGateway = { ...mg, apiKey: key || null };
+    saveSettings(settings);
+
+    if (key) {
+      ctx.showInfo(`Memory gateway API key set: ${maskApiKey(key)}`);
+    } else {
+      ctx.showInfo('Memory gateway API key cleared.');
+    }
+  } else if (action === 'url') {
+    const url = await askText(ctx, `Memory gateway base URL (default: ${MEMORY_GATEWAY_DEFAULT_URL})`, mg.baseUrl ?? undefined, true);
     if (url === null) return; // cancelled
 
     if (url && !isValidUrl(url)) {
@@ -129,38 +142,17 @@ export async function handleGatewayCommand(ctx: SlashCommandContext): Promise<vo
       return;
     }
 
-    settings.gateway = { ...gw, baseUrl: url || null };
+    settings.memoryGateway = { ...mg, baseUrl: url || null };
     saveSettings(settings);
 
     if (url) {
-      ctx.showInfo(`Gateway base URL set: ${url}`);
+      ctx.showInfo(`Memory gateway base URL set: ${url}`);
     } else {
-      ctx.showInfo('Gateway base URL cleared.');
+      ctx.showInfo(`Memory gateway base URL reset to default (${MEMORY_GATEWAY_DEFAULT_URL}).`);
     }
-  } else if (action === 'headers') {
-    const existing = headerCount > 0 ? JSON.stringify(gw.headers) : undefined;
-    const raw = await askText(ctx, 'Headers (JSON, e.g. {"Authorization":"Bearer tok"})', existing, true);
-    if (raw === null) return; // cancelled
-
-    if (!raw) {
-      settings.gateway = { ...gw, headers: {} };
-      saveSettings(settings);
-      ctx.showInfo('Gateway headers cleared.');
-      return;
-    }
-
-    const parsed = parseHeadersJson(raw);
-    if (!parsed) {
-      ctx.showError('Invalid JSON. Must be a JSON object of string key-value pairs.');
-      return;
-    }
-
-    settings.gateway = { ...gw, headers: parsed };
-    saveSettings(settings);
-    ctx.showInfo(`Gateway headers set (${Object.keys(parsed).length} header(s)).`);
   } else if (action === 'clear') {
-    settings.gateway = { ...GATEWAY_DEFAULTS };
+    settings.memoryGateway = { ...MEMORY_GATEWAY_DEFAULTS };
     saveSettings(settings);
-    ctx.showInfo('Gateway configuration cleared.');
+    ctx.showInfo('Memory gateway configuration cleared.');
   }
 }

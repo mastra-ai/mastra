@@ -23,7 +23,8 @@ import {
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
   handleCustomProvidersCommand,
-  handleGatewayCommand,
+  handleLlmProxyCommand,
+  handleMemoryGatewayCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
@@ -96,8 +97,11 @@ export async function dispatchSlashCommand(
     case 'custom-providers':
       await handleCustomProvidersCommand(buildCtx());
       return true;
-    case 'gateway':
-      await handleGatewayCommand(buildCtx());
+    case 'llm-proxy':
+      await handleLlmProxyCommand(buildCtx());
+      return true;
+    case 'memory-gateway':
+      await handleMemoryGatewayCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());

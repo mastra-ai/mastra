@@ -133,8 +133,15 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
 /**
  * Creates an Anthropic model using Claude Max OAuth authentication
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
+ *
+ * When a proxy baseURL/headers are provided, requests are routed through the
+ * proxy while still carrying the OAuth credentials so the proxy can forward
+ * them upstream to Anthropic.
  */
-export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
+export function opencodeClaudeMaxProvider(
+  modelId: string = 'claude-sonnet-4-20250514',
+  opts?: { baseURL?: string; headers?: Record<string, string> },
+): MastraModelConfig {
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
@@ -146,7 +153,8 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
     });
   }
 
-  // Custom fetch that handles OAuth
+  // Custom fetch that handles OAuth + optional proxy headers
+  const extraHeaders = opts?.headers;
   const oauthFetch = async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const authStorage = getAuthStorage();
 
@@ -167,10 +175,11 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
       throw new Error('Not logged in to Anthropic. Run /login first.');
     }
 
-    // Make request with OAuth headers
+    // Make request with OAuth headers (proxy headers are lowest priority)
     return fetch(url, {
       ...init,
       headers: {
+        ...extraHeaders,
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':
           'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
@@ -183,6 +192,7 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
     // Provide a dummy API key - the actual auth is handled via OAuth in oauthFetch
     // This prevents the SDK from throwing "API key is missing" at model creation time
     apiKey: 'oauth-placeholder',
+    ...(opts?.baseURL ? { baseURL: opts.baseURL } : {}),
     fetch: oauthFetch as any,
   });
 

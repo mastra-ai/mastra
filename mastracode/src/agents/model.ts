@@ -6,8 +6,8 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { GATEWAY_DEFAULTS, getCustomProviderId, loadSettings } from '../onboarding/settings.js';
-import type { GatewaySettings } from '../onboarding/settings.js';
+import { LLM_PROXY_DEFAULTS, getCustomProviderId, loadSettings } from '../onboarding/settings.js';
+import type { LlmProxySettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -129,7 +129,7 @@ function openaiApiKeyProvider(
  * - For anthropic/* models: Uses stored OAuth credentials when present, otherwise direct API key
  * - For openai/* models: Uses OAuth when configured, otherwise direct API key from AuthStorage
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
- * - For all other providers: Uses Mastra's model router (models.dev gateway)
+ * - For all other providers: Uses Mastra's model router (models.dev)
  */
 export function resolveModel(
   modelId: string,
@@ -139,13 +139,13 @@ export function resolveModel(
   const harnessHeaders = getHarnessHeaders(options?.requestContext);
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
-  const gw: GatewaySettings = settings.gateway ?? GATEWAY_DEFAULTS;
-  const gwHeaders = Object.keys(gw.headers).length > 0 ? gw.headers : undefined;
-  const gwBaseUrl = gw.baseUrl ?? undefined;
+  const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
+  const proxyHeaders = Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
+  const proxyBaseUrl = proxy.baseUrl ?? undefined;
 
-  // Merge gateway headers → harness headers (harness wins on conflict)
+  // Merge proxy headers → harness headers (harness wins on conflict)
   const headers: ModelRequestHeaders | undefined =
-    gwHeaders || harnessHeaders ? { ...gwHeaders, ...harnessHeaders } : undefined;
+    proxyHeaders || harnessHeaders ? { ...proxyHeaders, ...harnessHeaders } : undefined;
 
   const customProvider =
     providerId && modelName
@@ -173,7 +173,7 @@ export function resolveModel(
     }
     return createAnthropic({
       apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: gwBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
+      baseURL: proxyBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
       headers,
     })(modelId.substring('moonshotai/'.length));
@@ -181,23 +181,23 @@ export function resolveModel(
     const bareModelId = modelId.substring('anthropic/'.length);
     const storedCred = authStorage.get('anthropic');
 
-    // Primary path: explicit OAuth credential (handles its own auth — no headers/baseURL override)
+    // Primary path: explicit OAuth credential
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId);
+      return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, gwBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, proxyBaseUrl);
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers, gwBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId);
+    return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
@@ -206,23 +206,25 @@ export function resolveModel(
       const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
+        baseURL: proxyBaseUrl,
+        headers,
       });
     }
 
     const apiKey = getOpenAIApiKey();
     if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers, gwBaseUrl);
+      return openaiApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
     }
 
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
-      ...(gwBaseUrl ? { url: gwBaseUrl } : {}),
+      ...(proxyBaseUrl ? { url: proxyBaseUrl } : {}),
       headers,
     });
   } else {
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
-      ...(gwBaseUrl ? { url: gwBaseUrl } : {}),
+      ...(proxyBaseUrl ? { url: proxyBaseUrl } : {}),
       headers,
     });
   }
