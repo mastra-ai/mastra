@@ -65,6 +65,31 @@ export function useLogsFilters(logs: LogRecord[]) {
     setFilterGroups([]);
   }, []);
 
+  const updateFilterGroups = useCallback((nextState: Record<string, string[]>) => {
+    setFilterGroups(prev => {
+      const result: FilterGroup[] = [];
+      const seen = new Set<string>();
+
+      // Update or keep existing groups
+      for (const group of prev) {
+        const nextValues = nextState[group.field];
+        if (nextValues && nextValues.length > 0) {
+          result.push({ ...group, values: nextValues });
+          seen.add(group.field);
+        }
+        // If nextValues is empty/undefined, the group is dropped
+      }
+
+      // Add new groups for fields not yet tracked
+      for (const [field, values] of Object.entries(nextState)) {
+        if (seen.has(field) || values.length === 0) continue;
+        result.push({ id: `${field}-${Date.now()}`, field, comparator: 'is', values });
+      }
+
+      return result;
+    });
+  }, []);
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       if (searchQuery) {
@@ -94,6 +119,7 @@ export function useLogsFilters(logs: LogRecord[]) {
     toggleComparator,
     removeFilterGroup,
     clearAllFilters,
+    updateFilterGroups,
     filteredLogs,
   };
 }

@@ -7,7 +7,6 @@ import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
 import { getAllSpanIds } from './trace/get-descendant-ids';
 import { TraceTimeline } from './trace/trace-timeline';
 
-
 export interface TraceDetailsProps {
   traceId: string;
   onClose: () => void;
@@ -30,10 +29,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
     }
   }, [initialSpanId, traceData?.spans]);
 
-  const hierarchicalSpans = useMemo(
-    () => formatHierarchicalSpans(traceData?.spans ?? []),
-    [traceData?.spans],
-  );
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(traceData?.spans ?? []), [traceData?.spans]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -54,7 +50,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
     <DataDetailsPanel>
       <DataDetailsPanel.Header>
         <DataDetailsPanel.Heading>
-          Trace <b>{traceId}</b>
+          Trace <b># {traceId}</b>
         </DataDetailsPanel.Heading>
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
@@ -65,19 +61,13 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
         <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>
       ) : (
         <DataDetailsPanel.Content>
-          <div className="px-4 py-4">
-            <div className="flex items-center gap-2 mb-3 text-ui-xs uppercase tracking-widest text-neutral2">
-              <ListTreeIcon className="size-3.5" />
-              Timeline
-            </div>
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              onSpanClick={handleSpanClick}
-              selectedSpanId={selectedSpanId}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-            />
-          </div>
+          <TraceTimeline
+            hierarchicalSpans={hierarchicalSpans}
+            onSpanClick={handleSpanClick}
+            selectedSpanId={selectedSpanId}
+            expandedSpanIds={expandedSpanIds}
+            setExpandedSpanIds={setExpandedSpanIds}
+          />
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

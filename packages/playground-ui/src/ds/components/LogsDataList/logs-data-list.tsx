@@ -1,3 +1,4 @@
+import { DataListNextPageLoading } from '../DataList/data-list-next-page-loading';
 import { DataListNoMatch } from '../DataList/data-list-no-match';
 import { DataListRoot } from '../DataList/data-list-root';
 import { DataListRow } from '../DataList/data-list-row';
@@ -29,4 +30,5 @@ export const LogsDataList = Object.assign(DataListRoot, {
   EntityCell: LogsDataListEntityCell,
   MessageCell: LogsDataListMessageCell,
   DataCell: LogsDataListDataCell,
+  NextPageLoading: DataListNextPageLoading,
 });

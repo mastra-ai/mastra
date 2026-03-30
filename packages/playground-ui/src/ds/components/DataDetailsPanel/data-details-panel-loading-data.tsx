@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { Spinner } from '@/ds/components/Spinner';
 
 export interface DataDetailsPanelLoadingDataProps {
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 export function DataDetailsPanelLoadingData({ children }: DataDetailsPanelLoadingDataProps) {
