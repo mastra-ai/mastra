@@ -1,5 +1,11 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ClientOptions, Conversation, ConversationItemsPage, CreateConversationParams } from '../types';
+import type {
+  ClientOptions,
+  Conversation,
+  ConversationDeleted,
+  ConversationItemsPage,
+  CreateConversationParams,
+} from '../types';
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
@@ -34,6 +40,15 @@ export class Conversations extends BaseResource {
   retrieve(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<Conversation> {
     return this.request(
       `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
+    );
+  }
+
+  delete(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<ConversationDeleted> {
+    return this.request(
+      `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
     );
   }
 }

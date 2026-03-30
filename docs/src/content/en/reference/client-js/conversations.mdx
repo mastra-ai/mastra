@@ -7,7 +7,7 @@ packages:
 
 # Conversations API
 
-The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation, retrieve it, and list its stored items.
+The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation, retrieve it, delete it, and list its stored items.
 
 In Mastra, a conversation ID is the raw memory thread ID. Responses API calls can return this value as `conversation_id`, and the Conversations API lets you create and inspect the same thread directly.
 
@@ -113,6 +113,18 @@ console.log(conversation.thread)
 
 **Returns:** `Promise<Conversation>`.
 
+#### `delete(conversationId, requestContext?)`
+
+Deletes a conversation by its raw thread ID.
+
+```typescript
+const deleted = await client.conversations.delete('thread_123')
+
+console.log(deleted.deleted)
+```
+
+**Returns:** `Promise<ConversationDeleted>`.
+
 ### Items
 
 #### `items.list(conversationId, requestContext?)`
@@ -134,6 +146,12 @@ console.log(items.data)
 - `id`: The raw thread ID
 - `object`: Always `'conversation'`
 - `thread`: The stored thread record
+
+`delete()` returns:
+
+- `id`: The raw thread ID
+- `object`: Always `'conversation.deleted'`
+- `deleted`: Always `true`
 
 `items.list()` returns an item list with:
 

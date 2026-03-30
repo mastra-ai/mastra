@@ -25,6 +25,7 @@ It is intentionally narrow:
 - A `Mastra Agent + Tool` path that calls a real Mastra tool during the response turn
 - A `Provider-backed Agent` path that uses `providerOptions.openai.previousResponseId`
 - A `Mastra via OpenAI SDK` path that uses `openai.responses.create(...)` against the Mastra server
+- A `Conversations` path that can create, load, and delete stored conversations
 - A standard Mastra app structure instead of a custom embedded server bootstrap
 - A compact demo-friendly playground with a sidebar, prompt chips, Enter-to-send, response copying, and expandable raw payloads
 - A lightweight chat transcript that makes the difference between stored agent turns and provider-backed continuation visible

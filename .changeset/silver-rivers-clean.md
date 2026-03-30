@@ -17,7 +17,8 @@ is surfaced through `output` items such as `function_call`, `function_call_outpu
 and the final assistant message. Stored responses also return `conversation_id`, which
 maps directly to the underlying Mastra memory thread ID. You can create a conversation
 explicitly with `client.conversations.create()` or let the first stored response create
-it implicitly, then inspect the stored item history with `client.conversations.items.list()`.
+it implicitly, inspect the stored item history with `client.conversations.items.list()`,
+or remove the conversation with `client.conversations.delete()`.
 
 ```ts
 import { MastraClient } from '@mastra/client-js';

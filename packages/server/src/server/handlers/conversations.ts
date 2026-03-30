@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { HTTPException } from '../http-exception';
 import {
+  conversationDeletedSchema,
   conversationIdPathParams,
   conversationItemsListSchema,
   conversationObjectSchema,
   createConversationBodySchema,
 } from '../schemas/conversations';
-import type { ConversationItemsList, ConversationObject } from '../schemas/conversations';
+import type { ConversationDeleted, ConversationItemsList, ConversationObject } from '../schemas/conversations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
@@ -29,6 +30,14 @@ function buildConversationItemsList(items: ConversationItemsList['data']): Conve
     first_id: items[0]?.id ?? null,
     last_id: items.at(-1)?.id ?? null,
     has_more: false,
+  };
+}
+
+function buildConversationDeleted(conversationId: string): ConversationDeleted {
+  return {
+    id: conversationId,
+    object: 'conversation.deleted',
+    deleted: true,
   };
 }
 
@@ -143,6 +152,43 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
       return buildConversationItemsList(mapMastraMessagesToConversationItems(messages));
     } catch (error) {
       return handleError(error, 'Error retrieving conversation');
+    }
+  },
+});
+
+export const DELETE_CONVERSATION_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/v1/conversations/:conversationId',
+  responseType: 'json',
+  pathParamSchema: conversationIdPathParams,
+  responseSchema: conversationDeletedSchema,
+  summary: 'Delete a conversation',
+  description: 'Deletes a thread-backed conversation and its stored items',
+  tags: ['Responses'],
+  requiresAuth: true,
+  requiresPermission: 'agents:delete',
+  handler: async ({ mastra, requestContext, conversationId }) => {
+    try {
+      const memoryStore = await getResponseMemoryStore(mastra);
+      if (!memoryStore) {
+        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      }
+
+      const thread = await memoryStore.getThreadById({ threadId: conversationId });
+      if (!thread) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      }
+
+      await memoryStore.deleteThread({ threadId: conversationId });
+
+      return buildConversationDeleted(conversationId);
+    } catch (error) {
+      return handleError(error, 'Error deleting conversation');
     }
   },
 });

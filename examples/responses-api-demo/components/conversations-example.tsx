@@ -300,6 +300,7 @@ export function ConversationsExample() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -418,6 +419,29 @@ export function ConversationsExample() {
       setError(createError instanceof Error ? createError.message : 'Unable to create conversation.');
     } finally {
       setIsCreatingConversation(false);
+    }
+  }
+
+  async function deleteConversation() {
+    if (!activeConversationId || mode !== 'idle' || isDeletingConversation) {
+      return;
+    }
+
+    setIsDeletingConversation(true);
+    setError(null);
+
+    try {
+      await client.conversations.delete(activeConversationId);
+
+      const remainingConversations = conversations.filter(conversation => conversation.id !== activeConversationId);
+      setConversations(remainingConversations);
+      setActiveConversationId(remainingConversations[0]?.id ?? null);
+      setTurns([]);
+      setOpenRawTurnId(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete conversation.');
+    } finally {
+      setIsDeletingConversation(false);
     }
   }
 
@@ -802,17 +826,28 @@ export function ConversationsExample() {
       <aside className="demo-conversations">
         <div className="demo-conversations__header">
           <span className="demo-sidebar__eyebrow">Conversations</span>
-
-          <button
-            className="demo-conversations__create"
-            disabled={mode !== 'idle' || isCreatingConversation}
-            onClick={() => void createConversation()}
-            type="button"
-            aria-label="Create conversation"
-            title="Create conversation"
-          >
-            {isCreatingConversation ? '…' : '+'}
-          </button>
+          <div className="demo-actions__buttons">
+            {activeConversationId ? (
+              <button
+                className="demo-button demo-button--secondary"
+                disabled={mode !== 'idle' || isDeletingConversation}
+                onClick={() => void deleteConversation()}
+                type="button"
+              >
+                {isDeletingConversation ? 'Deleting...' : 'Delete'}
+              </button>
+            ) : null}
+            <button
+              className="demo-conversations__create"
+              disabled={mode !== 'idle' || isCreatingConversation}
+              onClick={() => void createConversation()}
+              type="button"
+              aria-label="Create conversation"
+              title="Create conversation"
+            >
+              {isCreatingConversation ? '…' : '+'}
+            </button>
+          </div>
         </div>
 
         <div className="demo-conversations__list" aria-label="Conversations">

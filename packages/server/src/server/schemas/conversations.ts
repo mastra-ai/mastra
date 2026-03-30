@@ -22,6 +22,12 @@ export const conversationObjectSchema = z.object({
   thread: getThreadByIdResponseSchema,
 });
 
+export const conversationDeletedSchema = z.object({
+  id: z.string(),
+  object: z.literal('conversation.deleted'),
+  deleted: z.literal(true),
+});
+
 export const conversationItemsListSchema = z.object({
   object: z.literal('list'),
   data: z.array(conversationItemSchema),
@@ -32,3 +38,4 @@ export const conversationItemsListSchema = z.object({
 
 export type ConversationObject = z.infer<typeof conversationObjectSchema>;
 export type ConversationItemsList = z.infer<typeof conversationItemsListSchema>;
+export type ConversationDeleted = z.infer<typeof conversationDeletedSchema>;

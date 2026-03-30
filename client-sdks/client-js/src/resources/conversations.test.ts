@@ -110,4 +110,22 @@ describe('Conversations Resource', () => {
       }),
     );
   });
+
+  it('deletes a conversation', async () => {
+    mockJsonResponse({
+      id: 'conv_123',
+      object: 'conversation.deleted',
+      deleted: true,
+    });
+
+    const deleted = await client.conversations.delete('conv_123');
+    expect(deleted.deleted).toBe(true);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/conversations/conv_123',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining(clientOptions.headers),
+      }),
+    );
+  });
 });

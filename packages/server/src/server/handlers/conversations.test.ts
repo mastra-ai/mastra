@@ -3,7 +3,12 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CREATE_CONVERSATION_ROUTE, GET_CONVERSATION_ITEMS_ROUTE, GET_CONVERSATION_ROUTE } from './conversations';
+import {
+  CREATE_CONVERSATION_ROUTE,
+  DELETE_CONVERSATION_ROUTE,
+  GET_CONVERSATION_ITEMS_ROUTE,
+  GET_CONVERSATION_ROUTE,
+} from './conversations';
 import { createTestServerContext } from './test-utils';
 
 describe('Conversation Handlers', () => {
@@ -110,6 +115,33 @@ describe('Conversation Handlers', () => {
         id: thread.id,
         resourceId: thread.resourceId,
       },
+    });
+  });
+
+  it('deletes a conversation by thread id', async () => {
+    const thread = await memory.createThread({
+      threadId: 'conv_delete',
+      resourceId: 'conv_delete',
+    });
+
+    const deleted = await DELETE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      conversationId: thread.id,
+    });
+
+    expect(deleted).toEqual({
+      id: 'conv_delete',
+      object: 'conversation.deleted',
+      deleted: true,
+    });
+
+    await expect(
+      GET_CONVERSATION_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        conversationId: thread.id,
+      }),
+    ).rejects.toMatchObject({
+      status: 404,
     });
   });
 });

@@ -222,6 +222,12 @@ export type Conversation = {
   thread: StorageThreadType;
 };
 
+export type ConversationDeleted = {
+  id: string;
+  object: 'conversation.deleted';
+  deleted: true;
+};
+
 export type CreateConversationParams = {
   agent_id: string;
   conversation_id?: string;
