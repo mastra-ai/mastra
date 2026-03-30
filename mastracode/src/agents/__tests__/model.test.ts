@@ -26,6 +26,9 @@ vi.mock('../../auth/storage.js', () => {
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
   promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
+  createAnthropicThinkingMiddleware: vi.fn((level: string) =>
+    level === 'off' ? undefined : { specificationVersion: 'v3', __thinkingLevel: level },
+  ),
 }));
 
 // Mock openai-codex provider
@@ -126,7 +129,7 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { thinkingLevel: undefined, headers: undefined });
     });
 
     it('uses API key when stored credential is api_key, even if isLoggedIn reports true', () => {
@@ -148,7 +151,7 @@ describe('resolveModel', () => {
       const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
 
       expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { thinkingLevel: undefined, headers: undefined });
     });
 
     it('uses stored API key credential when not logged in via OAuth', () => {
@@ -168,7 +171,7 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { thinkingLevel: undefined, headers: undefined });
     });
 
     it('passes harness headers to the Anthropic OAuth provider', () => {
@@ -184,6 +187,7 @@ describe('resolveModel', () => {
       });
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        thinkingLevel: undefined,
         headers: {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
@@ -195,6 +199,60 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.isLoggedIn.mockImplementation((p: string) => p === 'anthropic');
       resolveModel('anthropic/claude-sonnet-4-20250514');
       expect(mockAuthStorageInstance.reload).toHaveBeenCalled();
+    });
+
+    it('passes thinkingLevel to Anthropic OAuth provider', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514', { thinkingLevel: 'high' });
+
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        thinkingLevel: 'high',
+        headers: undefined,
+      });
+    });
+
+    it('passes thinkingLevel to Anthropic API key provider', async () => {
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514', { thinkingLevel: 'medium' });
+
+      // wrapLanguageModel should have been called with thinking middleware
+      const { wrapLanguageModel: mockWrap } = await import('ai');
+      const calls = (mockWrap as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1]![0] as { middleware: Array<Record<string, unknown>> };
+      const thinkingMw = lastCall.middleware.find((m: Record<string, unknown>) => '__thinkingLevel' in m);
+      expect(thinkingMw).toBeDefined();
+      expect((thinkingMw as Record<string, unknown>).__thinkingLevel).toBe('medium');
+    });
+
+    it('does not add thinking middleware when thinkingLevel is off', async () => {
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514', { thinkingLevel: 'off' });
+
+      const { wrapLanguageModel: mockWrap } = await import('ai');
+      const calls = (mockWrap as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1]![0] as { middleware: Array<Record<string, unknown>> };
+      const thinkingMw = lastCall.middleware.find((m: Record<string, unknown>) => '__thinkingLevel' in m);
+      expect(thinkingMw).toBeUndefined();
+    });
+
+    it('does not add thinking middleware when thinkingLevel is not specified', async () => {
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514');
+
+      const { wrapLanguageModel: mockWrap } = await import('ai');
+      const calls = (mockWrap as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1]![0] as { middleware: Array<Record<string, unknown>> };
+      const thinkingMw = lastCall.middleware.find((m: Record<string, unknown>) => '__thinkingLevel' in m);
+      expect(thinkingMw).toBeUndefined();
     });
   });
 

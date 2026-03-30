@@ -7,7 +7,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
-import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
+import { createAnthropicThinkingMiddleware, opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 
@@ -91,11 +91,18 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
-  const anthropic = createAnthropic({ apiKey, headers });
+function anthropicApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  options?: { thinkingLevel?: ThinkingLevel; headers?: ModelRequestHeaders },
+): LanguageModelV1 {
+  const anthropic = createAnthropic({ apiKey, headers: options?.headers });
+  const thinkingMiddleware = options?.thinkingLevel
+    ? createAnthropicThinkingMiddleware(options.thinkingLevel)
+    : undefined;
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [promptCacheMiddleware],
+    middleware: [promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
 
@@ -163,21 +170,24 @@ export function resolveModel(
 
     // Primary path: explicit OAuth credential
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers });
+      return opencodeClaudeMaxProvider(bareModelId, { thinkingLevel: options?.thinkingLevel, headers });
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), {
+        thinkingLevel: options?.thinkingLevel,
+        headers,
+      });
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
+      return anthropicApiKeyProvider(bareModelId, apiKey, { thinkingLevel: options?.thinkingLevel, headers });
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { headers });
+    return opencodeClaudeMaxProvider(bareModelId, { thinkingLevel: options?.thinkingLevel, headers });
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
