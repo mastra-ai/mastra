@@ -12,9 +12,9 @@ const textareaVariants = cva(
         unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
       },
       customSize: {
-        default: 'px-[13px] py-2 text-[calc(13_/_16_*_1rem)] min-h-[80px]',
+        default: 'px-[13px] py-2 text-[calc(13/16*1rem)] min-h-[80px]',
         sm: 'px-[13px] py-1.5 text-xs min-h-[60px]',
-        lg: 'px-[17px] py-3 text-[calc(13_/_16_*_1rem)] min-h-[120px]',
+        lg: 'px-[17px] py-3 text-[calc(13/16*1rem)] min-h-[120px]',
       },
     },
     defaultVariants: {

@@ -119,6 +119,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
 
+    if (options.name !== undefined) {
+      this.name = options.name;
+    }
     if (options.input !== undefined) {
       this.input = deepClean(options.input, this.deepCleanOptions);
     }
