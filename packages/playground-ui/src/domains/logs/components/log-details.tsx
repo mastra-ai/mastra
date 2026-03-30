@@ -96,6 +96,7 @@ export function LogDetails({
                   <Button
                     size="md"
                     className="min-w-0 flex-1 overflow-hidden"
+                    disabled={!log.traceId || !onSpanClick}
                     onClick={() => log.traceId && onSpanClick?.(log.traceId, log.spanId!)}
                   >
                     <ArrowRightIcon />
