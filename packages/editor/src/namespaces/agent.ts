@@ -203,7 +203,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ? { versionId: options.versionId }
           : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
-    } catch {
+    } catch (error) {
+      // If a specific versionId was requested, don't fail open — propagate the error
+      if (options && 'versionId' in options) {
+        throw error;
+      }
       // Editor not registered, storage not available, or agent not found — restore and return unchanged
       this.restoreCodeDefaults(agent);
       this.clearResolvedVersionId(agent);
