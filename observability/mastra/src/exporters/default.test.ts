@@ -948,6 +948,8 @@ describe('DefaultExporter', () => {
           type: 'metric',
           metric: {
             timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-1',
+            spanId: 'span-1',
             name: 'mastra_agent_duration_ms',
             value: 1,
             labels: {
@@ -959,8 +961,6 @@ describe('DefaultExporter', () => {
               other_label: 'kept',
             },
             correlationContext: {
-              traceId: 'trace-1',
-              spanId: 'span-1',
               environment: 'production',
               entityType: EntityType.AGENT,
               entityName: 'my-agent',
@@ -1131,7 +1131,7 @@ describe('DefaultExporter', () => {
           feedbacks: [
             expect.objectContaining({
               traceId: 'trace-1',
-              source: 'user',
+              feedbackSource: 'user',
               feedbackType: 'thumbs',
               value: 1,
             }),
@@ -1150,10 +1150,10 @@ describe('DefaultExporter', () => {
           type: 'log',
           log: {
             timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-1',
             level: 'info',
             message: 'Agent started',
             correlationContext: {
-              traceId: 'trace-1',
               entityType: EntityType.AGENT,
               entityName: 'my-agent',
               environment: 'production',

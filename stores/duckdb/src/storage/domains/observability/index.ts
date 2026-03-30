@@ -52,7 +52,7 @@ import type {
   ObservabilityStorageStrategy,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { ALL_DDL } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
@@ -82,6 +82,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async init(): Promise<void> {
     for (const ddl of ALL_DDL) {
       await this.db.execute(ddl);
+    }
+
+    for (const migration of ALL_MIGRATIONS) {
+      await this.db.execute(migration);
     }
   }
 

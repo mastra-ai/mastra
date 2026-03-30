@@ -2,12 +2,12 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   experimentIdField,
+  contextFields,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
-  userIdField,
 } from '../shared';
 
 // ============================================================================
@@ -20,6 +20,21 @@ const feedbackValueField = z
   .union([z.number(), z.string()])
   .describe('Feedback value (rating number or correction text)');
 const feedbackCommentField = z.string().describe('Additional comment or context');
+const feedbackUserIdField = z.string().describe('User who provided the feedback');
+
+function normalizeLegacyFeedbackActor<T>(input: T): T {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input;
+  }
+
+  const record = { ...(input as Record<string, unknown>) };
+  if (typeof record.userId === 'string' && record.feedbackUserId == null) {
+    record.feedbackUserId = record.userId;
+    delete record.userId;
+  }
+
+  return record as T;
+}
 
 // ============================================================================
 // FeedbackRecord Schema (Storage Format)
@@ -29,33 +44,41 @@ const feedbackCommentField = z.string().describe('Additional comment or context'
  * Schema for feedback as stored in the database.
  * Includes all fields from ExportedFeedback plus storage-specific fields.
  */
+const feedbackRecordObjectSchema = z.object({
+  timestamp: z.date().describe('When the feedback was recorded'),
+
+  // Target
+  traceId: traceIdField,
+  spanId: spanIdField.nullish().describe('Span ID this feedback applies to'),
+
+  // Feedback data
+  feedbackSource: feedbackSourceField.nullish(),
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source: feedbackSourceField.nullish(),
+  feedbackType: feedbackTypeField,
+  value: feedbackValueField,
+  comment: feedbackCommentField.nullish(),
+
+  // Feedback actor identity
+  feedbackUserId: feedbackUserIdField.nullish(),
+
+  // Context (entity hierarchy, identity, correlation, deployment, experimentation)
+  ...contextFields,
+
+  // Source linkage (e.g. dataset item result ID)
+  sourceId: z
+    .string()
+    .nullish()
+    .describe('ID of the source record this feedback is linked to (e.g. experiment result ID)'),
+
+  // User-defined metadata (context fields stored here)
+  metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
+});
+
 export const feedbackRecordSchema = z
-  .object({
-    timestamp: z.date().describe('When the feedback was recorded'),
-
-    // Target
-    traceId: traceIdField,
-    spanId: spanIdField.nullish().describe('Span ID this feedback applies to'),
-
-    // Feedback data
-    source: feedbackSourceField,
-    feedbackType: feedbackTypeField,
-    value: feedbackValueField,
-    comment: feedbackCommentField.nullish(),
-    experimentId: experimentIdField.nullish(),
-
-    // Identity
-    userId: userIdField.nullish(),
-
-    // Source linkage (e.g. dataset item result ID)
-    sourceId: z
-      .string()
-      .nullish()
-      .describe('ID of the source record this feedback is linked to (e.g. experiment result ID)'),
-
-    // User-defined metadata (context fields stored here)
-    metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
-  })
+  .object(feedbackRecordObjectSchema.shape)
   .describe('Feedback record as stored in the database');
 
 /** Feedback record type for storage */
@@ -69,18 +92,26 @@ export type FeedbackRecord = z.infer<typeof feedbackRecordSchema>;
  * Schema for user-provided feedback input (minimal required fields).
  * The span/trace context adds traceId/spanId before emitting ExportedFeedback.
  */
-export const feedbackInputSchema = z
-  .object({
-    source: feedbackSourceField,
-    feedbackType: feedbackTypeField,
-    value: feedbackValueField,
-    comment: feedbackCommentField.optional(),
-    userId: userIdField.optional(),
-    metadata: z.record(z.string(), z.unknown()).optional().describe('Additional feedback-specific metadata'),
-    experimentId: experimentIdField.optional(),
-    sourceId: z.string().optional().describe('ID of the source record this feedback is linked to'),
-  })
-  .describe('User-provided feedback input');
+const feedbackInputObjectSchema = z.object({
+  feedbackSource: feedbackSourceField.optional(),
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source: feedbackSourceField.optional(),
+  feedbackType: feedbackTypeField,
+  value: feedbackValueField,
+  comment: feedbackCommentField.optional(),
+  feedbackUserId: feedbackUserIdField.optional(),
+  /**
+   * @deprecated Use `feedbackUserId` instead.
+   */
+  userId: feedbackUserIdField.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional feedback-specific metadata'),
+  experimentId: experimentIdField.optional(),
+  sourceId: z.string().optional().describe('ID of the source record this feedback is linked to'),
+});
+
+export const feedbackInputSchema = z.object(feedbackInputObjectSchema.shape).describe('User-provided feedback input');
 
 /** User-facing feedback input type */
 export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
@@ -98,7 +129,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 /** Schema for createFeedback operation arguments */
 export const createFeedbackArgsSchema = z
   .object({
-    feedback: createFeedbackRecordSchema,
+    feedback: z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema),
   })
   .describe('Arguments for creating feedback');
 
@@ -108,7 +139,7 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: createFeedbackRecordSchema.omit({ timestamp: true }),
+    feedback: feedbackRecordObjectSchema.omit({ timestamp: true }),
   })
   .describe('Arguments for creating feedback');
 
@@ -126,7 +157,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 /** Schema for batchCreateFeedback operation arguments */
 export const batchCreateFeedbackArgsSchema = z
   .object({
-    feedbacks: z.array(createFeedbackRecordSchema),
+    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema)),
   })
   .describe('Arguments for batch recording feedback');
 
@@ -138,17 +169,24 @@ export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSche
 // ============================================================================
 
 /** Schema for filtering feedback in list queries */
-export const feedbackFilterSchema = z
-  .object({
-    ...commonFilterFields,
+const feedbackFilterObjectSchema = z.object({
+  ...commonFilterFields,
 
-    // Feedback-specific filters
-    feedbackType: z
-      .union([z.string(), z.array(z.string())])
-      .optional()
-      .describe('Filter by feedback type(s)'),
-    source: z.string().optional().describe('Filter by feedback source (e.g., user, system, manual)'),
-  })
+  // Feedback-specific filters
+  feedbackType: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe('Filter by feedback type(s)'),
+  feedbackSource: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+  feedbackUserId: feedbackUserIdField.optional(),
+});
+
+export const feedbackFilterSchema = z
+  .object(feedbackFilterObjectSchema.shape)
   .describe('Filters for querying feedback');
 
 /** Filters for querying feedback */
@@ -172,7 +210,10 @@ export const feedbackOrderBySchema = z
 /** Schema for listFeedback operation arguments */
 export const listFeedbackArgsSchema = z
   .object({
-    filters: feedbackFilterSchema.optional().describe('Optional filters to apply'),
+    filters: z
+      .preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema)
+      .optional()
+      .describe('Optional filters to apply'),
     pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
     orderBy: feedbackOrderBySchema
       .default({ field: 'timestamp', direction: 'DESC' })

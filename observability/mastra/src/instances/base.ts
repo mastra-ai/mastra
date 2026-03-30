@@ -339,6 +339,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new LoggerContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
       correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
@@ -355,6 +357,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
       correlationContext,
       metadata,
       cardinalityFilter: this.cardinalityFilter,
@@ -369,6 +373,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitObservabilityEvent(event: ObservabilityEvent): void {
     this.observabilityBus.emit(event);
+  }
+
+  /**
+   * Internal hook used by RecordedTrace/RecordedSpan hydration to route
+   * non-tracing annotation events back through the normal exporter pipeline.
+   */
+  __emitRecordedEvent(event: ObservabilityEvent): void {
+    this.emitObservabilityEvent(event);
   }
 
   // ============================================================================
