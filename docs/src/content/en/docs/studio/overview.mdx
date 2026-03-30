@@ -31,9 +31,7 @@ Once the server is running, you can:
 
 To run Studio in production, see [Studio deployment](/docs/studio/deployment). To run Studio independently from your Mastra server, use [`mastra studio`](/reference/cli/mastra#mastra-studio).
 
-## Studio UI
-
-The Studio UI lets you interact with your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go.
+## Primitives
 
 ### Agents
 
@@ -51,12 +49,6 @@ Visualize your workflow as a graph and run it step by step with a custom input. 
 
 When running a workflow, you can also view detailed traces showing tool calls, raw JSON outputs, and any errors that might have occurred along the way.
 
-### Tools
-
-Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
-
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/tools_ab07x7.mp4" />
-
 ### Processors
 
 View the input and output processors attached to each agent. The agent detail panel lists every processor by name and type, so you can verify your guardrails, token limiters, and custom processors are wired up correctly before testing.
@@ -65,19 +57,31 @@ View the input and output processors attached to each agent. The agent detail pa
 
 See [Processors](/docs/agents/processors) and [Guardrails](/docs/agents/guardrails) for configuration details.
 
-### MCP
+### MCP servers
 
 List the MCP servers attached to your Mastra instance and explore their available tools.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/mcp_rynloj.mp4" />
 
-### Observability
+### Tools
 
-When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
+Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/tools_ab07x7.mp4" />
 
-Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [Studio observability](/docs/studio/observability) docs to learn more.
+### Workspaces
+
+Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
+
+See [Workspaces](/docs/workspace/overview) for configuration details.
+
+### Request context
+
+Set runtime variables that flow into your agent's instructions and tools through dependency injection. Edit request context as JSON or use a schema-driven form when your agent defines a `requestContextSchema`. Values persist across test chats and experiments, so you can trigger conditional flows without restarting.
+
+See [Request context](/docs/server/request-context) for configuration details.
+
+## Evaluation
 
 ### Scorers
 
@@ -92,6 +96,28 @@ Create and manage collections of test cases to evaluate your agents and workflow
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/datasets_p35u2v.mp4" />
 
 See [Datasets overview](/docs/evals/datasets/overview) for the full API and versioning details.
+
+### Experiments
+
+Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
+
+See [Datasets overview](/docs/evals/datasets/overview) for setup details.
+
+## Observability
+
+### Metrics
+
+A dashboard that summarizes agent, workflow, and tool performance over a configurable time range (last 24 hours to 30 days). The top row shows total agent runs, model cost, token consumption, and average scorer performance. Below that, detailed cards break down model usage and cost per model, token usage per agent, trace volume with completed and error counts, latency percentiles (p50 and p95), and scorer trends over time.
+
+Visit the [Studio observability](/docs/studio/observability) docs for a detailed walkthrough.
+
+### Traces
+
+When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
+
+Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [Studio observability](/docs/studio/observability) docs to learn more.
 
 ## Configuration
 
