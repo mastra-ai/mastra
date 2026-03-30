@@ -13493,8 +13493,7 @@ describe('Message ordering regressions', () => {
 
   // ─── Test 3: observer failure should not lose messages ───
 
-  it('3 — observer failure in output path should not lose messages', async () => {
-    // Use a failing model for observation
+  it('3 — observer failure during sync observation should not lose previously persisted messages', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -13532,6 +13531,22 @@ describe('Message ordering regressions', () => {
       },
     });
 
+    // Seed messages so OM token threshold is exceeded at step > 0
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
     const state: Record<string, unknown> = {};
     const mockWriter = { custom: async () => {} };
     const abort = (() => {
@@ -13540,11 +13555,13 @@ describe('Message ordering regressions', () => {
     const makeCtx = () => {
       const ctx = new RequestContext();
       ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      ctx.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
       return ctx;
     };
 
-    const ml = new MessageList({ threadId, resourceId });
-    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    let ml = new MessageList({ threadId, resourceId });
+    let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     ml.add(
       {
@@ -13592,15 +13609,72 @@ describe('Message ordering regressions', () => {
       retryCount: 0,
     });
 
-    // Messages must be persisted despite observer failure
-    const result = await storage.listMessages({
+    // Verify Turn 1 messages persisted
+    let result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
-    const stored = result.messages;
-    expect(stored.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(stored.some(m => m.role === 'assistant')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+
+    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    Object.keys(state).forEach(k => delete state[k]);
+    ml = new MessageList({ threadId, resourceId });
+    processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    ml.add(
+      {
+        id: 'fail-user-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Follow-up question' }] },
+        createdAt: new Date('2025-01-01T10:02:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+    await processor.processInputStep({
+      messageList: ml,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: failingModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    // Step 1: threshold exceeded → sync observation fires → model throws → abort
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
+
+    // Despite observation failure, all previously persisted messages must survive
+    result = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    // Turn 2's user message was saved at step 1 *before* observation ran
+    expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───
