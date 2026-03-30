@@ -24,7 +24,7 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
       let page = 0;
       const scores: ScoreRecord[] = [];
 
-       
+     // eslint-disable-next-line no-constant-condition  
       while (true) {
         const res = await client.listScores({
           filters: {
