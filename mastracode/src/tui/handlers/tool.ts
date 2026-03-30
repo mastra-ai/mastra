@@ -51,7 +51,11 @@ export function formatToolResult(result: unknown): string {
         return textParts.join('\n');
       }
     }
-    return safeStringify(result, 2);
+    try {
+      return safeStringify(result, 2);
+    } catch {
+      return String(result);
+    }
   }
   return String(result);
 }
