@@ -5,8 +5,11 @@ export type { ThreadIsolationMode };
 /**
  * Configuration options for BrowserUseBrowser.
  * Extends the base BrowserConfig with browser-use SDK specific options.
+ *
+ * Note: `headless` and `cdpUrl` are omitted - Browser Use SDK is cloud-only
+ * and provides its own CDP URL from the session.
  */
-export interface BrowserConfig extends BaseBrowserConfig {
+export interface BrowserConfig extends Omit<BaseBrowserConfig, 'headless' | 'cdpUrl'> {
   /**
    * Browser Use API key.
    * If not provided, will use BROWSER_USE_API_KEY environment variable.
