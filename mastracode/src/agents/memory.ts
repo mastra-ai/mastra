@@ -83,6 +83,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
             threadTitle: true,
+            instruction:
+              'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.',
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,
