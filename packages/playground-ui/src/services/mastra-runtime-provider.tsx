@@ -390,6 +390,13 @@ export function MastraRuntimeProvider({
     setLegacyMessages(initializeMessageState(initialLegacyMessages || []));
   }, [initialLegacyMessages]);
 
+  const chatRequestContext = useMemo(() => {
+    if (!agentVersionId) return undefined;
+    const ctx = new RequestContext();
+    ctx.set('agentVersionId', agentVersionId);
+    return ctx;
+  }, [agentVersionId]);
+
   const {
     messages,
     sendMessage,
@@ -407,6 +414,7 @@ export function MastraRuntimeProvider({
   } = useChat({
     agentId,
     initialMessages,
+    requestContext: chatRequestContext,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();

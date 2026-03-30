@@ -18,6 +18,8 @@ export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
   initialMessages?: MastraUIMessage[];
+  /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
+  requestContext?: RequestContext;
 }
 
 interface SharedArgs {
@@ -60,12 +62,12 @@ const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string |
   return undefined;
 };
 
-export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProps) => {
+export const useChat = ({ agentId, resourceId, initialMessages, requestContext: propsRequestContext }: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
-  const _requestContext = useRef<RequestContext | undefined>(undefined);
+  const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -81,7 +83,10 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     const formattedMessages = resolveInitialMessages(initialMessages || []);
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
-  }, [initialMessages]);
+    if (propsRequestContext) {
+      _requestContext.current = propsRequestContext;
+    }
+  }, [initialMessages, propsRequestContext]);
 
   const generate = async ({
     coreUserMessages,
