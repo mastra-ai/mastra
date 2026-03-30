@@ -1,6 +1,6 @@
 import { createMemoryState } from '@chat-adapter/state-memory';
 import type { Adapter, CardElement, Message, SentMessage, StateAdapter, Thread } from 'chat';
-import { Actions, Button, Card, CardText, Chat, ThreadImpl } from 'chat';
+import { Actions, Button, Card, CardText, Chat } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -163,67 +163,38 @@ export class AgentChat {
     chat.onNewMention(handler);
     chat.onSubscribedMessage(handler);
 
-    // Tool approval buttons
-    chat.onAction(['tool_approve', 'tool_deny'], async event => {
+    // Tool approval buttons — id is "tool_approve:<runId>:<toolCallId>" or "tool_deny:<runId>:<toolCallId>"
+    chat.onAction(async event => {
+      const { actionId } = event;
+      if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
       try {
-        if (!event.value) return;
-        const {
-          runId,
-          toolCallId,
-          threadId,
-          platform: storedPlatform,
-          toolName: storedToolName,
-          argsSummary: storedArgsSummary,
-        } = JSON.parse(event.value) as {
-          runId: string;
-          toolCallId: string;
-          threadId: string;
-          platform: string;
-          toolName: string;
-          argsSummary: string;
-        };
-        const approved = event.actionId === 'tool_approve';
-        const platform = storedPlatform || event.adapter.name;
+        const approved = actionId.startsWith('tool_approve:');
+        const parts = actionId.split(':');
+        const runId = parts[1]!;
+        const toolCallId = parts[2];
 
-        // Reconstruct the original conversation thread from the encoded data.
-        // We can't use event.thread because Slack roots it on the card message,
-        // creating unwanted sub-threads in DMs.
+        // In Slack DMs, event.thread points to the approval card message rather
+        // than the top-level conversation, which can cause sub-threading.
+        // This is a known Slack adapter limitation.
+        const sdkThread = event.thread as Thread | null;
+        if (!sdkThread) {
+          this.log('info', `No thread in action event for runId=${runId}`);
+          return;
+        }
+        const platform = event.adapter.name;
+        const messageId = event.messageId;
         const adapter = this.adapters[platform];
         if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
-        const parts = threadId.split(':');
-        const sdkThread: Thread = new ThreadImpl({
-          adapter,
-          stateAdapter: this.stateAdapter,
-          id: threadId,
-          channelId: parts[1] || '',
-          isDM: event.thread?.isDM,
-        });
 
-        // Update the approval card to remove buttons
-        if (event.messageId) {
-          const titleText = storedArgsSummary
-            ? `**${storedToolName}** \`${storedArgsSummary}\` ⋯`
-            : `**${storedToolName}** ⋯`;
-          if (approved) {
-            // Show ⋯ while the tool executes; consumeAgentStream will replace with the result
-            try {
-              await adapter.editMessage(sdkThread.id, event.messageId, Card({ children: [CardText(titleText)] }));
-            } catch {
-              // best-effort
-            }
-          } else {
-            const isDM = event.thread?.isDM ?? sdkThread.isDM;
-            const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
-            try {
-              await adapter.editMessage(
-                sdkThread.id,
-                event.messageId,
-                Card({ children: [CardText(titleText), CardText(`🚫 Denied${suffix}`)] }),
-              );
-            } catch {
-              // best-effort
-            }
+        if (!approved) {
+          const isDM = sdkThread.isDM;
+          const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
+          try {
+            await adapter.editMessage(sdkThread.id, messageId, Card({ children: [CardText(`🚫 Denied${suffix}`)] }));
+          } catch {
+            // best-effort
           }
+          return;
         }
 
         // Build request context for the resumed stream
@@ -234,14 +205,14 @@ export class AgentChat {
           isDM: sdkThread.isDM,
           threadId: sdkThread.id,
           channelId: sdkThread.channelId,
-          messageId: event.messageId,
+          messageId,
           userId: event.user.userId,
           userName: event.user.fullName || event.user.userName,
         } satisfies ChannelContext);
 
-        // Resume the agent stream
-        const method = approved ? 'approveToolCall' : 'declineToolCall';
-        const resumedStream = await this.agent[method]({
+        // Resume the agent stream BEFORE editing the card —
+        // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
+        const resumedStream = await this.agent.approveToolCall({
           runId,
           toolCallId,
           requestContext,
@@ -261,11 +232,14 @@ export class AgentChat {
           sdkThread,
           platform,
           ensureTyping,
-          approved && event.messageId
-            ? { messageId: event.messageId, toolName: storedToolName, argsSummary: storedArgsSummary }
-            : undefined,
+          toolCallId ? { toolCallId, messageId } : undefined,
         );
       } catch (err) {
+        const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
+        if (isStaleApproval) {
+          this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+          return;
+        }
         this.log('error', 'Error handling tool approval action', err);
         try {
           const thread = event.thread;
@@ -500,25 +474,43 @@ export class AgentChat {
   /**
    * Consume an agent stream (initial or resumed), posting text, tool cards,
    * and approval prompts to the SDK thread.
+   *
+   * @param approvalContext - When resuming after a tool approval, provides the
+   *   approved tool's metadata and the messageId of the approval card so that
+   *   the tool-result can edit the card rather than posting a new message.
    */
   private async consumeAgentStream(
     stream: MastraModelOutput,
     sdkThread: Thread,
     platform: string,
     ensureTyping: () => Promise<void>,
-    approvalContext?: { messageId: string; toolName: string; argsSummary: string },
+    approvalContext?: { toolCallId: string; messageId: string },
   ): Promise<void> {
     const adapterConfig = this.adapterConfigs[platform];
+    const adapter = this.adapters[platform];
 
-    // Track tool calls: store metadata + the sent message so we can edit it if approval comes
+    // Track tool calls: store metadata + the sent message so we can edit it when the result arrives
     interface TrackedToolCall {
       toolName: string;
       args: Record<string, unknown>;
       argsSummary: string;
       startedAt: number;
       sentMessage?: SentMessage;
+      /** Raw adapter messageId — used when editing via adapter directly (e.g. approval card). */
+      rawMessageId?: string;
     }
     const toolCalls = new Map<string, TrackedToolCall>();
+
+    // Pre-seed with the just-approved tool so its tool-result can edit the approval card
+    if (approvalContext) {
+      toolCalls.set(approvalContext.toolCallId, {
+        toolName: '',
+        args: {},
+        argsSummary: '',
+        startedAt: Date.now(),
+        rawMessageId: approvalContext.messageId,
+      });
+    }
 
     let text = '';
     const flushText = async () => {
@@ -540,26 +532,53 @@ export class AgentChat {
         ) as Record<string, unknown>;
         const argsSummary = formatArgsSummary(rawArgs);
 
-        const sentMessage = adapterConfig?.formatToolCall
-          ? undefined
-          : await sdkThread.post(
-              Card({
-                children: [CardText(argsSummary ? `**${displayName}** \`${argsSummary}\` ⋯` : `**${displayName}** ⋯`)],
-              }),
-            );
+        // If this tool was pre-seeded (e.g. from an approval), update metadata
+        // and edit the existing card to "Running..." — don't post a new one
+        const existing = toolCalls.get(chunk.payload.toolCallId);
+        if (existing?.rawMessageId) {
+          existing.toolName = displayName;
+          existing.args = rawArgs;
+          existing.argsSummary = argsSummary;
+          existing.startedAt = Date.now();
+          if (adapter) {
+            const runningText = argsSummary ? `**${displayName}** \`${argsSummary}\` ⋯` : `**${displayName}** ⋯`;
+            try {
+              await adapter.editMessage(
+                sdkThread.id,
+                existing.rawMessageId,
+                Card({ children: [CardText(runningText)] }),
+              );
+            } catch {
+              // best-effort
+            }
+          }
+        } else {
+          const sentMessage = adapterConfig?.formatToolCall
+            ? undefined
+            : await sdkThread.post(
+                Card({
+                  children: [
+                    CardText(argsSummary ? `**${displayName}** \`${argsSummary}\` ⋯` : `**${displayName}** ⋯`),
+                  ],
+                }),
+              );
 
-        toolCalls.set(chunk.payload.toolCallId, {
-          toolName: displayName,
-          args: rawArgs,
-          argsSummary,
-          startedAt: Date.now(),
-          sentMessage,
-        });
+          toolCalls.set(chunk.payload.toolCallId, {
+            toolName: displayName,
+            args: rawArgs,
+            argsSummary,
+            startedAt: Date.now(),
+            sentMessage,
+          });
+        }
       } else if (chunk.type === 'tool-result') {
         const entry = toolCalls.get(chunk.payload.toolCallId);
-        const displayName = entry?.toolName ?? stripToolPrefix(chunk.payload.toolName);
-        const args = entry?.args ?? ((chunk.payload.args ?? {}) as Record<string, unknown>);
-        const argsSummary = entry?.argsSummary ?? formatArgsSummary(args);
+        const displayName = entry?.toolName || stripToolPrefix(chunk.payload.toolName);
+        const args =
+          entry?.args && Object.keys(entry.args).length > 0
+            ? entry.args
+            : ((chunk.payload.args ?? {}) as Record<string, unknown>);
+        const argsSummary = entry?.argsSummary || formatArgsSummary(args);
         toolCalls.delete(chunk.payload.toolCallId);
 
         if (adapterConfig?.formatToolCall) {
@@ -583,23 +602,19 @@ export class AgentChat {
             durationMs,
           );
 
-          // Try to edit the existing message (call message or approval card) into the result card
-          const editTarget = entry?.sentMessage ?? (approvalContext ? null : undefined);
-          if (editTarget) {
+          // Edit the existing card into the result, or post a new message
+          if (entry?.sentMessage) {
             try {
-              await editTarget.edit(resultCard);
+              await entry.sentMessage.edit(resultCard);
             } catch {
               await sdkThread.post(resultCard);
             }
-          } else if (approvalContext) {
-            // Resumed after approval — edit the approval card via adapter
+          } else if (entry?.rawMessageId && adapter) {
             try {
-              const adapter = this.adapters[platform]!;
-              await adapter.editMessage(sdkThread.id, approvalContext.messageId, resultCard);
+              await adapter.editMessage(sdkThread.id, entry.rawMessageId, resultCard);
             } catch {
               await sdkThread.post(resultCard);
             }
-            approvalContext = undefined; // Only use it for the first tool-result
           } else {
             await sdkThread.post(resultCard);
           }
@@ -614,23 +629,15 @@ export class AgentChat {
         const argsSummary = entry?.argsSummary ?? formatArgsSummary(args);
         toolCalls.delete(toolCallId);
 
-        const approvalData = JSON.stringify({
-          runId: stream.runId,
-          toolCallId,
-          threadId: sdkThread.id,
-          platform,
-          toolName: displayName,
-          argsSummary,
-        });
-
+        const runId = stream.runId;
         const header = argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`;
         const approvalCard = Card({
           children: [
             CardText(header),
             CardText('Requires approval to run.'),
             Actions([
-              Button({ id: 'tool_approve', label: 'Approve', style: 'primary', value: approvalData }),
-              Button({ id: 'tool_deny', label: 'Deny', style: 'danger', value: approvalData }),
+              Button({ id: `tool_approve:${runId}:${toolCallId}`, label: 'Approve', style: 'primary' }),
+              Button({ id: `tool_deny:${runId}:${toolCallId}`, label: 'Deny', style: 'danger' }),
             ]),
           ],
         });
@@ -646,7 +653,23 @@ export class AgentChat {
         } else {
           await sdkThread.post(approvalCard);
         }
-        // Stream is suspended — the onAction handler will resume it
+
+        // Stream is suspended — edit any remaining "Running..." cards from
+        // parallel tool calls to indicate they're queued behind this approval.
+        for (const [, remaining] of toolCalls) {
+          if (remaining.sentMessage) {
+            const queuedText = remaining.argsSummary
+              ? `**${remaining.toolName}** \`${remaining.argsSummary}\` ⏸`
+              : `**${remaining.toolName}** ⏸`;
+            try {
+              await remaining.sentMessage.edit(Card({ children: [CardText(queuedText)] }));
+            } catch {
+              // best-effort
+            }
+          }
+        }
+
+        // The onAction handler will resume the stream.
         return;
       } else if (chunk.type === 'text-delta') {
         if (chunk.payload.text) await ensureTyping();

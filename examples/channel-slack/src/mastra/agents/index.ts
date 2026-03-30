@@ -3,6 +3,7 @@ import { ChatChannelProcessor } from '@mastra/core/channels';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { DiscordAdapter } from '@chat-adapter/discord';
 import { SlackAdapter } from '@chat-adapter/slack';
+import { TelegramAdapter } from '@chat-adapter/telegram';
 import { Memory } from '@mastra/memory';
 
 export const exampleAgent = new Agent({
@@ -21,6 +22,7 @@ export const exampleAgent = new Agent({
       // formatError: () => 'Something went wrong. Please try again later.',
     },
     slack: new SlackAdapter(),
+    telegram: new TelegramAdapter(),
   },
   inputProcessors: [new ChatChannelProcessor()],
   workspace: new Workspace({
