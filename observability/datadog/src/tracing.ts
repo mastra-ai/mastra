@@ -287,10 +287,15 @@ export class DatadogExporter extends BaseExporter {
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
     // Merge span.metadata + remaining attributes into metadata
-    const combinedMetadata = {
+    // Error message goes into metadata (not tags) because tags get normalized/truncated
+    // which mangles free-form error text (e.g. colons split into key/value, spaces become underscores)
+    const combinedMetadata: Record<string, any> = {
       ...span.metadata,
       ...otherAttributes,
     };
+    if (span.errorInfo) {
+      combinedMetadata['error.message'] = span.errorInfo.message;
+    }
     if (Object.keys(combinedMetadata).length > 0) {
       annotations.metadata = combinedMetadata;
     }
@@ -314,10 +319,10 @@ export class DatadogExporter extends BaseExporter {
       }
     }
 
-    // Add error info as flattened tags (dd-trace requires primitive tag values)
+    // Add error status and structured error fields as tags (short, structured values that survive normalization)
+    // The error message itself is in metadata above to avoid tag normalization/truncation
     if (span.errorInfo) {
       tags.error = true;
-      tags['error.message'] = span.errorInfo.message;
       if (span.errorInfo.id) {
         tags['error.id'] = span.errorInfo.id;
       }

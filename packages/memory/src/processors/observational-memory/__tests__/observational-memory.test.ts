@@ -12,6 +12,7 @@ import {
   sortThreadsByOldestMessage,
   combineObservationsForBuffering,
 } from '../message-utils';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -1038,7 +1039,7 @@ describe('Observer Agent Helpers', () => {
         reflection: { observationTokens: 1000 },
       });
 
-      (om.observer as any).observerAgent = {
+      vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
         stream: async (prompt: any) => {
           capturedPrompt = prompt;
           return {
@@ -1048,7 +1049,7 @@ describe('Observer Agent Helpers', () => {
             }),
           };
         },
-      };
+      });
 
       const message = createTestMessage('ignored', 'user');
       message.content = {
@@ -1096,6 +1097,63 @@ describe('Observer Agent Helpers', () => {
           filename: 'floorplan.pdf',
         }),
       );
+    });
+  });
+
+  describe('ModelByInputTokens runtime routing', () => {
+    it('resolves observer and reflector models at call time from token tiers', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: {
+          model: new ModelByInputTokens({
+            upTo: {
+              10: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+          messageTokens: 1,
+          bufferTokens: false,
+        },
+        reflection: {
+          model: new ModelByInputTokens({
+            upTo: {
+              1: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+        },
+      });
+
+      const observerResolveSpy = vi.spyOn(om as any, 'resolveObservationModel');
+      const reflectorResolveSpy = vi.spyOn(om as any, 'resolveReflectionModel');
+
+      const observerCreateAgentSpy = vi.spyOn((om as any).observer, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<observations>obs</observations>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      const reflectorCreateAgentSpy = vi.spyOn((om as any).reflector, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<reflections>ref</reflections>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      const observerMessages = [createTestMessage('01234567890', 'user')];
+
+      await om.observer.call(undefined, observerMessages);
+      await (om as any).reflector.call('01234567890');
+
+      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
     });
   });
 
@@ -3476,7 +3534,7 @@ Ask about favorite vegetarian dishes
       scope: 'thread',
     });
 
-    (om.observer as any).observerAgent = {
+    vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
         return {
@@ -3486,7 +3544,7 @@ Ask about favorite vegetarian dishes
           }),
         };
       },
-    };
+    });
 
     const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
     attachmentMessage.content = {

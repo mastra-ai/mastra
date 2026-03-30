@@ -32,7 +32,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex items-center justify-center h-6 w-6 rounded-full text-neutral3 hover:text-neutral6 hover:bg-surface4 opacity-0 group-hover/add:opacity-100 transition-all duration-150 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent1"
+            className="flex items-center justify-center h-6 w-6 rounded-full text-neutral3 hover:text-neutral6 hover:bg-surface4 opacity-0 group-hover/add:opacity-100 transition-all duration-150 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
           >
             <Icon>
               <PlusIcon />
