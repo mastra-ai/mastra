@@ -317,6 +317,11 @@ export function ConversationsExample() {
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
   const isCreatingConversationRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,8 +367,11 @@ export function ConversationsExample() {
     let cancelled = false;
 
     async function loadConversationItems() {
+      setTurns([]);
+      setOpenRawTurnId(null);
+      setLoadingRawTurnId(null);
+
       if (!activeConversationId) {
-        setTurns([]);
         return;
       }
 
@@ -451,12 +459,19 @@ export function ConversationsExample() {
     try {
       await client.conversations.delete(conversationId);
 
-      const remainingConversations = conversations.filter(conversation => conversation.id !== conversationId);
-      setConversations(remainingConversations);
-      if (activeConversationId === conversationId) {
-        setActiveConversationId(remainingConversations[0]?.id ?? null);
+      let remainingConversations: ConversationSummary[] = [];
+      setConversations(current => {
+        remainingConversations = current.filter(conversation => conversation.id !== conversationId);
+        return remainingConversations;
+      });
+      setActiveConversationId(current =>
+        current === conversationId ? (remainingConversations[0]?.id ?? null) : current,
+      );
+
+      if (activeConversationIdRef.current === conversationId) {
         setTurns([]);
         setOpenRawTurnId(null);
+        setLoadingRawTurnId(null);
       }
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete conversation.');

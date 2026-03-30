@@ -108,6 +108,7 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
     const reader = this.response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let completed = false;
 
     try {
       while (true) {
@@ -133,10 +134,14 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
       }
 
       const finalEvent = parseSseBlock(buffer);
+      completed = true;
       if (finalEvent) {
         yield finalEvent;
       }
     } finally {
+      if (!completed) {
+        await reader.cancel();
+      }
       reader.releaseLock();
     }
   }
