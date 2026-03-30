@@ -514,6 +514,11 @@ async function finalizeResponse({
   return { completedState, response, responseMessages };
 }
 
+/**
+ * Resolves all request-scoped Mastra primitives needed to execute a Responses create
+ * call: the owning agent, the memory thread context, the normalized execution input,
+ * and the response-turn metadata that may be persisted later.
+ */
 async function prepareCreateResponseRequest({
   body,
   mastra,
@@ -581,6 +586,10 @@ async function prepareCreateResponseRequest({
   };
 }
 
+/**
+ * Bridges a Mastra agent stream into OpenAI-style Responses SSE events and completes
+ * the stored response-turn record when the stream finishes.
+ */
 function createResponseEventStream({
   body,
   configuredTools,

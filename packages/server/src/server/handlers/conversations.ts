@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from '../http-exception';
 import {
   conversationDeletedSchema,
@@ -14,6 +15,33 @@ import { handleError } from './error';
 import { mapMastraMessagesToConversationItems } from './responses.adapter';
 import { getResponseMemoryStore } from './responses.storage';
 import { getEffectiveResourceId } from './utils';
+
+/**
+ * Resolves a stored conversation thread and enforces the caller's resource scope.
+ * Conversations are persisted as memory threads, so all read/delete routes share
+ * this lookup path.
+ */
+async function resolveConversationThread({
+  conversationId,
+  memoryStore,
+  requestContext,
+}: {
+  conversationId: string;
+  memoryStore: NonNullable<Awaited<ReturnType<typeof getResponseMemoryStore>>>;
+  requestContext: RequestContext;
+}) {
+  const thread = await memoryStore.getThreadById({ threadId: conversationId });
+  if (!thread) {
+    throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+  }
+
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
+    throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+  }
+
+  return thread;
+}
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
   return {
@@ -98,15 +126,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Memory storage is not available' });
       }
 
-      const thread = await memoryStore.getThreadById({ threadId: conversationId });
-      if (!thread) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
-
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-      if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
+      const thread = await resolveConversationThread({ conversationId, memoryStore, requestContext });
 
       return buildConversationObject({ thread });
     } catch (error) {
@@ -133,15 +153,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Memory storage is not available' });
       }
 
-      const thread = await memoryStore.getThreadById({ threadId: conversationId });
-      if (!thread) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
-
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-      if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
+      await resolveConversationThread({ conversationId, memoryStore, requestContext });
 
       const { messages } = await memoryStore.listMessages({
         threadId: conversationId,
@@ -174,15 +186,7 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Memory storage is not available' });
       }
 
-      const thread = await memoryStore.getThreadById({ threadId: conversationId });
-      if (!thread) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
-
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-      if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-      }
+      await resolveConversationThread({ conversationId, memoryStore, requestContext });
 
       await memoryStore.deleteThread({ threadId: conversationId });
 

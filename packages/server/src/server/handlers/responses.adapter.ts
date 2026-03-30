@@ -182,11 +182,15 @@ function createFunctionCallOutputItem({ itemId, callId, output }: { itemId: stri
   };
 }
 
-function mapMastraMessagesToResponseToolItems(messages: MastraDBMessage[]) {
-  const items: Array<Extract<ConversationItem, { type: 'function_call' | 'function_call_output' }>> = [];
+type ResponseToolItem = Extract<ConversationItem, { type: 'function_call' | 'function_call_output' }>;
+
+/**
+ * Records which tool call ids already have dedicated tool-result messages so we can
+ * avoid duplicating `function_call_output` items when assistant messages echo the
+ * result inline.
+ */
+function collectToolResultCallIds(messages: MastraDBMessage[]) {
   const toolResultCallIds = new Set<string>();
-  const emittedCallIds = new Set<string>();
-  const emittedResultCallIds = new Set<string>();
 
   for (const message of messages) {
     const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
@@ -207,47 +211,63 @@ function mapMastraMessagesToResponseToolItems(messages: MastraDBMessage[]) {
     }
   }
 
-  for (const message of messages) {
-    const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+  return toolResultCallIds;
+}
 
-    for (const [partIndex, part] of parts.entries()) {
-      if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
-        continue;
-      }
+/**
+ * Maps one Mastra message into Responses tool items while preserving thread order.
+ */
+function mapMastraMessageToResponseToolItems({
+  message,
+  toolResultCallIds,
+  emittedCallIds,
+  emittedResultCallIds,
+}: {
+  message: MastraDBMessage;
+  toolResultCallIds: Set<string>;
+  emittedCallIds: Set<string>;
+  emittedResultCallIds: Set<string>;
+}): ResponseToolItem[] {
+  const items: ResponseToolItem[] = [];
+  const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
 
-      const toolInvocation = part.toolInvocation;
-      const toolName = typeof toolInvocation.toolName === 'string' ? toolInvocation.toolName : null;
-      const toolCallId =
-        typeof toolInvocation.toolCallId === 'string'
-          ? toolInvocation.toolCallId
-          : getToolKey(null, message.id, partIndex);
+  for (const [partIndex, part] of parts.entries()) {
+    if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
+      continue;
+    }
 
-      if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
-        items.push(
-          createFunctionCallItem({
-            itemId: `${message.id}:${partIndex}:call`,
-            callId: toolCallId,
-            name: toolName,
-            args: toolInvocation.args,
-          }),
-        );
-        emittedCallIds.add(toolCallId);
-      }
+    const toolInvocation = part.toolInvocation;
+    const toolName = typeof toolInvocation.toolName === 'string' ? toolInvocation.toolName : null;
+    const toolCallId =
+      typeof toolInvocation.toolCallId === 'string'
+        ? toolInvocation.toolCallId
+        : getToolKey(null, message.id, partIndex);
 
-      if (
-        toolInvocation.result !== undefined &&
-        !emittedResultCallIds.has(toolCallId) &&
-        (getMessageRole(message) === 'tool' || !toolResultCallIds.has(toolCallId))
-      ) {
-        items.push(
-          createFunctionCallOutputItem({
-            itemId: `${message.id}:${partIndex}:output`,
-            callId: toolCallId,
-            output: toolInvocation.result,
-          }),
-        );
-        emittedResultCallIds.add(toolCallId);
-      }
+    if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
+      items.push(
+        createFunctionCallItem({
+          itemId: `${message.id}:${partIndex}:call`,
+          callId: toolCallId,
+          name: toolName,
+          args: toolInvocation.args,
+        }),
+      );
+      emittedCallIds.add(toolCallId);
+    }
+
+    if (
+      toolInvocation.result !== undefined &&
+      !emittedResultCallIds.has(toolCallId) &&
+      (getMessageRole(message) === 'tool' || !toolResultCallIds.has(toolCallId))
+    ) {
+      items.push(
+        createFunctionCallOutputItem({
+          itemId: `${message.id}:${partIndex}:output`,
+          callId: toolCallId,
+          output: toolInvocation.result,
+        }),
+      );
+      emittedResultCallIds.add(toolCallId);
     }
   }
 
@@ -263,9 +283,20 @@ export function mapMastraMessagesToConversationItems(messages: MastraDBMessage[]
   }
 
   const items: ConversationItem[] = [];
-  const toolItems = mapMastraMessagesToResponseToolItems(messages);
+  const toolResultCallIds = collectToolResultCallIds(messages);
+  const emittedCallIds = new Set<string>();
+  const emittedResultCallIds = new Set<string>();
 
   for (const message of messages) {
+    items.push(
+      ...mapMastraMessageToResponseToolItems({
+        message,
+        toolResultCallIds,
+        emittedCallIds,
+        emittedResultCallIds,
+      }),
+    );
+
     const role = getMessageRole(message);
     const text = getMessageText(message);
 
@@ -296,7 +327,7 @@ export function mapMastraMessagesToConversationItems(messages: MastraDBMessage[]
     }
   }
 
-  return [...toolItems, ...items];
+  return items;
 }
 
 /**
@@ -319,9 +350,20 @@ export function mapMastraMessagesToResponseOutputItems({
 
   const output: ResponseOutputItem[] = [];
   const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
-  output.push(...mapMastraMessagesToResponseToolItems(messages));
+  const toolResultCallIds = collectToolResultCallIds(messages);
+  const emittedCallIds = new Set<string>();
+  const emittedResultCallIds = new Set<string>();
 
   for (const [messageIndex, message] of messages.entries()) {
+    output.push(
+      ...mapMastraMessageToResponseToolItems({
+        message,
+        toolResultCallIds,
+        emittedCallIds,
+        emittedResultCallIds,
+      }),
+    );
+
     const text = getMessageText(message);
     if (getMessageRole(message) === 'assistant' && text) {
       output.push(

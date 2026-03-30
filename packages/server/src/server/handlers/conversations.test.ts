@@ -97,6 +97,101 @@ describe('Conversation Handlers', () => {
     });
   });
 
+  it('preserves tool items in conversation order', async () => {
+    const thread = await memory.createThread({
+      threadId: 'conv_tools',
+      resourceId: 'conv_tools',
+    });
+
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'msg_user',
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'user',
+          type: 'text',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Check release status' }],
+          },
+        },
+        {
+          id: 'msg_assistant_tool',
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'assistant',
+          type: 'text',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_123',
+                  toolName: 'release-status',
+                  args: { channel: 'stable' },
+                },
+              },
+            ],
+          },
+        },
+        {
+          id: 'msg_tool',
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'tool',
+          type: 'text',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_123',
+                  toolName: 'release-status',
+                  result: { state: 'green' },
+                },
+              },
+            ],
+          },
+        },
+        {
+          id: 'msg_assistant_text',
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'assistant',
+          type: 'text',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Release is green.' }],
+          },
+        },
+      ],
+    });
+
+    const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      conversationId: thread.id,
+    });
+
+    expect(items).toMatchObject({
+      object: 'list',
+      data: [
+        { id: 'msg_user', type: 'message', role: 'user' },
+        { id: 'msg_assistant_tool:0:call', type: 'function_call', call_id: 'call_123', name: 'release-status' },
+        { id: 'msg_tool:0:output', type: 'function_call_output', call_id: 'call_123' },
+        { id: 'msg_assistant_text', type: 'message', role: 'assistant' },
+      ],
+    });
+  });
+
   it('retrieves a conversation by thread id', async () => {
     const thread = await memory.createThread({
       threadId: 'conv_789',
