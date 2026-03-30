@@ -73,6 +73,8 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
+export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -1221,6 +1223,12 @@ export interface ListAgentVersionsResponse {
 }
 
 export interface CreateAgentVersionParams {
+  changeMessage?: string;
+}
+
+export interface CreateCodeAgentVersionParams {
+  instructions?: AgentVersionResponse['instructions'];
+  tools?: AgentVersionResponse['tools'];
   changeMessage?: string;
 }
 

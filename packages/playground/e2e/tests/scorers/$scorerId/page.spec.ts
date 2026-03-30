@@ -6,16 +6,16 @@ test.afterEach(async () => {
 });
 
 test('has breadcrumb navigation', async ({ page }) => {
-  await page.goto('/scorers/response-quality');
+  await page.goto('/evaluation/scorers/response-quality');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
 
   const breadcrumb = page.locator('nav a:has-text("Scorers")').first();
-  await expect(breadcrumb).toHaveAttribute('href', '/scorers');
+  await expect(breadcrumb).toHaveAttribute('href', '/evaluation?tab=scorers');
 });
 
 test('displays scorer name and has documentation link', async ({ page }) => {
-  await page.goto('/scorers/response-quality');
+  await page.goto('/evaluation/scorers/response-quality');
 
   await expect(page.locator('h1')).toHaveText('Response Quality Scorer');
   await expect(page.locator('text=Scorers documentation')).toHaveAttribute(
@@ -25,17 +25,17 @@ test('displays scorer name and has documentation link', async ({ page }) => {
 });
 
 test('has entity filter dropdown', async ({ page }) => {
-  await page.goto('/scorers/response-quality');
+  await page.goto('/evaluation/scorers/response-quality');
 
-  // The entity filter should be present
-  const entityFilter = page.locator('button:has-text("All")');
+  const entityFilter = page.locator('main').getByRole('combobox').nth(1);
   await expect(entityFilter).toBeVisible();
+  await expect(entityFilter).toContainText('All Entities');
 });
 
 test('has scorer combobox for navigation', async ({ page }) => {
-  await page.goto('/scorers/response-quality');
+  await page.goto('/evaluation/scorers/response-quality');
 
-  // The scorer combobox should allow navigation between scorers
-  const combobox = page.getByRole('combobox').filter({ hasText: 'Response Quality Scorer' });
+  const combobox = page.locator('nav').getByRole('combobox').first();
   await expect(combobox).toBeVisible();
+  await expect(combobox).toContainText('Response Quality Scorer');
 });

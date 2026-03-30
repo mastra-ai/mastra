@@ -3,6 +3,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -141,11 +142,19 @@ export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   readonly scope: 'resource' | 'thread';
-  /** Whether retrieval-mode observation groups are enabled (thread scope only). */
+  /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
+  readonly onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
@@ -236,7 +245,8 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.retrieval = this.scope === 'thread' && (config.retrieval ?? false);
+    this.retrieval = Boolean(config.retrieval);
+    this.onIndexObservations = config.onIndexObservations;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -401,6 +411,8 @@ export class ObservationalMemory {
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
       observedMessageIds: this.observedMessageIds,
+      resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
+      tokenCounter: this.tokenCounter,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -420,6 +432,7 @@ export class ObservationalMemory {
       persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
+      resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
     });
 
     // Validate buffer configuration
@@ -514,6 +527,84 @@ export class ObservationalMemory {
     return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
   }
 
+  private resolveObservationModel(inputTokens: number): {
+    model: Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
+    selectedThreshold?: number;
+    routingStrategy?: 'model-by-input-tokens';
+    routingThresholds?: string;
+  } {
+    return this.resolveTieredModel(this.observationConfig.model, inputTokens);
+  }
+
+  private resolveReflectionModel(inputTokens: number): {
+    model: Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
+    selectedThreshold?: number;
+    routingStrategy?: 'model-by-input-tokens';
+    routingThresholds?: string;
+  } {
+    return this.resolveTieredModel(this.reflectionConfig.model, inputTokens);
+  }
+
+  private resolveTieredModel<TModel extends ObservationalMemoryModel>(
+    model: TModel,
+    inputTokens: number,
+  ): {
+    model: Exclude<TModel, ModelByInputTokens>;
+    selectedThreshold?: number;
+    routingStrategy?: 'model-by-input-tokens';
+    routingThresholds?: string;
+  } {
+    if (!(model instanceof ModelByInputTokens)) {
+      return {
+        model: model as Exclude<TModel, ModelByInputTokens>,
+      };
+    }
+
+    const thresholds = model.getThresholds();
+    const selectedThreshold = thresholds.find(upTo => inputTokens <= upTo) ?? thresholds.at(-1);
+
+    return {
+      model: model.resolve(inputTokens) as Exclude<TModel, ModelByInputTokens>,
+      selectedThreshold,
+      routingStrategy: 'model-by-input-tokens',
+      routingThresholds: thresholds.join(','),
+    };
+  }
+
+  private async resolveModelRouting(
+    modelConfig: ObservationalMemoryModel,
+    requestContext?: RequestContext,
+  ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> {
+    try {
+      if (modelConfig instanceof ModelByInputTokens) {
+        const routing = await Promise.all(
+          modelConfig.getThresholds().map(async upTo => {
+            const resolvedModel = modelConfig.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
+            const resolved = await this.resolveModelContext(resolvedModel, requestContext);
+
+            return {
+              upTo,
+              model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+            };
+          }),
+        );
+
+        return {
+          model: routing[0]?.model ?? '(unknown)',
+          routing,
+        };
+      }
+
+      const resolved = await this.resolveModelContext(modelConfig, requestContext);
+      return {
+        model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+      };
+    } catch (error) {
+      omError('[OM] Failed to resolve model config', error);
+      return { model: '(unknown)' };
+    }
+  }
+
   private async resolveModelContext(
     modelConfig: ObservationalMemoryModel,
     requestContext?: RequestContext,
@@ -563,37 +654,31 @@ export class ObservationalMemory {
       messageTokens: number | ThresholdRange;
       model: string;
       previousObserverTokens: number | false | undefined;
+      routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
       model: string;
+      routing?: Array<{ upTo: number; model: string }>;
     };
   }> {
-    const safeResolveModel = async (modelConfig: ObservationalMemoryModel): Promise<string> => {
-      try {
-        const resolved = await this.resolveModelContext(modelConfig, requestContext);
-        return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';
-      } catch (error) {
-        omError('[OM] Failed to resolve model config', error);
-        return '(unknown)';
-      }
-    };
-
-    const [observationModelName, reflectionModelName] = await Promise.all([
-      safeResolveModel(this.observationConfig.model),
-      safeResolveModel(this.reflectionConfig.model),
+    const [observationResolved, reflectionResolved] = await Promise.all([
+      this.resolveModelRouting(this.observationConfig.model, requestContext),
+      this.resolveModelRouting(this.reflectionConfig.model, requestContext),
     ]);
 
     return {
       scope: this.scope,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
-        model: observationModelName,
+        model: observationResolved.model,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        routing: observationResolved.routing,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
-        model: reflectionModelName,
+        model: reflectionResolved.model,
+        routing: reflectionResolved.routing,
       },
     };
   }
@@ -1674,6 +1759,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
     requestContext?: RequestContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<void> {
     const bufferKey = this.buffering.getObservationBufferKey(lockKey);
 
@@ -1699,6 +1785,7 @@ ${formattedMessages}
       bufferKey,
       writer,
       requestContext,
+      observabilityContext,
     ).finally(() => {
       // Clean up the operation tracking
       BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
@@ -1723,6 +1810,7 @@ ${formattedMessages}
     bufferKey: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<void> {
     // Wait for any existing buffering operation to complete first (mutex behavior)
     const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
@@ -1829,6 +1917,7 @@ ${formattedMessages}
       startedAt,
       writer,
       requestContext,
+      observabilityContext,
     }).run();
 
     // Update the buffer cursor so the next buffer only sees messages newer than this one.
@@ -1857,6 +1946,7 @@ ${formattedMessages}
     threshold: number;
     writer?: ProcessorStreamWriter;
     requestContext?: RequestContext;
+    observabilityContext?: ObservabilityContext;
   }): Promise<boolean> {
     if (!this.buffering.isAsyncObservationEnabled()) return false;
 
@@ -2568,6 +2658,7 @@ ${formattedMessages}
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     requestContext?: RequestContext;
+    observabilityContext?: ObservabilityContext;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
      *  Use this to seal messages in a live MessageList and persist them to storage. */
     beforeBuffer?: (candidates: MastraDBMessage[]) => Promise<void>;
@@ -2575,7 +2666,7 @@ ${formattedMessages}
     buffered: boolean;
     record: ObservationalMemoryRecord;
   }> {
-    const { threadId, resourceId, requestContext } = opts;
+    const { threadId, resourceId, requestContext, observabilityContext } = opts;
 
     let record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
@@ -2714,6 +2805,7 @@ ${formattedMessages}
         startedAt,
         writer,
         requestContext,
+        observabilityContext,
       }).run();
 
       // Update the boundary tokens in storage + in-memory cache for interval tracking
@@ -2949,6 +3041,7 @@ ${formattedMessages}
     hooks?: ObserveHooks;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
+    observabilityContext?: ObservabilityContext;
   }): Promise<{
     observed: boolean;
     reflected: boolean;
@@ -2994,6 +3087,7 @@ ${formattedMessages}
           reflectionHooks,
           requestContext,
           writer: opts.writer,
+          observabilityContext: opts.observabilityContext,
         }).run();
         observed = true;
       } finally {
@@ -3023,6 +3117,7 @@ ${formattedMessages}
     resourceId?: string,
     prompt?: string,
     requestContext?: RequestContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<{
     reflected: boolean;
     record: ObservationalMemoryRecord;
@@ -3047,6 +3142,8 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        observabilityContext,
+        undefined,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
@@ -3167,6 +3264,7 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
     return new ObservationTurn({
@@ -3174,6 +3272,7 @@ ${formattedMessages}
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,
+      observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });
   }

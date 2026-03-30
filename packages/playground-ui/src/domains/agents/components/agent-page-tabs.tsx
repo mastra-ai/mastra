@@ -71,7 +71,7 @@ export function AgentPageTabs({
       />
       {showPlayground && (
         <TabLink
-          href={`/agents/${agentId}/playground`}
+          href={`/agents/${agentId}/editor`}
           active={activeTab === 'versions'}
           icon={<GitBranch />}
           label="Editor"
