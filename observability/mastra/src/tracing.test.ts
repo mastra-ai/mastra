@@ -1437,11 +1437,11 @@ describe('Tracing', () => {
 
       expect(testExporter.logEvents).toHaveLength(1);
       expect(testExporter.logEvents[0]!.log).toMatchObject({
+        traceId: childSpan.traceId,
+        spanId: childSpan.id,
         message: 'tool running',
         data: { attempt: 1 },
         correlationContext: {
-          traceId: childSpan.traceId,
-          spanId: childSpan.id,
           entityName: childSpan.entityName,
           tags: ['batch-processing', 'priority-high'],
         },
@@ -1477,12 +1477,12 @@ describe('Tracing', () => {
 
       expect(testExporter.metricEvents).toHaveLength(1);
       expect(testExporter.metricEvents[0]!.metric).toMatchObject({
+        traceId: modelSpan.traceId,
+        spanId: modelSpan.id,
         name: 'user_metric',
         value: 1,
         labels: { status: 'ok' },
         correlationContext: {
-          traceId: modelSpan.traceId,
-          spanId: modelSpan.id,
           entityName: modelSpan.entityName,
         },
       });

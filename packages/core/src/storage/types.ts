@@ -2154,6 +2154,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -2212,6 +2213,7 @@ export interface CreateDatasetInput {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: TargetType;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2225,6 +2227,7 @@ export interface UpdateDatasetInput {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
