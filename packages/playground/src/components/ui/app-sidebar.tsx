@@ -163,16 +163,11 @@ const mainNavigation: SidebarSection[] = [
         indent: true,
         requiredPermission: 'observability:read',
       },
-      {
-        name: 'Datasets',
-        url: '/datasets',
-        icon: <DatabaseIcon />,
-        isOnMastraPlatform: false,
-        requiredPermission: 'datasets:read',
-      },
+
       {
         name: 'Logs',
         url: '/logs',
+        indent: true,
         icon: <LogsIcon />,
         isOnMastraPlatform: true,
         requiresExperimentalFeatures: true,

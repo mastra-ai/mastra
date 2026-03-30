@@ -3,8 +3,8 @@ import { EntityListNoMatch } from './entity-list-no-match';
 import { EntityListRoot } from './entity-list-root';
 import { EntityListRow } from './entity-list-row';
 import { EntityListRowLink } from './entity-list-row-link';
-import { EntityListTop } from './entity-list-top';
 import { EntityListRows } from './entity-list-rows';
+import { EntityListTop } from './entity-list-top';
 import { EntityListTopCell, EntityListTopCellWithTooltip, EntityListTopCellSmart } from './entity-list-top-cell';
 
 export const EntityList = Object.assign(EntityListRoot, {
