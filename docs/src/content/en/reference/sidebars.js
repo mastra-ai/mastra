@@ -31,6 +31,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getDescription', label: '.getDescription()' },
         { type: 'doc', id: 'agents/getInstructions', label: '.getInstructions()' },
         { type: 'doc', id: 'agents/getLLM', label: '.getLLM()' },
+        { type: 'doc', id: 'agents/getLLMByModel', label: '.getLLMByModel()' },
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
