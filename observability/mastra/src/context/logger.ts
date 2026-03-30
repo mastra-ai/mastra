@@ -46,11 +46,13 @@ export class LoggerContextImpl implements LoggerContext {
    * mutations after construction do not affect emitted logs.
    */
   constructor(config: LoggerContextConfig) {
+    const correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+
     this.config = {
       ...config,
-      traceId: config.traceId,
-      spanId: config.spanId,
-      correlationContext: config.correlationContext ? { ...config.correlationContext } : undefined,
+      traceId: config.traceId ?? correlationContext?.traceId,
+      spanId: config.spanId ?? correlationContext?.spanId,
+      correlationContext,
       metadata: config.metadata ? structuredClone(config.metadata) : undefined,
     };
   }

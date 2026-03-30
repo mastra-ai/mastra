@@ -6,10 +6,12 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   ConfigSelector,
   ConfigSelectorOptions,
+  FeedbackInput,
   FeedbackEvent,
   ObservabilityEntrypoint,
   ObservabilityInstance,
   RecordedTrace,
+  ScoreInput,
   ScoreEvent,
 } from '@mastra/core/observability';
 import type { ObservabilityStorage } from '@mastra/core/storage';
@@ -18,7 +20,11 @@ import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityC
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
-import { hydrateRecordedTrace } from './recorded';
+import {
+  buildRecordedFeedbackEventFromTrace,
+  buildRecordedScoreEventFromTrace,
+  hydrateRecordedTrace,
+} from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -189,7 +195,57 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     return hydrateRecordedTrace({
       trace,
       emitRecordedEvent: event => this.#emitRecordedEvent(event),
+      canEmitRecordedEvent: () => !!this.#getRecordedTraceInstance(),
+      debugRecordedAnnotationUnavailable: ({ kind, traceId, spanId }) => {
+        this.logger?.debug(
+          kind === 'score'
+            ? 'addScore() is unavailable; rehydrate the trace before calling addScore()'
+            : 'addFeedback() is unavailable; rehydrate the trace before calling addFeedback()',
+          {
+            traceId,
+            spanId,
+          },
+        );
+      },
     });
+  }
+
+  async addScore(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void> {
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedScoreEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      score: args.score,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
+  }
+
+  async addFeedback(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void> {
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedFeedbackEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      feedback: args.feedback,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
   }
 
   /** Register a named observability instance, optionally marking it as default. */
@@ -246,6 +302,15 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     return (await storage.getStore('observability')) ?? null;
   }
 
+  async #getStoredTrace(traceId: string) {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    return observabilityStorage.getTrace({ traceId });
+  }
+
   #getRecordedTraceInstance(): ObservabilityInstance | undefined {
     return this.getDefaultInstance() ?? Array.from(this.listInstances().values())[0];
   }
@@ -253,6 +318,12 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   async #emitRecordedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
     const instance = this.#getRecordedTraceInstance();
     if (!instance) {
+      this.logger?.debug(
+        event.type === 'score'
+          ? 'Score event was dropped because no observability instance is registered'
+          : 'Feedback event was dropped because no observability instance is registered',
+        { eventType: event.type },
+      );
       return;
     }
 

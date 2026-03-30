@@ -220,4 +220,30 @@ describe('MetricsContextImpl', () => {
     expect(onMetricEvent).toHaveBeenCalledTimes(1);
     expect(onMetricEvent.mock.calls[0]![0].metric.name).toBe('test_metric');
   });
+
+  it('should fall back to deprecated traceId and spanId on correlationContext', () => {
+    setupBus();
+    const cardinalityFilter = new CardinalityFilter();
+
+    const metrics = new MetricsContextImpl({
+      cardinalityFilter,
+      observabilityBus: bus,
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        entityType: EntityType.AGENT,
+      },
+    });
+
+    metrics.emit('calls', 1);
+
+    const metric = emittedEvents[0]!.metric;
+    expect(metric.traceId).toBe('legacy-trace');
+    expect(metric.spanId).toBe('legacy-span');
+    expect(metric.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      entityType: EntityType.AGENT,
+    });
+  });
 });

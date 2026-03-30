@@ -283,6 +283,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;
 
     this.correlationContext = {
+      traceId: this.traceId,
+      spanId: this.id,
       tags: rootTags,
       entityType: this.entityType,
       entityId: this.entityId,

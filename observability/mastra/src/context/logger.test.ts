@@ -191,4 +191,29 @@ describe('LoggerContextImpl', () => {
       tags: ['root-tag-1', 'root-tag-2'],
     });
   });
+
+  it('should fall back to deprecated traceId and spanId on correlationContext', () => {
+    bus = new ObservabilityBus();
+    captureEvents();
+
+    const logger = new LoggerContextImpl({
+      observabilityBus: bus,
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        tags: ['tag-a'],
+      },
+    });
+
+    logger.info('legacy trace context');
+
+    const log = emittedEvents[0]!.log;
+    expect(log.traceId).toBe('legacy-trace');
+    expect(log.spanId).toBe('legacy-span');
+    expect(log.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      tags: ['tag-a'],
+    });
+  });
 });

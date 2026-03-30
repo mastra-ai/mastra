@@ -59,9 +59,9 @@ export class MetricsContextImpl implements MetricsContext {
    * copied so mutations after construction do not affect emitted metrics.
    */
   constructor(config: MetricsContextConfig) {
-    this.traceId = config.traceId;
-    this.spanId = config.spanId;
     this.correlationContext = config.correlationContext ? { ...config.correlationContext } : undefined;
+    this.traceId = config.traceId ?? this.correlationContext?.traceId;
+    this.spanId = config.spanId ?? this.correlationContext?.spanId;
     this.metadata = config.metadata ? structuredClone(config.metadata) : undefined;
     this.cardinalityFilter = config.cardinalityFilter;
     this.observabilityBus = config.observabilityBus;

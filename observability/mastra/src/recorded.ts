@@ -14,7 +14,14 @@ import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
 
 type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent;
 type EmitRecordedEvent = (event: RecordedAnnotationEvent) => void | Promise<void>;
+type CanEmitRecordedEvent = () => boolean;
+type DebugRecordedAnnotationUnavailable = (args: {
+  kind: 'score' | 'feedback';
+  traceId: string;
+  spanId?: string;
+}) => void;
 type RecordedErrorInfo = AnyRecordedSpan['errorInfo'];
+type CorrelationParent = Pick<SpanRecord, 'entityType' | 'entityId' | 'entityName'> | AnyRecordedSpan | undefined;
 
 function nullToUndefined<T>(value: T | null | undefined): T | undefined {
   return value ?? undefined;
@@ -48,15 +55,19 @@ function normalizeErrorInfo(error: SpanRecord['error']): RecordedErrorInfo {
   };
 }
 
-function buildCorrelationContext(span: SpanRecord, rootSpan: SpanRecord, parent?: AnyRecordedSpan): CorrelationContext {
+function buildCorrelationContext(
+  span: SpanRecord,
+  rootSpan: SpanRecord,
+  parent?: CorrelationParent,
+): CorrelationContext {
   return {
     tags: rootSpan.tags ?? undefined,
     entityType: nullToUndefined(span.entityType),
     entityId: nullToUndefined(span.entityId),
     entityName: nullToUndefined(span.entityName),
-    parentEntityType: parent?.entityType,
-    parentEntityId: parent?.entityId,
-    parentEntityName: parent?.entityName,
+    parentEntityType: parent?.entityType ?? undefined,
+    parentEntityId: parent?.entityId ?? undefined,
+    parentEntityName: parent?.entityName ?? undefined,
     rootEntityType: nullToUndefined(rootSpan.entityType),
     rootEntityId: nullToUndefined(rootSpan.entityId),
     rootEntityName: nullToUndefined(rootSpan.entityName),
@@ -74,10 +85,10 @@ function buildCorrelationContext(span: SpanRecord, rootSpan: SpanRecord, parent?
   };
 }
 
-function buildScoreEvent(args: {
+export function buildRecordedScoreEvent(args: {
   span: SpanRecord;
   rootSpan: SpanRecord;
-  parent?: AnyRecordedSpan;
+  parent?: CorrelationParent;
   score: ScoreInput;
   spanId?: string;
 }): ScoreEvent {
@@ -92,6 +103,7 @@ function buildScoreEvent(args: {
       scorerId: score.scorerId,
       scorerVersion: score.scorerVersion,
       source: score.source,
+      scoreSource: score.scoreSource,
       score: score.score,
       reason: score.reason,
       experimentId: score.experimentId,
@@ -102,10 +114,10 @@ function buildScoreEvent(args: {
   };
 }
 
-function buildFeedbackEvent(args: {
+export function buildRecordedFeedbackEvent(args: {
   span: SpanRecord;
   rootSpan: SpanRecord;
-  parent?: AnyRecordedSpan;
+  parent?: CorrelationParent;
   feedback: FeedbackInput;
   spanId?: string;
 }): FeedbackEvent {
@@ -118,8 +130,10 @@ function buildFeedbackEvent(args: {
       traceId: span.traceId,
       spanId,
       source: feedback.source,
+      feedbackSource: feedback.feedbackSource,
       feedbackType: feedback.feedbackType,
       value: feedback.value,
+      userId: feedback.userId,
       feedbackUserId: feedback.feedbackUserId,
       comment: feedback.comment,
       sourceId: feedback.sourceId,
@@ -128,6 +142,55 @@ function buildFeedbackEvent(args: {
       metadata: mergeMetadata(span.metadata, feedback.metadata),
     },
   };
+}
+
+function findSpanById(spans: SpanRecord[], spanId: string | undefined): SpanRecord | undefined {
+  if (!spanId) return undefined;
+  return spans.find(span => span.spanId === spanId);
+}
+
+export function buildRecordedScoreEventFromTrace(args: {
+  trace: GetTraceResponse;
+  score: ScoreInput;
+  spanId?: string;
+}): ScoreEvent | null {
+  const rootSpan = findRootSpan(args.trace.spans);
+  if (!rootSpan) return null;
+
+  const span = args.spanId ? findSpanById(args.trace.spans, args.spanId) : rootSpan;
+  if (!span) return null;
+
+  const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
+
+  return buildRecordedScoreEvent({
+    span,
+    rootSpan,
+    parent,
+    score: args.score,
+    spanId: args.spanId,
+  });
+}
+
+export function buildRecordedFeedbackEventFromTrace(args: {
+  trace: GetTraceResponse;
+  feedback: FeedbackInput;
+  spanId?: string;
+}): FeedbackEvent | null {
+  const rootSpan = findRootSpan(args.trace.spans);
+  if (!rootSpan) return null;
+
+  const span = args.spanId ? findSpanById(args.trace.spans, args.spanId) : rootSpan;
+  if (!span) return null;
+
+  const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
+
+  return buildRecordedFeedbackEvent({
+    span,
+    rootSpan,
+    parent,
+    feedback: args.feedback,
+    spanId: args.spanId,
+  });
 }
 
 class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpan<TType> {
@@ -162,13 +225,23 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   readonly #raw: SpanRecord;
   readonly #rootSpan: SpanRecord;
   readonly #emitRecordedEvent: EmitRecordedEvent;
+  readonly #canEmitRecordedEvent: CanEmitRecordedEvent;
+  readonly #debugRecordedAnnotationUnavailable: DebugRecordedAnnotationUnavailable;
 
-  constructor(args: { raw: SpanRecord; rootSpan: SpanRecord; emitRecordedEvent: EmitRecordedEvent }) {
-    const { raw, rootSpan, emitRecordedEvent } = args;
+  constructor(args: {
+    raw: SpanRecord;
+    rootSpan: SpanRecord;
+    emitRecordedEvent: EmitRecordedEvent;
+    canEmitRecordedEvent: CanEmitRecordedEvent;
+    debugRecordedAnnotationUnavailable: DebugRecordedAnnotationUnavailable;
+  }) {
+    const { raw, rootSpan, emitRecordedEvent, canEmitRecordedEvent, debugRecordedAnnotationUnavailable } = args;
 
     this.#raw = raw;
     this.#rootSpan = rootSpan;
     this.#emitRecordedEvent = emitRecordedEvent;
+    this.#canEmitRecordedEvent = canEmitRecordedEvent;
+    this.#debugRecordedAnnotationUnavailable = debugRecordedAnnotationUnavailable;
 
     this.id = raw.spanId;
     this.traceId = raw.traceId;
@@ -192,8 +265,13 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   }
 
   async addScore(score: ScoreInput): Promise<void> {
+    if (!this.#canEmitRecordedEvent()) {
+      this.#debugRecordedAnnotationUnavailable({ kind: 'score', traceId: this.traceId, spanId: this.id });
+      return;
+    }
+
     await this.#emitRecordedEvent(
-      buildScoreEvent({
+      buildRecordedScoreEvent({
         span: this.#raw,
         rootSpan: this.#rootSpan,
         parent: this.parent,
@@ -204,8 +282,13 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   }
 
   async addFeedback(feedback: FeedbackInput): Promise<void> {
+    if (!this.#canEmitRecordedEvent()) {
+      this.#debugRecordedAnnotationUnavailable({ kind: 'feedback', traceId: this.traceId, spanId: this.id });
+      return;
+    }
+
     await this.#emitRecordedEvent(
-      buildFeedbackEvent({
+      buildRecordedFeedbackEvent({
         span: this.#raw,
         rootSpan: this.#rootSpan,
         parent: this.parent,
@@ -224,6 +307,8 @@ class RecordedTraceImpl implements RecordedTrace {
   readonly #rootRecord: SpanRecord;
   readonly #emitRecordedEvent: EmitRecordedEvent;
   readonly #spanMap: Map<string, AnyRecordedSpan>;
+  readonly #canEmitRecordedEvent: CanEmitRecordedEvent;
+  readonly #debugRecordedAnnotationUnavailable: DebugRecordedAnnotationUnavailable;
 
   constructor(args: {
     traceId: string;
@@ -231,6 +316,8 @@ class RecordedTraceImpl implements RecordedTrace {
     rootRecord: SpanRecord;
     spans: AnyRecordedSpan[];
     emitRecordedEvent: EmitRecordedEvent;
+    canEmitRecordedEvent: CanEmitRecordedEvent;
+    debugRecordedAnnotationUnavailable: DebugRecordedAnnotationUnavailable;
   }) {
     this.traceId = args.traceId;
     this.rootSpan = args.rootSpan;
@@ -238,6 +325,8 @@ class RecordedTraceImpl implements RecordedTrace {
     this.spans = args.spans;
     this.#emitRecordedEvent = args.emitRecordedEvent;
     this.#spanMap = new Map(args.spans.map(span => [span.id, span]));
+    this.#canEmitRecordedEvent = args.canEmitRecordedEvent;
+    this.#debugRecordedAnnotationUnavailable = args.debugRecordedAnnotationUnavailable;
   }
 
   getSpan(spanId: string): AnyRecordedSpan | null {
@@ -245,8 +334,13 @@ class RecordedTraceImpl implements RecordedTrace {
   }
 
   async addScore(score: ScoreInput): Promise<void> {
+    if (!this.#canEmitRecordedEvent()) {
+      this.#debugRecordedAnnotationUnavailable({ kind: 'score', traceId: this.traceId });
+      return;
+    }
+
     await this.#emitRecordedEvent(
-      buildScoreEvent({
+      buildRecordedScoreEvent({
         span: this.#rootRecord,
         rootSpan: this.#rootRecord,
         score,
@@ -255,8 +349,13 @@ class RecordedTraceImpl implements RecordedTrace {
   }
 
   async addFeedback(feedback: FeedbackInput): Promise<void> {
+    if (!this.#canEmitRecordedEvent()) {
+      this.#debugRecordedAnnotationUnavailable({ kind: 'feedback', traceId: this.traceId });
+      return;
+    }
+
     await this.#emitRecordedEvent(
-      buildFeedbackEvent({
+      buildRecordedFeedbackEvent({
         span: this.#rootRecord,
         rootSpan: this.#rootRecord,
         feedback,
@@ -273,15 +372,31 @@ function findRootSpan(spans: SpanRecord[]): SpanRecord | undefined {
 export function hydrateRecordedTrace(args: {
   trace: GetTraceResponse;
   emitRecordedEvent: EmitRecordedEvent;
+  canEmitRecordedEvent?: CanEmitRecordedEvent;
+  debugRecordedAnnotationUnavailable?: DebugRecordedAnnotationUnavailable;
 }): RecordedTrace | null {
-  const { trace, emitRecordedEvent } = args;
+  const {
+    trace,
+    emitRecordedEvent,
+    canEmitRecordedEvent = () => true,
+    debugRecordedAnnotationUnavailable = () => {},
+  } = args;
   const rootSpan = findRootSpan(trace.spans);
 
   if (!rootSpan) {
     return null;
   }
 
-  const recordedSpans = trace.spans.map(raw => new RecordedSpanImpl({ raw, rootSpan, emitRecordedEvent }));
+  const recordedSpans = trace.spans.map(
+    raw =>
+      new RecordedSpanImpl({
+        raw,
+        rootSpan,
+        emitRecordedEvent,
+        canEmitRecordedEvent,
+        debugRecordedAnnotationUnavailable,
+      }),
+  );
   const spanMap = new Map(recordedSpans.map(span => [span.id, span]));
 
   for (const span of recordedSpans) {
@@ -304,5 +419,7 @@ export function hydrateRecordedTrace(args: {
     rootRecord: rootSpan,
     spans: recordedSpans,
     emitRecordedEvent,
+    canEmitRecordedEvent,
+    debugRecordedAnnotationUnavailable,
   });
 }

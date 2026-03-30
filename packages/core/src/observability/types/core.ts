@@ -9,10 +9,10 @@
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { FeedbackEvent } from './feedback';
+import type { FeedbackEvent, FeedbackInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
-import type { ScoreEvent } from './scores';
+import type { ScoreEvent, ScoreInput } from './scores';
 import type {
   AnySpan,
   RecordedTrace,
@@ -250,6 +250,18 @@ export interface ObservabilityEntrypoint {
    * Returns null when storage is unavailable or the trace does not exist.
    */
   getRecordedTrace?(args: { traceId: string }): Promise<RecordedTrace | null>;
+
+  /**
+   * Add a score to a persisted trace or span without hydrating a RecordedTrace.
+   * Useful for durable executions that persist only identifiers across serialization boundaries.
+   */
+  addScore?(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void>;
+
+  /**
+   * Add feedback to a persisted trace or span without hydrating a RecordedTrace.
+   * Useful for durable executions that persist only identifiers across serialization boundaries.
+   */
+  addFeedback?(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;

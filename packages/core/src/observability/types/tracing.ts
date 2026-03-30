@@ -647,6 +647,10 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * - Spans loaded from storage for evaluation
  * - Spans from completed traces being annotated
  * - Post-hoc quality scoring and user feedback
+ *
+ * RecordedSpan objects are hydrated runtime wrappers and should not be treated as
+ * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
+ * top-level observability annotation APIs after resume.
  */
 export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
@@ -679,6 +683,9 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * All references point to the same span objects - no memory duplication.
  *
  * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
+ * RecordedTrace objects are hydrated runtime wrappers and should not be stored
+ * across durable workflow serialization boundaries. Persist identifiers instead
+ * and rehydrate, or use top-level observability annotation APIs after resume.
  */
 export interface RecordedTrace {
   /** The trace identifier */
