@@ -38,8 +38,7 @@ export type WorkspaceToolName =
  *
  * Uses `(...args: any[]) => any` for the function branch so it stays
  * assignable from all core context variants (ToolConfigContext,
- * ToolConfigWithArgsContext) without importing them. resolveToolConfig
- * never calls these functions — it uses safe boolean defaults instead.
+ * ToolConfigWithArgsContext) without importing them.
  */
 
 type DynamicToolConfigValue = boolean | ((...args: any[]) => any);
@@ -62,43 +61,70 @@ export type WorkspaceToolsConfig = {
 } & Partial<Record<WorkspaceToolName, WorkspaceToolConfig>>;
 
 /**
+ * Safely resolve a dynamic config value (boolean or async function) to a boolean.
+ * Falls back to `safeDefault` when no context is available or the function throws.
+ */
+async function resolveDynamicValue(
+  value: DynamicToolConfigValue | undefined,
+  context: { workspace: object; requestContext: Record<string, unknown> } | undefined,
+  safeDefault: boolean,
+): Promise<boolean> {
+  if (value === undefined) return safeDefault;
+  if (typeof value === 'boolean') return value;
+  if (!context) return safeDefault;
+  try {
+    return await value(context);
+  } catch (error) {
+    console.warn('[Workspace Tools] Dynamic config function threw, using safe default:', error);
+    return safeDefault;
+  }
+}
+
+/**
  * Resolve the effective configuration for a workspace tool.
  * Inlined from @mastra/core/workspace for compatibility.
  *
- * Dynamic function values are resolved to safe defaults (enabled=true,
- * requireApproval=true) since this synchronous fallback path only runs
- * on older core versions that won't produce function values.
+ * Dynamic function values are resolved by calling them with the provided
+ * workspace and requestContext. If a function throws, safe defaults are used
+ * (enabled → false, requireApproval → true, requireReadBeforeWrite → true).
  */
-export function resolveToolConfig(
+export async function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
-): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean } {
-  let enabled = false;
-  let requireApproval = true;
-  let requireReadBeforeWrite: boolean | undefined;
+  context?: { workspace: object; requestContext: Record<string, unknown> },
+): Promise<{ enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean }> {
+  let enabled: DynamicToolConfigValue = true;
+  let requireApproval: DynamicToolConfigValue = false;
+  let requireReadBeforeWrite: DynamicToolConfigValue | undefined;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
-      enabled = typeof toolsConfig.enabled === 'function' ? true : toolsConfig.enabled;
+      enabled = toolsConfig.enabled;
     }
     if (toolsConfig.requireApproval !== undefined) {
-      requireApproval = typeof toolsConfig.requireApproval === 'function' ? true : toolsConfig.requireApproval;
+      requireApproval = toolsConfig.requireApproval;
     }
 
     const perToolConfig = toolsConfig[toolName];
     if (perToolConfig) {
       if (perToolConfig.enabled !== undefined) {
-        enabled = typeof perToolConfig.enabled === 'function' ? true : perToolConfig.enabled;
+        enabled = perToolConfig.enabled;
       }
       if (perToolConfig.requireApproval !== undefined) {
-        requireApproval = typeof perToolConfig.requireApproval === 'function' ? true : perToolConfig.requireApproval;
+        requireApproval = perToolConfig.requireApproval;
       }
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
-        requireReadBeforeWrite =
-          typeof perToolConfig.requireReadBeforeWrite === 'function' ? true : perToolConfig.requireReadBeforeWrite;
+        requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
       }
     }
   }
 
-  return { enabled, requireApproval, requireReadBeforeWrite };
+  return {
+    enabled: await resolveDynamicValue(enabled, context, false),
+    requireApproval: await resolveDynamicValue(requireApproval, context, true),
+    requireReadBeforeWrite:
+      requireReadBeforeWrite !== undefined
+        ? await resolveDynamicValue(requireReadBeforeWrite, context, true)
+        : undefined,
+  };
 }
