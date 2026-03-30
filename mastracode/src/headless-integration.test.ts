@@ -7,6 +7,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
+import { runHeadless } from './headless.js';
+
 vi.setConfig({ testTimeout: 30_000 });
 
 /**
@@ -225,5 +227,239 @@ describe('headless mode — event-driven auto-resolution', () => {
     const agentEnd = events.find(e => e.type === 'agent_end') as any;
     expect(agentEnd).toBeDefined();
     expect(agentEnd.reason).toBe('aborted');
+  });
+});
+
+describe('headless mode — --model flag', () => {
+  function createHarnessWithModels(opts: {
+    doStream: () => Promise<{ stream: ReadableStream }>;
+    customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
+  }) {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
+      tools: {},
+    });
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-model-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+
+    const storage = new LibSQLStore({
+      id: 'test-store',
+      url: `file:${storePath}`,
+    });
+
+    const harness = new Harness({
+      id: 'test-harness',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: true } as any,
+      customModelCatalogProvider: () =>
+        (opts.customModels ?? []).map(m => ({
+          ...m,
+          useCount: 0,
+        })),
+    });
+
+    return harness;
+  }
+
+  it('switches model when a valid --model is provided', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response text') }),
+      customModels: [
+        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      model: 'anthropic/claude-haiku-4-5',
+    });
+
+    expect(exitCode).toBe(0);
+
+    const modelChanged = events.find(e => e.type === 'model_changed') as any;
+    expect(modelChanged).toBeDefined();
+    expect(modelChanged.modelId).toBe('anthropic/claude-haiku-4-5');
+
+    // Verify the harness state was updated
+    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('returns exit code 1 for an unknown model', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [
+        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      model: 'nonexistent/model-xyz',
+    });
+
+    expect(exitCode).toBe(1);
+
+    // Agent should never have started
+    expect(events.find(e => e.type === 'agent_start')).toBeUndefined();
+  });
+
+  it('returns exit code 1 when model has no API key', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [
+        {
+          id: 'openai/gpt-4o',
+          provider: 'openai',
+          modelName: 'gpt-4o',
+          hasApiKey: false,
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+        },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      model: 'openai/gpt-4o',
+    });
+
+    expect(exitCode).toBe(1);
+
+    // Agent should never have started
+    expect(events.find(e => e.type === 'agent_start')).toBeUndefined();
+  });
+
+  it('emits JSON error for unknown model in json format', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const stdoutLines: string[] = [];
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string) => {
+      stdoutLines.push(chunk);
+      return true;
+    }) as any;
+
+    try {
+      const exitCode = await runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'json',
+        continue_: false,
+        model: 'nonexistent/model',
+      });
+
+      expect(exitCode).toBe(1);
+
+      const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
+      expect(errorLine).toBeDefined();
+      const parsed = JSON.parse(errorLine!.trim());
+      expect(parsed.type).toBe('error');
+      expect(parsed.error.message).toContain('Unknown model');
+      expect(parsed.error.message).toContain('nonexistent/model');
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  });
+
+  it('emits JSON error for model without API key in json format', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [
+        {
+          id: 'openai/gpt-4o',
+          provider: 'openai',
+          modelName: 'gpt-4o',
+          hasApiKey: false,
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+        },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const stdoutLines: string[] = [];
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string) => {
+      stdoutLines.push(chunk);
+      return true;
+    }) as any;
+
+    try {
+      const exitCode = await runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'json',
+        continue_: false,
+        model: 'openai/gpt-4o',
+      });
+
+      expect(exitCode).toBe(1);
+
+      const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
+      expect(errorLine).toBeDefined();
+      const parsed = JSON.parse(errorLine!.trim());
+      expect(parsed.type).toBe('error');
+      expect(parsed.error.message).toContain('no API key configured');
+      expect(parsed.error.message).toContain('OPENAI_API_KEY');
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  });
+
+  it('does not switch model when --model is not provided', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response text') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+    });
+
+    expect(exitCode).toBe(0);
+
+    // No model_changed event should have been emitted
+    expect(events.find(e => e.type === 'model_changed')).toBeUndefined();
   });
 });
