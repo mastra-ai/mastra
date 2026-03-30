@@ -68,8 +68,8 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@assistant-ui/react": "^0.12.19",
-    "@assistant-ui/react-markdown": "^0.12.6",
+    "@assistant-ui/react": "^0.12.21",
+    "@assistant-ui/react-markdown": "^0.12.7",
     "@assistant-ui/react-syntax-highlighter": "^0.12.7",
     "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
