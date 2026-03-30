@@ -31,6 +31,19 @@ interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
 }
 
+function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
+  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
+    const key = envVarName.trim();
+    const value = envVars?.[key] ?? process.env[key];
+
+    if (value === undefined || value === null) {
+      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
+    }
+
+    return value;
+  });
+}
+
 // Provider-specific overrides for URL, npm package, and other config.
 // These take priority over what models.dev returns (e.g. correct base URLs, SDK packages).
 // This constant is ONLY used during generation in fetchProviders() to determine
@@ -162,7 +175,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
-    return customBaseUrl || config.url;
+    return customBaseUrl || interpolateUrlTemplate(config.url, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {

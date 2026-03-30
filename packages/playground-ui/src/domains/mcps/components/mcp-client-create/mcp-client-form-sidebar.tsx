@@ -255,7 +255,7 @@ export function MCPClientFormSidebar({
       </ScrollArea>
 
       {(showSubmit ?? !readOnly) && (
-        <div className="flex-shrink-0 p-4 flex flex-col gap-2">
+        <div className="shrink-0 p-4 flex flex-col gap-2">
           {!readOnly &&
             (() => {
               const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;

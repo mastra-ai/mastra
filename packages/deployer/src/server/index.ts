@@ -147,6 +147,7 @@ export async function createHonoServer(
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
     prefix: apiPrefix,
+    mcpOptions: server?.mcpOptions,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context

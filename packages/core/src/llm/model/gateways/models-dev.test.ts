@@ -15,6 +15,7 @@ describe('ModelsDevGateway', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('fetchProviders', () => {
@@ -240,6 +241,13 @@ describe('ModelsDevGateway', () => {
             env: ['OPENAI_API_KEY'],
             api: 'https://api.openai.com/v1',
           },
+          'cloudflare-workers-ai': {
+            id: 'cloudflare-workers-ai',
+            name: 'Cloudflare Workers AI',
+            models: { '@cf/meta/llama-3.1-8b-instruct': {} },
+            env: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_KEY'],
+            api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+          },
         }),
       });
       await gateway.fetchProviders();
@@ -256,6 +264,36 @@ describe('ModelsDevGateway', () => {
         OPENAI_BASE_URL: 'https://custom.openai.proxy/v1',
       });
       expect(url).toBe('https://custom.openai.proxy/v1');
+    });
+
+    it('should interpolate URL template variables from env vars', () => {
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: 'account-123',
+      });
+
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1');
+    });
+
+    it('should not fall back to process.env when env vars explicitly provide an empty string', () => {
+      vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'account-123');
+
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: '',
+      });
+
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts//ai/v1');
+    });
+
+    it('should throw when a required URL template variable is missing', () => {
+      const previous = process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      try {
+        expect(() => gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {})).toThrow(
+          'Missing environment variable CLOUDFLARE_ACCOUNT_ID required to build provider URL',
+        );
+      } finally {
+        if (previous !== undefined) process.env.CLOUDFLARE_ACCOUNT_ID = previous;
+      }
     });
 
     it('should return false for invalid model ID format', () => {

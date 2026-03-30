@@ -96,7 +96,7 @@ function buildDateWithTime(date: Date, timeStr: string): Date | null {
 
 /** SubContent that renders via Portal so it escapes parent overflow/backdrop-filter */
 const subContentClass = cn(
-  'bg-surface5 backdrop-blur-xl z-50 min-w-[8rem] overflow-auto rounded-lg p-2 shadow-md',
+  'bg-surface5 backdrop-blur-xl z-50 min-w-32 overflow-auto rounded-lg p-2 shadow-md',
   'data-[state=open]:animate-in data-[state=closed]:animate-out',
   'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
   'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -140,7 +140,7 @@ function SubMenuSearch({
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={e => e.stopPropagation()}
-          className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
+          className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-hidden w-full')}
         />
       </div>
     </div>
@@ -416,7 +416,7 @@ export function TracesTools({
               )}
             </Button>
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" className={cn('min-w-[12rem]')}>
+          <DropdownMenu.Content align="end" className={cn('min-w-48')}>
             {/* Search filters */}
             <div className={cn('px-2 pb-2')}>
               <div
@@ -434,7 +434,7 @@ export function TracesTools({
                   onChange={e => setFilterSearch(e.target.value)}
                   onKeyDown={e => e.stopPropagation()}
                   className={cn(
-                    'bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full',
+                    'bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-hidden w-full',
                   )}
                 />
               </div>
@@ -544,7 +544,7 @@ export function TracesTools({
                   Metadata
                   {metadataCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{metadataCount}</span>}
                 </DropdownMenu.SubTrigger>
-                <PortalSubContent className={cn('max-h-[20rem]')}>
+                <PortalSubContent className={cn('max-h-80')}>
                   {metadataKeys.length >= SUBMENU_SEARCH_THRESHOLD && (
                     <SubMenuSearch
                       value={metadataKeySearch}
@@ -563,7 +563,7 @@ export function TracesTools({
                             <span className={cn('truncate')}>{key}</span>
                             {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                           </DropdownMenu.SubTrigger>
-                          <PortalSubContent className={cn('max-h-[20rem]')}>
+                          <PortalSubContent className={cn('max-h-80')}>
                             {values.length >= SUBMENU_SEARCH_THRESHOLD && (
                               <SubMenuSearch
                                 value={subValueSearch}
@@ -634,7 +634,7 @@ export function TracesTools({
                         <span className={cn('ml-auto text-ui-sm text-accent1')}>{activeInGroup}</span>
                       )}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent className={cn('max-h-[20rem]')}>
+                    <PortalSubContent className={cn('max-h-80')}>
                       {fieldsWithValues.length >= SUBMENU_SEARCH_THRESHOLD && (
                         <SubMenuSearch
                           value={contextFieldSearch}
@@ -656,7 +656,7 @@ export function TracesTools({
                                 <span className={cn('truncate')}>{field.label}</span>
                                 {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                               </DropdownMenu.SubTrigger>
-                              <PortalSubContent className={cn('max-h-[20rem]')}>
+                              <PortalSubContent className={cn('max-h-80')}>
                                 {values.length >= SUBMENU_SEARCH_THRESHOLD && (
                                   <SubMenuSearch
                                     value={subValueSearch}

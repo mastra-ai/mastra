@@ -112,7 +112,7 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
           value={search}
           onChange={e => setSearch(e.target.value)}
           onReset={() => setSearch('')}
-          className="w-full max-w-[20rem]"
+          className="w-full max-w-80"
         />
         <ButtonsGroup>
           <SelectFieldBlock
