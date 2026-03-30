@@ -1,5 +1,25 @@
 # @mastra/duckdb
 
+## 1.1.0-alpha.3
+
+### Minor Changes
+
+- Added DuckDB-backed observability queries for score and feedback analytics, including aggregates like counts and averages, breakdowns by dimensions such as model or environment, time-series over fixed intervals, and percentile calculations like p50 and p95. ([#14861](https://github.com/mastra-ai/mastra/pull/14861))
+
+  ```ts
+  const result = await store.observability.getScorePercentiles({
+    scorerId: 'relevance',
+    percentiles: [0.5, 0.95],
+    interval: '1h',
+  });
+  // { series: [{ percentile: 0.5, points: [{ timestamp, value }] }, ...] }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/core@1.18.0-alpha.5
+
 ## 1.1.0-alpha.2
 
 ### Minor Changes

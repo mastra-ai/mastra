@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.10.0-alpha.8
+
+### Minor Changes
+
+- Added a "Custom response..." option to questions with predefined choices. When selected, it switches to a free-text input so you can type an answer not covered by the given options. ([#14845](https://github.com/mastra-ai/mastra/pull/14845))
+
+### Patch Changes
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/core@1.18.0-alpha.5
+
 ## 0.10.0-alpha.7
 
 ### Patch Changes

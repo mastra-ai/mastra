@@ -1,5 +1,27 @@
 # @mastra/server
 
+## 1.18.0-alpha.5
+
+### Minor Changes
+
+- Added public observability endpoints for score and feedback analytics, including `/observability/scores/aggregate`, `/observability/scores/breakdown`, `/observability/scores/timeseries`, `/observability/scores/percentiles`, and matching `/observability/feedback/*` routes for aggregates, breakdowns, time-series, and percentile queries. ([#14861](https://github.com/mastra-ai/mastra/pull/14861))
+
+  ```bash
+  curl -X POST /observability/scores/aggregate \
+    -H 'content-type: application/json' \
+    -d '{"scorerId":"relevance","aggregation":"avg"}'
+  # {"value":0.82}
+  ```
+
+### Patch Changes
+
+- Changed default agent version resolution from draft to published. Execution endpoints now use the latest published agent version by default instead of the draft version. ([#14847](https://github.com/mastra-ai/mastra/pull/14847))
+
+- GET /tools and GET /agents no longer crash when MCP tools or other JSON Schema-backed tools are registered. ([#14787](https://github.com/mastra-ai/mastra/pull/14787))
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/core@1.18.0-alpha.5
+
 ## 1.18.0-alpha.4
 
 ### Patch Changes

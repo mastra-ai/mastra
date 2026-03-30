@@ -1,5 +1,14 @@
 # @mastra/editor
 
+## 0.7.9-alpha.5
+
+### Patch Changes
+
+- Changed default agent version resolution from draft to published. Execution endpoints now use the latest published agent version by default instead of the draft version. ([#14847](https://github.com/mastra-ai/mastra/pull/14847))
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/core@1.18.0-alpha.5
+
 ## 0.7.9-alpha.4
 
 ### Patch Changes
