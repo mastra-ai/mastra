@@ -10,8 +10,14 @@ import type { CorrelationContext } from './core';
  * Used with recordedSpan.addFeedback() and recordedTrace.addFeedback().
  */
 export interface FeedbackInput {
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   * Source of the feedback (e.g., "user", "admin", "qa")
+   */
+  source?: string;
+
   /** Source of the feedback (e.g., "user", "admin", "qa") */
-  source: string;
+  feedbackSource?: string;
 
   /** Type of feedback (e.g., "thumbs", "rating", "correction") */
   feedbackType: string;
@@ -24,6 +30,12 @@ export interface FeedbackInput {
 
   /** Optional source record identifier this feedback is linked to */
   sourceId?: string;
+
+  /**
+   * @deprecated Use `feedbackUserId` instead.
+   * User who provided the feedback
+   */
+  userId?: string;
 
   /** User who provided the feedback */
   feedbackUserId?: string;
@@ -58,14 +70,26 @@ export interface ExportedFeedback {
   /** Specific span receiving feedback (undefined = trace-level feedback) */
   spanId?: string;
 
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   * Source of the feedback
+   */
+  source?: string;
+
   /** Source of the feedback */
-  source: string;
+  feedbackSource?: string;
 
   /** Type of feedback */
   feedbackType: string;
 
   /** Feedback value */
   value: number | string;
+
+  /**
+   * @deprecated Use `feedbackUserId` instead.
+   * User who provided the feedback
+   */
+  userId?: string;
 
   /** User who provided the feedback */
   feedbackUserId?: string;

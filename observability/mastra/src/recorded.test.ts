@@ -109,6 +109,8 @@ describe('RecordedTrace', () => {
       metadata: { channel: 'chat' },
     });
 
+    await mastra.observability.getDefaultInstance()?.flush();
+
     const scores = await observabilityStore!.listScores({
       filters: { traceId: 'trace-1' },
       pagination: { page: 0, perPage: 10 },

@@ -178,6 +178,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
           .createFeedback({
             feedback: {
               traceId: item.traceId,
+              source: 'studio',
               feedbackSource: 'studio',
               feedbackType: 'rating',
               value: rating === 'positive' ? 1 : -1,
@@ -203,6 +204,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
           .createFeedback({
             feedback: {
               traceId: item.traceId,
+              source: 'studio',
               feedbackSource: 'studio',
               feedbackType: 'comment',
               value: comment,

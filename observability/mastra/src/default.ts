@@ -258,7 +258,6 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
     if (instance instanceof BaseObservabilityInstance) {
       instance.__emitRecordedEvent(event);
-      await instance.flush();
       return;
     }
 
@@ -271,10 +270,5 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     if (handlerResults.length > 0) {
       await Promise.allSettled(handlerResults);
     }
-
-    await Promise.allSettled([
-      ...instance.getExporters().map(exporter => exporter.flush()),
-      ...(bridge ? [bridge.flush()] : []),
-    ]);
   }
 }

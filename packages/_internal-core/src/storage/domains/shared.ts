@@ -140,10 +140,11 @@ export const metadataField = z.record(z.string(), z.unknown()).describe('User-de
 export const tagsField = z.array(z.string()).describe('Labels for filtering');
 
 /**
- * Context fields shared across observability signals (metrics, logs).
- * All fields are nullish — each signal uses them as optional context.
+ * Base context fields shared across tracing and non-tracing observability records.
+ * Source/provenance is intentionally excluded because tracing uses `source`
+ * while signals use `executionSource`.
  */
-export const contextFields = {
+const contextFieldsBase = {
   // Entity identification
   entityType: entityTypeField.nullish(),
   entityId: entityIdField.nullish(),
@@ -172,7 +173,6 @@ export const contextFields = {
 
   // Deployment context
   environment: environmentField.nullish(),
-  source: sourceField.nullish(),
   serviceName: serviceNameField.nullish(),
   scope: scopeField.nullish(),
 
@@ -181,44 +181,21 @@ export const contextFields = {
 } as const;
 
 /**
- * Context fields shared across observability signals that are not spans.
+ * Context fields used by tracing/span records.
+ * Tracing continues to expose execution provenance as `source`.
+ */
+export const contextFields = {
+  ...contextFieldsBase,
+  source: sourceField.nullish(),
+} as const;
+
+/**
+ * Context fields shared across observability signals other than spans (metrics, logs, scores, feedback).
  * These use `executionSource` to avoid colliding with signal-specific provenance fields.
  */
 export const observabilitySignalContextFields = {
-  // Entity identification
-  entityType: entityTypeField.nullish(),
-  entityId: entityIdField.nullish(),
-  entityName: entityNameField.nullish(),
-
-  // Parent entity hierarchy
-  parentEntityType: parentEntityTypeField.nullish(),
-  parentEntityId: parentEntityIdField.nullish(),
-  parentEntityName: parentEntityNameField.nullish(),
-
-  // Root entity hierarchy
-  rootEntityType: rootEntityTypeField.nullish(),
-  rootEntityId: rootEntityIdField.nullish(),
-  rootEntityName: rootEntityNameField.nullish(),
-
-  // Identity & tenancy
-  userId: userIdField.nullish(),
-  organizationId: organizationIdField.nullish(),
-  resourceId: resourceIdField.nullish(),
-
-  // Correlation IDs
-  runId: runIdField.nullish(),
-  sessionId: sessionIdField.nullish(),
-  threadId: threadIdField.nullish(),
-  requestId: requestIdField.nullish(),
-
-  // Deployment context
-  environment: environmentField.nullish(),
+  ...contextFieldsBase,
   executionSource: executionSourceField.nullish(),
-  serviceName: serviceNameField.nullish(),
-  scope: scopeField.nullish(),
-
-  // Experimentation
-  experimentId: experimentIdField.nullish(),
 } as const;
 
 /**

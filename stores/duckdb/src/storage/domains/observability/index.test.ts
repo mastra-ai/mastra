@@ -767,6 +767,31 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores).toHaveLength(1);
       expect(filtered.scores[0]!.score).toBe(0.85);
     });
+
+    it('supports deprecated source aliases for scores', async () => {
+      await storage.createScore({
+        score: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-score',
+          spanId: null,
+          scorerId: 'legacy',
+          source: 'manual',
+          score: 1,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listScores({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.scores).toHaveLength(1);
+      expect(filtered.scores[0]!.traceId).toBe('trace-legacy-score');
+      expect(filtered.scores[0]!.source).toBe('manual');
+      expect(filtered.scores[0]!.scoreSource).toBe('manual');
+    });
   });
 
   // ==========================================================================
@@ -817,6 +842,32 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.feedback[0]!.value).toBe(1);
       expect(filtered.feedback[0]!.feedbackUserId).toBe('user-1');
       expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+    });
+
+    it('supports deprecated source aliases for feedback', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-feedback',
+          spanId: null,
+          source: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listFeedback({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.feedback).toHaveLength(1);
+      expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
+      expect(filtered.feedback[0]!.source).toBe('manual');
+      expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('batch creates and lists feedback', async () => {

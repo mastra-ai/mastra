@@ -1009,12 +1009,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createScore(args: CreateScoreArgs): Promise<void> {
-    this.db.scoreRecords.push(args.score as ScoreRecord);
+    this.db.scoreRecords.push({
+      ...args.score,
+      scoreSource: args.score.scoreSource ?? args.score.source ?? null,
+      source: args.score.source ?? args.score.scoreSource ?? null,
+    } as ScoreRecord);
   }
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     for (const score of args.scores) {
-      this.db.scoreRecords.push(score as ScoreRecord);
+      this.db.scoreRecords.push({
+        ...score,
+        scoreSource: score.scoreSource ?? score.source ?? null,
+        source: score.source ?? score.scoreSource ?? null,
+      } as ScoreRecord);
     }
   }
 
@@ -1072,7 +1080,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       const names = Array.isArray(filters.scorerId) ? filters.scorerId : [filters.scorerId];
       if (!names.includes(score.scorerId)) return false;
     }
-    if (filters.scoreSource !== undefined && score.scoreSource !== filters.scoreSource) return false;
+    const scoreSource = score.scoreSource ?? score.source ?? null;
+    if (filters.scoreSource !== undefined && scoreSource !== filters.scoreSource) return false;
+    if (filters.source !== undefined && scoreSource !== filters.source) return false;
     if (filters.experimentId !== undefined && score.experimentId !== filters.experimentId) return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (score.tags == null) return false;
@@ -1089,12 +1099,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    this.db.feedbackRecords.push(args.feedback as FeedbackRecord);
+    this.db.feedbackRecords.push({
+      ...args.feedback,
+      feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
+      source: args.feedback.source ?? args.feedback.feedbackSource ?? null,
+      feedbackUserId: args.feedback.feedbackUserId ?? args.feedback.userId ?? null,
+    } as FeedbackRecord);
   }
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     for (const fb of args.feedbacks) {
-      this.db.feedbackRecords.push(fb as FeedbackRecord);
+      this.db.feedbackRecords.push({
+        ...fb,
+        feedbackSource: fb.feedbackSource ?? fb.source ?? '',
+        source: fb.source ?? fb.feedbackSource ?? null,
+        feedbackUserId: fb.feedbackUserId ?? fb.userId ?? null,
+      } as FeedbackRecord);
     }
   }
 
@@ -1148,7 +1168,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       const types = Array.isArray(filters.feedbackType) ? filters.feedbackType : [filters.feedbackType];
       if (!types.includes(fb.feedbackType)) return false;
     }
-    if (filters.feedbackSource !== undefined && fb.feedbackSource !== filters.feedbackSource) return false;
+    const feedbackSource = fb.feedbackSource ?? fb.source ?? '';
+    if (filters.feedbackSource !== undefined && feedbackSource !== filters.feedbackSource) return false;
+    if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
     if (filters.tags != null && filters.tags.length > 0) {

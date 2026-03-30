@@ -16,8 +16,14 @@ export interface ScoreInput {
   /** Version of the scorer */
   scorerVersion?: string;
 
-  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  /**
+   * @deprecated Use `scoreSource` instead.
+   * Source of the score (e.g., "manual", "automated", "experiment")
+   */
   source?: string;
+
+  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  scoreSource?: string;
 
   /** Numeric score value (typically 0-1 or 0-100) */
   score: number;
@@ -64,8 +70,14 @@ export interface ExportedScore {
   /** Version of the scorer */
   scorerVersion?: string;
 
-  /** Source of the score */
+  /**
+   * @deprecated Use `scoreSource` instead.
+   * Source of the score
+   */
   source?: string;
+
+  /** Source of the score */
+  scoreSource?: string;
 
   /** Numeric score value */
   score: number;

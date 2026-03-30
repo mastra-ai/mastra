@@ -41,6 +41,10 @@ export const feedbackRecordSchema = z
     spanId: spanIdField.nullish().describe('Span ID this feedback applies to'),
 
     // Feedback data
+    /**
+     * @deprecated Use `feedbackSource` instead.
+     */
+    source: feedbackSourceField.nullish(),
     feedbackSource: feedbackSourceField,
     feedbackType: feedbackTypeField,
     value: feedbackValueField,
@@ -67,7 +71,12 @@ export const feedbackRecordSchema = z
   .describe('Feedback record as stored in the database');
 
 /** Feedback record type for storage */
-export type FeedbackRecord = z.infer<typeof feedbackRecordSchema>;
+export type FeedbackRecord = z.infer<typeof feedbackRecordSchema> & {
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source?: string | null;
+};
 
 // ============================================================================
 // FeedbackInput Schema (User-Facing API)
@@ -79,10 +88,18 @@ export type FeedbackRecord = z.infer<typeof feedbackRecordSchema>;
  */
 export const feedbackInputSchema = z
   .object({
+    feedbackSource: feedbackSourceField.optional(),
+    /**
+     * @deprecated Use `feedbackSource` instead.
+     */
     source: feedbackSourceField,
     feedbackType: feedbackTypeField,
     value: feedbackValueField,
     comment: feedbackCommentField.optional(),
+    /**
+     * @deprecated Use `feedbackUserId` instead.
+     */
+    userId: feedbackUserIdField.optional(),
     feedbackUserId: feedbackUserIdField.optional(),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional feedback-specific metadata'),
     experimentId: experimentIdField.optional(),
@@ -91,7 +108,16 @@ export const feedbackInputSchema = z
   .describe('User-provided feedback input');
 
 /** User-facing feedback input type */
-export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
+export type FeedbackInput = z.infer<typeof feedbackInputSchema> & {
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source?: string;
+  /**
+   * @deprecated Use `feedbackUserId` instead.
+   */
+  userId?: string;
+};
 
 // ============================================================================
 // Create Feedback Schemas
@@ -101,7 +127,7 @@ export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
 export const createFeedbackRecordSchema = feedbackRecordSchema;
 
 /** Feedback record for creation */
-export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
+export type CreateFeedbackRecord = FeedbackRecord;
 
 /** Schema for createFeedback operation arguments */
 export const createFeedbackArgsSchema = z
@@ -111,7 +137,9 @@ export const createFeedbackArgsSchema = z
   .describe('Arguments for creating feedback');
 
 /** Arguments for creating feedback */
-export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
+export type CreateFeedbackArgs = {
+  feedback: CreateFeedbackRecord;
+};
 
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
@@ -121,7 +149,9 @@ export const createFeedbackBodySchema = z
   .describe('Arguments for creating feedback');
 
 /** Body for creating feedback in client/server */
-export type CreateFeedbackBody = z.infer<typeof createFeedbackBodySchema>;
+export type CreateFeedbackBody = {
+  feedback: Omit<CreateFeedbackRecord, 'timestamp'>;
+};
 
 /** Schema for createFeedback operation response */
 export const createFeedbackResponseSchema = z
@@ -139,7 +169,9 @@ export const batchCreateFeedbackArgsSchema = z
   .describe('Arguments for batch recording feedback');
 
 /** Arguments for batch creating feedback */
-export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
+export type BatchCreateFeedbackArgs = {
+  feedbacks: CreateFeedbackRecord[];
+};
 
 // ============================================================================
 // Feedback Filter Schema
@@ -155,13 +187,22 @@ export const feedbackFilterSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Filter by feedback type(s)'),
+    /**
+     * @deprecated Use `feedbackSource` instead.
+     */
+    source: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
     feedbackSource: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
     feedbackUserId: feedbackUserIdField.optional(),
   })
   .describe('Filters for querying feedback');
 
 /** Filters for querying feedback */
-export type FeedbackFilter = z.infer<typeof feedbackFilterSchema>;
+export type FeedbackFilter = z.infer<typeof feedbackFilterSchema> & {
+  /**
+   * @deprecated Use `feedbackSource` instead.
+   */
+  source?: string;
+};
 
 // ============================================================================
 // List Feedback Schemas

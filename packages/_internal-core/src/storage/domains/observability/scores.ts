@@ -40,6 +40,10 @@ export const scoreRecordSchema = z
     // Score data
     scorerId: scorerIdField,
     scorerVersion: scorerVersionField.nullish(),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
+    source: scoreSourceField.nullish(),
     scoreSource: scoreSourceField.nullish(),
     score: scoreValueField,
     reason: scoreReasonField.nullish(),
@@ -59,7 +63,12 @@ export const scoreRecordSchema = z
   .describe('Score record as stored in the database');
 
 /** Score record type for storage */
-export type ScoreRecord = z.infer<typeof scoreRecordSchema>;
+export type ScoreRecord = z.infer<typeof scoreRecordSchema> & {
+  /**
+   * @deprecated Use `scoreSource` instead.
+   */
+  source?: string | null;
+};
 
 // ============================================================================
 // ScoreInput Schema (User-Facing API)
@@ -73,6 +82,10 @@ export const scoreInputSchema = z
   .object({
     scorerId: scorerIdField,
     scorerVersion: scorerVersionField.optional(),
+    scoreSource: scoreSourceField.optional(),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
     source: scoreSourceField.optional(),
     score: scoreValueField,
     reason: scoreReasonField.optional(),
@@ -83,7 +96,12 @@ export const scoreInputSchema = z
   .describe('User-provided score input');
 
 /** User-facing score input type */
-export type ScoreInput = z.infer<typeof scoreInputSchema>;
+export type ScoreInput = z.infer<typeof scoreInputSchema> & {
+  /**
+   * @deprecated Use `scoreSource` instead.
+   */
+  source?: string;
+};
 
 // ============================================================================
 // Create Score Schemas
@@ -93,7 +111,7 @@ export type ScoreInput = z.infer<typeof scoreInputSchema>;
 export const createScoreRecordSchema = scoreRecordSchema;
 
 /** Score record for creation */
-export type CreateScoreRecord = z.infer<typeof createScoreRecordSchema>;
+export type CreateScoreRecord = ScoreRecord;
 
 /** Schema for createScore operation arguments */
 export const createScoreArgsSchema = z
@@ -103,7 +121,9 @@ export const createScoreArgsSchema = z
   .describe('Arguments for creating a score');
 
 /** Arguments for creating a score */
-export type CreateScoreArgs = z.infer<typeof createScoreArgsSchema>;
+export type CreateScoreArgs = {
+  score: CreateScoreRecord;
+};
 
 /** Schema for createScore operation body in client/server */
 export const createScoreBodySchema = z
@@ -113,7 +133,9 @@ export const createScoreBodySchema = z
   .describe('Arguments for creating a score');
 
 /** Body for creating a score in client/server */
-export type CreateScoreBody = z.infer<typeof createScoreBodySchema>;
+export type CreateScoreBody = {
+  score: Omit<CreateScoreRecord, 'timestamp'>;
+};
 
 /** Schema for createScore operation response */
 export const createScoreResponseSchema = z.object({ success: z.boolean() }).describe('Response from creating a score');
@@ -129,7 +151,9 @@ export const batchCreateScoresArgsSchema = z
   .describe('Arguments for batch recording scores');
 
 /** Arguments for batch creating scores */
-export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
+export type BatchCreateScoresArgs = {
+  scores: CreateScoreRecord[];
+};
 
 // ============================================================================
 // Score Filter Schema
@@ -145,12 +169,21 @@ export const scoresFilterSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Filter by scorer ID(s)'),
+    /**
+     * @deprecated Use `scoreSource` instead.
+     */
+    source: scoreSourceField.optional().describe('Filter by score source'),
     scoreSource: scoreSourceField.optional().describe('Filter by score source'),
   })
   .describe('Filters for querying scores');
 
 /** Filters for querying scores */
-export type ScoresFilter = z.infer<typeof scoresFilterSchema>;
+export type ScoresFilter = z.infer<typeof scoresFilterSchema> & {
+  /**
+   * @deprecated Use `scoreSource` instead.
+   */
+  source?: string;
+};
 
 // ============================================================================
 // List Scores Schemas
