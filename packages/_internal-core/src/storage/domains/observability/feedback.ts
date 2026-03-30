@@ -121,7 +121,7 @@ export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
 // ============================================================================
 
 /** Schema for creating a feedback record */
-export const createFeedbackRecordSchema = z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema);
+export const createFeedbackRecordSchema = feedbackRecordSchema;
 
 /** Feedback record for creation */
 export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
@@ -129,7 +129,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 /** Schema for createFeedback operation arguments */
 export const createFeedbackArgsSchema = z
   .object({
-    feedback: createFeedbackRecordSchema,
+    feedback: z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema),
   })
   .describe('Arguments for creating feedback');
 
@@ -139,7 +139,7 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema.omit({ timestamp: true })),
+    feedback: feedbackRecordObjectSchema.omit({ timestamp: true }),
   })
   .describe('Arguments for creating feedback');
 
@@ -157,7 +157,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 /** Schema for batchCreateFeedback operation arguments */
 export const batchCreateFeedbackArgsSchema = z
   .object({
-    feedbacks: z.array(createFeedbackRecordSchema),
+    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema)),
   })
   .describe('Arguments for batch recording feedback');
 

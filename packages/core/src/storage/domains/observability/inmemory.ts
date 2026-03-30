@@ -542,7 +542,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
       if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
       if (filters.environment !== undefined && m.environment !== filters.environment) return false;
-      if (filters.executionSource !== undefined && m.executionSource !== filters.executionSource) return false;
+      const metricExecutionSource = m.executionSource ?? m.source ?? null;
+      if (filters.executionSource !== undefined && metricExecutionSource !== filters.executionSource) return false;
+      if (filters.source !== undefined && metricExecutionSource !== filters.source) return false;
       if (filters.parentEntityType !== undefined && m.parentEntityType !== filters.parentEntityType) return false;
       if (filters.parentEntityName !== undefined && m.parentEntityName !== filters.parentEntityName) return false;
       if (filters.rootEntityType !== undefined && m.rootEntityType !== filters.rootEntityType) return false;
@@ -993,7 +995,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.rootEntityName !== undefined && log.rootEntityName !== filters.rootEntityName) return false;
     if (filters.serviceName !== undefined && log.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && log.environment !== filters.environment) return false;
-    if (filters.executionSource !== undefined && log.executionSource !== filters.executionSource) return false;
+    const logExecutionSource = log.executionSource ?? log.source ?? null;
+    if (filters.executionSource !== undefined && logExecutionSource !== filters.executionSource) return false;
+    if (filters.source !== undefined && logExecutionSource !== filters.source) return false;
     if (filters.experimentId !== undefined && log.experimentId !== filters.experimentId) return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (log.tags == null) return false;
@@ -1010,19 +1014,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createScore(args: CreateScoreArgs): Promise<void> {
+    const scoreSource = args.score.scoreSource ?? args.score.source ?? null;
     this.db.scoreRecords.push({
       ...args.score,
-      scoreSource: args.score.scoreSource ?? args.score.source ?? null,
-      source: args.score.source ?? args.score.scoreSource ?? null,
+      scoreSource,
+      source: scoreSource,
     } as ScoreRecord);
   }
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     for (const score of args.scores) {
+      const scoreSource = score.scoreSource ?? score.source ?? null;
       this.db.scoreRecords.push({
         ...score,
-        scoreSource: score.scoreSource ?? score.source ?? null,
-        source: score.source ?? score.scoreSource ?? null,
+        scoreSource,
+        source: scoreSource,
       } as ScoreRecord);
     }
   }
