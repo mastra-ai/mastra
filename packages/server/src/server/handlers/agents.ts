@@ -616,7 +616,7 @@ export async function getAgentFromSystem({
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
