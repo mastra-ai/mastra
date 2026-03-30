@@ -1,5 +1,148 @@
 # @mastra/memory
 
+## 1.11.0-alpha.4
+
+### Minor Changes
+
+- feat(memory): add recall-tool history retrieval for agents using observational memory ([#14567](https://github.com/mastra-ai/mastra/pull/14567))
+
+  Agents that use observational memory can now use the `recall` tool to retrieve history from past conversations, including raw messages, thread listings, and indexed observation-group memories.
+
+  Enable observational-memory retrieval when listing tools:
+
+  ```ts
+  const tools = await memory.listTools({
+    threadId: 'thread_123',
+    resourceId: 'resource_abc',
+    observationalMemory: {
+      retrieval: { vector: true, scope: 'resource' },
+    },
+  });
+  ```
+
+  With retrieval enabled, `recall` can browse the current thread, list threads for the current resource, and search indexed observation groups with source ranges.
+
+### Patch Changes
+
+- Fixed observational memory tracing spans so observer and reflector runner work is attached to the active agent trace again. ([#14749](https://github.com/mastra-ai/mastra/pull/14749))
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0-alpha.3
+
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Fixed OM repro capture so recordings keep writing usable artifacts even when live state contains circular values. ([#14744](https://github.com/mastra-ai/mastra/pull/14744))
+
+- Fixed observational memory response ID rotation at buffered chunk boundaries so assistant output continues in a fresh message slot. ([#14745](https://github.com/mastra-ai/mastra/pull/14745))
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
+## 1.10.1-alpha.2
+
+### Patch Changes
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Improved observational memory continuation prompts to reduce leaked context-management language in long conversations. ([#14650](https://github.com/mastra-ai/mastra/pull/14650))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
+## 1.10.1-alpha.1
+
+### Patch Changes
+
+- **Refactored Observational Memory into modular architecture** ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+  Restructured the Observational Memory (OM) engine from a single ~3,800-line monolithic class into a modular, strategy-based architecture. The public API and behavior are unchanged — this is a purely internal refactor that improves maintainability, testability, and separation of concerns.
+
+  **Why** — The original `ObservationalMemory` class handled everything: orchestration, LLM calling, observation logic for three different scopes, reflection, buffering coordination, turn lifecycle, and message processing. This made it difficult to reason about individual behaviors, test them in isolation, or extend the system. The refactor separates these responsibilities into focused modules.
+
+  **Observation strategies** — Extracted three duplicated observation code paths (~650 lines of conditionals) into pluggable strategy classes sharing a common `prepare → process → persist` lifecycle via an abstract base class. The correct strategy is selected automatically based on scope and buffering configuration.
+
+  ```
+  observation-strategies/
+    base.ts            — abstract ObservationStrategy + StrategyDeps interface
+    sync.ts            — SyncObservationStrategy (thread-scoped synchronous)
+    async-buffer.ts    — AsyncBufferObservationStrategy (background buffered)
+    resource-scoped.ts — ResourceScopedObservationStrategy (multi-thread)
+    index.ts           — static factory: ObservationStrategy.create(om, opts)
+  ```
+
+  ```ts
+  // Internal usage — strategies are selected and run automatically:
+  const strategy = ObservationStrategy.create(om, {
+    record,
+    threadId,
+    resourceId,
+    messages,
+    cycleId,
+    startedAt,
+  });
+  const result = await strategy.run();
+  ```
+
+  **Turn/Step abstraction** — Introduced `ObservationTurn` and `StepContext` to model the lifecycle of a single agent interaction. A Turn manages message loading, system message injection, record caching, and cleanup. A Step handles per-generation observation, activation, and reflection decisions. This replaced ~580 lines of inline orchestration in the processor with ~170 lines of structured calls.
+
+  ```ts
+  // Internal lifecycle managed by the processor:
+  const turn = new ObservationTurn(om, memory, { threadId, resourceId });
+  await turn.start(messageList, writer); // loads history, injects OM system message
+
+  const step = turn.step(0);
+  await step.prepare(messageList, writer); // activate buffered, maybe reflect
+  // ... agent generates response ...
+  await step.complete(messageList, writer); // observe new messages, buffer if needed
+
+  await turn.end(messageList, writer); // persist, cleanup
+  ```
+
+  **Dedicated runners** — Moved observer and reflector LLM-calling logic into `ObserverRunner` (194 lines) and `ReflectorRunner` (710 lines), separating prompt construction, degenerate output detection, retry logic, and compression level escalation from orchestration. `BufferingCoordinator` (175 lines) extracts the static buffering state machine and async operation tracking.
+
+  **Processor** — Added `ObservationalMemoryProcessor` implementing the `Processor` interface, bridging the OM engine with the AI SDK message pipeline. It owns the decision of _when_ to buffer, activate, observe, and reflect — while the OM engine owns _how_ to do each operation.
+
+  ```ts
+  // The processor is created automatically by Memory when OM is enabled.
+  // It plugs into the AI SDK message pipeline:
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model, messageTokens: 500 },
+        reflection: { model, observationTokens: 10_000 },
+      },
+    },
+  });
+
+  // For direct access to the OM engine (e.g. for manual observe/buffer/activate):
+  const om = await memory.omEngine;
+  ```
+
+  **Unified OM engine instantiation** — Replaced the duplicated `getOMEngine()` singleton and per-call `createOMProcessor()` engine creation with a single lazy `omEngine` property on the `Memory` class. This eliminates config drift between the legacy `getContext()` API and the processor pipeline — both now share the same `ObservationalMemory` instance with the full configuration.
+
+  ```ts
+  // Before (casting required, config could drift):
+  const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
+
+  // After (typed, single shared engine):
+  const om = await memory.omEngine;
+  ```
+
+  **Improved observation activation atomicity** — Added conditional WHERE clauses to `activateBufferedObservations` in all storage adapters (pg, libsql, mongodb) to prevent duplicate chunk swaps when concurrent processes attempt activation simultaneously. If chunks have already been cleared by another process, the operation returns early with zero counts instead of corrupting state.
+
+  **Compression start level from model context** — Integrated model-aware compression start levels into the `ReflectorRunner`. Models like `gemini-2.5-flash` that struggle with light compression now start at compression level 2 instead of 1, reducing wasted reflection retries.
+
+  **Pure function extraction** — Moved reusable helpers into `message-utils.ts`: `filterObservedMessages`, `getBufferedChunks`, `sortThreadsByOldestMessage`, `stripThreadTags`. Eliminated dead code including `isObserving` DB flag, `countMessageTokens`, `acquireObservingLock`/`releaseObservingLock`, and ~10 cascading dead private methods.
+
+  **Cleanup** — Dropped `threadIdCache` (pointless memoization), removed `as any` casts for private method access (made methods properly public with `@internal` tsdoc), replaced sealed-ID-based tracking with message-level `metadata.mastra.sealed` flag checks.
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/core@1.16.1-alpha.1
+
 ## 1.10.1-alpha.0
 
 ### Patch Changes

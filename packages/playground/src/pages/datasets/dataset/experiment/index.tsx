@@ -77,13 +77,13 @@ function DatasetExperimentPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name}
           </Crumb>
           <Crumb isCurrent as="span">

@@ -15,6 +15,7 @@ import {
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -567,6 +568,39 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_EXPERIMENT_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT
+          "experimentId",
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'needs-review' THEN 1 ELSE 0 END) as "needsReview",
+          SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) as reviewed,
+          SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as complete
+        FROM ${TABLE_EXPERIMENT_RESULTS}
+        GROUP BY "experimentId"`,
+        args: [],
+      });
+
+      return (result.rows ?? []).map(row => ({
+        experimentId: row.experimentId as string,
+        total: Number(row.total ?? 0),
+        needsReview: Number(row.needsReview ?? 0),
+        reviewed: Number(row.reviewed ?? 0),
+        complete: Number(row.complete ?? 0),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_REVIEW_SUMMARY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

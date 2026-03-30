@@ -111,27 +111,69 @@ Retrieval mode is experimental. The API may change in future releases.
 
 Normal OM compresses messages into observations, which is great for staying on task — but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
 
+#### Browsing only
+
+Set `retrieval: true` to enable the recall tool for browsing raw messages. No vector store needed. By default, the recall tool can browse across all threads for the current resource.
+
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      scope: 'thread',
       retrieval: true,
     },
   },
 })
 ```
 
+#### With semantic search
+
+Set `retrieval: { vector: true }` to also enable semantic search. This reuses the vector store and embedder already configured on your Memory instance:
+
+```typescript
+const memory = new Memory({
+  storage,
+  vector: myVectorStore,
+  embedder: myEmbedder,
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: { vector: true },
+    },
+  },
+})
+```
+
+When vector search is configured, new observation groups are automatically indexed at buffer time and during synchronous observation (fire-and-forget, non-blocking). Semantic search returns observation-group matches with their raw source message ID ranges, so the recall tool can show the summarized memory alongside where it came from.
+
+#### Restricting to the current thread
+
+By default, the recall tool scope is `'resource'` — the agent can list threads, browse other threads, and search across all conversations. Set `scope: 'thread'` to restrict the agent to only the current thread:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: { vector: true, scope: 'thread' },
+    },
+  },
+})
+```
+
+#### What retrieval enables
+
 With retrieval mode enabled, OM:
 
 - Stores a `range` (e.g. `startId:endId`) on each observation group pointing to the messages it was derived from
 - Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
-- Registers a `recall` tool the agent can call to page through the raw messages behind any range
+- Registers a `recall` tool the agent can call to:
+  - Page through the raw messages behind any observation group range
+  - Search by semantic similarity (`mode: "search"` with a `query` string) — requires `vector: true`
+  - List all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads (default `scope: 'resource'`)
+  - When `scope: 'thread'`: restrict browsing and search to the current thread only
 
-Retrieval mode is only active for thread-scoped OM. Setting `retrieval: true` with `scope: 'resource'` has no effect — OM keeps resource-scoped behavior but skips retrieval-mode context and does not register the `recall` tool.
-
-See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, and token limiting).
+See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, cross-thread browsing, and token limiting).
 
 ## Models
 
@@ -166,17 +208,19 @@ const memory = new Memory({
       observation: {
         model: new ModelByInputTokens({
           upTo: {
-            10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
-            40_000: 'openai/gpt-4o', // Stronger for medium inputs
-            1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
+            // Faster, cheaper models for smaller inputs; stronger models for larger contexts
+            5_000: 'openrouter/mistralai/ministral-8b-2512',
+            20_000: 'openrouter/mistralai/mistral-small-2603',
+            40_000: 'openai/gpt-5.4-mini',
+            1_000_000: 'google/gemini-3.1-flash-lite-preview',
           },
         }),
       },
       reflection: {
         model: new ModelByInputTokens({
           upTo: {
-            20_000: 'google/gemini-2.5-flash',
-            80_000: 'openai/gpt-4o',
+            20_000: 'openai/gpt-5.4-mini',
+            100_000: 'google/gemini-2.5-flash',
           },
         }),
       },

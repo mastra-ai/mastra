@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "1.5.1",
+  "version": "1.6.0-alpha.2",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.13.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.16.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

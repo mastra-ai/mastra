@@ -88,6 +88,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     instructions,
     memoryConfig,
     memory,
+    isResume: !!resumeContext,
   });
 
   const streamStep = createStreamStep({
