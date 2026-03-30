@@ -89,6 +89,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.allToolComponents = [];
+  state.allSystemReminderComponents = [];
   state.harness.getDisplayState().modifiedFiles.clear();
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);

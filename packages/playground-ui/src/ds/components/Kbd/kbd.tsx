@@ -17,7 +17,7 @@ export const Kbd = ({ children, theme = 'dark', className }: KbdProps) => {
   return (
     <kbd
       className={cn(
-        'border rounded-md px-1.5 py-0.5 font-mono text-ui-sm inline-flex items-center justify-center min-w-[1.5rem]',
+        'border rounded-md px-1.5 py-0.5 font-mono text-ui-sm inline-flex items-center justify-center min-w-6',
         transitions.transform,
         'active:scale-95 active:shadow-none',
         themeClass,

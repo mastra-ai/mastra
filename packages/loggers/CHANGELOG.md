@@ -1,5 +1,39 @@
 # @mastra/loggers
 
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Added `mixin` and `customLevels` options to `PinoLogger`. ([#14726](https://github.com/mastra-ai/mastra/pull/14726))
+
+  You can now attach shared fields to every log entry with `mixin`, which is useful for values like trace IDs, request IDs, or service metadata.
+
+  You can also define custom log levels when you need to match an existing Pino logging setup.
+
+  **Example**
+
+  ```ts
+  import { PinoLogger } from '@mastra/loggers';
+
+  const logger = new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+    mixin() {
+      return { traceId: 'abc-123' };
+    },
+    customLevels: {
+      audit: 35,
+    },
+  });
+
+  logger.info('User signed in');`
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+
 ## 1.0.3
 
 ### Patch Changes
