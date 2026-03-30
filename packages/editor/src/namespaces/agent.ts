@@ -194,7 +194,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
         options && 'versionId' in options
           ? { versionId: options.versionId }
-          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'published' };
+          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
     } catch {
       // Editor not registered, storage not available, or agent not found — restore and return unchanged

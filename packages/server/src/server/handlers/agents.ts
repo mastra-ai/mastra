@@ -605,7 +605,7 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
