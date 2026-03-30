@@ -183,6 +183,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * they may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
+  private clearResolvedVersionId(agent: Agent): void {
+    const raw = agent.toRawConfig();
+    if (!raw || !('resolvedVersionId' in raw)) return;
+    const { resolvedVersionId: _removed, ...rest } = raw;
+    agent.__setRawConfig(rest);
+  }
+
   async applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
@@ -199,12 +206,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     } catch {
       // Editor not registered, storage not available, or agent not found — restore and return unchanged
       this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
       return agent;
     }
 
     if (!storedConfig) {
       // No stored config — restore code defaults if previously overridden
       this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
       return agent;
     }
 
@@ -293,6 +302,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (storedConfig.resolvedVersionId) {
       const existing = agent.toRawConfig() ?? {};
       agent.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+    } else {
+      this.clearResolvedVersionId(agent);
     }
 
     return agent;
