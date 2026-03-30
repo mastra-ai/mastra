@@ -7,6 +7,7 @@
  */
 
 import type { TaskItem } from '@mastra/core/harness';
+import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
@@ -50,11 +51,7 @@ export function formatToolResult(result: unknown): string {
         return textParts.join('\n');
       }
     }
-    try {
-      return JSON.stringify(result, null, 2);
-    } catch {
-      return String(result);
-    }
+    return safeStringify(result, 2);
   }
   return String(result);
 }
