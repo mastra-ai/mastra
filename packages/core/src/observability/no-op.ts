@@ -4,6 +4,7 @@ import type {
   ConfigSelector,
   ConfigSelectorOptions,
   Counter,
+  FeedbackInput,
   Gauge,
   Histogram,
   LoggerContext,
@@ -11,6 +12,7 @@ import type {
   ObservabilityEntrypoint,
   ObservabilityInstance,
   RecordedTrace,
+  ScoreInput,
   TracingContext,
 } from './types';
 
@@ -98,6 +100,14 @@ export class NoOpObservability implements ObservabilityEntrypoint {
 
   async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
     return null;
+  }
+
+  async addScore(_args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void> {
+    return;
+  }
+
+  async addFeedback(_args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void> {
+    return;
   }
 
   registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {
