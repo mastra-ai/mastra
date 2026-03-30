@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Fixed RequestContext type mismatch when using @mastra/client-js alongside @mastra/core. Moved @mastra/core from a bundled dependency to a peer dependency, matching the pattern used by all other @mastra packages. This prevents duplicate installations that caused TypeScript error `ts(2769): Types have separate declarations of a private property 'registry'`.
+Fixed RequestContext type incompatibility when using @mastra/client-js alongside @mastra/core. Previously, @mastra/client-js could install its own separate copy of @mastra/core, causing TypeScript to reject valid RequestContext usage. Now @mastra/client-js shares the same @mastra/core instance as the rest of your project, matching the pattern used by all other @mastra packages.
