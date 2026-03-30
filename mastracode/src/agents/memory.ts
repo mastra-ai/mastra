@@ -54,6 +54,8 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   // When memory gateway is enabled, the gateway handles all message persistence
   // and observational memory server-side — skip local Memory entirely.
+  // NOTE: Checked once at startup; runtime toggles require restart because
+  // Harness/Agent DynamicArgument<MastraMemory> doesn't accept undefined from the factory.
   const mgApiKey = new AuthStorage().getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
   if (mgApiKey) return undefined;
 
