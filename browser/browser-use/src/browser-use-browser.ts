@@ -296,7 +296,6 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Connect to a browser via CDP WebSocket URL.
    */
   private async connectToCdp(cdpUrl: string): Promise<void> {
-    console.log(`[BrowserUseBrowser] connectToCdp: input URL = ${cdpUrl}`);
     // Get page-level CDP URL (not browser-level)
     const pageCdpUrl = await this.getPageCdpUrl(cdpUrl);
 

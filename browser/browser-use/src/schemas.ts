@@ -18,7 +18,9 @@ import { z } from 'zod';
  * The agent will autonomously navigate, click, type, and extract data to complete the task.
  */
 export const runInputSchema = z.object({
-  task: z.string().describe('Natural language description of the task to perform (e.g., "Go to google.com and search for AI news")'),
+  task: z
+    .string()
+    .describe('Natural language description of the task to perform (e.g., "Go to google.com and search for AI news")'),
   startUrl: z.string().optional().describe('URL to start the task from'),
   maxSteps: z.number().optional().describe('Maximum steps the agent can take (default: 100)'),
   llm: z
