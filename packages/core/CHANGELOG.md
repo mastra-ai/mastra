@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 1.18.0-alpha.5
+
+### Minor Changes
+
+- Added public score and feedback analytics APIs to observability storage: ([#14861](https://github.com/mastra-ai/mastra/pull/14861))
+  `getScoreAggregate` / `getFeedbackAggregate` for counts, sums, averages, minimums, maximums, or latest values;
+  `getScoreBreakdown` / `getFeedbackBreakdown` for grouped results by dimension;
+  `getScoreTimeSeries` / `getFeedbackTimeSeries` for time-bucketed trends;
+  and `getScorePercentiles` / `getFeedbackPercentiles` for percentile series such as p50 and p95.
+
+  ```ts
+  await observability.getScoreTimeSeries({
+    scorerId: 'relevance',
+    interval: '1h',
+    aggregation: 'avg',
+  });
+  // returns time-bucketed average scores
+  ```
+
+### Patch Changes
+
+- Added resolvedVersionId to agent run trace span attributes for tracking which agent version was used during execution. ([#14847](https://github.com/mastra-ai/mastra/pull/14847))
+
 ## 1.18.0-alpha.4
 
 ### Minor Changes

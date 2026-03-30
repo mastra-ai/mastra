@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 20.0.0-alpha.9
+
+### Patch Changes
+
+- Improved the default playground tabs so labels size to their content with tighter horizontal padding. ([#14857](https://github.com/mastra-ai/mastra/pull/14857))
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/client-js@1.11.0-alpha.8
+  - @mastra/react@0.2.18-alpha.8
+  - @mastra/core@1.18.0-alpha.5
+
 ## 20.0.0-alpha.8
 
 ### Minor Changes
