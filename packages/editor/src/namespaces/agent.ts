@@ -191,7 +191,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
         options && 'versionId' in options
           ? { versionId: options.versionId }
-          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
+          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'published' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
     } catch {
       // Editor not registered, storage not available, or agent not found — restore and return unchanged
@@ -284,6 +284,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         agent.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }
+    }
+
+    // Persist the resolved version ID so it can be read by span attributes / handlers
+    if (storedConfig.resolvedVersionId) {
+      const existing = agent.toRawConfig() ?? {};
+      agent.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
     }
 
     return agent;

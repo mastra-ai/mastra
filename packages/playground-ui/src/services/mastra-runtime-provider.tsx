@@ -377,6 +377,7 @@ export function MastraRuntimeProvider({
   settings,
   requestContext,
   modelVersion,
+  agentVersionId,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -688,6 +689,9 @@ export function MastraRuntimeProvider({
     Object.entries(requestContext ?? {}).forEach(([key, value]) => {
       requestContextInstance.set(key, value);
     });
+    if (agentVersionId) {
+      requestContextInstance.set('agentVersionId', agentVersionId);
+    }
 
     try {
       if (isSupportedModel) {

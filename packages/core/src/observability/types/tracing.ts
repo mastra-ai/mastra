@@ -83,6 +83,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** The resolved agent version ID used for this execution */
+  resolvedVersionId?: string;
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */

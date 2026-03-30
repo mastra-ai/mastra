@@ -1160,6 +1160,7 @@ export class Agent<
         saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
+        resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
         listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
         __runOutputProcessors: this.__runOutputProcessors.bind(this),
@@ -4202,6 +4203,9 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       metadata: {
         runId,
