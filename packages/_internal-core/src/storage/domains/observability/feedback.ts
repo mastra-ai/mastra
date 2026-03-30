@@ -33,7 +33,7 @@ const feedbackValueField = z
 const feedbackCommentField = z.string().describe('Additional comment or context');
 const feedbackUserIdField = z.string().describe('User who provided the feedback');
 
-export function normalizeLegacyFeedbackActor<T>(input: T): T {
+function normalizeLegacyFeedbackActor<T>(input: T): T {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return input;
   }
@@ -180,7 +180,7 @@ export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSche
 // ============================================================================
 
 /** Schema for filtering feedback in list queries */
-export const feedbackFilterObjectSchema = z.object({
+const feedbackFilterObjectSchema = z.object({
   ...commonFilterFields,
 
   // Feedback-specific filters
@@ -197,7 +197,7 @@ export const feedbackFilterObjectSchema = z.object({
 });
 
 export const feedbackFilterSchema = z
-  .preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema)
+  .object(feedbackFilterObjectSchema.shape)
   .describe('Filters for querying feedback');
 
 /** Filters for querying feedback */
@@ -221,7 +221,10 @@ export const feedbackOrderBySchema = z
 /** Schema for listFeedback operation arguments */
 export const listFeedbackArgsSchema = z
   .object({
-    filters: feedbackFilterSchema.optional(),
+    filters: z
+      .preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema)
+      .optional()
+      .describe('Optional filters to apply'),
     pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
     orderBy: feedbackOrderBySchema
       .default({ field: 'timestamp', direction: 'DESC' })

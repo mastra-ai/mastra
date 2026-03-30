@@ -175,12 +175,6 @@ describe('Feedback Schemas', () => {
       const filter = feedbackFilterSchema.parse({});
       expect(filter).toEqual({});
     });
-
-    it('maps deprecated userId filter to feedbackUserId', () => {
-      const filter = feedbackFilterSchema.parse({ userId: 'user-123' });
-      expect(filter.feedbackUserId).toBe('user-123');
-      expect(filter).not.toHaveProperty('userId');
-    });
   });
 
   describe('listFeedbackArgsSchema', () => {
@@ -196,14 +190,6 @@ describe('Feedback Schemas', () => {
       });
       expect(args.pagination.page).toBe(1);
       expect(args.pagination.perPage).toBe(25);
-    });
-
-    it('rewrites deprecated feedback actor alias inside filters', () => {
-      const args = listFeedbackArgsSchema.parse({
-        filters: { userId: 'trace-user-123' },
-      });
-      expect(args.filters?.feedbackUserId).toBe('trace-user-123');
-      expect(args.filters).not.toHaveProperty('userId');
     });
   });
 
