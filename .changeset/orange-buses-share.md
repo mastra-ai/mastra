@@ -12,11 +12,3 @@ Score and feedback payloads now support `scoreSource`, `feedbackSource`, and `ex
 
 **Migration note**
 Deprecated fields (like `source` and feedback `userId`) are still accepted for compatibility.
-
-```ts
-metrics.emit('mastra_tool_duration_ms', 42, {}, {
-  correlationContext: { entityType: 'agent', entityName: 'my-agent' },
-  traceId: 'trace-123',
-  spanId: 'span-456',
-});
-```

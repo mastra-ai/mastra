@@ -25,6 +25,7 @@ import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  FeedbackFilter,
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
@@ -1102,8 +1103,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     this.db.feedbackRecords.push({
       ...args.feedback,
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
-      source: args.feedback.source ?? args.feedback.feedbackSource ?? null,
-      feedbackUserId: args.feedback.feedbackUserId ?? args.feedback.userId ?? null,
+      source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
+      feedbackUserId:
+        args.feedback.feedbackUserId ??
+        args.feedback.userId ??
+        (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
     } as FeedbackRecord);
   }
 
@@ -1112,8 +1116,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       this.db.feedbackRecords.push({
         ...fb,
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',
-        source: fb.source ?? fb.feedbackSource ?? null,
-        feedbackUserId: fb.feedbackUserId ?? fb.userId ?? null,
+        source: fb.feedbackSource ?? fb.source ?? '',
+        feedbackUserId:
+          fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
       } as FeedbackRecord);
     }
   }
@@ -1139,7 +1144,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  private feedbackMatchesFilters(fb: FeedbackRecord, filters?: ListFeedbackArgs['filters']): boolean {
+  private feedbackMatchesFilters(fb: FeedbackRecord, filters?: FeedbackFilter): boolean {
     if (!filters) return true;
 
     if (filters.timestamp) {
