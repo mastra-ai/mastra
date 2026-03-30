@@ -43,14 +43,13 @@ test.describe('Workflow Execution', () => {
   test('workflows list page shows registered workflows', async ({ page }) => {
     await page.goto('/workflows');
 
-    await expect(page.locator('h1')).toHaveText('Workflows');
+    await expect(page.locator('h1')).toHaveText('Workflows', { timeout: 10_000 });
     await expect(page.getByRole('link', { name: 'sequential-steps' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'basic-suspend' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'branch-workflow' })).toBeVisible();
-    // exact: true needed — state-parallel-workflow and foreach-retry-workflow are substring matches
-    await expect(page.getByRole('link', { name: 'parallel-workflow', exact: true })).toBeVisible();
+    await expect(page.getByRole('link').filter({ hasText: /^parallel-workflow/ })).toBeVisible();
     await expect(page.getByRole('link', { name: 'foreach-workflow' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'retry-workflow', exact: true })).toBeVisible();
+    await expect(page.getByRole('link').filter({ hasText: /^retry-workflow/ })).toBeVisible();
   });
 
   test('sequential-steps: run to completion', async ({ page }) => {

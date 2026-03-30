@@ -17,11 +17,10 @@ test.describe('MCP Servers', () => {
 
     await expect(page.locator('h1')).toHaveText('MCP Servers');
 
-    // The test-mcp server should be listed
-    await expect(page.getByRole('link', { name: 'Test MCP Server' })).toBeVisible();
-
-    // It should show 2 tools attached
-    await expect(page.getByText('2 tools')).toBeVisible();
+    // The test-mcp server should be listed with 2 tools
+    const mcpLink = page.getByRole('link', { name: 'Test MCP Server' });
+    await expect(mcpLink).toBeVisible();
+    await expect(mcpLink.locator(':scope > span:nth-child(4)')).toHaveText('2');
   });
 
   test('MCP server detail shows available tools', async ({ page }) => {

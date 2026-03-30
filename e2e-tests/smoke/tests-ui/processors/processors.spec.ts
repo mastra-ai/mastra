@@ -16,14 +16,13 @@ test.describe('Processors', () => {
     await expect(page.locator('h1')).toHaveText('Processors');
 
     // Verify all three registered processors are listed
-    const main = page.locator('main');
-    await expect(main.getByRole('link', { name: 'Uppercase Processor' })).toBeVisible();
-    await expect(main.getByRole('link', { name: 'Suffix Processor' })).toBeVisible();
-    await expect(main.getByRole('link', { name: 'Tripwire Test Processor' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Uppercase Processor' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Suffix Processor' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Tripwire Test Processor' })).toBeVisible();
 
-    // Verify phase badges are visible in the table
-    await expect(main.getByText('Input', { exact: true }).first()).toBeVisible();
-    await expect(main.getByText('Output Result').first()).toBeVisible();
+    // Verify phase column headers are visible
+    await expect(page.getByRole('button', { name: 'INPUT' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'RESULT' })).toBeVisible();
   });
 
   test('processor detail: run uppercase processor and verify result', async ({ page }) => {

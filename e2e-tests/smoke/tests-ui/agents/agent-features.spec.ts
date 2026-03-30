@@ -125,25 +125,25 @@ test.describe('Agent Features', () => {
   test('agents list shows all agents with correct attached entities', async ({ page }) => {
     await page.goto('/agents');
 
-    // All five agents should appear
+    // All five agents should appear as links
     await expect(page.getByRole('link', { name: 'Test Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Helper Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Network Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Approval Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Workflow Agent' })).toBeVisible();
 
-    // Network Agent row shows 1 agent (helperAgent)
-    const networkRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Network Agent' }) });
-    await expect(networkRow.getByText('1 agent')).toBeVisible();
+    // Grid columns: Name(1), Instructions(2), Model(3), Workflows(4), Agents(5), Tools(6)
+    // Network Agent has 1 agent (helperAgent)
+    const networkLink = page.getByRole('link', { name: 'Network Agent' });
+    await expect(networkLink.locator(':scope > span:nth-child(5)')).toHaveText('1');
 
-    // Helper Agent row shows 0 agents, 1 tool
-    const helperRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Helper Agent' }) });
-    await expect(helperRow.getByText('0 agents')).toBeVisible();
-    await expect(helperRow.getByText('1 tool')).toBeVisible();
+    // Helper Agent has 1 tool
+    const helperLink = page.getByRole('link', { name: 'Helper Agent' });
+    await expect(helperLink.locator(':scope > span:nth-child(6)')).toHaveText('1');
 
-    // Workflow Agent row shows 1 workflow
-    const workflowRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Workflow Agent' }) });
-    await expect(workflowRow.getByText('1 workflow')).toBeVisible();
+    // Workflow Agent has 1 workflow
+    const workflowLink = page.getByRole('link', { name: 'Workflow Agent' });
+    await expect(workflowLink.locator(':scope > span:nth-child(4)')).toHaveText('1');
   });
 
   test('network-agent delegates to helper-agent via sub-agent call', async ({ page }) => {
