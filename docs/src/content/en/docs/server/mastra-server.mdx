@@ -23,7 +23,7 @@ The server provides:
 
 - API endpoints for all registered agents and workflows
 - Custom API routes and middleware
-- Authentication with multiple providers
+- Authentication across providers
 - Request context for dynamic configuration
 - Stream data redaction for secure responses
 
@@ -55,10 +55,10 @@ Visit the [configuration reference](/reference/configuration#server-options) for
 - **[Request Context](/docs/server/request-context)**: Pass request-specific values to agents, tools, and workflows based on runtime conditions.
 - **[Server Adapters](/docs/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
 - **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
-- **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
+- **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser and server environments.
 - **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
 
-## OpenAI-compatible Responses API
+## OpenAI-compatible responses API
 
 Mastra also exposes a Responses API-compatible route. This route is an adapter layer on top of Mastra agents, memory, and storage, not a raw provider proxy. By default, the generated server serves it at `/api/v1/responses`, along with `GET /api/v1/responses/:responseId`, `DELETE /api/v1/responses/:responseId`, `POST /api/v1/conversations`, `GET /api/v1/conversations/:conversationId`, `DELETE /api/v1/conversations/:conversationId`, and `GET /api/v1/conversations/:conversationId/items`.
 
@@ -79,7 +79,7 @@ const response = await fetch('http://localhost:4111/api/v1/responses', {
 })
 ```
 
-Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it does not require extra model calls. Tool-using turns can emit non-message `response.output_item.*` items such as `function_call` in addition to assistant message items. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn.
+Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it doesn't require extra model calls. Tool-using turns can emit non-message `response.output_item.*` items such as `function_call` alongside assistant message items. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn.
 
 Stored responses also return `conversation_id`. In Mastra, this is the raw memory `threadId`. You can create a conversation explicitly with `POST /api/v1/conversations`, or let the first stored Responses request create it implicitly:
 
@@ -123,7 +123,7 @@ If you pass both `conversation_id` and `previous_response_id`, they must resolve
 
 Configured tool definitions are returned under `tools`, while actual tool activity is emitted through `output` items such as `function_call`, `function_call_output`, and the final assistant `message`. This keeps the Responses adapter aligned with the OpenAI Responses object model while still running through Mastra agents and memory.
 
-For advanced provider-native features, the route also passes `providerOptions` through to the underlying agent `generate()` or `stream()` call. Use this as the escape hatch for provider-specific options that Mastra does not normalize at the Responses API layer. When the provider returns provider-native response state, Mastra includes it back on the response object as `providerOptions`, so follow-up requests can reuse values like `openai.responseId`.
+For advanced provider-native features, the route also passes `providerOptions` through to the underlying agent `generate()` or `stream()` call. Use this as the escape hatch for provider-specific options that Mastra doesn't normalize at the Responses API layer. When the provider returns provider-native response state, Mastra includes it back on the response object as `providerOptions`, so follow-up requests can reuse values like `openai.responseId`.
 
 The route also supports agents backed by both AI SDK v5+ models and legacy AI SDK v4 models. Responses uses `generate()` and `stream()` for v5+ agents, and automatically falls back to `generateLegacy()` and `streamLegacy()` for legacy agents.
 

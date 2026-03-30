@@ -141,9 +141,9 @@ const response = await client.responses.create({
 
 **Returns:** `Promise<ResponsesResponse>` when `stream` is omitted or `false`.
 
-Configured tool definitions are exposed on `response.tools`. If the agent actually calls a tool, that activity appears in `response.output` as `function_call` and `function_call_output` items alongside the assistant `message`.
+Configured tool definitions are exposed on `response.tools`. If the agent calls a tool, that activity is represented in `response.output` as `function_call` and `function_call_output` items alongside the assistant `message`.
 
-Stored responses include `conversation_id` in addition to `response.id`. Use `conversation_id` when you want to target a known thread directly:
+Stored responses include `conversation_id` and `response.id`. Use `conversation_id` when you want to target a known thread directly:
 
 ```typescript
 const first = await client.responses.create({
@@ -271,4 +271,4 @@ For stored responses, `conversation_id` contains the raw Mastra thread ID for th
 
 Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.
 
-When tool activity is part of the response, `response.output_item.added` and `response.output_item.done` can carry non-message output items such as `function_call` in addition to assistant `message` items.
+When tool activity is part of the response, `response.output_item.added` and `response.output_item.done` can carry non-message output items such as `function_call` alongside assistant `message` items.
