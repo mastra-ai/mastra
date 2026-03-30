@@ -121,6 +121,7 @@
         "gpt-5.2-chat-latest",
         "gpt-5.2-codex",
         "gpt-5.2-pro",
+        "gpt-5.3-chat-latest",
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
@@ -380,7 +381,8 @@
         "glm-4.7-flash",
         "glm-4.7-flashx",
         "glm-5",
-        "glm-5-turbo"
+        "glm-5-turbo",
+        "glm-5.1"
       ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
@@ -659,6 +661,7 @@
         "ideogramai/ideogram-v2a",
         "ideogramai/ideogram-v2a-turbo",
         "lumalabs/ray2",
+        "novita/deepseek-v3.2",
         "novita/glm-4.6",
         "novita/glm-4.6v",
         "novita/glm-4.7",
@@ -731,6 +734,7 @@
         "xai/grok-4-fast-reasoning",
         "xai/grok-4.1-fast-non-reasoning",
         "xai/grok-4.1-fast-reasoning",
+        "xai/grok-4.20-multi-agent",
         "xai/grok-code-fast-1"
       ],
       "docUrl": "https://creator.poe.com/docs/external-applications/openai-compatible-api",
@@ -1012,7 +1016,6 @@
         "gemini-3-1-pro-preview",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
-        "glm-5",
         "gpt-4o",
         "gpt-5-3-codex",
         "gpt-5-4",
@@ -1024,7 +1027,8 @@
         "grok-4-1-fast-reasoning",
         "grok-code-fast-1",
         "kimi-k2.5",
-        "minimax-m2-5"
+        "minimax-m2-5",
+        "zai-glm-5"
       ],
       "docUrl": "https://docs.frogbot.ai",
       "gateway": "models.dev"
@@ -1062,7 +1066,12 @@
         "gemini-flash-latest",
         "gemini-flash-lite-latest",
         "gemini-live-2.5-flash",
-        "gemini-live-2.5-flash-preview-native-audio"
+        "gemini-live-2.5-flash-preview-native-audio",
+        "gemma-3-12b-it",
+        "gemma-3-27b-it",
+        "gemma-3-4b-it",
+        "gemma-3n-e2b-it",
+        "gemma-3n-e4b-it"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev",
@@ -2105,7 +2114,7 @@
         "nousresearch/hermes-4-70b",
         "nvidia/nemotron-3-nano-30b-a3b:free",
         "nvidia/nemotron-3-super-120b-a12b",
-        "nvidia/nemotron-3-super-120b-a12b-free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
         "nvidia/nemotron-nano-12b-v2-vl:free",
         "nvidia/nemotron-nano-9b-v2",
         "nvidia/nemotron-nano-9b-v2:free",
@@ -3101,15 +3110,23 @@
       "apiKeyEnvVar": "GROQ_API_KEY",
       "name": "Groq",
       "models": [
+        "allam-2-7b",
+        "canopylabs/orpheus-arabic-saudi",
+        "canopylabs/orpheus-v1-english",
+        "groq/compound",
+        "groq/compound-mini",
         "llama-3.1-8b-instant",
         "llama-3.3-70b-versatile",
-        "meta-llama/llama-4-maverick-17b-128e-instruct",
         "meta-llama/llama-4-scout-17b-16e-instruct",
-        "meta-llama/llama-guard-4-12b",
+        "meta-llama/llama-prompt-guard-2-22m",
+        "meta-llama/llama-prompt-guard-2-86m",
         "moonshotai/kimi-k2-instruct-0905",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
-        "qwen/qwen3-32b"
+        "openai/gpt-oss-safeguard-20b",
+        "qwen/qwen3-32b",
+        "whisper-large-v3",
+        "whisper-large-v3-turbo"
       ],
       "docUrl": "https://console.groq.com/docs/models",
       "gateway": "models.dev",
@@ -3342,6 +3359,7 @@
         "mistral-medium-latest",
         "mistral-nemo",
         "mistral-small-2506",
+        "mistral-small-2603",
         "mistral-small-latest",
         "open-mistral-7b",
         "open-mixtral-8x22b",
@@ -4028,6 +4046,8 @@
         "zai-org/glm-4.7",
         "zai-org/glm-4.7-flash",
         "zai-org/glm-5",
+        "zai-org/glm-5.1",
+        "zai-org/glm-5.1:thinking",
         "zai-org/glm-5:thinking"
       ],
       "docUrl": "https://docs.nano-gpt.com",
@@ -4257,7 +4277,8 @@
         "glm-4.7-flash",
         "glm-4.7-flashx",
         "glm-5",
-        "glm-5-turbo"
+        "glm-5-turbo",
+        "glm-5.1"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
@@ -4539,6 +4560,7 @@
       "gpt-5.2-chat-latest",
       "gpt-5.2-codex",
       "gpt-5.2-pro",
+      "gpt-5.3-chat-latest",
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
@@ -4732,7 +4754,8 @@
       "glm-4.7-flash",
       "glm-4.7-flashx",
       "glm-5",
-      "glm-5-turbo"
+      "glm-5-turbo",
+      "glm-5.1"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
@@ -4934,6 +4957,7 @@
       "ideogramai/ideogram-v2a",
       "ideogramai/ideogram-v2a-turbo",
       "lumalabs/ray2",
+      "novita/deepseek-v3.2",
       "novita/glm-4.6",
       "novita/glm-4.6v",
       "novita/glm-4.7",
@@ -5006,6 +5030,7 @@
       "xai/grok-4-fast-reasoning",
       "xai/grok-4.1-fast-non-reasoning",
       "xai/grok-4.1-fast-reasoning",
+      "xai/grok-4.20-multi-agent",
       "xai/grok-code-fast-1"
     ],
     "opencode": [
@@ -5224,7 +5249,6 @@
       "gemini-3-1-pro-preview",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
-      "glm-5",
       "gpt-4o",
       "gpt-5-3-codex",
       "gpt-5-4",
@@ -5236,7 +5260,8 @@
       "grok-4-1-fast-reasoning",
       "grok-code-fast-1",
       "kimi-k2.5",
-      "minimax-m2-5"
+      "minimax-m2-5",
+      "zai-glm-5"
     ],
     "google": [
       "gemini-1.5-flash",
@@ -5268,7 +5293,12 @@
       "gemini-flash-latest",
       "gemini-flash-lite-latest",
       "gemini-live-2.5-flash",
-      "gemini-live-2.5-flash-preview-native-audio"
+      "gemini-live-2.5-flash-preview-native-audio",
+      "gemma-3-12b-it",
+      "gemma-3-27b-it",
+      "gemma-3-4b-it",
+      "gemma-3n-e2b-it",
+      "gemma-3n-e4b-it"
     ],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
@@ -6182,7 +6212,7 @@
       "nousresearch/hermes-4-70b",
       "nvidia/nemotron-3-nano-30b-a3b:free",
       "nvidia/nemotron-3-super-120b-a12b",
-      "nvidia/nemotron-3-super-120b-a12b-free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
       "nvidia/nemotron-nano-12b-v2-vl:free",
       "nvidia/nemotron-nano-9b-v2",
       "nvidia/nemotron-nano-9b-v2:free",
@@ -7034,15 +7064,23 @@
       "veo-3.1-generate-preview"
     ],
     "groq": [
+      "allam-2-7b",
+      "canopylabs/orpheus-arabic-saudi",
+      "canopylabs/orpheus-v1-english",
+      "groq/compound",
+      "groq/compound-mini",
       "llama-3.1-8b-instant",
       "llama-3.3-70b-versatile",
-      "meta-llama/llama-4-maverick-17b-128e-instruct",
       "meta-llama/llama-4-scout-17b-16e-instruct",
-      "meta-llama/llama-guard-4-12b",
+      "meta-llama/llama-prompt-guard-2-22m",
+      "meta-llama/llama-prompt-guard-2-86m",
       "moonshotai/kimi-k2-instruct-0905",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "qwen/qwen3-32b"
+      "openai/gpt-oss-safeguard-20b",
+      "qwen/qwen3-32b",
+      "whisper-large-v3",
+      "whisper-large-v3-turbo"
     ],
     "aihubmix": [
       "Kimi-K2-0905",
@@ -7208,6 +7246,7 @@
       "mistral-medium-latest",
       "mistral-nemo",
       "mistral-small-2506",
+      "mistral-small-2603",
       "mistral-small-latest",
       "open-mistral-7b",
       "open-mixtral-8x22b",
@@ -7845,6 +7884,8 @@
       "zai-org/glm-4.7",
       "zai-org/glm-4.7-flash",
       "zai-org/glm-5",
+      "zai-org/glm-5.1",
+      "zai-org/glm-5.1:thinking",
       "zai-org/glm-5:thinking"
     ],
     "clarifai": [
@@ -8011,7 +8052,8 @@
       "glm-4.7-flash",
       "glm-4.7-flashx",
       "glm-5",
-      "glm-5-turbo"
+      "glm-5-turbo",
+      "glm-5.1"
     ],
     "moonshotai-cn": [
       "kimi-k2-0711-preview",

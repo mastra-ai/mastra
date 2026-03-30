@@ -1,9 +1,337 @@
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@import '@assistant-ui/react-ui/styles/index.css';
+
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Base CSS variables - must be defined before @theme references them */
+:root {
+  --font-inter: 'Inter', sans-serif;
+  --tasa-explorer: 'TasaExplorer', sans-serif;
+  --geist-mono: 'GeistMonoVF', monospace;
+
+  /* Dark theme (default) */
+  --surface1: #09090b;
+  --surface2: #111113;
+  --surface3: #18181b;
+  --surface4: #212124;
+  --surface5: rgba(39, 39, 42, 0.9);
+  --surface6: #3b3b40;
+
+  --accent1: #22c55e;
+  --accent2: #ef4444;
+  --accent3: #3b82f6;
+  --accent5: #60a5fa;
+  --accent6: #f59e0b;
+
+  --accent1Dark: #0d2818;
+  --accent2Dark: #2a1515;
+  --accent3Dark: #152036;
+  --accent5Dark: #15202a;
+  --accent6Dark: #261d0d;
+
+  --accent1Darker: #0a1a10;
+  --accent2Darker: #1a1010;
+  --accent3Darker: #0f1520;
+  --accent5Darker: #0f151a;
+  --accent6Darker: #1a140a;
+
+  --neutral1: #52525b;
+  --neutral2: #71717a;
+  --neutral3: #a1a1aa;
+  --neutral4: #d4d4d8;
+  --neutral5: #e4e4e7;
+  --neutral6: #fafafa;
+
+  --error: #ef4444;
+  --overlay: rgba(0, 0, 0, 0.75);
+  --border1: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.12);
+
+  /* Semantic color aliases */
+  --text1: var(--neutral6);
+  --warning1: var(--accent6);
+  --positive1: var(--accent1);
+  --negative1: var(--accent2);
+}
+
+html.light {
+  --surface1: #ffffff;
+  --surface2: #f8fafc;
+  --surface3: #f1f5f9;
+  --surface4: #e2e8f0;
+  --surface5: rgba(226, 232, 240, 0.9);
+  --surface6: #cbd5e1;
+
+  --accent1: #16a34a;
+  --accent2: #dc2626;
+  --accent3: #2563eb;
+  --accent5: #3b82f6;
+  --accent6: #d97706;
+
+  --accent1Dark: #dcfce7;
+  --accent2Dark: #fee2e2;
+  --accent3Dark: #dbeafe;
+  --accent5Dark: #dbeafe;
+  --accent6Dark: #fef3c7;
+
+  --accent1Darker: #bbf7d0;
+  --accent2Darker: #fecaca;
+  --accent3Darker: #bfdbfe;
+  --accent5Darker: #bfdbfe;
+  --accent6Darker: #fde68a;
+
+  --neutral1: #64748b;
+  --neutral2: #475569;
+  --neutral3: #334155;
+  --neutral4: #1e293b;
+  --neutral5: #0f172a;
+  --neutral6: #020617;
+
+  --error: #dc2626;
+  --overlay: rgba(15, 23, 42, 0.45);
+  --border1: rgba(15, 23, 42, 0.12);
+  --border2: rgba(15, 23, 42, 0.2);
+
+  /* Semantic color aliases */
+  --text1: var(--neutral6);
+  --warning1: var(--accent6);
+  --positive1: var(--accent1);
+  --negative1: var(--accent2);
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= theme(--breakpoint-3xl)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@theme {
+  --spacing-*: initial;
+  --spacing-0: 0rem;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-7: 1.75rem;
+  --spacing-8: 2rem;
+  --spacing-9: 2.25rem;
+  --spacing-10: 2.5rem;
+  --spacing-11: 2.75rem;
+  --spacing-12: 3rem;
+  --spacing-14: 3.5rem;
+  --spacing-16: 4rem;
+  --spacing-20: 5rem;
+  --spacing-24: 6rem;
+  --spacing-28: 7rem;
+  --spacing-32: 8rem;
+  --spacing-36: 9rem;
+  --spacing-40: 10rem;
+  --spacing-44: 11rem;
+  --spacing-48: 12rem;
+  --spacing-52: 13rem;
+  --spacing-56: 14rem;
+  --spacing-60: 15rem;
+  --spacing-64: 16rem;
+  --spacing-72: 18rem;
+  --spacing-80: 20rem;
+  --spacing-96: 24rem;
+  --spacing-px: 0.0625rem;
+  --spacing-0_5: 0.125rem;
+  --spacing-1_5: 0.375rem;
+  --spacing-2_5: 0.625rem;
+  --spacing-3_5: 0.875rem;
+
+  --breakpoint-2xl: 1536px;
+  --breakpoint-3xl: 1700px;
+  --breakpoint-4xl: 2000px;
+
+  --text-ui-xs: 0.625rem;
+  --text-ui-sm: 0.75rem;
+  --text-ui-smd: 0.8125rem;
+  --text-ui-md: 0.875rem;
+  --text-ui-lg: 1rem;
+  --text-header-xs: 1rem;
+  --text-header-sm: 1.125rem;
+  --text-header-md: 1.25rem;
+  --text-header-lg: 1.5rem;
+  --text-header-xl: 1.75rem;
+
+  --leading-ui-xs: 160%;
+  --leading-ui-sm: 150%;
+  --leading-ui-smd: 150%;
+  --leading-ui-md: 143%;
+  --leading-ui-lg: 150%;
+  --leading-header-xs: 137%;
+  --leading-header-sm: 133%;
+  --leading-header-md: 140%;
+  --leading-header-lg: 133%;
+  --leading-header-xl: 129%;
+
+  --radius-none: 0px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --height-icon-default: 16px;
+  --height-icon-lg: 20px;
+  --height-icon-sm: 12px;
+  --spacing-form-sm: 1.75rem;
+  --spacing-form-md: 2rem;
+  --spacing-form-default: 2.25rem;
+  --spacing-form-lg: 2.5rem;
+  --height-header-default: 48px;
+  --height-table-header: 28px;
+  --height-table-row: 56px;
+  --height-table-row-small: 40px;
+  --height-badge-default: 28px;
+  --height-avatar-sm: 24px;
+  --height-avatar-md: 32px;
+  --height-avatar-lg: 40px;
+  --height-dropdown-max-height: 300px;
+
+  --max-height-icon-default: 16px;
+  --max-height-icon-lg: 20px;
+  --max-height-icon-sm: 12px;
+  --spacing-form-sm: 1.75rem;
+  --spacing-form-md: 2rem;
+  --spacing-form-default: 2.25rem;
+  --spacing-form-lg: 2.5rem;
+  --max-height-header-default: 48px;
+  --max-height-table-header: 28px;
+  --max-height-table-row: 56px;
+  --max-height-table-row-small: 40px;
+  --max-height-badge-default: 28px;
+  --max-height-avatar-sm: 24px;
+  --max-height-avatar-md: 32px;
+  --max-height-avatar-lg: 40px;
+  --max-height-dropdown-max-height: 300px;
+
+  --width-icon-default: 16px;
+  --width-icon-lg: 20px;
+  --width-icon-sm: 12px;
+  /* Using --spacing-form-* for both height and width */
+  --width-header-default: 48px;
+  --width-table-header: 28px;
+  --width-table-row: 56px;
+  --width-table-row-small: 40px;
+  --width-badge-default: 28px;
+  --width-avatar-sm: 24px;
+  --width-avatar-md: 32px;
+  --width-avatar-lg: 40px;
+  --width-dropdown-max-height: 300px;
+
+  --container-icon-default: 16px;
+  --container-icon-lg: 20px;
+  --container-icon-sm: 12px;
+  /* Using --spacing-form-* for container sizing */
+  --container-header-default: 48px;
+  --container-table-header: 28px;
+  --container-table-row: 56px;
+  --container-table-row-small: 40px;
+  --container-badge-default: 28px;
+  --container-avatar-sm: 24px;
+  --container-avatar-md: 32px;
+  --container-avatar-lg: 40px;
+  --container-dropdown-max-height: 300px;
+
+  --color-surface1: var(--surface1);
+  --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
+  --color-surface4: var(--surface4);
+  --color-surface5: var(--surface5);
+  --color-surface6: var(--surface6);
+  --color-accent1: var(--accent1);
+  --color-accent2: var(--accent2);
+  --color-accent3: var(--accent3);
+  --color-accent5: var(--accent5);
+  --color-accent6: var(--accent6);
+  --color-accent1Dark: var(--accent1Dark);
+  --color-accent2Dark: var(--accent2Dark);
+  --color-accent3Dark: var(--accent3Dark);
+  --color-accent5Dark: var(--accent5Dark);
+  --color-accent6Dark: var(--accent6Dark);
+  --color-accent1Darker: var(--accent1Darker);
+  --color-accent2Darker: var(--accent2Darker);
+  --color-accent3Darker: var(--accent3Darker);
+  --color-accent5Darker: var(--accent5Darker);
+  --color-accent6Darker: var(--accent6Darker);
+  --color-neutral1: var(--neutral1);
+  --color-neutral2: var(--neutral2);
+  --color-neutral3: var(--neutral3);
+  --color-neutral4: var(--neutral4);
+  --color-neutral5: var(--neutral5);
+  --color-neutral6: var(--neutral6);
+  --color-error: var(--error);
+  --color-overlay: var(--overlay);
+  --color-border1: var(--border1);
+  --color-border2: var(--border2);
+
+  /* Semantic color aliases */
+  --color-text1: var(--text1);
+  --color-warning1: var(--warning1);
+  --color-positive1: var(--positive1);
+  --color-negative1: var(--negative1);
+
+  --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono:
+    var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --shadow-glow-accent1: 0 0 20px rgba(34, 197, 94, 0.25);
+  --shadow-glow-accent2: 0 0 20px rgba(239, 68, 68, 0.25);
+  --shadow-focus-ring: 0 0 0 3px rgba(34, 197, 94, 0.12);
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border1);
+  }
+  body {
+    background-color: var(--surface1);
+    color: var(--neutral6);
+  }
+}
 
 /* your custom layer goes AFTER Tailwind imports */
-@layer components {
-  .time-input::-webkit-calendar-picker-indicator {
+
+@utility wrap-break-word {
+  overflow-wrap: break-word;
+}
+
+@utility time-input {
+  &::-webkit-calendar-picker-indicator {
     @apply cursor-pointer;
     background: url('/icons/clock.svg') no-repeat center;
     background-size: 1em 1em;

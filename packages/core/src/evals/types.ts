@@ -433,18 +433,6 @@ export type TrajectoryComparisonOptions = {
    */
   ordering?: 'strict' | 'relaxed' | 'unordered';
   /**
-   * Whether to require exact match of the trajectory (same steps in same order, no extra steps).
-   * When false, allows additional steps as long as expected steps appear in order.
-   * @default false
-   * @deprecated Use `ordering: 'strict'` instead
-   */
-  strictOrder?: boolean;
-  /**
-   * Whether to compare step-specific data (e.g., toolArgs/toolResult for tool_call steps).
-   * @default false
-   */
-  compareStepData?: boolean;
-  /**
    * Whether to allow repeated steps in the trajectory.
    * When false, repeated steps (loops) are penalized.
    * @default true
@@ -453,16 +441,19 @@ export type TrajectoryComparisonOptions = {
 };
 
 /**
- * A lightweight step matcher for trajectory expectations.
- * Simpler than `TrajectoryStep` — just specify `name` and optionally `stepType` and `data`.
+ * Discriminated union mirroring `TrajectoryStep` — specify a `stepType` for autocomplete
+ * on that variant's fields (e.g., `toolArgs` for `tool_call`). All variant-specific fields
+ * are optional; only specified fields are used for comparison.
+ *
+ * Omit `stepType` to match any step by name only.
  *
  * @example
  * ```ts
  * // Match any step named 'search'
  * { name: 'search' }
  *
- * // Match a tool_call named 'search' with specific args
- * { name: 'search', stepType: 'tool_call', data: { query: 'weather' } }
+ * // Match a tool_call with specific args (autocomplete for toolArgs, toolResult, success)
+ * { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
  *
  * // Match an agent run with nested expectations for its children
  * {
@@ -478,20 +469,76 @@ export type TrajectoryComparisonOptions = {
  * }
  * ```
  */
-export type ExpectedStep = {
+/**
+ * Utility type: derive an expected-step variant from an actual TrajectoryStep variant.
+ *
+ * - Keeps `name` and `stepType` required (for discriminant narrowing)
+ * - Makes all other variant-specific fields optional
+ * - Drops `durationMs` and `metadata` (not useful for expectations)
+ * - Replaces `children: TrajectoryStep[]` with `children: TrajectoryExpectation`
+ */
+type ToExpected<T extends TrajectoryStep> = Pick<T, 'name' | 'stepType'> &
+  Partial<Omit<T, 'name' | 'stepType' | 'children' | 'durationMs' | 'metadata'>> & {
+    /** Nested trajectory expectation for this step's children */
+    children?: TrajectoryExpectation;
+  };
+
+/**
+ * Expected step with no specific `stepType` — matches any step by name only.
+ * Use this when you don't care about the step type, just the name.
+ */
+type ExpectedGenericStep = {
   /** Step name to match (tool name, agent ID, workflow step name, etc.) */
   name: string;
-  /** Step type to match. If omitted, matches any step type with the given name */
-  stepType?: TrajectoryStepType;
-  /** Expected step-specific data (toolArgs for tool_call, output for workflow_step, etc.) */
-  data?: Record<string, unknown>;
-  /**
-   * Nested trajectory expectation for this step's children.
-   * Overrides the parent config for evaluating this step's children.
-   * e.g., require strict ordering for the parent agent but unordered for a sub-agent.
-   */
+  /** Must be omitted for generic matching */
+  stepType?: undefined;
+  /** Nested trajectory expectation for this step's children */
   children?: TrajectoryExpectation;
 };
+
+/**
+ * A step expectation for trajectory evaluation.
+ *
+ * Discriminated union derived from `TrajectoryStep` — when you specify a `stepType`,
+ * you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`).
+ * Omit `stepType` to match any step by name only.
+ *
+ * @example
+ * ```ts
+ * // Name-only matching (any step type)
+ * { name: 'search' }
+ *
+ * // Type-narrowed with autocomplete for toolArgs, toolResult, success
+ * { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+ *
+ * // Nested expectations for a sub-agent
+ * {
+ *   name: 'research-agent',
+ *   stepType: 'agent_run',
+ *   children: {
+ *     ordering: 'unordered',
+ *     steps: [
+ *       { name: 'search', stepType: 'tool_call' },
+ *       { name: 'summarize', stepType: 'tool_call' },
+ *     ],
+ *   },
+ * }
+ * ```
+ */
+export type ExpectedStep =
+  | ToExpected<ToolCallStep>
+  | ToExpected<McpToolCallStep>
+  | ToExpected<ModelGenerationStep>
+  | ToExpected<AgentRunStep>
+  | ToExpected<WorkflowStepStep>
+  | ToExpected<WorkflowRunStep>
+  | ToExpected<WorkflowConditionalStep>
+  | ToExpected<WorkflowParallelStep>
+  | ToExpected<WorkflowLoopStep>
+  | ToExpected<WorkflowSleepStep>
+  | ToExpected<WorkflowWaitEventStep>
+  | ToExpected<ProcessorRunStep>
+  | ExpectedGenericStep;
 
 /**
  * Full trajectory expectation config for the unified trajectory scorer.
@@ -512,9 +559,6 @@ export type TrajectoryExpectation = {
    * @default 'relaxed'
    */
   ordering?: 'strict' | 'relaxed' | 'unordered';
-
-  /** Whether to compare step-specific data (toolArgs/toolResult, output, etc.) */
-  compareStepData?: boolean;
 
   /** Whether to allow repeated steps in accuracy evaluation. @default true */
   allowRepeatedSteps?: boolean;

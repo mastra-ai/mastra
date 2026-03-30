@@ -75,6 +75,7 @@ import type {
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  AgentVersionIdentifier,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -191,10 +192,11 @@ export class MastraClient extends BaseResource {
   /**
    * Gets an agent instance by ID
    * @param agentId - ID of the agent to retrieve
+   * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string) {
-    return new Agent(this.options, agentId);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
+    return new Agent(this.options, agentId, version);
   }
 
   /**
