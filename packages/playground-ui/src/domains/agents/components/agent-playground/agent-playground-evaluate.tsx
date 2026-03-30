@@ -256,7 +256,7 @@ export function AgentPlaygroundEvaluate({
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left sidebar: Navigation */}
-      <div className="w-[240px] flex-shrink-0 border-r border-border1 flex flex-col overflow-hidden">
+      <div className="w-[240px] shrink-0 border-r border-border1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1">
           <div className="p-3">
             {/* Experiments */}
@@ -633,7 +633,7 @@ export function AgentPlaygroundEvaluate({
                   placeholder="Search datasets..."
                   value={attachDatasetSearch}
                   onChange={e => setAttachDatasetSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-none focus:ring-1 focus:ring-accent1"
+                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-hidden focus:ring-1 focus:ring-accent1"
                 />
                 {unattachedDatasets
                   .filter(
@@ -701,7 +701,7 @@ export function AgentPlaygroundEvaluate({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-none focus:ring-1 focus:ring-accent1"
+                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-hidden focus:ring-1 focus:ring-accent1"
                 />
                 {unattachedScorers
                   .filter(

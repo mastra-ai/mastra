@@ -396,7 +396,21 @@ The adapter registers routes for both HTTP and SSE (Server-Sent Events) transpor
 
 ### Serverless mode
 
-For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`:
+For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`.
+
+When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set `mcpOptions` in your server config:
+
+```typescript
+const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
+  },
+})
+```
+
+When manually creating a server adapter, pass `mcpOptions` directly:
 
 ```typescript
 const server = new MastraServer({

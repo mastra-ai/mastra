@@ -689,6 +689,16 @@
       "source": "/docs/observability/datasets/running-experiments",
       "destination": "/docs/evals/datasets/running-experiments",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/listStoredAgents",
+      "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getStoredAgentById",
+      "destination": "/reference",
+      "permanent": true
     }
   ]
 }

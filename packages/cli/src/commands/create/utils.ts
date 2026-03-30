@@ -12,7 +12,7 @@ import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { interactivePrompt } from '../init/utils.js';
 import type { LLMProvider } from '../init/utils.js';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, isGitInitialized } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -195,6 +195,8 @@ export const createMastraProject = async ({
   let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
+    const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
+
     result = await interactivePrompt({
       options: { showBanner: false },
       skip: {
@@ -203,6 +205,7 @@ export const createMastraProject = async ({
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
         directory: true,
+        gitInit: skipGitInit,
       },
     });
   }

@@ -9,7 +9,7 @@ export type TabListProps = {
   alignment?: 'left' | 'full-width';
 };
 
-export const TabList = ({ children, variant = 'default', alignment = 'left', className }: TabListProps) => {
+export const TabList = ({ children, variant = 'default', alignment = 'full-width', className }: TabListProps) => {
   return (
     <div className={cn('w-full overflow-x-auto', className)}>
       <RadixTabs.List
@@ -29,7 +29,7 @@ export const TabList = ({ children, variant = 'default', alignment = 'left', cla
               variant === 'buttons',
             [`[&>button]:flex-1 [&>button]:py-2 [&>button]:px-4 [&>button]:text-neutral3 [&>button]:${transitions.all}`]:
               variant === 'buttons',
-            '[&>button]:hover:text-neutral4 [&>button]:hover:bg-surface3': variant === 'buttons',
+            'hover:[&>button]:text-neutral4 hover:[&>button]:bg-surface3': variant === 'buttons',
             '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:bg-surface4 [&>button[data-state=active]]:shadow-inner':
               variant === 'buttons',
           },
