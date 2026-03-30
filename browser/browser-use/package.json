@@ -60,7 +60,7 @@
   },
   "dependencies": {
     "@types/ws": "^8.18.1",
-    "browser-use-sdk": "^3.3.1",
+    "browser-use-sdk": "^3.3.2",
     "ws": "^8.20.0"
   }
 }
