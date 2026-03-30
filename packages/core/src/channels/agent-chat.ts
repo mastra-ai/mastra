@@ -200,24 +200,32 @@ export class AgentChat {
 
         // Update the approval card to remove buttons
         if (event.messageId) {
-          const isDM = event.thread?.isDM ?? sdkThread.isDM;
-          const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
-          const statusText = approved ? `✅ Approved${suffix}` : `🚫 Denied${suffix}`;
-          try {
-            await adapter.editMessage(
-              sdkThread.id,
-              event.messageId,
-              Card({
-                children: [
-                  CardText(
-                    storedArgsSummary ? `**${storedToolName}** \`${storedArgsSummary}\`` : `**${storedToolName}**`,
-                  ),
-                  CardText(statusText),
-                ],
-              }),
-            );
-          } catch {
-            // best-effort — some platforms may not support editing
+          const titleText = storedArgsSummary
+            ? `**${storedToolName}** \`${storedArgsSummary}\``
+            : `**${storedToolName}**`;
+          if (approved) {
+            // Show "Running..." while the tool executes; consumeAgentStream will replace with the result
+            try {
+              await adapter.editMessage(
+                sdkThread.id,
+                event.messageId,
+                Card({ children: [CardText(titleText), CardText('Running...')] }),
+              );
+            } catch {
+              // best-effort
+            }
+          } else {
+            const isDM = event.thread?.isDM ?? sdkThread.isDM;
+            const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
+            try {
+              await adapter.editMessage(
+                sdkThread.id,
+                event.messageId,
+                Card({ children: [CardText(titleText), CardText(`🚫 Denied${suffix}`)] }),
+              );
+            } catch {
+              // best-effort
+            }
           }
         }
 
@@ -538,7 +546,10 @@ export class AgentChat {
           ? undefined
           : await sdkThread.post(
               Card({
-                children: [CardText(argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`)],
+                children: [
+                  CardText(argsSummary ? `**${displayName}** \`${argsSummary}\`` : `**${displayName}**`),
+                  CardText('Running...'),
+                ],
               }),
             );
 
@@ -779,18 +790,24 @@ export class AgentChat {
     startGateway: (options: { waitUntil: (p: Promise<unknown>) => void }, durationMs?: number) => Promise<Response>,
   ): void {
     const DURATION = 24 * 60 * 60 * 1000;
+    const RETRY_DELAY = 5000;
 
     const reconnect = async () => {
       while (true) {
         try {
           let resolve: () => void;
-          const done = new Promise<void>(r => {
-            resolve = r;
+          let reject: (err: unknown) => void;
+          const done = new Promise<void>((res, rej) => {
+            resolve = res;
+            reject = rej;
           });
           await startGateway(
             {
               waitUntil: (p: Promise<unknown>) => {
-                void p.then(() => resolve!());
+                void p.then(
+                  () => resolve!(),
+                  err => reject!(err),
+                );
               },
             },
             DURATION,
@@ -798,8 +815,8 @@ export class AgentChat {
           await done;
           this.log('info', `[${name}] Gateway session ended, reconnecting...`);
         } catch (err) {
-          this.log('error', `[${name}] Gateway listener error`, err);
-          await new Promise(r => setTimeout(r, 5000));
+          this.log('error', `[${name}] Gateway error, retrying in ${RETRY_DELAY / 1000}s`, err);
+          await new Promise(r => setTimeout(r, RETRY_DELAY));
         }
       }
     };

@@ -18,11 +18,11 @@ importers:
         specifier: ^2.0.23
         version: 2.0.100(zod@4.3.6)
       '@chat-adapter/discord':
-        specifier: ^4.20.2
-        version: 4.20.2
+        specifier: ^4.23.0
+        version: 4.23.0
       '@chat-adapter/slack':
-        specifier: ^4.21.0
-        version: 4.21.0
+        specifier: ^4.23.0
+        version: 4.23.0
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -58,17 +58,14 @@ packages:
     resolution: {integrity: sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==}
     engines: {node: '>=18'}
 
-  '@chat-adapter/discord@4.20.2':
-    resolution: {integrity: sha512-hA9kKLpfyxmJdgIpldFy64aPc6/3iPQySW/GtfDfDTuUVsAYm9lw5UlW90RNciwLgIL9sqqZLsQ4wJmM4PeJfQ==}
+  '@chat-adapter/discord@4.23.0':
+    resolution: {integrity: sha512-rxK652CEoG1J8R26H3xcisiGVmSnUEXWIm5eEcQxjHRyiEClFi4T1KeS6ekYhZmzPBuU6wkOwiToqcTs/2C3hg==}
 
-  '@chat-adapter/shared@4.20.2':
-    resolution: {integrity: sha512-cTtTVHgH/2l9/+ILSExCr/kZwzz2Y8tp7WKRweMRWFOBcXZ0U5ZtviZCCDWBqU/YOBilQUgON8vIP9eo1w0m5w==}
+  '@chat-adapter/shared@4.23.0':
+    resolution: {integrity: sha512-IDHgrAi3Y8Qptl1kd8zmM6jxWX+lu0cq/uZiURv8jONufWHrVwVr19pN0YK52ASnRlLZkcaNYXoa+mLFGQ2tlw==}
 
-  '@chat-adapter/shared@4.21.0':
-    resolution: {integrity: sha512-7Tog6z7FOWp3/Ok+N7QFb8OkhKCua/TlGm9iHFNofBf3XumGG/j2IdgZQWo/0X89HJl4K0NrDfDcTtzQkvkKLA==}
-
-  '@chat-adapter/slack@4.21.0':
-    resolution: {integrity: sha512-oeE33+WxjFiCVbHfIHVJz8V0G5rcJxer2qprLESZgOFDzcp99ieOV4kDnDnPLB+IQ+kFkObXtg/I7qSl/rGITg==}
+  '@chat-adapter/slack@4.23.0':
+    resolution: {integrity: sha512-J5Ml/Ug8Zdb3zVIcbMhkei9U9aTeY+uqpzuuzcHkwdJC6FDFhwj5TSiuocckctqW9tMCqzFl4h4gU5q9f6KSGA==}
 
   '@discordjs/builders@1.13.1':
     resolution: {integrity: sha512-cOU0UDHc3lp/5nKByDxkmRiNZBpdp0kx55aarbiAfakfKJHlxv/yFW1zmIqCAmwH5CRlrH9iMFKJMpvW4DPB+w==}
@@ -328,11 +325,8 @@ packages:
   character-entities@2.0.2:
     resolution: {integrity: sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ==}
 
-  chat@4.20.2:
-    resolution: {integrity: sha512-iTyMjE3ZRnubw1t4HgSyhU+sOG5coIBYxNS4DZbBmjQCJ9DnArmiejtG3cMigb11E2OlilZ97oKuRGigIOPh4g==}
-
-  chat@4.21.0:
-    resolution: {integrity: sha512-rhWVU0pjpf6sQGhW/yx6h4cKYhwoxInQbZH0MnAKM4CfKi20LX90OgHvPWtk3PghiSc9t9v0eu+pGeDnayAndA==}
+  chat@4.23.0:
+    resolution: {integrity: sha512-Gmw8yyDrrH9Vxs+TfxF7FoTENrCzJV4T0FiAh7APGcQPhMMYAhrpq66PKj8azhkUSEyaen8ujbneogoJWiY8vg==}
 
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
@@ -746,10 +740,10 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@chat-adapter/discord@4.20.2':
+  '@chat-adapter/discord@4.23.0':
     dependencies:
-      '@chat-adapter/shared': 4.20.2
-      chat: 4.20.2
+      '@chat-adapter/shared': 4.23.0
+      chat: 4.23.0
       discord-api-types: 0.37.120
       discord-interactions: 4.4.0
       discord.js: 14.25.1
@@ -758,23 +752,17 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@chat-adapter/shared@4.20.2':
+  '@chat-adapter/shared@4.23.0':
     dependencies:
-      chat: 4.20.2
+      chat: 4.23.0
     transitivePeerDependencies:
       - supports-color
 
-  '@chat-adapter/shared@4.21.0':
+  '@chat-adapter/slack@4.23.0':
     dependencies:
-      chat: 4.21.0
-    transitivePeerDependencies:
-      - supports-color
-
-  '@chat-adapter/slack@4.21.0':
-    dependencies:
-      '@chat-adapter/shared': 4.21.0
+      '@chat-adapter/shared': 4.23.0
       '@slack/web-api': 7.15.0
-      chat: 4.21.0
+      chat: 4.23.0
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -987,19 +975,7 @@ snapshots:
 
   character-entities@2.0.2: {}
 
-  chat@4.20.2:
-    dependencies:
-      '@workflow/serde': 4.1.0-beta.2
-      mdast-util-to-string: 4.0.0
-      remark-gfm: 4.0.1
-      remark-parse: 11.0.0
-      remark-stringify: 11.0.0
-      remend: 1.3.0
-      unified: 11.0.5
-    transitivePeerDependencies:
-      - supports-color
-
-  chat@4.21.0:
+  chat@4.23.0:
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
