@@ -182,7 +182,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
         <div
           key={idx}
           className={cn(
-            'px-3 py-0.5 whitespace-pre-wrap break-words',
+            'px-3 py-0.5 whitespace-pre-wrap wrap-break-word',
             line.type === 'removed' && 'bg-red-950/20 text-red-300',
             line.type === 'added' && 'bg-green-950/20 text-green-300',
             line.type === 'equal' && 'text-neutral4',
@@ -655,7 +655,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                             defaultValue={name}
                             onBlur={e => handleRenameVariable(name, e.target.value.trim())}
                             placeholder="key"
-                            className="w-24 shrink-0 text-ui-sm font-mono text-neutral5 bg-transparent border-none outline-none focus-visible:outline-none focus-visible:ring-0"
+                            className="w-24 shrink-0 text-ui-sm font-mono text-neutral5 bg-transparent border-none outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
                             aria-label={`Variable name: ${name}`}
                           />
                         )}
@@ -670,7 +670,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                             defaultValue={schema.default != null ? String(schema.default) : ''}
                             onBlur={e => handleVariableValueChange(name, e.target.value)}
                             placeholder="value"
-                            className="flex-1 min-w-0 text-ui-sm text-neutral3 bg-transparent border-none outline-none focus-visible:outline-none focus-visible:ring-0"
+                            className="flex-1 min-w-0 text-ui-sm text-neutral3 bg-transparent border-none outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
                             aria-label={`Variable value: ${name}`}
                           />
                         )}
@@ -678,7 +678,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                           <button
                             type="button"
                             onClick={() => handleRemoveVariable(name)}
-                            className="text-neutral3 hover:text-neutral5 transition-colors focus-visible:outline-none focus-visible:ring-0 shrink-0"
+                            className="text-neutral3 hover:text-neutral5 transition-colors focus-visible:outline-hidden focus-visible:ring-0 shrink-0"
                             aria-label={`Remove variable ${name}`}
                           >
                             <Icon size="sm">

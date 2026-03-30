@@ -15,6 +15,7 @@ import type { MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent } from './scores';
 import type {
   AnySpan,
+  RecordedTrace,
   CreateSpanOptions,
   EntityType,
   ExportedSpan,
@@ -36,12 +37,14 @@ import type {
  * These fields can travel alongside observability signals without being encoded in labels.
  */
 export interface CorrelationContext {
-  // Correlation
+  /**
+   * @deprecated Use the signal's top-level `traceId` instead.
+   */
   traceId?: string;
+  /**
+   * @deprecated Use the signal's top-level `spanId` instead.
+   */
   spanId?: string;
-  tags?: string[];
-
-  // Context
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
@@ -62,6 +65,7 @@ export interface CorrelationContext {
   source?: string;
   serviceName?: string;
   experimentId?: string;
+  tags?: string[];
 }
 
 /**
@@ -240,6 +244,12 @@ export interface ObservabilityEntrypoint {
   setLogger(options: { logger: IMastraLogger }): void;
 
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined;
+
+  /**
+   * Load a persisted trace as a hydrated RecordedTrace object.
+   * Returns null when storage is unavailable or the trace does not exist.
+   */
+  getRecordedTrace?(args: { traceId: string }): Promise<RecordedTrace | null>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;
