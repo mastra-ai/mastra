@@ -570,7 +570,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                     <ObservationRenderer
                       observations={observations}
                       maxHeight={undefined}
-                      className="break-words w-full overflow-hidden"
+                      className="wrap-break-word w-full overflow-hidden"
                     />
                     {isCopied && (
                       <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
@@ -656,7 +656,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               {(streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 && (
                 <div className="flex items-center gap-2">
                   <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
+                    className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
                   />
                   <span className="text-[10px] text-neutral5">
                     {streamProgress.windows.buffered.observations.chunks} buffered chunk
@@ -670,13 +670,13 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               )}
               {streamProgress.windows?.buffered?.reflection?.status === 'running' && (
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-purple-400 animate-pulse" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-purple-400 animate-pulse" />
                   <span className="text-[10px] text-neutral5">Buffering reflection…</span>
                 </div>
               )}
               {streamProgress.windows?.buffered?.reflection?.status === 'complete' && (
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-green-500" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-green-500" />
                   <span className="text-[10px] text-neutral5">Reflection buffered</span>
                   <span className="text-[10px] text-neutral3">
                     {formatTokens(streamProgress.windows.buffered.reflection.inputObservationTokens)} →{' '}

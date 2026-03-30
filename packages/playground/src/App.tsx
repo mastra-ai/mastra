@@ -245,7 +245,7 @@ const routes = [
           { path: 'chat/:threadId', element: <Agent /> },
           ...(isExperimentalFeatures
             ? [
-                { path: 'playground', element: <AgentPlayground /> },
+                { path: 'editor', element: <AgentPlayground /> },
                 { path: 'evaluate', element: <AgentEvaluate /> },
                 { path: 'review', element: <AgentReview /> },
               ]

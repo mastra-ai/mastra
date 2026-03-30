@@ -1,4 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -51,6 +52,9 @@ export class ObservationTurn {
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
 
+  /** Optional observability context for nested OM spans. */
+  observabilityContext?: ObservabilityContext;
+
   /** Optional processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks?: ObservationTurnHooks;
 
@@ -59,12 +63,14 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
     this.om = opts.om;
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks;
   }
 

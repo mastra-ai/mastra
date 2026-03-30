@@ -1,5 +1,27 @@
 # @mastra/ai-sdk
 
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Added `onError` callback to `handleChatStream()` options. This lets you intercept and sanitize stream errors before they reach the client — useful for preventing internal infrastructure details from leaking to end users. ([#14681](https://github.com/mastra-ai/mastra/pull/14681))
+
+  ```ts
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'myAgent',
+    params,
+    onError: error => 'An unexpected error occurred. Please try again.',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed toAISdkStream() crashing when resumed supervisor and subagent streams continue with nested tool results after a suspended tool call. ([#14675](https://github.com/mastra-ai/mastra/pull/14675))
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+
 ## 1.2.1
 
 ### Patch Changes

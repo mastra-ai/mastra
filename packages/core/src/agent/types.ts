@@ -218,7 +218,7 @@ export interface AgentConfig<
    * }
    * ```
    */
-  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
@@ -231,19 +231,19 @@ export interface AgentConfig<
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions, TRequestContext>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
@@ -268,7 +268,7 @@ export interface AgentConfig<
    * });
    * ```
    */
-  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions, TRequestContext>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -276,16 +276,16 @@ export interface AgentConfig<
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, Agent>>;
+  agents?: DynamicArgument<Record<string, Agent>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
-  scorers?: DynamicArgument<MastraScorers>;
+  scorers?: DynamicArgument<MastraScorers, TRequestContext>;
 
   /**
    * Memory module used for storing and retrieving stateful context.
    */
-  memory?: DynamicArgument<MastraMemory>;
+  memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'
@@ -299,19 +299,19 @@ export interface AgentConfig<
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
    */
-  workspace?: DynamicArgument<AnyWorkspace | undefined>;
+  workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Output processors that can modify or validate messages from the agent, before it is sent to the client.
    * These can be individual processors (implementing `processOutputResult`, `processOutputStream`, or `processOutputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.

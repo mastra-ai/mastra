@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { DataChunkType } from '../stream/types';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
@@ -34,6 +35,7 @@ type ToolInvocationLike = {
 
 export interface ToolResultReminderOptions {
   reminderText?: string;
+  maxTokens?: number;
   pathExists?: (path: string) => boolean;
   isDirectory?: (path: string) => boolean;
   readFile?: (path: string) => string;
@@ -109,6 +111,21 @@ function getReminderMarkup(reminderText: string, instructionPath: string): strin
   return `<system-reminder type="${REMINDER_TYPE}" path="${escapeXmlAttribute(instructionPath)}">${escapeXml(reminderText)}</system-reminder>`;
 }
 
+function truncateToTokenLimit(content: string, maxTokens: number): string {
+  const estimatedTokens = estimateTokenCount(content);
+  if (estimatedTokens <= maxTokens) {
+    return content;
+  }
+
+  const approximateCharLimit = Math.max(maxTokens * 4, 1);
+  const sliceEnd = Math.min(content.length, approximateCharLimit);
+  const newlineIndex = content.lastIndexOf('\n', sliceEnd);
+  const truncatedContent = content.slice(0, newlineIndex > 0 ? newlineIndex : sliceEnd).trimEnd();
+  const shownTokens = estimateTokenCount(truncatedContent);
+
+  return `${truncatedContent}\n\n[truncated — showing first ~${shownTokens} of ~${estimatedTokens} estimated tokens]`;
+}
+
 type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
 
 function getCompletedToolCalls(messageList: MessageList): CompletedToolCall[] {
@@ -168,6 +185,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   processorIndex = 0;
 
   private readonly reminderText?: string;
+  private readonly maxTokens: number;
   private readonly pathExists: (path: string) => boolean;
   private readonly isDirectory: (path: string) => boolean;
   private readonly readFile: (path: string) => string;
@@ -175,6 +193,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
+    this.maxTokens = options.maxTokens ?? 1000;
     this.pathExists = options.pathExists ?? existsSync;
     this.isDirectory =
       options.isDirectory ??
@@ -231,7 +250,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     try {
       const content = this.readFile(instructionPath).trim();
       if (content.length > 0) {
-        return content;
+        return truncateToTokenLimit(content, this.maxTokens);
       }
     } catch {
       // Fall back to configured reminder text if file cannot be read.

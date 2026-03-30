@@ -112,10 +112,10 @@ const config = {
     sourcemap: true,
   },
   editor: new MastraEditor(),
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  // },
 };
 
 export const mastra = new Mastra({
