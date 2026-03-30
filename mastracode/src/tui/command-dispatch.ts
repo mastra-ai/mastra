@@ -19,6 +19,7 @@ import {
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
+  handleThreadCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
@@ -78,6 +79,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
+      return true;
+    case 'thread':
+      await handleThreadCommand(buildCtx());
       return true;
     case 'skills':
       await handleSkillsCommand(buildCtx());

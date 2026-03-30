@@ -118,6 +118,10 @@ export interface GlobalSettings {
     activeOmPackId: string | null;
     /** Explicit OM model override — used for custom OM pack or /om manual changes. */
     omModelOverride: string | null;
+    /** Default OM observation threshold used for new threads unless overridden per-thread. */
+    omObservationThreshold: number | null;
+    /** Default OM reflection threshold used for new threads unless overridden per-thread. */
+    omReflectionThreshold: number | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
@@ -167,6 +171,8 @@ const DEFAULTS: GlobalSettings = {
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    omObservationThreshold: null,
+    omReflectionThreshold: null,
     subagentModels: {},
   },
   preferences: {

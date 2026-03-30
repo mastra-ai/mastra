@@ -1,5 +1,81 @@
 # @mastra/evals
 
+## 1.2.0-alpha.1
+
+### Patch Changes
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0-alpha.3
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- **Trajectory scorers**: Added scorers for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+  - `createTrajectoryScorerCode` — unified scorer that evaluates accuracy, efficiency, blacklist violations, and tool failure patterns in a single pass. Supports per-item expectations from datasets with static defaults. Nested `ExpectedStep.children` configs allow recursive evaluation with different rules per hierarchy level.
+  - `createTrajectoryAccuracyScorerCode` — deterministic accuracy scorer with strict, relaxed, and unordered ordering modes.
+  - `createTrajectoryAccuracyScorerLLM` — LLM-based scorer for semantic trajectory evaluation.
+
+  **Utility functions:**
+  - `extractTrajectory` / `extractWorkflowTrajectory` — Convert agent runs and workflow executions into structured trajectories
+  - `extractTrajectoryFromTrace` — Build hierarchical trajectories from observability trace spans, including nested agent/tool calls
+  - `compareTrajectories` — Compare actual vs. expected trajectories with configurable ordering and data matching. Accepts `ExpectedStep[]` for simpler expected step definitions
+  - `checkTrajectoryEfficiency` — Evaluate step counts, token usage, and duration against budgets
+  - `checkTrajectoryBlacklist` — Detect forbidden tools or tool sequences
+  - `analyzeToolFailures` — Detect retry patterns, fallbacks, and argument corrections
+
+  **Example — unified scorer with defaults:**
+
+  ```ts
+  import { createTrajectoryScorerCode } from '@mastra/evals/scorers';
+
+  const scorer = createTrajectoryScorerCode({
+    defaults: {
+      ordering: 'strict',
+      steps: [
+        { name: 'validate-input' },
+        {
+          name: 'research-agent',
+          stepType: 'agent_run',
+          children: {
+            ordering: 'unordered',
+            steps: [{ name: 'search' }, { name: 'summarize' }],
+          },
+        },
+        { name: 'save-result' },
+      ],
+      maxSteps: 10,
+      blacklistedTools: ['deleteAll'],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
 ## 1.1.2
 
 ### Patch Changes

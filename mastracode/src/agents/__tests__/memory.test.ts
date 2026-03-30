@@ -18,6 +18,10 @@ vi.mock('../model', () => ({
   resolveModel: vi.fn(() => ({ __provider: 'mock' })),
 }));
 
+vi.mock('@mastra/fastembed', () => ({
+  fastembed: { small: {} },
+}));
+
 // Capture the options passed to Memory constructor
 const memoryCalls: Array<Record<string, unknown>> = [];
 vi.mock('@mastra/memory', () => ({

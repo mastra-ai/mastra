@@ -1,4 +1,5 @@
 @tailwind components;
+@tailwind utilities;
 
 /* your custom layer goes AFTER Tailwind imports */
 @layer components {

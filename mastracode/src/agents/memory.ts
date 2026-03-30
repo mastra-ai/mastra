@@ -1,6 +1,8 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
+import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
 import { MEMORY_GATEWAY_DEFAULTS, loadSettings } from '../onboarding/settings.js';
@@ -48,7 +50,7 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
  * Reads OM thresholds from harness state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -71,10 +73,12 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
 
     cachedMemory = new Memory({
       storage,
+      vector: vector || false,
+      embedder: vector ? fastembed.small : undefined,
       options: {
         observationalMemory: {
           enabled: omEnabled,
-          retrieval: omScope === 'thread',
+          retrieval: vector ? { vector: true } : omScope === 'thread',
           scope: omScope,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,
@@ -84,6 +88,8 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
             threadTitle: true,
+            instruction:
+              'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.',
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,

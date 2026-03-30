@@ -1,5 +1,21 @@
 # @mastra/libsql
 
+## 1.7.3-alpha.2
+
+### Patch Changes
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
 ## 1.7.3-alpha.1
 
 ### Patch Changes

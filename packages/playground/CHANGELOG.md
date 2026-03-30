@@ -1,5 +1,37 @@
 # @internal/playground
 
+## 1.3.16-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`7e86302`](https://github.com/mastra-ai/mastra/commit/7e86302a77f16adbb771af43f72472872d13593e), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`bbfd3c0`](https://github.com/mastra-ai/mastra/commit/bbfd3c0302ac10be63e5fca93b5068690f472dea), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/client-js@1.11.0-alpha.6
+  - @mastra/core@1.18.0-alpha.3
+  - @mastra/react@0.2.18-alpha.6
+  - @mastra/playground-ui@20.0.0-alpha.6
+
+## 1.3.16-alpha.5
+
+### Patch Changes
+
+- Fixed the viewer-role E2E suite by skipping a sidebar assertion that is currently out of sync with Observability navigation behavior. ([#14760](https://github.com/mastra-ai/mastra/pull/14760))
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4)]:
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/client-js@1.10.1-alpha.5
+  - @mastra/playground-ui@20.0.0-alpha.5
+  - @mastra/react@0.2.18-alpha.5
+
+## 1.3.16-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`1bf693f`](https://github.com/mastra-ai/mastra/commit/1bf693f2e11cc3eb6b882e412416b7998e8dc80c), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+  - @mastra/playground-ui@19.1.0-alpha.4
+  - @mastra/client-js@1.10.1-alpha.4
+  - @mastra/react@0.2.18-alpha.4
+
 ## 1.3.16-alpha.3
 
 ### Patch Changes

@@ -16,6 +16,7 @@ export { handleCloneCommand } from './clone.js';
 export { handleResourceCommand } from './resource.js';
 export { handleDiffCommand } from './diff.js';
 export { handleThreadsCommand } from './threads.js';
+export { handleThreadCommand } from './thread.js';
 export { handleThreadTagDirCommand } from './thread-tag-dir.js';
 export { handleSandboxCommand } from './sandbox.js';
 export { handleModelsPackCommand } from './models-pack.js';
