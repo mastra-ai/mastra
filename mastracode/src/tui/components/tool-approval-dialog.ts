@@ -10,6 +10,7 @@
  */
 import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
+import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 
@@ -118,11 +119,7 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
       if (typeof value === 'string') {
         str = value;
       } else {
-        try {
-          str = JSON.stringify(value);
-        } catch {
-          str = String(value);
-        }
+        str = safeStringify(value);
       }
       const maxLen = 120;
       const firstLine = str.split('\n')[0] ?? '';
