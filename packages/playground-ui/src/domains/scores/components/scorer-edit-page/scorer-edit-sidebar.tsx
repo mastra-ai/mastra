@@ -194,7 +194,7 @@ export function ScorerEditSidebar({
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="flex-shrink-0 p-4">
+      <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
