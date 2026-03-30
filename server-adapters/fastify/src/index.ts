@@ -321,12 +321,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
 
-        reply.raw.on('error', err => {
+        const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
           void reader.cancel('response write error');
-        });
+        };
+        reply.raw.once('error', onResError);
 
         try {
           while (true) {
@@ -339,6 +340,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
         } finally {
+          reply.raw.off('error', onResError);
           reply.raw.end();
         }
       } else {

@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -107,7 +108,7 @@ describe('datastream-response error handling', () => {
     expect(genericHandlerErrorCall).toBeUndefined();
   });
 
-  it('should listen for reply.raw error events during datastream-response piping', { timeout: 15000 }, async () => {
+  it('should log errors when reply.raw emits an error during datastream-response piping', async () => {
     app = Fastify({ forceCloseConnections: true });
 
     const adapter = new MastraServer({
@@ -123,15 +124,17 @@ describe('datastream-response error handling', () => {
       debug: vi.fn(),
     } as any);
 
-    // Create a stream that sends data slowly so we can trigger a write error
+    // Capture the raw response so we can destroy it mid-stream
+    let capturedRes: ServerResponse | null = null;
+
+    // Create a stream that sends data slowly so we have time to destroy the response
     const createSlowStream = () => {
       let chunkCount = 0;
       return new ReadableStream({
         async pull(controller) {
           chunkCount++;
-          if (chunkCount <= 10) {
+          if (chunkCount <= 20) {
             controller.enqueue(new TextEncoder().encode(`chunk-${chunkCount}\n`));
-            // Small delay between chunks
             await new Promise(resolve => setTimeout(resolve, 50));
           } else {
             controller.close();
@@ -154,30 +157,36 @@ describe('datastream-response error handling', () => {
       },
     };
 
+    // Hook to capture the raw response object before the route handler
+    app.addHook('onRequest', async (request, reply) => {
+      capturedRes = reply.raw;
+    });
     app.addHook('preHandler', adapter.createContextMiddleware());
     await adapter.registerRoute(app, testRoute, { prefix: '' });
 
     const address = await app.listen({ port: 0 });
 
-    // Use AbortController to abort the request mid-stream, simulating a client disconnect
-    const controller = new AbortController();
-
-    const response = await fetch(`${address}/test/datastream-write-error`, {
+    // Start the request (don't await the full response)
+    const fetchPromise = fetch(`${address}/test/datastream-write-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-      signal: controller.signal,
-    });
+    }).catch(() => {});
 
-    // Read one chunk then abort
-    const reader = response.body!.getReader();
-    await reader.read(); // Read first chunk
-    controller.abort();
+    // Wait for the response to start streaming
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-    // Wait for the server-side stream processing to notice the disconnect
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Emit an error on the response to simulate a socket-level write failure
+    capturedRes!.emit('error', new Error('simulated connection reset'));
 
-    // The server should not have crashed — this test passing without unhandled rejection is the assertion
-    expect(true).toBe(true);
+    // Wait for error handling to complete
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await fetchPromise;
+
+    // Verify the error was logged through the response error handler
+    const writePathErrorCall = loggerErrorSpy.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0] === 'Error writing datastream response',
+    );
+    expect(writePathErrorCall).toBeDefined();
   });
 });

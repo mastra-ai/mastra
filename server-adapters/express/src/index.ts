@@ -292,12 +292,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
 
-        response.on('error', err => {
+        const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
           void reader.cancel('response write error');
-        });
+        };
+        response.once('error', onResError);
 
         try {
           while (true) {
@@ -310,6 +311,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
         } finally {
+          response.off('error', onResError);
           response.end();
         }
       } else {

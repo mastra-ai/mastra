@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import type { Server, ServerResponse } from 'node:http';
 import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -106,7 +106,6 @@ describe('datastream-response error handling', () => {
 
     // The error should be caught and logged within the datastream-response handler itself,
     // NOT propagate up to the generic "Error calling handler" catch in registerRoute.
-    // Currently, it propagates because there's no catch block — only a finally.
     const datastreamErrorCall = loggerErrorSpy.mock.calls.find(
       (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('datastream'),
     );
@@ -119,7 +118,7 @@ describe('datastream-response error handling', () => {
     expect(genericHandlerErrorCall).toBeUndefined();
   });
 
-  it('should listen for ctx.res error events during datastream-response piping', async () => {
+  it('should log errors when ctx.res emits an error during datastream-response piping', async () => {
     const app = new Koa();
     app.use(bodyParser());
 
@@ -136,15 +135,17 @@ describe('datastream-response error handling', () => {
       debug: vi.fn(),
     } as any);
 
-    // Create a stream that sends data slowly so we can trigger a write error
+    // Capture the raw response so we can destroy it mid-stream
+    let capturedRes: ServerResponse | null = null;
+
+    // Create a stream that sends data slowly so we have time to destroy the response
     const createSlowStream = () => {
       let chunkCount = 0;
       return new ReadableStream({
         async pull(controller) {
           chunkCount++;
-          if (chunkCount <= 10) {
+          if (chunkCount <= 20) {
             controller.enqueue(new TextEncoder().encode(`chunk-${chunkCount}\n`));
-            // Small delay between chunks
             await new Promise(resolve => setTimeout(resolve, 50));
           } else {
             controller.close();
@@ -167,6 +168,11 @@ describe('datastream-response error handling', () => {
       },
     };
 
+    // Middleware to capture the response object before the route handler
+    app.use(async (ctx, next) => {
+      capturedRes = ctx.res;
+      await next();
+    });
     app.use(adapter.createContextMiddleware());
     await adapter.registerRoute(app, testRoute, { prefix: '' });
 
@@ -176,25 +182,27 @@ describe('datastream-response error handling', () => {
     const address = server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
 
-    // Use AbortController to abort the request mid-stream, simulating a client disconnect
-    const controller = new AbortController();
-
-    const response = await fetch(`http://localhost:${port}/test/datastream-write-error`, {
+    // Start the request (don't await the full response)
+    const fetchPromise = fetch(`http://localhost:${port}/test/datastream-write-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-      signal: controller.signal,
-    });
+    }).catch(() => {});
 
-    // Read one chunk then abort
-    const reader = response.body!.getReader();
-    await reader.read(); // Read first chunk
-    controller.abort();
+    // Wait for the response to start streaming
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-    // Wait for the server-side stream processing to notice the disconnect
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Emit an error on the response to simulate a socket-level write failure
+    capturedRes!.emit('error', new Error('simulated connection reset'));
 
-    // The server should not have crashed — this test passing without unhandled rejection is the assertion
-    expect(true).toBe(true);
+    // Wait for error handling to complete
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await fetchPromise;
+
+    // Verify the error was logged through the response error handler
+    const writePathErrorCall = loggerErrorSpy.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0] === 'Error writing datastream response',
+    );
+    expect(writePathErrorCall).toBeDefined();
   });
 });

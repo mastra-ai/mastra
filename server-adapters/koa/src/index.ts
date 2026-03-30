@@ -422,12 +422,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
 
-        ctx.res.on('error', err => {
+        const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
           void reader.cancel('response write error');
-        });
+        };
+        ctx.res.once('error', onResError);
 
         try {
           while (true) {
@@ -440,6 +441,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
         } finally {
+          ctx.res.off('error', onResError);
           ctx.res.end();
         }
       } else {
