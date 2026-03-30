@@ -30,7 +30,7 @@ type Turn = {
   status: 'pending' | 'done' | 'error';
 };
 
-function createTurnId() {
+function createEntryId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -171,8 +171,8 @@ function getToolCalls(payload: unknown): ToolCall[] {
   return [...calls.values()];
 }
 
-function patchTurn(turns: Turn[], turnId: string, next: Partial<Turn>) {
-  return turns.map(turn => (turn.id === turnId ? { ...turn, ...next } : turn));
+function patchEntry(turns: Turn[], entryId: string, next: Partial<Turn>) {
+  return turns.map(turn => (turn.id === entryId ? { ...turn, ...next } : turn));
 }
 
 export function ProviderBackedResponsesExample() {
@@ -182,7 +182,7 @@ export function ProviderBackedResponsesExample() {
   const [error, setError] = useState<string | null>(null);
   const [openRawTurnId, setOpenRawTurnId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [activeRequest, setActiveRequest] = useState<{ turnId: string; startedAt: number } | null>(null);
+  const [activeRequest, setActiveRequest] = useState<{ entryId: string; startedAt: number } | null>(null);
 
   useEffect(() => {
     if (!activeRequest) {
@@ -191,9 +191,9 @@ export function ProviderBackedResponsesExample() {
 
     const interval = window.setInterval(() => {
       setTurns(current =>
-        patchTurn(current, activeRequest.turnId, {
+        patchEntry(current, activeRequest.entryId, {
           latencyMs: performance.now() - activeRequest.startedAt,
-          tokenCount: estimateTokenCount(current.find(turn => turn.id === activeRequest.turnId)?.text ?? ''),
+          tokenCount: estimateTokenCount(current.find(turn => turn.id === activeRequest.entryId)?.text ?? ''),
         }),
       );
     }, 120);
@@ -209,17 +209,17 @@ export function ProviderBackedResponsesExample() {
     }
 
     const previousProviderResponseId = turns.at(-1)?.providerResponseId ?? null;
-    const turnId = createTurnId();
+    const entryId = createEntryId();
     const startedAt = performance.now();
 
     setError(null);
     setMode(nextMode);
     setOpenRawTurnId(null);
-    setActiveRequest({ turnId, startedAt });
+    setActiveRequest({ entryId, startedAt });
     setTurns(current => [
       ...current,
       {
-        id: turnId,
+        id: entryId,
         prompt,
         responseId: null,
         providerResponseId: null,
@@ -262,7 +262,7 @@ export function ProviderBackedResponsesExample() {
         const text = getOutputText(response);
 
         setTurns(current =>
-          patchTurn(current, turnId, {
+          patchEntry(current, entryId, {
             responseId: getResponseId(response),
             providerResponseId: getProviderResponseId(response),
             text,
@@ -313,7 +313,7 @@ export function ProviderBackedResponsesExample() {
 
         startTransition(() => {
           setTurns(current =>
-            patchTurn(current, turnId, {
+            patchEntry(current, entryId, {
               responseId,
               providerResponseId,
               text,
@@ -332,7 +332,7 @@ export function ProviderBackedResponsesExample() {
 
       setError(message);
       setTurns(current =>
-        patchTurn(current, turnId, {
+        patchEntry(current, entryId, {
           text: message,
           latencyMs: performance.now() - startedAt,
           status: 'error',
