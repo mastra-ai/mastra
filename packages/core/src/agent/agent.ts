@@ -33,7 +33,7 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
-import type { TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -155,7 +155,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
-  public source?: 'code' | 'stored';
+  public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;

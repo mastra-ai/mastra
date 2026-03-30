@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
+import { EntityType, SpanType } from './types';
+import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+
+const entityTypeValues = new Set(Object.values(EntityType));
 
 /**
  * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
@@ -151,4 +154,35 @@ export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
   }
 
   return rootExportSpan;
+}
+
+/**
+ * Resolves the best available entity type for a span-like record.
+ *
+ * Prefers an explicit `entityType` when present and valid, then falls back to the
+ * span type for common observability entities.
+ */
+export function getEntityTypeForSpan(span: {
+  entityType?: string | null;
+  spanType?: SpanType | string | null;
+}): EntityType | undefined {
+  if (span.entityType && entityTypeValues.has(span.entityType as EntityType)) {
+    return span.entityType as EntityType;
+  }
+
+  switch (span.spanType) {
+    case SpanType.AGENT_RUN:
+      return EntityType.AGENT;
+    case SpanType.WORKFLOW_RUN:
+      return EntityType.WORKFLOW_RUN;
+    case SpanType.WORKFLOW_STEP:
+      return EntityType.WORKFLOW_STEP;
+    case SpanType.TOOL_CALL:
+    case SpanType.MCP_TOOL_CALL:
+      return EntityType.TOOL;
+    case SpanType.PROCESSOR_RUN:
+      return EntityType.OUTPUT_PROCESSOR;
+    default:
+      return undefined;
+  }
 }
