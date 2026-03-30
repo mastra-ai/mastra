@@ -320,7 +320,7 @@ export function ProviderBackedResponsesExample() {
               raw,
               model: responseModel,
               tools,
-              tokenCount: raw ? getTokenCount(JSON.parse(raw) as unknown, text) : estimateTokenCount(text),
+              tokenCount: raw ? getTokenCount(parseJson(raw), text) : estimateTokenCount(text),
               latencyMs: performance.now() - startedAt,
               status: event.type === 'response.completed' ? 'done' : 'pending',
             }),
