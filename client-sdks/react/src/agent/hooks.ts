@@ -62,7 +62,12 @@ const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string |
   return undefined;
 };
 
-export const useChat = ({ agentId, resourceId, initialMessages, requestContext: propsRequestContext }: MastraChatProps) => {
+export const useChat = ({
+  agentId,
+  resourceId,
+  initialMessages,
+  requestContext: propsRequestContext,
+}: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
@@ -340,7 +345,11 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCall({ runId: currentRunId, toolCallId, requestContext: _requestContext.current });
+    const response = await agent.approveToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -364,7 +373,11 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCall({ runId: currentRunId, toolCallId, requestContext: _requestContext.current });
+    const response = await agent.declineToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -390,7 +403,11 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCallGenerate({ runId: currentRunId, toolCallId, requestContext: _requestContext.current });
+    const response = await agent.approveToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -418,7 +435,11 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCallGenerate({ runId: currentRunId, toolCallId, requestContext: _requestContext.current });
+    const response = await agent.declineToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -450,7 +471,10 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveNetworkToolCall({ runId: networkRunId, requestContext: _requestContext.current });
+    const response = await agent.approveNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 
@@ -480,7 +504,10 @@ export const useChat = ({ agentId, resourceId, initialMessages, requestContext: 
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineNetworkToolCall({ runId: networkRunId, requestContext: _requestContext.current });
+    const response = await agent.declineNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 
