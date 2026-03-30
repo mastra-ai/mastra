@@ -201,6 +201,10 @@ function patchEntry(turns: Turn[], entryId: string, next: Partial<Turn>) {
   return turns.map(turn => (turn.id === entryId ? { ...turn, ...next } : turn));
 }
 
+function findTurn(turns: Turn[], entryId: string) {
+  return turns.find(turn => turn.id === entryId) ?? null;
+}
+
 function getConversationTitle(prompt: string) {
   const trimmed = prompt.trim();
 
@@ -268,7 +272,7 @@ function buildTurnsFromItems(items: ConversationItem[]) {
           prompt: pendingPrompt,
           responseId: typeof item.id === 'string' ? item.id : null,
           text,
-          raw: JSON.stringify({ message: item, tools: [...pendingTools.values()] }, null, 2),
+          raw: '',
           model: `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`,
           tools: [...pendingTools.values()],
           tokenCount: estimateTokenCount(text),
@@ -303,6 +307,7 @@ export function ConversationsExample() {
   const [mode, setMode] = useState<'idle' | 'json' | 'stream'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [openRawTurnId, setOpenRawTurnId] = useState<string | null>(null);
+  const [loadingRawTurnId, setLoadingRawTurnId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [activeRequest, setActiveRequest] = useState<{ entryId: string; startedAt: number } | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -457,6 +462,45 @@ export function ConversationsExample() {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete conversation.');
     } finally {
       setIsDeletingConversation(false);
+    }
+  }
+
+  async function toggleRawTurn(entryId: string) {
+    if (openRawTurnId === entryId) {
+      setOpenRawTurnId(null);
+      if (loadingRawTurnId === entryId) {
+        setLoadingRawTurnId(null);
+      }
+      return;
+    }
+
+    const turn = findTurn(turns, entryId);
+    if (!turn?.responseId) {
+      return;
+    }
+
+    setOpenRawTurnId(entryId);
+
+    if (!turn.raw) {
+      setLoadingRawTurnId(entryId);
+
+      try {
+        const response = await client.responses.retrieve(turn.responseId);
+
+        setTurns(current =>
+          patchEntry(current, entryId, {
+            raw: JSON.stringify(response, null, 2),
+            model: getModel(response),
+            tokenCount: getTokenCount(response, turn.text),
+          }),
+        );
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load response payload.');
+        setOpenRawTurnId(null);
+        return;
+      } finally {
+        setLoadingRawTurnId(current => (current === entryId ? null : current));
+      }
     }
   }
 
@@ -716,6 +760,7 @@ export function ConversationsExample() {
             ) : (
               turns.map(turn => {
                 const isRawOpen = openRawTurnId === turn.id;
+                const isRawLoading = loadingRawTurnId === turn.id;
 
                 return (
                   <div className="demo-message-group" key={turn.id}>
@@ -735,11 +780,11 @@ export function ConversationsExample() {
                           <div className="demo-message__actions">
                             <button
                               className="demo-toolbar-button"
-                              disabled={!turn.raw}
-                              onClick={() => setOpenRawTurnId(current => (current === turn.id ? null : turn.id))}
+                              disabled={!turn.responseId}
+                              onClick={() => void toggleRawTurn(turn.id)}
                               type="button"
                             >
-                              {isRawOpen ? 'Hide JSON' : 'Raw JSON'}
+                              {isRawLoading ? 'Loading…' : isRawOpen ? 'Hide JSON' : 'Raw JSON'}
                             </button>
                           </div>
                         </div>
@@ -794,7 +839,7 @@ export function ConversationsExample() {
                         <div className={`demo-json-shell${isRawOpen ? ' is-open' : ''}`}>
                           <div className="demo-json-shell__inner">
                             <pre className="demo-json">
-                              <code>{turn.raw || 'No response payload yet.'}</code>
+                              <code>{isRawLoading ? 'Loading response JSON…' : turn.raw || 'No response payload yet.'}</code>
                             </pre>
                           </div>
                         </div>
