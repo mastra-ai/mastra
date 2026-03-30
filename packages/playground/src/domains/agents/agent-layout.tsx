@@ -33,7 +33,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const defaultModel = agent?.modelId ?? '';
   const requestContextSchema = agent?.requestContextSchema;
 
-  const activeTab: AgentPageTab = location.pathname.includes('/playground')
+  const activeTab: AgentPageTab = location.pathname.includes('/editor')
     ? 'versions'
     : location.pathname.includes('/evaluate')
       ? 'evaluate'
