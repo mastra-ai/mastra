@@ -5,7 +5,7 @@
  */
 
 import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem } from '@mariozechner/pi-tui';
+import type { Focusable, SelectItem, Component } from '@mariozechner/pi-tui';
 import { theme, getSelectListTheme } from '../theme.js';
 
 export interface AskQuestionDialogOptions {
@@ -24,7 +24,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private onCancel: () => void;
 
   /** Children added by buildSelectMode/buildInputMode, tracked for removal on mode switch */
-  private modeChildren: import('@mariozechner/pi-tui').Component[] = [];
+  private modeChildren: Component[] = [];
 
   private _focused = false;
   get focused(): boolean {
