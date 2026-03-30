@@ -120,7 +120,9 @@ All step types share the base properties `name`, `durationMs`, `metadata`, and `
 
 ## Expected steps
 
-When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a simpler type designed for expectations:
+When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a discriminated union that mirrors `TrajectoryStep` — when you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). All variant-specific fields are optional, so you only assert against what you care about.
+
+Omit `stepType` entirely to match any step by name only.
 
 <PropertiesTable
   content={[
@@ -133,14 +135,15 @@ When defining expected trajectories, use `ExpectedStep` instead of the full `Tra
   {
     name: 'stepType',
     type: 'TrajectoryStepType',
-    description: 'Step type to match. If omitted, matches any step type with the given name.',
+    description:
+      "Step type discriminant. When set, enables autocomplete for that variant's fields. If omitted, matches any step type with the given name.",
     isOptional: true,
   },
   {
-    name: 'data',
-    type: 'Record<string, unknown>',
+    name: '(variant fields)',
+    type: 'varies',
     description:
-      "Expected step data. Compared against the actual step's type-specific data (toolArgs for tool_call, output for workflow_step, etc.).",
+      'Type-specific fields from the corresponding TrajectoryStep variant. For example, `toolArgs` and `toolResult` for `tool_call`, `modelId` for `model_generation`, `output` for `workflow_step`. All optional — only specified fields are compared.',
     isOptional: true,
   },
   {
@@ -160,11 +163,14 @@ const steps: ExpectedStep[] = [
   // Match by name only (any step type)
   { name: 'search' },
 
-  // Match by name and step type
+  // Match by name and step type (autocomplete for tool_call fields)
   { name: 'search', stepType: 'tool_call' },
 
-  // Match with expected data
-  { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } },
+  // Match with specific toolArgs (auto-compared when present)
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } },
+
+  // Match a model generation step by model ID
+  { name: 'gpt-4o', stepType: 'model_generation', modelId: 'gpt-4o' },
 ]
 ```
 
@@ -226,18 +232,10 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
   content={[
   {
     name: 'expectedTrajectory',
-    type: 'TrajectoryExpectation',
+    type: 'Trajectory | ExpectedStep[]',
     description:
-      'Static expected trajectory to compare against. When provided, all dataset items use this trajectory. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
+      'Static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
     isOptional: true,
-    properties: [
-      {
-        name: 'steps',
-        type: 'ExpectedStep[]',
-        description: 'Ordered list of expected steps. See [Expected steps](#expected-steps) for the type definition.',
-        isOptional: true,
-      },
-    ],
   },
   {
     name: 'comparisonOptions',
@@ -250,14 +248,6 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
         type: 'boolean',
         description:
           'Requires exact match of trajectory (same steps in same order, no extra steps). When false, allows additional steps as long as expected steps appear in order.',
-        isOptional: true,
-        defaultValue: 'false',
-      },
-      {
-        name: 'compareStepData',
-        type: 'boolean',
-        description:
-          'Whether to compare step-specific data (toolArgs/toolResult for tool calls, output for workflow steps) in addition to step names.',
         isOptional: true,
         defaultValue: 'false',
       },
@@ -455,8 +445,8 @@ const scorer = createTrajectoryAccuracyScorerCode({
       },
     ],
   },
-  comparisonOptions: { compareStepData: true },
 })
+// Data fields like toolArgs are auto-compared when present on expected steps
 ```
 
 ## LLM-based trajectory accuracy scorer
@@ -475,9 +465,9 @@ The `createTrajectoryAccuracyScorerLLM()` function from `@mastra/evals/scorers/p
   },
   {
     name: 'expectedTrajectory',
-    type: 'TrajectoryExpectation',
+    type: 'Trajectory | ExpectedStep[]',
     description:
-      'Optional static expected trajectory to compare against. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
+      'Optional static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
     isOptional: true,
   },
 ]}
@@ -584,13 +574,6 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
         defaultValue: "'relaxed'",
       },
       {
-        name: 'compareStepData',
-        type: 'boolean',
-        description: 'Whether to compare step-specific data in addition to step names.',
-        isOptional: true,
-        defaultValue: 'false',
-      },
-      {
         name: 'allowRepeatedSteps',
         type: 'boolean',
         description: 'Whether to allow repeated steps without penalty.',
@@ -640,36 +623,43 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
         type: 'number',
         description: 'Maximum retries per tool before flagging as a failure pattern.',
         isOptional: true,
-        defaultValue: '3',
+        defaultValue: '2',
       },
     ],
   },
   {
     name: 'weights',
-    type: 'object',
-    description: 'Weights for combining dimension scores into the final score.',
+    type: 'TrajectoryScoreWeights',
+    description: 'Custom weights for combining dimension scores. Weights are normalized to sum to 1.0.',
     isOptional: true,
     properties: [
       {
         name: 'accuracy',
         type: 'number',
-        description: 'Weight for accuracy dimension.',
+        description: 'Weight for accuracy scoring.',
         isOptional: true,
         defaultValue: '0.4',
       },
       {
         name: 'efficiency',
         type: 'number',
-        description: 'Weight for efficiency dimension.',
+        description: 'Weight for efficiency scoring.',
         isOptional: true,
         defaultValue: '0.3',
       },
       {
         name: 'toolFailures',
         type: 'number',
-        description: 'Weight for tool failures dimension.',
+        description: 'Weight for tool failure analysis.',
         isOptional: true,
-        defaultValue: '0.3',
+        defaultValue: '0.2',
+      },
+      {
+        name: 'blacklist',
+        type: 'number',
+        description: 'Weight for blacklist scoring (when no violations occur).',
+        isOptional: true,
+        defaultValue: '0.1',
       },
     ],
   },
@@ -685,7 +675,7 @@ The unified scorer evaluates four dimensions:
 1. **Blacklist** — Checks for forbidden tools or sequences. Any violation immediately results in a score of **0.0** regardless of other dimensions.
 1. **Tool failures** — Detects retry patterns, fallback patterns, and argument correction patterns.
 
-The final score is a weighted average of accuracy, efficiency, and tool failures. Blacklist violations override everything to 0.
+The final score is a weighted combination of active dimensions, normalized by which dimensions are active. Default weights are accuracy 0.4, efficiency 0.3, tool failures 0.2, blacklist 0.1, but you can customize them via the `weights` option. Blacklist violations override everything to 0. When nested evaluations are present, the score is 70% top-level and 30% nested average.
 
 ### Unified scorer results
 
@@ -694,11 +684,13 @@ The final score is a weighted average of accuracy, efficiency, and tool failures
   runId: string,
   preprocessStepResult: {
     accuracy?: TrajectoryComparisonResult,
-    efficiency: TrajectoryEfficiencyResult,
-    blacklist: TrajectoryBlacklistResult,
-    toolFailures: ToolFailureAnalysisResult,
+    efficiency?: TrajectoryEfficiencyResult,
+    blacklist?: TrajectoryBlacklistResult,
+    toolFailures?: ToolFailureAnalysisResult,
+    nested?: NestedEvaluationResult[],
   },
-  score: number
+  score: number,
+  reason: string
 }
 ```
 
@@ -754,6 +746,13 @@ const scorer = createTrajectoryScorerCode({
     maxSteps: 10,
     noRedundantCalls: true,
     maxRetriesPerTool: 2,
+  },
+  // Customize how dimensions contribute to the final score
+  weights: {
+    accuracy: 0.5, // prioritize step accuracy
+    efficiency: 0.3,
+    toolFailures: 0.1,
+    blacklist: 0.1,
   },
 })
 ```

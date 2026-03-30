@@ -1,5 +1,33 @@
 # @mastra/playground-ui
 
+## 20.0.0-alpha.7
+
+### Patch Changes
+
+- Changed the Editor tab URL from /agents/:agentId/playground to /agents/:agentId/editor in Mastra Studio ([#14795](https://github.com/mastra-ai/mastra/pull/14795))
+
+## 20.0.0-alpha.6
+
+### Patch Changes
+
+- Fix restored subagent tool results so approval cards and nested tool state appear correctly in the dev server. ([#14348](https://github.com/mastra-ai/mastra/pull/14348))
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`7e86302`](https://github.com/mastra-ai/mastra/commit/7e86302a77f16adbb771af43f72472872d13593e), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`bbfd3c0`](https://github.com/mastra-ai/mastra/commit/bbfd3c0302ac10be63e5fca93b5068690f472dea), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/client-js@1.11.0-alpha.6
+  - @mastra/core@1.18.0-alpha.3
+  - @mastra/react@0.2.18-alpha.6
+  - @mastra/ai-sdk@1.3.0-alpha.0
+
+## 20.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`eef4a26`](https://github.com/mastra-ai/mastra/commit/eef4a2657cb14343e302e3f310ada86a2013f6cf), [`8812997`](https://github.com/mastra-ai/mastra/commit/8812997791f546ae6c64921bac6f65d3f4b5832e)]:
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/ai-sdk@1.3.0-alpha.0
+  - @mastra/client-js@1.10.1-alpha.5
+  - @mastra/react@0.2.18-alpha.5
+
 ## 19.1.0-alpha.4
 
 ### Minor Changes
@@ -2677,7 +2705,7 @@
 
   **Other changes:**
   - All form elements now use `rounded-md` radius
-  - All form elements now use `focus:outline focus:outline-accent1` focus effect
+  - All form elements now use `focus:outline-solid focus:outline-accent1` focus effect
   - Removed `button-md` and `button-lg` size tokens (use `form-sm`, `form-md`, `form-lg` instead)
 
 - Added platform-aware navigation filtering using `useMastraPlatform` hook. Nav links now include an `isOnMastraPlatform` property that controls visibility based on whether the app is running on Mastra Platform or locally. ([#11990](https://github.com/mastra-ai/mastra/pull/11990))
@@ -3095,7 +3123,7 @@
 - Rename icon color tokens to neutral for better semantic naming ([#11933](https://github.com/mastra-ai/mastra/pull/11933))
 
 - Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability. ([#11965](https://github.com/mastra-ai/mastra/pull/11965))
-  - Changed arbitrary spacing values like `gap-[1rem]`, `p-[1.5rem]`, `px-[2rem]` to standard classes (`gap-4`, `p-6`, `px-8`)
+  - Changed arbitrary spacing values like `gap-[16px]`, `p-[24px]`, `px-[32px]` to standard classes (`gap-4`, `p-6`, `px-8`)
   - Updated z-index values from `z-[1]` and `z-[100]` to standard `z-10` and `z-50`
   - Replaced arbitrary gap values like `gap-[6px]` with `gap-1.5`
   - Updated duration values from `duration-[1s]` to `duration-1000`
@@ -3509,7 +3537,7 @@
 
   **Other changes:**
   - All form elements now use `rounded-md` radius
-  - All form elements now use `focus:outline focus:outline-accent1` focus effect
+  - All form elements now use `focus:outline-solid focus:outline-accent1` focus effect
   - Removed `button-md` and `button-lg` size tokens (use `form-sm`, `form-md`, `form-lg` instead)
 
 - Added platform-aware navigation filtering using `useMastraPlatform` hook. Nav links now include an `isOnMastraPlatform` property that controls visibility based on whether the app is running on Mastra Platform or locally. ([#11990](https://github.com/mastra-ai/mastra/pull/11990))
@@ -3554,7 +3582,7 @@
 - Rename icon color tokens to neutral for better semantic naming ([#11933](https://github.com/mastra-ai/mastra/pull/11933))
 
 - Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability. ([#11965](https://github.com/mastra-ai/mastra/pull/11965))
-  - Changed arbitrary spacing values like `gap-[1rem]`, `p-[1.5rem]`, `px-[2rem]` to standard classes (`gap-4`, `p-6`, `px-8`)
+  - Changed arbitrary spacing values like `gap-[16px]`, `p-[24px]`, `px-[32px]` to standard classes (`gap-4`, `p-6`, `px-8`)
   - Updated z-index values from `z-[1]` and `z-[100]` to standard `z-10` and `z-50`
   - Replaced arbitrary gap values like `gap-[6px]` with `gap-1.5`
   - Updated duration values from `duration-[1s]` to `duration-1000`

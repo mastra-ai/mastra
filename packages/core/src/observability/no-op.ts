@@ -10,6 +10,7 @@ import type {
   MetricsContext,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  RecordedTrace,
   TracingContext,
 } from './types';
 
@@ -93,6 +94,10 @@ export class NoOpObservability implements ObservabilityEntrypoint {
 
   getSelectedInstance(_options: ConfigSelectorOptions): ObservabilityInstance | undefined {
     return;
+  }
+
+  async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
+    return null;
   }
 
   registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {

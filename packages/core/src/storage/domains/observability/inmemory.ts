@@ -25,6 +25,7 @@ import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  FeedbackFilter,
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
@@ -541,7 +542,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
       if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
       if (filters.environment !== undefined && m.environment !== filters.environment) return false;
-      if (filters.source !== undefined && m.source !== filters.source) return false;
+      const metricExecutionSource = m.executionSource ?? m.source ?? null;
+      if (filters.executionSource !== undefined && metricExecutionSource !== filters.executionSource) return false;
+      if (filters.source !== undefined && metricExecutionSource !== filters.source) return false;
       if (filters.parentEntityType !== undefined && m.parentEntityType !== filters.parentEntityType) return false;
       if (filters.parentEntityName !== undefined && m.parentEntityName !== filters.parentEntityName) return false;
       if (filters.rootEntityType !== undefined && m.rootEntityType !== filters.rootEntityType) return false;
@@ -992,7 +995,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.rootEntityName !== undefined && log.rootEntityName !== filters.rootEntityName) return false;
     if (filters.serviceName !== undefined && log.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && log.environment !== filters.environment) return false;
-    if (filters.source !== undefined && log.source !== filters.source) return false;
+    const logExecutionSource = log.executionSource ?? log.source ?? null;
+    if (filters.executionSource !== undefined && logExecutionSource !== filters.executionSource) return false;
+    if (filters.source !== undefined && logExecutionSource !== filters.source) return false;
     if (filters.experimentId !== undefined && log.experimentId !== filters.experimentId) return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (log.tags == null) return false;
@@ -1009,12 +1014,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createScore(args: CreateScoreArgs): Promise<void> {
-    this.db.scoreRecords.push(args.score as ScoreRecord);
+    const scoreSource = args.score.scoreSource ?? args.score.source ?? null;
+    this.db.scoreRecords.push({
+      ...args.score,
+      scoreSource,
+      source: scoreSource,
+    } as ScoreRecord);
   }
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     for (const score of args.scores) {
-      this.db.scoreRecords.push(score as ScoreRecord);
+      const scoreSource = score.scoreSource ?? score.source ?? null;
+      this.db.scoreRecords.push({
+        ...score,
+        scoreSource,
+        source: scoreSource,
+      } as ScoreRecord);
     }
   }
 
@@ -1052,11 +1067,36 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     if (filters.traceId !== undefined && score.traceId !== filters.traceId) return false;
     if (filters.spanId !== undefined && score.spanId !== filters.spanId) return false;
+    if (filters.entityType !== undefined && score.entityType !== filters.entityType) return false;
+    if (filters.entityName !== undefined && score.entityName !== filters.entityName) return false;
+    if (filters.userId !== undefined && score.userId !== filters.userId) return false;
+    if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
+    if (filters.resourceId !== undefined && score.resourceId !== filters.resourceId) return false;
+    if (filters.runId !== undefined && score.runId !== filters.runId) return false;
+    if (filters.sessionId !== undefined && score.sessionId !== filters.sessionId) return false;
+    if (filters.threadId !== undefined && score.threadId !== filters.threadId) return false;
+    if (filters.requestId !== undefined && score.requestId !== filters.requestId) return false;
+    if (filters.parentEntityType !== undefined && score.parentEntityType !== filters.parentEntityType) return false;
+    if (filters.parentEntityName !== undefined && score.parentEntityName !== filters.parentEntityName) return false;
+    if (filters.rootEntityType !== undefined && score.rootEntityType !== filters.rootEntityType) return false;
+    if (filters.rootEntityName !== undefined && score.rootEntityName !== filters.rootEntityName) return false;
+    if (filters.serviceName !== undefined && score.serviceName !== filters.serviceName) return false;
+    if (filters.environment !== undefined && score.environment !== filters.environment) return false;
+    if (filters.executionSource !== undefined && score.executionSource !== filters.executionSource) return false;
     if (filters.scorerId !== undefined) {
       const names = Array.isArray(filters.scorerId) ? filters.scorerId : [filters.scorerId];
       if (!names.includes(score.scorerId)) return false;
     }
+    const scoreSource = score.scoreSource ?? score.source ?? null;
+    if (filters.scoreSource !== undefined && scoreSource !== filters.scoreSource) return false;
+    if (filters.source !== undefined && scoreSource !== filters.source) return false;
     if (filters.experimentId !== undefined && score.experimentId !== filters.experimentId) return false;
+    if (filters.tags != null && filters.tags.length > 0) {
+      if (score.tags == null) return false;
+      for (const tag of filters.tags) {
+        if (!score.tags.includes(tag)) return false;
+      }
+    }
 
     return true;
   }
@@ -1066,12 +1106,26 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    this.db.feedbackRecords.push(args.feedback as FeedbackRecord);
+    this.db.feedbackRecords.push({
+      ...args.feedback,
+      feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
+      source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
+      feedbackUserId:
+        args.feedback.feedbackUserId ??
+        args.feedback.userId ??
+        (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+    } as FeedbackRecord);
   }
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     for (const fb of args.feedbacks) {
-      this.db.feedbackRecords.push(fb as FeedbackRecord);
+      this.db.feedbackRecords.push({
+        ...fb,
+        feedbackSource: fb.feedbackSource ?? fb.source ?? '',
+        source: fb.feedbackSource ?? fb.source ?? '',
+        feedbackUserId:
+          fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+      } as FeedbackRecord);
     }
   }
 
@@ -1096,7 +1150,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  private feedbackMatchesFilters(fb: FeedbackRecord, filters?: ListFeedbackArgs['filters']): boolean {
+  private feedbackMatchesFilters(fb: FeedbackRecord, filters?: FeedbackFilter): boolean {
     if (!filters) return true;
 
     if (filters.timestamp) {
@@ -1105,13 +1159,37 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     if (filters.traceId !== undefined && fb.traceId !== filters.traceId) return false;
     if (filters.spanId !== undefined && fb.spanId !== filters.spanId) return false;
+    if (filters.entityType !== undefined && fb.entityType !== filters.entityType) return false;
+    if (filters.entityName !== undefined && fb.entityName !== filters.entityName) return false;
+    if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
+    if (filters.organizationId !== undefined && fb.organizationId !== filters.organizationId) return false;
+    if (filters.resourceId !== undefined && fb.resourceId !== filters.resourceId) return false;
+    if (filters.runId !== undefined && fb.runId !== filters.runId) return false;
+    if (filters.sessionId !== undefined && fb.sessionId !== filters.sessionId) return false;
+    if (filters.threadId !== undefined && fb.threadId !== filters.threadId) return false;
+    if (filters.requestId !== undefined && fb.requestId !== filters.requestId) return false;
+    if (filters.parentEntityType !== undefined && fb.parentEntityType !== filters.parentEntityType) return false;
+    if (filters.parentEntityName !== undefined && fb.parentEntityName !== filters.parentEntityName) return false;
+    if (filters.rootEntityType !== undefined && fb.rootEntityType !== filters.rootEntityType) return false;
+    if (filters.rootEntityName !== undefined && fb.rootEntityName !== filters.rootEntityName) return false;
+    if (filters.serviceName !== undefined && fb.serviceName !== filters.serviceName) return false;
+    if (filters.environment !== undefined && fb.environment !== filters.environment) return false;
+    if (filters.executionSource !== undefined && fb.executionSource !== filters.executionSource) return false;
     if (filters.feedbackType !== undefined) {
       const types = Array.isArray(filters.feedbackType) ? filters.feedbackType : [filters.feedbackType];
       if (!types.includes(fb.feedbackType)) return false;
     }
-    if (filters.source !== undefined && fb.source !== filters.source) return false;
+    const feedbackSource = fb.feedbackSource ?? fb.source ?? '';
+    if (filters.feedbackSource !== undefined && feedbackSource !== filters.feedbackSource) return false;
+    if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
-    if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
+    if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
+    if (filters.tags != null && filters.tags.length > 0) {
+      if (fb.tags == null) return false;
+      for (const tag of filters.tags) {
+        if (!fb.tags.includes(tag)) return false;
+      }
+    }
 
     return true;
   }

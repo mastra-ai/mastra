@@ -16,6 +16,7 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 
 // =============================================================================
@@ -983,6 +984,26 @@ describe('getResolvedConfig()', () => {
 
     const config = await om.getResolvedConfig();
     expect(config.scope).toBe('resource');
+  });
+
+  it('should surface tiered observer model config without failing resolution', async () => {
+    const storage = createInMemoryStorage();
+    const om = createOM(storage, {
+      observerModel: new ModelByInputTokens({
+        upTo: {
+          1000: 'openai/gpt-4o-mini',
+          5000: 'openai/gpt-4o',
+        },
+      }),
+    });
+
+    const config = await om.getResolvedConfig();
+
+    expect(config.observation.model).toBe('openai/gpt-4o-mini');
+    expect(config.observation.routing).toEqual([
+      { upTo: 1000, model: 'openai/gpt-4o-mini' },
+      { upTo: 5000, model: 'openai/gpt-4o' },
+    ]);
   });
 });
 

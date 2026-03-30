@@ -616,6 +616,7 @@ export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
 }
@@ -658,13 +659,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -677,7 +678,7 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -700,13 +701,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
@@ -820,6 +821,8 @@ export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOption
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Span name override */
+  name?: string;
   /** Input data */
   input?: any;
   /** Output data */
