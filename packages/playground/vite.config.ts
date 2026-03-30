@@ -1,7 +1,7 @@
 import { builtinModules } from 'node:module';
 import path from 'node:path';
-import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
 
@@ -17,7 +17,6 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_SERVER_PROTOCOL%%/g, 'http')
       .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
-      .replace(/%%MASTRA_THEME_TOGGLE%%/g, process.env.MASTRA_THEME_TOGGLE || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false');
   },
 });

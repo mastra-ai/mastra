@@ -22,7 +22,7 @@ export const TabList = ({ children, variant = 'default', alignment = 'full-width
               variant === 'default',
             '[&>button]:flex-1': variant === 'default' && alignment === 'full-width',
             [`[&>button]:${transitions.colors} [&>button]:hover:text-neutral4`]: variant === 'default',
-            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:border-white/50':
+            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:border-black/50 [&>button[data-state=active]]:dark:border-white/50':
               variant === 'default',
             // variant: buttons
             'border border-border1 flex justify-stretch rounded-md overflow-hidden text-ui-md min-h-[2.5rem]':
