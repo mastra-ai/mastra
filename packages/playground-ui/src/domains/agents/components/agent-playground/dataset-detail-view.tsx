@@ -503,7 +503,7 @@ function ExpandedItemEditor({
         <Txt variant="ui-xs" className="text-neutral3 font-medium">
           Input
         </Txt>
-        <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
+        <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
           {formatValue(item.input)}
         </pre>
       </div>
@@ -512,7 +512,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Ground Truth
           </Txt>
-          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
+          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
             {formatValue(item.groundTruth)}
           </pre>
         </div>

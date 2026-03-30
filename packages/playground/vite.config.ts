@@ -1,5 +1,6 @@
 import { builtinModules } from 'node:module';
 import path from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
@@ -53,15 +54,12 @@ const stubNodeBuiltinsPlugin: Plugin = {
 
 export default defineConfig(({ mode }) => {
   const commonConfig: UserConfig = {
-    plugins: [stubNodeBuiltinsPlugin, react()],
+    plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react()],
     base: './',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
-    },
-    optimizeDeps: {
-      include: ['@tailwind-config'],
     },
     build: {
       cssCodeSplit: false,

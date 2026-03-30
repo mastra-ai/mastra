@@ -62,7 +62,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
         data-workflow-step-status={previousDisplayStatus}
         data-testid="workflow-condition-node"
         className={cn(
-          'bg-surface3 rounded-lg w-[300px] border border-border1',
+          'bg-surface3 rounded-lg w-dropdown-max-height border border-border1',
           previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
           previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
           previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',
@@ -126,11 +126,11 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 whitespace-pre-wrap break-words',
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
                             className,
-                            previousDisplayStatus === 'success' && nextStep && '!bg-accent1Dark',
-                            previousDisplayStatus === 'failed' && nextStep && '!bg-accent2Dark',
-                            previousDisplayStatus === 'tripwire' && nextStep && '!bg-amber-900/40',
+                            previousDisplayStatus === 'success' && nextStep && 'bg-accent1Dark!',
+                            previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Dark!',
+                            previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-900/40!',
                           )}
                           onClick={() => setOpenDialog(true)}
                           style={style}

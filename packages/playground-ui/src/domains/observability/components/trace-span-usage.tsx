@@ -221,7 +221,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
 
         return (
           <div
-            className={cn('bg-surface3 p-3 px-4 rounded-lg text-ui-md flex-grow', {
+            className={cn('bg-surface3 p-3 px-4 rounded-lg text-ui-md grow', {
               'min-h-[5.5rem]': traceUsage,
             })}
             key={key}
