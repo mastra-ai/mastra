@@ -2,10 +2,12 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   experimentIdField,
+  observabilitySignalContextFields,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
   spanIdField,
+  tagsField,
   traceIdField,
   userIdField,
 } from '../shared';
@@ -20,6 +22,7 @@ const feedbackValueField = z
   .union([z.number(), z.string()])
   .describe('Feedback value (rating number or correction text)');
 const feedbackCommentField = z.string().describe('Additional comment or context');
+const feedbackUserIdField = userIdField.describe('User who provided the feedback');
 
 // ============================================================================
 // FeedbackRecord Schema (Storage Format)
@@ -38,14 +41,19 @@ export const feedbackRecordSchema = z
     spanId: spanIdField.nullish().describe('Span ID this feedback applies to'),
 
     // Feedback data
-    source: feedbackSourceField,
+    feedbackSource: feedbackSourceField,
     feedbackType: feedbackTypeField,
     value: feedbackValueField,
     comment: feedbackCommentField.nullish(),
-    experimentId: experimentIdField.nullish(),
 
-    // Identity
-    userId: userIdField.nullish(),
+    // Feedback actor identity
+    feedbackUserId: feedbackUserIdField.nullish(),
+
+    // Context (entity hierarchy, identity, correlation, deployment, experimentation)
+    ...observabilitySignalContextFields,
+
+    // Filtering
+    tags: tagsField.nullish(),
 
     // Source linkage (e.g. dataset item result ID)
     sourceId: z
@@ -75,7 +83,7 @@ export const feedbackInputSchema = z
     feedbackType: feedbackTypeField,
     value: feedbackValueField,
     comment: feedbackCommentField.optional(),
-    userId: userIdField.optional(),
+    feedbackUserId: feedbackUserIdField.optional(),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional feedback-specific metadata'),
     experimentId: experimentIdField.optional(),
     sourceId: z.string().optional().describe('ID of the source record this feedback is linked to'),
@@ -147,7 +155,8 @@ export const feedbackFilterSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Filter by feedback type(s)'),
-    source: z.string().optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+    feedbackSource: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+    feedbackUserId: feedbackUserIdField.optional(),
   })
   .describe('Filters for querying feedback');
 

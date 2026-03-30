@@ -6,7 +6,7 @@
  *   1. Event metadata (eventType, timestamp)
  *   2. IDs (trace, span, experiment, resource, run, session, etc.)
  *   3. Entity hierarchy (entity, parent, root)
- *   4. Context (user, org, environment, service, source)
+ *   4. Context (user, org, environment, service, executionSource)
  *   5. Domain-specific scalar fields
  *   6. JSON fields (attributes, metadata, tags, input/output, etc.)
  */
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS metric_events (
   threadId VARCHAR,
   requestId VARCHAR,
   environment VARCHAR,
-  source VARCHAR,
+  executionSource VARCHAR,
   serviceName VARCHAR,
 
   -- Metric-specific scalars
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS log_events (
   threadId VARCHAR,
   requestId VARCHAR,
   environment VARCHAR,
-  source VARCHAR,
+  executionSource VARCHAR,
   serviceName VARCHAR,
 
   -- Log-specific scalars
@@ -166,15 +166,40 @@ CREATE TABLE IF NOT EXISTS score_events (
   experimentId VARCHAR,
   scoreTraceId VARCHAR,
 
+  -- Entity hierarchy
+  entityType VARCHAR,
+  entityId VARCHAR,
+  entityName VARCHAR,
+  parentEntityType VARCHAR,
+  parentEntityId VARCHAR,
+  parentEntityName VARCHAR,
+  rootEntityType VARCHAR,
+  rootEntityId VARCHAR,
+  rootEntityName VARCHAR,
+
+  -- Context
+  userId VARCHAR,
+  organizationId VARCHAR,
+  resourceId VARCHAR,
+  runId VARCHAR,
+  sessionId VARCHAR,
+  threadId VARCHAR,
+  requestId VARCHAR,
+  environment VARCHAR,
+  executionSource VARCHAR,
+  serviceName VARCHAR,
+
   -- Score-specific scalars
   scorerId VARCHAR NOT NULL,
   scorerVersion VARCHAR,
-  source VARCHAR,
+  scoreSource VARCHAR,
   score DOUBLE NOT NULL,
   reason VARCHAR,
 
   -- JSON fields
-  metadata JSON
+  tags JSON,
+  metadata JSON,
+  scope JSON
 )`;
 
 /** DDL for the feedback_events append-only table. */
@@ -187,17 +212,43 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   traceId VARCHAR NOT NULL,
   spanId VARCHAR,
   experimentId VARCHAR,
+  -- Entity hierarchy
+  entityType VARCHAR,
+  entityId VARCHAR,
+  entityName VARCHAR,
+  parentEntityType VARCHAR,
+  parentEntityId VARCHAR,
+  parentEntityName VARCHAR,
+  rootEntityType VARCHAR,
+  rootEntityId VARCHAR,
+  rootEntityName VARCHAR,
+
+  -- Context
   userId VARCHAR,
+  organizationId VARCHAR,
+  resourceId VARCHAR,
+  runId VARCHAR,
+  sessionId VARCHAR,
+  threadId VARCHAR,
+  requestId VARCHAR,
+  environment VARCHAR,
+  executionSource VARCHAR,
+  serviceName VARCHAR,
+
+  -- Feedback actor / linkage
+  feedbackUserId VARCHAR,
   sourceId VARCHAR,
 
   -- Feedback-specific scalars
-  source VARCHAR NOT NULL,
+  feedbackSource VARCHAR NOT NULL,
   feedbackType VARCHAR NOT NULL,
   value VARCHAR NOT NULL,
   comment VARCHAR,
 
   -- JSON fields
-  metadata JSON
+  tags JSON,
+  metadata JSON,
+  scope JSON
 )`;
 
 /** All observability DDL statements, in creation order. */

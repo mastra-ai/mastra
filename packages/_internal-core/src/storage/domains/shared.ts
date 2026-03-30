@@ -110,6 +110,7 @@ export const requestIdField = z.string().describe('HTTP request ID for log corre
 export const environmentField = z.string().describe(`Environment (e.g., "production" | "staging" | "development")`);
 
 export const sourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
+export const executionSourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
 
 export const serviceNameField = z.string().describe('Name of the service');
 
@@ -180,6 +181,47 @@ export const contextFields = {
 } as const;
 
 /**
+ * Context fields shared across observability signals that are not spans.
+ * These use `executionSource` to avoid colliding with signal-specific provenance fields.
+ */
+export const observabilitySignalContextFields = {
+  // Entity identification
+  entityType: entityTypeField.nullish(),
+  entityId: entityIdField.nullish(),
+  entityName: entityNameField.nullish(),
+
+  // Parent entity hierarchy
+  parentEntityType: parentEntityTypeField.nullish(),
+  parentEntityId: parentEntityIdField.nullish(),
+  parentEntityName: parentEntityNameField.nullish(),
+
+  // Root entity hierarchy
+  rootEntityType: rootEntityTypeField.nullish(),
+  rootEntityId: rootEntityIdField.nullish(),
+  rootEntityName: rootEntityNameField.nullish(),
+
+  // Identity & tenancy
+  userId: userIdField.nullish(),
+  organizationId: organizationIdField.nullish(),
+  resourceId: resourceIdField.nullish(),
+
+  // Correlation IDs
+  runId: runIdField.nullish(),
+  sessionId: sessionIdField.nullish(),
+  threadId: threadIdField.nullish(),
+  requestId: requestIdField.nullish(),
+
+  // Deployment context
+  environment: environmentField.nullish(),
+  executionSource: executionSourceField.nullish(),
+  serviceName: serviceNameField.nullish(),
+  scope: scopeField.nullish(),
+
+  // Experimentation
+  experimentId: experimentIdField.nullish(),
+} as const;
+
+/**
  * Common filter fields shared across observability signal filters (metrics, logs, scores, feedback).
  * All fields are optional — each signal extends this with signal-specific filters.
  */
@@ -194,13 +236,6 @@ export const commonFilterFields = {
   experimentId: experimentIdField.optional(),
   serviceName: serviceNameField.optional(),
   environment: environmentField.optional(),
-} as const;
-
-/**
- * Additional filters shared by observability signals that carry correlation context.
- * Logs and metrics should generally expose this same context filter surface.
- */
-export const observabilitySignalFilterFields = {
   parentEntityType: parentEntityTypeField.optional(),
   parentEntityName: parentEntityNameField.optional(),
   rootEntityType: rootEntityTypeField.optional(),
@@ -210,7 +245,7 @@ export const observabilitySignalFilterFields = {
   sessionId: sessionIdField.optional(),
   threadId: threadIdField.optional(),
   requestId: requestIdField.optional(),
-  source: sourceField.optional(),
+  executionSource: executionSourceField.optional(),
   tags: z.array(z.string()).optional().describe('Filter by tags (must have all specified tags)'),
 } as const;
 

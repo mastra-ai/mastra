@@ -1,9 +1,8 @@
 import { z } from 'zod/v4';
 import {
   commonFilterFields,
-  contextFields,
+  observabilitySignalContextFields,
   metadataField,
-  observabilitySignalFilterFields,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
@@ -42,7 +41,7 @@ export const logRecordSchema = z
     spanId: spanIdField.nullish(),
 
     // Context fields (same as tracing)
-    ...contextFields,
+    ...observabilitySignalContextFields,
 
     // Filtering
     tags: tagsField.nullish(),
@@ -101,7 +100,6 @@ export type BatchCreateLogsArgs = z.infer<typeof batchCreateLogsArgsSchema>;
 export const logsFilterSchema = z
   .object({
     ...commonFilterFields,
-    ...observabilitySignalFilterFields,
 
     // Log-specific filters
     level: z

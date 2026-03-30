@@ -135,9 +135,9 @@ describe('MetricsContextImpl', () => {
 
     const metrics = new MetricsContextImpl({
       cardinalityFilter,
+      traceId: 'trace-1',
+      spanId: 'span-1',
       correlationContext: {
-        traceId: 'trace-1',
-        spanId: 'span-1',
         entityType: EntityType.AGENT,
         entityName: 'test-agent',
         environment: 'test',
@@ -148,12 +148,12 @@ describe('MetricsContextImpl', () => {
     metrics.emit('calls', 1, { agent: 'test-agent' });
 
     expect(emittedEvents[0]!.metric.correlationContext).toEqual({
-      traceId: 'trace-1',
-      spanId: 'span-1',
       entityType: EntityType.AGENT,
       entityName: 'test-agent',
       environment: 'test',
     });
+    expect(emittedEvents[0]!.metric.traceId).toBe('trace-1');
+    expect(emittedEvents[0]!.metric.spanId).toBe('span-1');
   });
 
   it('should include metadata when provided', () => {

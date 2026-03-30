@@ -1,8 +1,7 @@
 import { z } from 'zod/v4';
 import {
   commonFilterFields,
-  contextFields,
-  observabilitySignalFilterFields,
+  observabilitySignalContextFields,
   tagsField,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -50,7 +49,7 @@ export const metricRecordSchema = z
     spanId: spanIdField.nullish(),
 
     // Context (entity hierarchy, identity, correlation, deployment, experimentation)
-    ...contextFields,
+    ...observabilitySignalContextFields,
 
     // Canonical costing fields
     provider: providerField.nullish(),
@@ -146,7 +145,6 @@ export type MetricsAggregation = z.infer<typeof metricsAggregationSchema>;
 export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
-    ...observabilitySignalFilterFields,
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),

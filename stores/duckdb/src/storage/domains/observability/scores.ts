@@ -1,25 +1,51 @@
 import type { BatchCreateScoresArgs, CreateScoreArgs, ListScoresArgs, ListScoresResponse } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson } from './helpers';
+import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 
 /** Insert a single score event. */
 export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): Promise<void> {
   const s = args.score;
   await db.execute(
-    `INSERT INTO score_events (timestamp, traceId, spanId, scorerId, scorerVersion, source, score, reason, experimentId, scoreTraceId, metadata)
+    `INSERT INTO score_events (
+      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
+      scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
+    )
      VALUES (${[
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
-       v(s.scorerId),
-       v(s.scorerVersion ?? null),
-       v(s.source ?? null),
-       v(s.score),
-       v(s.reason ?? null),
        v(s.experimentId ?? null),
        v(s.scoreTraceId ?? null),
+       v(s.entityType ?? null),
+       v(s.entityId ?? null),
+       v(s.entityName ?? null),
+       v(s.parentEntityType ?? null),
+       v(s.parentEntityId ?? null),
+       v(s.parentEntityName ?? null),
+       v(s.rootEntityType ?? null),
+       v(s.rootEntityId ?? null),
+       v(s.rootEntityName ?? null),
+       v(s.userId ?? null),
+       v(s.organizationId ?? null),
+       v(s.resourceId ?? null),
+       v(s.runId ?? null),
+       v(s.sessionId ?? null),
+       v(s.threadId ?? null),
+       v(s.requestId ?? null),
+       v(s.environment ?? null),
+       v(s.executionSource ?? null),
+       v(s.serviceName ?? null),
+       v(s.scorerId),
+       v(s.scorerVersion ?? null),
+       v(s.scoreSource ?? null),
+       v(s.score),
+       v(s.reason ?? null),
+       jsonV(s.tags ?? null),
        jsonV(s.metadata),
+       jsonV(s.scope ?? null),
      ].join(', ')})`,
   );
 }
@@ -34,19 +60,45 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
         v(s.timestamp),
         v(s.traceId),
         v(s.spanId ?? null),
-        v(s.scorerId),
-        v(s.scorerVersion ?? null),
-        v(s.source ?? null),
-        v(s.score),
-        v(s.reason ?? null),
         v(s.experimentId ?? null),
         v(s.scoreTraceId ?? null),
+        v(s.entityType ?? null),
+        v(s.entityId ?? null),
+        v(s.entityName ?? null),
+        v(s.parentEntityType ?? null),
+        v(s.parentEntityId ?? null),
+        v(s.parentEntityName ?? null),
+        v(s.rootEntityType ?? null),
+        v(s.rootEntityId ?? null),
+        v(s.rootEntityName ?? null),
+        v(s.userId ?? null),
+        v(s.organizationId ?? null),
+        v(s.resourceId ?? null),
+        v(s.runId ?? null),
+        v(s.sessionId ?? null),
+        v(s.threadId ?? null),
+        v(s.requestId ?? null),
+        v(s.environment ?? null),
+        v(s.executionSource ?? null),
+        v(s.serviceName ?? null),
+        v(s.scorerId),
+        v(s.scorerVersion ?? null),
+        v(s.scoreSource ?? null),
+        v(s.score),
+        v(s.reason ?? null),
+        jsonV(s.tags ?? null),
         jsonV(s.metadata),
+        jsonV(s.scope ?? null),
       ].join(', ')})`,
   );
 
   await db.execute(
-    `INSERT INTO score_events (timestamp, traceId, spanId, scorerId, scorerVersion, source, score, reason, experimentId, scoreTraceId, metadata)
+    `INSERT INTO score_events (
+      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
+      scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
+    )
      VALUES ${tuples.join(',\n       ')}`,
   );
 }
@@ -79,16 +131,37 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
       timestamp: toDate(r.timestamp),
       traceId: r.traceId as string,
       spanId: (r.spanId as string) ?? null,
-      scorerId: r.scorerId as string,
-      scorerVersion: (r.scorerVersion as string) ?? null,
-      source: (r.source as string) ?? null,
-      score: Number(r.score),
-      reason: (r.reason as string) ?? null,
       experimentId: (r.experimentId as string) ?? null,
       scoreTraceId: (r.scoreTraceId as string) ?? null,
+      entityType: (r.entityType as string) ?? null,
+      entityId: (r.entityId as string) ?? null,
+      entityName: (r.entityName as string) ?? null,
+      parentEntityType: (r.parentEntityType as string) ?? null,
+      parentEntityId: (r.parentEntityId as string) ?? null,
+      parentEntityName: (r.parentEntityName as string) ?? null,
+      rootEntityType: (r.rootEntityType as string) ?? null,
+      rootEntityId: (r.rootEntityId as string) ?? null,
+      rootEntityName: (r.rootEntityName as string) ?? null,
+      userId: (r.userId as string) ?? null,
+      organizationId: (r.organizationId as string) ?? null,
+      resourceId: (r.resourceId as string) ?? null,
+      runId: (r.runId as string) ?? null,
+      sessionId: (r.sessionId as string) ?? null,
+      threadId: (r.threadId as string) ?? null,
+      requestId: (r.requestId as string) ?? null,
+      environment: (r.environment as string) ?? null,
+      executionSource: (r.executionSource as string) ?? null,
+      serviceName: (r.serviceName as string) ?? null,
+      scorerId: r.scorerId as string,
+      scorerVersion: (r.scorerVersion as string) ?? null,
+      scoreSource: (r.scoreSource as string) ?? null,
+      score: Number(r.score),
+      reason: (r.reason as string) ?? null,
+      tags: parseJsonArray(r.tags) as string[] | null,
       metadata: parseJson(r.metadata) as Record<string, unknown> | null,
+      scope: parseJson(r.scope) as Record<string, unknown> | null,
     };
-  });
+  }) as ListScoresResponse['scores'];
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },

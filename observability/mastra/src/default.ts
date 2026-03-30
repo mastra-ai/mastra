@@ -6,13 +6,19 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   ConfigSelector,
   ConfigSelectorOptions,
+  FeedbackEvent,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  RecordedTrace,
+  ScoreEvent,
 } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
+import { routeToHandler } from './bus/route-event';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
+import { hydrateRecordedTrace } from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -31,6 +37,7 @@ function isInstance(
  */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
+  #mastra?: Mastra;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -134,6 +141,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   setMastraContext(options: { mastra: Mastra }): void {
     const instances = this.listInstances();
     const { mastra } = options;
+    this.#mastra = mastra;
 
     instances.forEach(instance => {
       const config = instance.getConfig();
@@ -165,6 +173,23 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Get the observability instance chosen by the config selector for the given options. */
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined {
     return this.#registry.getSelected(options);
+  }
+
+  async getRecordedTrace(args: { traceId: string }): Promise<RecordedTrace | null> {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    const trace = await observabilityStorage.getTrace({ traceId: args.traceId });
+    if (!trace) {
+      return null;
+    }
+
+    return hydrateRecordedTrace({
+      trace,
+      emitRecordedEvent: event => this.#emitRecordedEvent(event),
+    });
   }
 
   /** Register a named observability instance, optionally marking it as default. */
@@ -210,5 +235,46 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      return null;
+    }
+
+    return (await storage.getStore('observability')) ?? null;
+  }
+
+  #getRecordedTraceInstance(): ObservabilityInstance | undefined {
+    return this.getDefaultInstance() ?? Array.from(this.listInstances().values())[0];
+  }
+
+  async #emitRecordedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
+    const instance = this.#getRecordedTraceInstance();
+    if (!instance) {
+      return;
+    }
+
+    if (instance instanceof BaseObservabilityInstance) {
+      instance.__emitRecordedEvent(event);
+      await instance.flush();
+      return;
+    }
+
+    const bridge = instance.getBridge();
+    const handlerResults = [
+      ...instance.getExporters().map(exporter => routeToHandler(exporter, event, this.logger)),
+      ...(bridge ? [routeToHandler(bridge, event, this.logger)] : []),
+    ].filter((result): result is Promise<void> => !!result && typeof result.then === 'function');
+
+    if (handlerResults.length > 0) {
+      await Promise.allSettled(handlerResults);
+    }
+
+    await Promise.allSettled([
+      ...instance.getExporters().map(exporter => exporter.flush()),
+      ...(bridge ? [bridge.flush()] : []),
+    ]);
   }
 }

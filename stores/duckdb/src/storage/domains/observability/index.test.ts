@@ -780,12 +780,12 @@ describe('ObservabilityStorageDuckDB', () => {
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Great!',
           experimentId: null,
-          userId: 'user-1',
+          feedbackUserId: 'user-1',
           sourceId: 'source-1',
           metadata: null,
         },
@@ -796,12 +796,12 @@ describe('ObservabilityStorageDuckDB', () => {
           timestamp: new Date(),
           traceId: 'trace-2',
           spanId: null,
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
           experimentId: 'exp-1',
-          userId: 'user-2',
+          feedbackUserId: 'user-2',
           sourceId: 'source-2',
           metadata: null,
         },
@@ -811,11 +811,11 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback).toHaveLength(2);
 
       const filtered = await storage.listFeedback({
-        filters: { source: 'user' },
+        filters: { feedbackSource: 'user' },
       });
       expect(filtered.feedback).toHaveLength(1);
       expect(filtered.feedback[0]!.value).toBe(1);
-      expect(filtered.feedback[0]!.userId).toBe('user-1');
+      expect(filtered.feedback[0]!.feedbackUserId).toBe('user-1');
       expect(filtered.feedback[0]!.sourceId).toBe('source-1');
     });
 
@@ -826,12 +826,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'batch-trace-1',
             spanId: null,
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
             experimentId: null,
-            userId: 'user-1',
+            feedbackUserId: 'user-1',
             sourceId: 'source-1',
             metadata: null,
           },
@@ -839,12 +839,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:01Z'),
             traceId: 'batch-trace-2',
             spanId: 'span-2',
-            source: 'reviewer',
+            feedbackSource: 'reviewer',
             feedbackType: 'rating',
             value: 4,
             comment: null,
             experimentId: 'exp-1',
-            userId: 'user-2',
+            feedbackUserId: 'user-2',
             sourceId: 'source-2',
             metadata: { category: 'quality' },
           },
@@ -852,12 +852,12 @@ describe('ObservabilityStorageDuckDB', () => {
             timestamp: new Date('2026-01-01T00:00:02Z'),
             traceId: 'batch-trace-3',
             spanId: null,
-            source: 'system',
+            feedbackSource: 'system',
             feedbackType: 'flag',
             value: 'needs-review',
             comment: 'Escalated',
             experimentId: null,
-            userId: null,
+            feedbackUserId: null,
             sourceId: 'source-3',
             metadata: { severity: 'high' },
           },
@@ -873,7 +873,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Helpful',
@@ -882,7 +882,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-2',
           spanId: 'span-2',
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
@@ -891,7 +891,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-3',
           spanId: null,
-          source: 'system',
+          feedbackSource: 'system',
           feedbackType: 'flag',
           value: 'needs-review',
           comment: 'Escalated',

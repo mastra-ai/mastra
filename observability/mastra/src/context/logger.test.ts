@@ -29,9 +29,9 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
+      traceId: 'trace-abc',
+      spanId: 'span-123',
       correlationContext: {
-        traceId: 'trace-abc',
-        spanId: 'span-123',
         tags: ['tag-a'],
       },
       metadata: { runId: 'run-1', environment: 'test' },
@@ -45,9 +45,9 @@ describe('LoggerContextImpl', () => {
     expect(log.level).toBe('info');
     expect(log.message).toBe('test message');
     expect(log.data).toEqual({ key: 'value' });
+    expect(log.traceId).toBe('trace-abc');
+    expect(log.spanId).toBe('span-123');
     expect(log.correlationContext).toEqual({
-      traceId: 'trace-abc',
-      spanId: 'span-123',
       tags: ['tag-a'],
     });
     expect(log.metadata).toEqual({ runId: 'run-1', environment: 'test' });
@@ -58,10 +58,8 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
-      correlationContext: {
-        traceId: 'trace-1',
-        spanId: 'span-1',
-      },
+      traceId: 'trace-1',
+      spanId: 'span-1',
       observabilityBus: bus,
     });
 
@@ -135,10 +133,8 @@ describe('LoggerContextImpl', () => {
     });
 
     const logger = new LoggerContextImpl({
-      correlationContext: {
-        traceId: 'trace-1',
-        spanId: 'span-1',
-      },
+      traceId: 'trace-1',
+      spanId: 'span-1',
       observabilityBus: bus,
     });
 
@@ -153,10 +149,8 @@ describe('LoggerContextImpl', () => {
     captureEvents();
 
     const logger = new LoggerContextImpl({
-      correlationContext: {
-        traceId: 'trace-1',
-        spanId: 'span-1',
-      },
+      traceId: 'trace-1',
+      spanId: 'span-1',
       observabilityBus: bus,
       metadata: {
         entity_type: 'agent',

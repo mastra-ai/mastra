@@ -37,6 +37,12 @@ export interface ExportedLog {
   /** When the log was emitted */
   timestamp: Date;
 
+  /** Trace receiving feedback (undefined = not tied to a trace) */
+  traceId?: string;
+
+  /** Specific span receiving feedback (undefined = trace-level feedback) */
+  spanId?: string;
+
   /** Log severity level */
   level: LogLevel;
 
@@ -45,16 +51,6 @@ export interface ExportedLog {
 
   /** Structured data associated with this log */
   data?: Record<string, unknown>;
-
-  /**
-   * @deprecated Use `correlationContext.traceId` instead.
-   */
-  traceId?: string;
-
-  /**
-   * @deprecated Use `correlationContext.spanId` instead.
-   */
-  spanId?: string;
 
   /**
    * @deprecated Use `correlationContext.tags` instead.

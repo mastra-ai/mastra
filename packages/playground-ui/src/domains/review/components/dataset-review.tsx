@@ -148,7 +148,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
           .createFeedback({
             feedback: {
               traceId: item.traceId,
-              source: 'studio',
+              feedbackSource: 'studio',
               feedbackType: 'rating',
               value: rating === 'positive' ? 1 : -1,
               experimentId: item.experimentId ?? undefined,
@@ -170,7 +170,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
           .createFeedback({
             feedback: {
               traceId: item.traceId,
-              source: 'studio',
+              feedbackSource: 'studio',
               feedbackType: 'comment',
               value: comment,
               comment,

@@ -80,6 +80,12 @@ export interface ExportedMetric {
   /** When the metric was recorded */
   timestamp: Date;
 
+  /** Trace receiving feedback (undefined = not tied to a trace) */
+  traceId?: string;
+
+  /** Specific span receiving feedback (undefined = trace-level feedback) */
+  spanId?: string;
+
   /** Metric name (e.g., mastra_agent_duration_ms) */
   name: string;
 
