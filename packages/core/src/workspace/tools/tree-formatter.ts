@@ -103,7 +103,11 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   let globMatcher: GlobMatcher | undefined;
   if (pattern) {
     const patterns = Array.isArray(pattern) ? pattern : [pattern];
-    globMatcher = createGlobMatcher(patterns, { dot: showHidden });
+    // Normalize bare "*" to "**/*" so LLMs using "*" as "match everything"
+    // get the expected behavior — plain "*" doesn't cross "/" boundaries
+    // and silently excludes all files in subdirectories.
+    const normalizedPatterns = patterns.map(p => (p === '*' ? '**/*' : p));
+    globMatcher = createGlobMatcher(normalizedPatterns, { dot: showHidden });
   }
 
   const lines: string[] = ['.'];

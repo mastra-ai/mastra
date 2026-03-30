@@ -592,6 +592,18 @@ src
       expect(result.fileCount).toBe(2);
     });
 
+    it('should treat bare "*" as "**/*" to match files at any depth (#14823)', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'src', 'utils'));
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
+      const result = await formatAsTree(filesystem, '.', { pattern: '*' });
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('app.ts');
+      expect(result.tree).toContain('helpers.ts');
+      expect(result.fileCount).toBe(3);
+    });
     it('should support multiple patterns', async () => {
       await fs.writeFile(path.join(tempDir, 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'App.tsx'), '');
