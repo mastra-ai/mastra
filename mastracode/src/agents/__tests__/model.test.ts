@@ -79,6 +79,7 @@ const mockLoadSettings = vi.hoisted(() =>
     () => {
       customProviders: Array<{ name: string; url: string; apiKey?: string; headers?: Record<string, string> }>;
       llmProxy?: { baseUrl: string | null; headers: Record<string, string> };
+      memoryGateway?: { apiKey: string | null; baseUrl: string | null };
     }
   >(() => ({
     customProviders: [],
@@ -93,6 +94,8 @@ vi.mock('../../onboarding/settings.js', () => ({
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
   LLM_PROXY_DEFAULTS: { baseUrl: null, headers: {} },
+  MEMORY_GATEWAY_DEFAULTS: { apiKey: null, baseUrl: null },
+  MEMORY_GATEWAY_DEFAULT_URL: 'https://server.mastra.ai/v1',
 }));
 
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
@@ -427,6 +430,113 @@ describe('resolveModel', () => {
           baseURL: 'https://proxy.corp.com',
         }),
       );
+    });
+  });
+
+  describe('memory gateway', () => {
+    it('uses memory gateway URL and X-Mastra-Authorization when apiKey is set', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.url).toBe('https://server.mastra.ai/v1');
+      expect(result.headers).toEqual({
+        'X-Mastra-Authorization': 'Bearer msk_test123',
+      });
+    });
+
+    it('uses custom memory gateway baseUrl when set', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: 'https://custom-gw.example.com' },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      expect(result.url).toBe('https://custom-gw.example.com');
+      expect(result.headers).toEqual({
+        'X-Mastra-Authorization': 'Bearer msk_test123',
+      });
+    });
+
+    it('supersedes llm-proxy when both are configured', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: { baseUrl: 'https://proxy.corp.com', headers: { 'X-Proxy': 'yes' } },
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      // Memory gateway wins — llm-proxy URL and headers are ignored
+      expect(result.url).toBe('https://server.mastra.ai/v1');
+      expect(result.headers).toEqual({
+        'X-Mastra-Authorization': 'Bearer msk_test123',
+      });
+    });
+
+    it('merges X-Mastra-Authorization with harness headers', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash', {
+        requestContext: makeRequestContext({ threadId: 'thread-1' }),
+      }) as Record<string, unknown>;
+
+      expect(result.headers).toEqual({
+        'X-Mastra-Authorization': 'Bearer msk_test123',
+        'x-thread-id': 'thread-1',
+      });
+    });
+
+    it('passes memory gateway URL to Anthropic OAuth provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+      });
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514');
+
+      expect(vi.mocked(opencodeClaudeMaxProvider)).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        baseURL: 'https://server.mastra.ai/v1',
+        headers: { 'X-Mastra-Authorization': 'Bearer msk_test123' },
+      });
+    });
+
+    it('passes memory gateway URL to OpenAI OAuth provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: { apiKey: 'msk_test123', baseUrl: null },
+      });
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth' });
+
+      resolveModel('openai/gpt-4o');
+
+      expect(vi.mocked(openaiCodexProvider)).toHaveBeenCalledWith('gpt-4o', {
+        baseURL: 'https://server.mastra.ai/v1',
+        headers: { 'X-Mastra-Authorization': 'Bearer msk_test123' },
+        thinkingLevel: undefined,
+      });
+    });
+
+    it('falls back to llm-proxy when memory gateway apiKey is null', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        llmProxy: { baseUrl: 'https://proxy.corp.com', headers: { 'X-Proxy': 'yes' } },
+        memoryGateway: { apiKey: null, baseUrl: null },
+      });
+
+      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+
+      expect(result.url).toBe('https://proxy.corp.com');
+      expect(result.headers).toEqual({ 'X-Proxy': 'yes' });
     });
   });
 });

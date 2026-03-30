@@ -175,11 +175,12 @@ export function opencodeClaudeMaxProvider(
       throw new Error('Not logged in to Anthropic. Run /login first.');
     }
 
-    // Merge headers: init (SDK) < proxy < OAuth (highest priority)
+    // Merge headers: proxy < OAuth (highest priority)
+    // Deliberately discard init?.headers — the SDK injects the dummy
+    // `x-api-key: oauth-placeholder` which causes a 401 if forwarded.
     return fetch(url, {
       ...init,
       headers: {
-        ...(init?.headers as Record<string, string> | undefined),
         ...extraHeaders,
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':

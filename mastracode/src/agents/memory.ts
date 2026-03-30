@@ -53,7 +53,10 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   // Read once at factory creation — avoids synchronous file I/O on every request
   const mg = loadSettings().memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
-  const omEnabled = !mg.apiKey;
+
+  // When memory gateway is enabled, the gateway handles all message persistence
+  // and observational memory server-side — skip local Memory entirely.
+  if (mg.apiKey) return undefined;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
@@ -63,7 +66,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
     const observerPreviousObservationTokens = 1000;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${omEnabled}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -77,7 +80,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       embedder: vector ? fastembed.small : undefined,
       options: {
         observationalMemory: {
-          enabled: omEnabled,
+          enabled: true,
           retrieval: vector ? { vector: true } : omScope === 'thread',
           scope: omScope,
           observation: {

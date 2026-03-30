@@ -40,12 +40,13 @@ function makeRequestContext(overrides?: Record<string, unknown>) {
   const ctx = new RequestContext();
   // Use unique thresholds per call to bust the module-level cache
   testCounter++;
-  ctx.set('harness', {
+  const state = {
     threadId: 'test-thread',
     resourceId: 'test-resource',
     observationThreshold: 10_000 + testCounter,
     ...overrides,
-  });
+  };
+  ctx.set('harness', { ...state, getState: () => state });
   return ctx;
 }
 
@@ -53,37 +54,35 @@ describe('getDynamicMemory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     memoryCalls.length = 0;
-    // Reset module-level cache by re-importing would be ideal, but we can
-    // force cache miss by varying thresholds via harness state
   });
 
-  it('creates Memory with OM enabled when memoryGateway.apiKey is null', () => {
+  it('returns a memory factory with OM enabled when memoryGateway.apiKey is null', () => {
     mockLoadSettings.mockReturnValue({ memoryGateway: { apiKey: null, baseUrl: null } });
 
     const factory = getDynamicMemory({} as any);
-    factory({ requestContext: makeRequestContext() });
+    expect(factory).toBeDefined();
+
+    factory!({ requestContext: makeRequestContext() });
 
     expect(memoryCalls).toHaveLength(1);
     const omConfig = (memoryCalls[0].options as any).observationalMemory;
     expect(omConfig.enabled).toBe(true);
   });
 
-  it('creates Memory with OM disabled when memoryGateway.apiKey is set', () => {
+  it('returns undefined when memoryGateway.apiKey is set (gateway handles everything)', () => {
     mockLoadSettings.mockReturnValue({ memoryGateway: { apiKey: 'mg-key-abc', baseUrl: null } });
 
     const factory = getDynamicMemory({} as any);
-    factory({ requestContext: makeRequestContext() });
-
-    expect(memoryCalls).toHaveLength(1);
-    const omConfig = (memoryCalls[0].options as any).observationalMemory;
-    expect(omConfig.enabled).toBe(false);
+    expect(factory).toBeUndefined();
   });
 
-  it('falls back to MEMORY_GATEWAY_DEFAULTS when memoryGateway is missing from settings', () => {
+  it('returns a memory factory when memoryGateway is missing from settings (defaults)', () => {
     mockLoadSettings.mockReturnValue({});
 
     const factory = getDynamicMemory({} as any);
-    factory({ requestContext: makeRequestContext() });
+    expect(factory).toBeDefined();
+
+    factory!({ requestContext: makeRequestContext() });
 
     expect(memoryCalls).toHaveLength(1);
     const omConfig = (memoryCalls[0].options as any).observationalMemory;

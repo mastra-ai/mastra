@@ -83,7 +83,7 @@ export const MEMORY_GATEWAY_DEFAULTS: MemoryGatewaySettings = {
   baseUrl: null,
 };
 
-export const MEMORY_GATEWAY_DEFAULT_URL = 'https://platform.mastra.ai/v1';
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://server.mastra.ai/v1';
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';

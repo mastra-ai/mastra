@@ -6,8 +6,14 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { LLM_PROXY_DEFAULTS, getCustomProviderId, loadSettings } from '../onboarding/settings.js';
-import type { LlmProxySettings } from '../onboarding/settings.js';
+import {
+  LLM_PROXY_DEFAULTS,
+  MEMORY_GATEWAY_DEFAULTS,
+  MEMORY_GATEWAY_DEFAULT_URL,
+  getCustomProviderId,
+  loadSettings,
+} from '../onboarding/settings.js';
+import type { LlmProxySettings, MemoryGatewaySettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -139,14 +145,28 @@ export function resolveModel(
   const harnessHeaders = getHarnessHeaders(options?.requestContext);
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
-  const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
-  const proxyBaseUrl = proxy.baseUrl ?? undefined;
-  // Only forward proxy headers when a proxy base URL is configured
-  const proxyHeaders = proxyBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
 
-  // Merge proxy headers → harness headers (harness wins on conflict)
+  // Memory gateway supersedes llm-proxy when enabled
+  const mg: MemoryGatewaySettings = settings.memoryGateway ?? MEMORY_GATEWAY_DEFAULTS;
+  const mgEnabled = !!mg.apiKey;
+
+  let effectiveBaseUrl: string | undefined;
+  let effectiveProxyHeaders: ModelRequestHeaders | undefined;
+
+  if (mgEnabled) {
+    effectiveBaseUrl = mg.baseUrl ?? MEMORY_GATEWAY_DEFAULT_URL;
+    effectiveProxyHeaders = { 'X-Mastra-Authorization': `Bearer ${mg.apiKey}` };
+  } else {
+    const proxy: LlmProxySettings = settings.llmProxy ?? LLM_PROXY_DEFAULTS;
+    effectiveBaseUrl = proxy.baseUrl ?? undefined;
+    // Only forward proxy headers when a proxy base URL is configured
+    effectiveProxyHeaders =
+      effectiveBaseUrl && Object.keys(proxy.headers).length > 0 ? proxy.headers : undefined;
+  }
+
+  // Merge effective proxy headers → harness headers (harness wins on conflict)
   const headers: ModelRequestHeaders | undefined =
-    proxyHeaders || harnessHeaders ? { ...proxyHeaders, ...harnessHeaders } : undefined;
+    effectiveProxyHeaders || harnessHeaders ? { ...effectiveProxyHeaders, ...harnessHeaders } : undefined;
 
   const customProvider =
     providerId && modelName
@@ -158,8 +178,8 @@ export function resolveModel(
   if (customProvider) {
     // Precedence: proxy < customProvider < harness
     const customHeaders: ModelRequestHeaders | undefined =
-      proxyHeaders || customProvider.headers || harnessHeaders
-        ? { ...proxyHeaders, ...customProvider.headers, ...harnessHeaders }
+      effectiveProxyHeaders || customProvider.headers || harnessHeaders
+        ? { ...effectiveProxyHeaders, ...customProvider.headers, ...harnessHeaders }
         : undefined;
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
@@ -179,7 +199,7 @@ export function resolveModel(
     }
     return createAnthropic({
       apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: proxyBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
+      baseURL: effectiveBaseUrl ?? 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
       headers,
     })(modelId.substring('moonshotai/'.length));
@@ -189,21 +209,21 @@ export function resolveModel(
 
     // Primary path: explicit OAuth credential
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
+      return opencodeClaudeMaxProvider(bareModelId, { baseURL: effectiveBaseUrl, headers });
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, proxyBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers, effectiveBaseUrl);
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
+      return anthropicApiKeyProvider(bareModelId, apiKey, headers, effectiveBaseUrl);
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { baseURL: proxyBaseUrl, headers });
+    return opencodeClaudeMaxProvider(bareModelId, { baseURL: effectiveBaseUrl, headers });
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
@@ -212,25 +232,25 @@ export function resolveModel(
       const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
-        baseURL: proxyBaseUrl,
+        baseURL: effectiveBaseUrl,
         headers,
       });
     }
 
     const apiKey = getOpenAIApiKey();
     if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers, proxyBaseUrl);
+      return openaiApiKeyProvider(bareModelId, apiKey, headers, effectiveBaseUrl);
     }
 
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
-      ...(proxyBaseUrl ? { url: proxyBaseUrl } : {}),
+      ...(effectiveBaseUrl ? { url: effectiveBaseUrl } : {}),
       headers,
     });
   } else {
     return new ModelRouterLanguageModel({
       id: modelId as `${string}/${string}`,
-      ...(proxyBaseUrl ? { url: proxyBaseUrl } : {}),
+      ...(effectiveBaseUrl ? { url: effectiveBaseUrl } : {}),
       headers,
     });
   }
