@@ -78,13 +78,8 @@ export interface AgentLegacyCapabilities {
   hasOwnMemory(): boolean;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
-  /** Get the agent's configured LLM instance */
-  getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
-  /** Get an LLM instance for a request-scoped model override */
-  getLLMByModel(options: {
-    requestContext: RequestContext;
-    model: DynamicArgument<MastraModelConfig>;
-  }): Promise<MastraLLMV1>;
+  /** Get the agent's LLM instance, optionally using a request-scoped model override */
+  getLLM(options: { requestContext: RequestContext; model?: DynamicArgument<MastraModelConfig> }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   /** Get memory messages (deprecated - use input processors) */
@@ -792,14 +787,10 @@ export class AgentLegacyHandler {
       }) ||
       randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
-    const llm = (args as { model?: DynamicArgument<MastraModelConfig> }).model
-      ? await this.capabilities.getLLMByModel({
-          requestContext,
-          model: (args as { model?: DynamicArgument<MastraModelConfig> }).model!,
-        })
-      : await this.capabilities.getLLM({
-          requestContext,
-        });
+    const llm = await this.capabilities.getLLM({
+      requestContext,
+      model: (args as { model?: DynamicArgument<MastraModelConfig> }).model,
+    });
 
     const memory = await this.capabilities.getMemory({ requestContext });
 

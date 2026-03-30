@@ -1169,7 +1169,6 @@ export class Agent<
           return result;
         },
         getLLM: this.getLLM.bind(this) as any,
-        getLLMByModel: this.getLLMByModel.bind(this) as any,
         getMemory: this.getMemory.bind(this),
         convertTools: this.convertTools.bind(this),
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
@@ -1469,38 +1468,19 @@ export class Agent<
    * @example
    * ```typescript
    * const llm = await agent.getLLM();
+   * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
    * ```
    */
-  public getLLM({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | MastraLLM
-    | Promise<MastraLLM> {
-    return this.resolveLLMFromSelection({
-      requestContext,
-      modelSelectionPromise: this.resolveModelSelection(this.model, requestContext),
-    });
-  }
-
-  /**
-   * Gets or creates an LLM instance for a request-scoped model override without
-   * mutating the agent's configured model.
-   *
-   * @example
-   * ```typescript
-   * const llm = await agent.getLLMByModel({
-   *   model: 'openai/gpt-5',
-   * });
-   * ```
-   */
-  public getLLMByModel({
+  public getLLM({
     requestContext = new RequestContext(),
     model,
   }: {
     requestContext?: RequestContext;
-    model: DynamicArgument<MastraModelConfig, TRequestContext>;
-  }): MastraLLM | Promise<MastraLLM> {
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+  } = {}): MastraLLM | Promise<MastraLLM> {
     return this.resolveLLMFromSelection({
       requestContext,
-      modelSelectionPromise: this.resolveModelSelection(model, requestContext),
+      modelSelectionPromise: this.resolveModelSelection(model ?? this.model, requestContext),
     });
   }
 
@@ -1932,7 +1912,7 @@ export class Agent<
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const llm = model ? await this.getLLMByModel({ requestContext, model }) : await this.getLLM({ requestContext });
+    const llm = await this.getLLM({ requestContext, model });
 
     const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
@@ -4217,11 +4197,7 @@ export class Agent<
       );
     }
 
-    const llm = (
-      options.model
-        ? await this.getLLMByModel({ requestContext, model: options.model })
-        : await this.getLLM({ requestContext })
-    ) as MastraLLMVNext;
+    const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
     // Apply null→undefined transform for OpenAI structured output validation.
     // OpenAI strict mode sends null for optional fields, but schemas like Zod's .optional()
@@ -4782,14 +4758,10 @@ export class Agent<
       mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig, TRequestContext> }
     ).model;
 
-    const llm = modelOverride
-      ? await this.getLLMByModel({
-          requestContext: mergedOptions.requestContext,
-          model: modelOverride,
-        })
-      : await this.getLLM({
-          requestContext: mergedOptions.requestContext,
-        });
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+      model: modelOverride,
+    });
 
     const modelInfo = llm.getModel();
 
@@ -4908,14 +4880,10 @@ export class Agent<
       }
     ).model;
 
-    const llm = modelOverride
-      ? await this.getLLMByModel({
-          requestContext: mergedOptions.requestContext,
-          model: modelOverride,
-        })
-      : await this.getLLM({
-          requestContext: mergedOptions.requestContext,
-        });
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+      model: modelOverride,
+    });
 
     const modelInfo = llm.getModel();
 
@@ -5041,14 +5009,10 @@ export class Agent<
       }
     ).model;
 
-    const llm = modelOverride
-      ? await this.getLLMByModel({
-          requestContext: mergedStreamOptions.requestContext,
-          model: modelOverride,
-        })
-      : await this.getLLM({
-          requestContext: mergedStreamOptions.requestContext,
-        });
+    const llm = await this.getLLM({
+      requestContext: mergedStreamOptions.requestContext,
+      model: modelOverride,
+    });
 
     if (!isSupportedLanguageModel(llm.getModel())) {
       const modelInfo = llm.getModel();
@@ -5171,14 +5135,10 @@ export class Agent<
       mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig, TRequestContext> }
     ).model;
 
-    const llm = modelOverride
-      ? await this.getLLMByModel({
-          requestContext: mergedOptions.requestContext,
-          model: modelOverride,
-        })
-      : await this.getLLM({
-          requestContext: mergedOptions.requestContext,
-        });
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+      model: modelOverride,
+    });
 
     const modelInfo = llm.getModel();
 
