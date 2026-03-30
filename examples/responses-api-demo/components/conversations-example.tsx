@@ -432,8 +432,8 @@ export function ConversationsExample() {
     }
   }
 
-  async function deleteConversation() {
-    if (!activeConversationId || mode !== 'idle' || isDeletingConversation) {
+  async function deleteConversation(conversationId: string) {
+    if (mode !== 'idle' || isDeletingConversation) {
       return;
     }
 
@@ -441,13 +441,15 @@ export function ConversationsExample() {
     setError(null);
 
     try {
-      await client.conversations.delete(activeConversationId);
+      await client.conversations.delete(conversationId);
 
-      const remainingConversations = conversations.filter(conversation => conversation.id !== activeConversationId);
+      const remainingConversations = conversations.filter(conversation => conversation.id !== conversationId);
       setConversations(remainingConversations);
-      setActiveConversationId(remainingConversations[0]?.id ?? null);
-      setTurns([]);
-      setOpenRawTurnId(null);
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(remainingConversations[0]?.id ?? null);
+        setTurns([]);
+        setOpenRawTurnId(null);
+      }
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete conversation.');
     } finally {
@@ -845,16 +847,6 @@ export function ConversationsExample() {
         <div className="demo-conversations__header">
           <span className="demo-sidebar__eyebrow">Conversations</span>
           <div className="demo-actions__buttons">
-            {activeConversationId ? (
-              <button
-                className="demo-button demo-button--secondary"
-                disabled={mode !== 'idle' || isDeletingConversation}
-                onClick={() => void deleteConversation()}
-                type="button"
-              >
-                {isDeletingConversation ? 'Deleting...' : 'Delete'}
-              </button>
-            ) : null}
             <button
               className="demo-conversations__create"
               disabled={mode !== 'idle' || isCreatingConversation}
@@ -875,17 +867,38 @@ export function ConversationsExample() {
             <div className="demo-conversations__empty">No conversations yet.</div>
           ) : (
             conversations.map(conversation => (
-              <button
+              <div
                 key={conversation.id}
                 className={`demo-conversation-item${conversation.id === activeConversationId ? ' is-active' : ''}`}
-                disabled={mode !== 'idle'}
-                onClick={() => setActiveConversationId(conversation.id)}
-                type="button"
               >
-                <span className="demo-conversation-item__title">{conversation.title}</span>
-                <span className="demo-conversation-item__subtitle">{conversation.subtitle}</span>
-                <span className="demo-conversation-item__id">{conversation.id}</span>
-              </button>
+                <button
+                  className="demo-conversation-item__select"
+                  disabled={mode !== 'idle'}
+                  onClick={() => setActiveConversationId(conversation.id)}
+                  type="button"
+                >
+                  <span className="demo-conversation-item__title">{conversation.title}</span>
+                  <span className="demo-conversation-item__subtitle">{conversation.subtitle}</span>
+                  <span className="demo-conversation-item__id">{conversation.id}</span>
+                </button>
+
+                <button
+                  className="demo-conversation-item__delete"
+                  disabled={mode !== 'idle' || isDeletingConversation}
+                  onClick={() => void deleteConversation(conversation.id)}
+                  type="button"
+                  aria-label={`Delete ${conversation.title}`}
+                  title={`Delete ${conversation.title}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4.8c0-.44.36-.8.8-.8h6.4c.44 0 .8.36.8.8V6" />
+                    <path d="M6.8 6l.76 11.36c.05.78.7 1.39 1.48 1.39h6.92c.78 0 1.43-.61 1.48-1.39L18.2 6" />
+                    <path d="M10 10.25v5.5" />
+                    <path d="M14 10.25v5.5" />
+                  </svg>
+                </button>
+              </div>
             ))
           )}
         </div>

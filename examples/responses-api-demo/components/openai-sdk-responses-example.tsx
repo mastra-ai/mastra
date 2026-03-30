@@ -1,16 +1,24 @@
 'use client';
 
-import type { ResponsesStreamEvent } from '@mastra/client-js';
 import OpenAI from 'openai';
 import { startTransition, useEffect, useState } from 'react';
 
 const client = new OpenAI({
   apiKey: 'mastra-demo-key',
   baseURL: `${process.env.NEXT_PUBLIC_MASTRA_BASE_URL ?? 'http://localhost:4111'}/api/v1`,
+  // The official OpenAI SDK is server-first. We enable browser usage here only
+  // for this demo so readers can see the exact `openai.responses.*` calls
+  // pointed at Mastra. OpenAI documents this as risky because real API keys
+  // would be exposed in client-side code:
+  // https://github.com/openai/openai-node#why-is-this-dangerous
   dangerouslyAllowBrowser: true,
   fetch: (input, init) => {
     const headers = new Headers(init?.headers);
 
+    // The OpenAI SDK adds Stainless telemetry headers in the browser. We strip
+    // them in this example because the Mastra demo server's CORS setup does not
+    // explicitly allow those headers, and the example should stay focused on the
+    // Responses API call shape instead of extra server CORS configuration.
     headers.delete('x-stainless-lang');
     headers.delete('x-stainless-package-version');
     headers.delete('x-stainless-os');

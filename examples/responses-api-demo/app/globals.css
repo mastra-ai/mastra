@@ -190,11 +190,9 @@
   }
 
   .demo-conversation-item {
-    @apply flex w-full flex-col gap-1.5 rounded-[14px] border px-4 py-[14px] text-left transition-transform duration-300 ease-out;
+    @apply flex w-full items-start gap-2 rounded-[14px] border p-2 text-left transition-transform duration-300 ease-out;
     border-color: rgba(15, 90, 65, 0.08);
     background: rgba(255, 255, 255, 0.82);
-    color: inherit;
-    cursor: pointer;
     transition:
       transform var(--transition-spring),
       border-color var(--transition-fast),
@@ -202,23 +200,47 @@
       box-shadow var(--transition-fast);
   }
 
-  .demo-conversation-item:hover:not(:disabled) {
+  .demo-conversation-item:hover {
     transform: translateY(-1px);
     border-color: rgba(24, 134, 95, 0.16);
     background: rgba(255, 255, 255, 0.94);
     box-shadow: var(--shadow-soft);
   }
 
-  .demo-conversation-item:disabled {
-    @apply opacity-60;
-    cursor: not-allowed;
-    transform: none;
-  }
-
   .demo-conversation-item.is-active {
     border-color: rgba(24, 134, 95, 0.24);
     background: linear-gradient(180deg, rgba(24, 134, 95, 0.09), rgba(255, 255, 255, 0.94));
     box-shadow: var(--shadow-soft);
+  }
+
+  .demo-conversation-item__select {
+    @apply flex min-w-0 flex-1 flex-col gap-1.5 rounded-[10px] bg-transparent px-2 py-2 text-left;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .demo-conversation-item__select:disabled {
+    @apply opacity-60;
+    cursor: not-allowed;
+  }
+
+  .demo-conversation-item__delete {
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border text-[1rem] leading-none transition-colors;
+    border-color: rgba(15, 90, 65, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .demo-conversation-item__delete:hover:not(:disabled) {
+    border-color: rgba(179, 75, 75, 0.18);
+    background: rgba(255, 245, 245, 0.96);
+    color: #9f3a3a;
+  }
+
+  .demo-conversation-item__delete:disabled {
+    @apply opacity-50;
+    cursor: not-allowed;
   }
 
   .demo-conversation-item__title {
