@@ -111,6 +111,26 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () => storage.listScores({}),
       expectedMessage: 'does not support listing scores',
     },
+    {
+      name: 'getScoreAggregate',
+      callThunk: () => storage.getScoreAggregate({ scorerId: 'test', aggregation: 'sum' }),
+      expectedMessage: 'does not support score aggregation',
+    },
+    {
+      name: 'getScoreBreakdown',
+      callThunk: () => storage.getScoreBreakdown({ scorerId: 'test', groupBy: ['entityType'], aggregation: 'sum' }),
+      expectedMessage: 'does not support score breakdown',
+    },
+    {
+      name: 'getScoreTimeSeries',
+      callThunk: () => storage.getScoreTimeSeries({ scorerId: 'test', interval: '1h', aggregation: 'sum' }),
+      expectedMessage: 'does not support score time series',
+    },
+    {
+      name: 'getScorePercentiles',
+      callThunk: () => storage.getScorePercentiles({ scorerId: 'test', percentiles: [0.5, 0.95], interval: '1h' }),
+      expectedMessage: 'does not support score percentiles',
+    },
 
     // Feedback
     {
@@ -132,6 +152,28 @@ describe('ObservabilityStorage base class', () => {
       name: 'listFeedback',
       callThunk: () => storage.listFeedback({}),
       expectedMessage: 'does not support listing feedback',
+    },
+    {
+      name: 'getFeedbackAggregate',
+      callThunk: () => storage.getFeedbackAggregate({ feedbackType: 'rating', aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback aggregation',
+    },
+    {
+      name: 'getFeedbackBreakdown',
+      callThunk: () =>
+        storage.getFeedbackBreakdown({ feedbackType: 'rating', groupBy: ['entityType'], aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback breakdown',
+    },
+    {
+      name: 'getFeedbackTimeSeries',
+      callThunk: () => storage.getFeedbackTimeSeries({ feedbackType: 'rating', interval: '1h', aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback time series',
+    },
+    {
+      name: 'getFeedbackPercentiles',
+      callThunk: () =>
+        storage.getFeedbackPercentiles({ feedbackType: 'rating', percentiles: [0.5, 0.95], interval: '1h' }),
+      expectedMessage: 'does not support feedback percentiles',
     },
   ];
 

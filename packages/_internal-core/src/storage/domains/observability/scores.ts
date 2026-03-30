@@ -1,10 +1,21 @@
 import { z } from 'zod/v4';
 import {
+  aggregateResponseFields,
+  aggregationIntervalSchema,
+  aggregationTypeSchema,
+  aggregatedValueField,
+  bucketTimestampField,
+  comparePeriodSchema,
   commonFilterFields,
   experimentIdField,
   contextFields,
+  dimensionsField,
+  groupBySchema,
   paginationArgsSchema,
   paginationInfoSchema,
+  percentileField,
+  percentileBucketValueField,
+  percentilesSchema,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -180,7 +191,7 @@ export const scoresOrderBySchema = z
 /** Schema for listScores operation arguments */
 export const listScoresArgsSchema = z
   .object({
-    filters: scoresFilterSchema.optional().describe('Optional filters to apply'),
+    filters: scoresFilterSchema.optional(),
     pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
     orderBy: scoresOrderBySchema
       .default({ field: 'timestamp', direction: 'DESC' })
@@ -199,3 +210,103 @@ export const listScoresResponseSchema = z.object({
 
 /** Response containing paginated scores */
 export type ListScoresResponse = z.infer<typeof listScoresResponseSchema>;
+
+// ============================================================================
+// OLAP Query Schemas
+// ============================================================================
+
+export const getScoreAggregateArgsSchema = z
+  .object({
+    scorerId: scorerIdField,
+    scoreSource: scoreSourceField.optional(),
+    aggregation: aggregationTypeSchema,
+    filters: scoresFilterSchema.optional(),
+    comparePeriod: comparePeriodSchema.optional(),
+  })
+  .describe('Arguments for getting a score aggregate');
+
+export type GetScoreAggregateArgs = z.infer<typeof getScoreAggregateArgsSchema>;
+
+export const getScoreAggregateResponseSchema = z.object(aggregateResponseFields);
+
+export type GetScoreAggregateResponse = z.infer<typeof getScoreAggregateResponseSchema>;
+
+export const getScoreBreakdownArgsSchema = z
+  .object({
+    scorerId: scorerIdField,
+    scoreSource: scoreSourceField.optional(),
+    groupBy: groupBySchema,
+    aggregation: aggregationTypeSchema,
+    filters: scoresFilterSchema.optional(),
+  })
+  .describe('Arguments for getting a score breakdown');
+
+export type GetScoreBreakdownArgs = z.infer<typeof getScoreBreakdownArgsSchema>;
+
+export const getScoreBreakdownResponseSchema = z.object({
+  groups: z.array(
+    z.object({
+      dimensions: dimensionsField,
+      value: aggregatedValueField,
+    }),
+  ),
+});
+
+export type GetScoreBreakdownResponse = z.infer<typeof getScoreBreakdownResponseSchema>;
+
+export const getScoreTimeSeriesArgsSchema = z
+  .object({
+    scorerId: scorerIdField,
+    scoreSource: scoreSourceField.optional(),
+    interval: aggregationIntervalSchema,
+    aggregation: aggregationTypeSchema,
+    filters: scoresFilterSchema.optional(),
+    groupBy: groupBySchema.optional(),
+  })
+  .describe('Arguments for getting score time series');
+
+export type GetScoreTimeSeriesArgs = z.infer<typeof getScoreTimeSeriesArgsSchema>;
+
+export const getScoreTimeSeriesResponseSchema = z.object({
+  series: z.array(
+    z.object({
+      name: z.string().describe('Series name (scorer ID or group key)'),
+      points: z.array(
+        z.object({
+          timestamp: bucketTimestampField,
+          value: aggregatedValueField,
+        }),
+      ),
+    }),
+  ),
+});
+
+export type GetScoreTimeSeriesResponse = z.infer<typeof getScoreTimeSeriesResponseSchema>;
+
+export const getScorePercentilesArgsSchema = z
+  .object({
+    scorerId: scorerIdField,
+    scoreSource: scoreSourceField.optional(),
+    percentiles: percentilesSchema,
+    interval: aggregationIntervalSchema,
+    filters: scoresFilterSchema.optional(),
+  })
+  .describe('Arguments for getting score percentiles');
+
+export type GetScorePercentilesArgs = z.infer<typeof getScorePercentilesArgsSchema>;
+
+export const getScorePercentilesResponseSchema = z.object({
+  series: z.array(
+    z.object({
+      percentile: percentileField,
+      points: z.array(
+        z.object({
+          timestamp: bucketTimestampField,
+          value: percentileBucketValueField,
+        }),
+      ),
+    }),
+  ),
+});
+
+export type GetScorePercentilesResponse = z.infer<typeof getScorePercentilesResponseSchema>;

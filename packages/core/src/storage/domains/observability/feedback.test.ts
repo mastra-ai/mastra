@@ -5,6 +5,14 @@ import {
   feedbackFilterSchema,
   feedbackInputSchema,
   feedbackRecordSchema,
+  getFeedbackAggregateArgsSchema,
+  getFeedbackAggregateResponseSchema,
+  getFeedbackBreakdownArgsSchema,
+  getFeedbackBreakdownResponseSchema,
+  getFeedbackPercentilesArgsSchema,
+  getFeedbackPercentilesResponseSchema,
+  getFeedbackTimeSeriesArgsSchema,
+  getFeedbackTimeSeriesResponseSchema,
   listFeedbackArgsSchema,
   listFeedbackResponseSchema,
 } from './feedback';
@@ -204,6 +212,89 @@ describe('Feedback Schemas', () => {
       });
       expect(response.feedback).toHaveLength(1);
       expect(response.pagination.hasMore).toBe(false);
+    });
+  });
+
+  describe('feedback OLAP schemas', () => {
+    it('getFeedbackAggregateArgsSchema validates', () => {
+      const args = getFeedbackAggregateArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+        comparePeriod: 'previous_week',
+      });
+      expect(args.feedbackType).toBe('rating');
+      expect(args.feedbackSource).toBe('user');
+    });
+
+    it('getFeedbackAggregateResponseSchema validates', () => {
+      const response = getFeedbackAggregateResponseSchema.parse({
+        value: 4.2,
+        previousValue: 4.0,
+        changePercent: 5,
+      });
+      expect(response.value).toBe(4.2);
+    });
+
+    it('getFeedbackBreakdownArgsSchema validates', () => {
+      const args = getFeedbackBreakdownArgsSchema.parse({
+        feedbackType: 'rating',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+      expect(args.groupBy).toEqual(['entityName']);
+    });
+
+    it('getFeedbackBreakdownResponseSchema validates', () => {
+      const response = getFeedbackBreakdownResponseSchema.parse({
+        groups: [{ dimensions: { entityName: 'agent-a' }, value: 4.5 }],
+      });
+      expect(response.groups[0]?.value).toBe(4.5);
+    });
+
+    it('getFeedbackTimeSeriesArgsSchema validates', () => {
+      const args = getFeedbackTimeSeriesArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+        interval: '1d',
+      });
+      expect(args.interval).toBe('1d');
+    });
+
+    it('getFeedbackTimeSeriesResponseSchema validates', () => {
+      const response = getFeedbackTimeSeriesResponseSchema.parse({
+        series: [{ name: 'rating', points: [{ timestamp: now, value: 4.5 }] }],
+      });
+      expect(response.series[0]?.points[0]?.value).toBe(4.5);
+    });
+
+    it('getFeedbackPercentilesArgsSchema validates', () => {
+      const args = getFeedbackPercentilesArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        percentiles: [0.5, 0.95],
+        interval: '1h',
+      });
+      expect(args.percentiles).toEqual([0.5, 0.95]);
+    });
+
+    it('getFeedbackPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getFeedbackPercentilesArgsSchema.parse({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
+    });
+
+    it('getFeedbackPercentilesResponseSchema validates', () => {
+      const response = getFeedbackPercentilesResponseSchema.parse({
+        series: [{ percentile: 0.95, points: [{ timestamp: now, value: 5 }] }],
+      });
+      expect(response.series[0]?.percentile).toBe(0.95);
     });
   });
 });
