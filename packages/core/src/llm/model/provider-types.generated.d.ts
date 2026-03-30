@@ -86,6 +86,7 @@ export type ProviderModelsMap = {
     'gpt-5.2-chat-latest',
     'gpt-5.2-codex',
     'gpt-5.2-pro',
+    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
@@ -482,6 +483,7 @@ export type ProviderModelsMap = {
     'ideogramai/ideogram-v2a',
     'ideogramai/ideogram-v2a-turbo',
     'lumalabs/ray2',
+    'novita/deepseek-v3.2',
     'novita/glm-4.6',
     'novita/glm-4.6v',
     'novita/glm-4.7',
@@ -554,6 +556,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast-reasoning',
     'xai/grok-4.1-fast-non-reasoning',
     'xai/grok-4.1-fast-reasoning',
+    'xai/grok-4.20-multi-agent',
     'xai/grok-code-fast-1',
   ];
   readonly opencode: readonly [
@@ -772,7 +775,6 @@ export type ProviderModelsMap = {
     'gemini-3-1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
-    'glm-5',
     'gpt-4o',
     'gpt-5-3-codex',
     'gpt-5-4',
@@ -785,6 +787,7 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'kimi-k2.5',
     'minimax-m2-5',
+    'zai-glm-5',
   ];
   readonly google: readonly [
     'gemini-1.5-flash',
@@ -817,6 +820,11 @@ export type ProviderModelsMap = {
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
     'gemini-live-2.5-flash-preview-native-audio',
+    'gemma-3-12b-it',
+    'gemma-3-27b-it',
+    'gemma-3-4b-it',
+    'gemma-3n-e2b-it',
+    'gemma-3n-e4b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -1730,7 +1738,7 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-super-120b-a12b',
-    'nvidia/nemotron-3-super-120b-a12b-free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -2770,6 +2778,7 @@ export type ProviderModelsMap = {
     'mistral-medium-latest',
     'mistral-nemo',
     'mistral-small-2506',
+    'mistral-small-2603',
     'mistral-small-latest',
     'open-mistral-7b',
     'open-mixtral-8x22b',
@@ -3407,6 +3416,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7',
     'zai-org/glm-4.7-flash',
     'zai-org/glm-5',
+    'zai-org/glm-5.1',
+    'zai-org/glm-5.1:thinking',
     'zai-org/glm-5:thinking',
   ];
   readonly clarifai: readonly [

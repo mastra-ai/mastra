@@ -1,5 +1,92 @@
 # @mastra/core
 
+## 1.18.0-alpha.3
+
+### Minor Changes
+
+- Add version-aware code-agent lookup and override version lifecycle support. ([#14776](https://github.com/mastra-ai/mastra/pull/14776))
+
+  `Mastra.getAgent(name, version)` and `Mastra.getAgentById(id, version)` can now resolve draft or specific stored override versions when the editor package is configured, and throw a clear error when versioned lookup is requested without the editor.
+
+  `client.getAgent(id, version)` now carries version selection through agent detail and voice metadata requests, and the `Agent` resource now supports override version management methods including `listVersions`, `createVersion`, `getVersion`, `activateVersion`, `restoreVersion`, `deleteVersion`, and `compareVersions`.
+
+  `Agent.createVersion(...)` is intentionally limited to code-agent overrideable fields plus version metadata, rather than the full stored-agent configuration surface.
+
+### Patch Changes
+
+- Persist observational memory threshold settings across restarts and restore per-thread overrides. ([#14788](https://github.com/mastra-ai/mastra/pull/14788))
+
+- feat(memory): add recall-tool history retrieval for agents using observational memory ([#14567](https://github.com/mastra-ai/mastra/pull/14567))
+
+  Agents that use observational memory can now use the `recall` tool to retrieve history from past conversations, including raw messages, thread listings, and indexed observation-group memories.
+
+  Enable observational-memory retrieval when listing tools:
+
+  ```ts
+  const tools = await memory.listTools({
+    threadId: 'thread_123',
+    resourceId: 'resource_abc',
+    observationalMemory: {
+      retrieval: { vector: true, scope: 'resource' },
+    },
+  });
+  ```
+
+  With retrieval enabled, `recall` can browse the current thread, list threads for the current resource, and search indexed observation groups with source ranges.
+
+- Limit dynamically injected AGENTS.md reminders to 1000 estimated tokens by default and tell mastracode observational memory to ignore those ephemeral reminder messages. ([#14790](https://github.com/mastra-ai/mastra/pull/14790))
+
+- Fixed missing `TRequestContext` type parameter on `DynamicArgument` fields in `AgentConfig`. Previously, only `instructions` and `tools` correctly propagated the `requestContextSchema` type to their dynamic function callbacks. Now all dynamic fields — `model`, `workflows`, `workspace`, `agents`, `memory`, `scorers`, `defaultGenerateOptionsLegacy`, `defaultStreamOptionsLegacy`, `defaultOptions`, `defaultNetworkOptions`, `inputProcessors`, and `outputProcessors` — properly type `requestContext` based on the agent's `requestContextSchema`. ([#14582](https://github.com/mastra-ai/mastra/pull/14582))
+
+  **Before:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `unknown`
+    },
+  });
+  ```
+
+  **After:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `string`
+    },
+  });
+  ```
+
+- Fixed resuming suspended tool calls with `resumeStream` or `approveToolCall` failing with a TripWire when input processors (e.g. TokenLimiterProcessor) are enabled on the agent. ([#14561](https://github.com/mastra-ai/mastra/pull/14561))
+
+- Fixed streaming delegation to propagate output processor modifications to the supervisor. Previously, when a sub-agent had an output processor that modified text via `processOutputResult`, the supervisor received the raw LLM output instead of the processed text. The processed text was only saved to the sub-agent's memory. Now the supervisor correctly receives the output-processor-modified text from delegated sub-agents in the streaming path. ([#14731](https://github.com/mastra-ai/mastra/pull/14731))
+
+- Fixed MODEL_GENERATION and AGENT_RUN spans not reflecting model, provider, parameters, and availableTools overrides from input processors. Traces in Langfuse and other exporters now show the correct model info when a processor dynamically switches models. ([#14705](https://github.com/mastra-ai/mastra/pull/14705))
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
 ## 1.18.0-alpha.2
 
 ### Patch Changes

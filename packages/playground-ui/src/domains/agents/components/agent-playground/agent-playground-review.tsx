@@ -274,7 +274,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left sidebar */}
-      <div className="w-[280px] flex-shrink-0 border-r border-border1 flex flex-col overflow-hidden">
+      <div className="w-[280px] shrink-0 border-r border-border1 flex flex-col overflow-hidden">
         <div className="p-3 flex-1 overflow-y-auto">
           {/* Analyze + Tags */}
           <div className="flex items-center justify-between mb-2">

@@ -60,7 +60,7 @@ export const ButtonsVariant: Story = {
 
 export const TwoTabs: Story = {
   render: () => (
-    <Tabs defaultTab="input" className="w-[300px]">
+    <Tabs defaultTab="input" className="w-dropdown-max-height">
       <TabList>
         <Tab value="input">Input</Tab>
         <Tab value="output">Output</Tab>

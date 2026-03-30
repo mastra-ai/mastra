@@ -111,7 +111,7 @@ export function AgentEditSidebar({
   return (
     <div className="h-full flex flex-col">
       <Tabs defaultTab="identity" className="flex-1 min-h-0 flex flex-col">
-        <TabList className="flex-shrink-0">
+        <TabList className="shrink-0">
           <Tab value="identity">
             <Icon size="sm">
               <AgentIcon />
@@ -273,7 +273,7 @@ export function AgentEditSidebar({
 
       {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
-        <div className="flex-shrink-0 p-4">
+        <div className="shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
