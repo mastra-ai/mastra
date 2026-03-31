@@ -22,7 +22,6 @@ Metrics are routed through an internal event bus to the `DefaultExporter`, which
 Four conditions must be true for a metric to reach storage:
 
 1. The span is sampled (not dropped by the sampling strategy).
-1. The span survives all span output processors (none return `null`).
 1. `DefaultExporter` is configured as an exporter.
 1. The storage backend supports metrics (`DuckDB` or `InMemory`).
 
@@ -101,21 +100,21 @@ The correlation fields are grouped into four categories:
 
 **Entity hierarchy**
 
-- `entityType`, `entityId`, `entityName`: the entity that produced the metric (e.g. agent, workflow)
-- `parentEntityType`, `parentEntityId`, `parentEntityName`: the parent entity
-- `rootEntityType`, `rootEntityId`, `rootEntityName`: the root entity in the call chain
+- `entityType`, `entityId`, `entityName`: The entity that produced the metric (e.g. agent, workflow)
+- `parentEntityType`, `parentEntityId`, `parentEntityName`: The parent entity
+- `rootEntityType`, `rootEntityId`, `rootEntityName`: The root entity in the call chain
 
 **Identity**
 
-- `userId`, `organizationId`, `resourceId`: identity context from the request
-- `runId`, `sessionId`, `threadId`, `requestId`: correlation IDs
+- `userId`, `organizationId`, `resourceId`: Identity context from the request
+- `runId`, `sessionId`, `threadId`, `requestId`: Correlation IDs
 
 **Deployment**
 
-- `environment`: deployment environment (e.g. `production`, `staging`)
-- `source`: source identifier
-- `serviceName`: service name from the observability config
-- `experimentId`: experiment identifier, if applicable
+- `environment`: Deployment environment (e.g. `production`, `staging`)
+- `source`: Source identifier
+- `serviceName`: Service name from the observability config
+- `experimentId`: Experiment identifier, if applicable
 
 ### Why correlation helps with debugging
 
@@ -125,23 +124,17 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### No metrics are appearing
 
-- **Observability is configured**: verify that your `Mastra` instance has an `observability` config with at least one exporter.
-- **`DefaultExporter` is present**: other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
-- **Storage supports metrics**: only `DuckDB` and `InMemory` implement `batchCreateMetrics`. PostgreSQL, LibSQL, and MongoDB don't support metrics storage yet.
-- **Sampling isn't 0%**: if sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
+- **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
+- **`DefaultExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
+- **Storage supports metrics**: Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+- **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
 
 ### Duration metrics are missing
 
-- **Span has timestamps**: duration is calculated from `startTime` and `endTime`. If either is missing, the metric is skipped.
-- **Span type maps to a metric**: only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
-- **Span isn't filtered**: if a span output processor returns `null` for the span, metrics aren't extracted.
+- **Span has timestamps**: Duration is calculated from `startTime` and `endTime`. If either is missing, the metric is skipped.
+- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
 
 ### Token metrics are missing
 
-- **Span is a model generation**: token metrics are only emitted from `MODEL_GENERATION` spans.
-- **Provider reports usage**: the model provider must include `usage` data in its response. If usage is absent, no token metrics are emitted.
-
-### Metrics are visible in traces but not in your backend
-
-- **DuckDB is configured**: verify the DuckDB store is wired into the `domains.observability` slot of your composite store.
-- **In-memory isn't used in production**: `InMemory` storage loses all metrics on restart. Use a production database for persistent metrics storage.
+- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Provider reports usage**: The model provider must include `usage` data in its response. If usage is absent, no token metrics are emitted.
