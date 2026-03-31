@@ -4,9 +4,10 @@ This directory contains example agents demonstrating various Mastra features.
 
 ## Getting Started
 
-1. Install dependencies (from the repository root):
+1. From the `mastra` repository root, change into this example directory and install dependencies:
 
    ```bash
+   cd examples/agent
    pnpm install --ignore-workspace
    ```
 
