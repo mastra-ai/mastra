@@ -293,7 +293,7 @@ function AgentTracesToolbar({
                     filters.setScoreThreshold(n);
                   }
                 }}
-                className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-none focus:ring-1 focus:ring-accent1"
+                className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-hidden focus:ring-1 focus:ring-accent1"
               />
             </div>
           )}

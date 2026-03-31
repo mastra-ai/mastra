@@ -150,6 +150,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
         requestContextSchema,
         targetType,
         targetIds,
+        scorerIds,
       } = params as {
         name: string;
         description?: string;
@@ -159,6 +160,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
         requestContextSchema?: Record<string, unknown> | null;
         targetType?: TargetType;
         targetIds?: string[];
+        scorerIds?: string[];
       };
       const ds = await mastra.datasets.create({
         name,
@@ -169,6 +171,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
         requestContextSchema,
         targetType,
         targetIds,
+        scorerIds,
       });
       const details = await ds.getDetails();
       return details as any;
@@ -229,6 +232,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         tags,
         targetType,
         targetIds,
+        scorerIds,
       } = params as {
         name?: string;
         description?: string;
@@ -239,6 +243,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         tags?: string[];
         targetType?: TargetType;
         targetIds?: string[];
+        scorerIds?: string[] | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.update({
@@ -251,6 +256,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         tags,
         targetType,
         targetIds,
+        scorerIds,
       });
       return result as any;
     } catch (error) {

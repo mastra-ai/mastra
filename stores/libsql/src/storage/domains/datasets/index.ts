@@ -66,6 +66,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'tags', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'TEXT');
@@ -122,6 +123,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       tags: row.tags ? safelyParseJSON(row.tags) : undefined,
       targetType: (row.targetType as TargetType) || undefined,
       targetIds: row.targetIds ? safelyParseJSON(row.targetIds) : undefined,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
       version: row.version as number,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
@@ -191,6 +193,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
           targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
+          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -207,6 +210,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         requestContextSchema: input.requestContextSchema ?? undefined,
         targetType: input.targetType ?? undefined,
         targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -294,6 +298,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updates.push('targetIds = ?');
         values.push(args.targetIds === null ? null : JSON.stringify(args.targetIds));
       }
+      if (args.scorerIds !== undefined) {
+        updates.push('scorerIds = ?');
+        values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
+      }
 
       values.push(args.id);
 
@@ -316,6 +324,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         tags: (args.tags !== undefined ? args.tags : existing.tags) ?? undefined,
         targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? undefined,
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? undefined,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? undefined,
         updatedAt: new Date(now),
       };
     } catch (error) {

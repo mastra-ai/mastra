@@ -21,12 +21,12 @@ const defaultOptions: ExternalToast = {
   unstyled: true,
   classNames: {
     toast:
-      'bg-surface3 w-full h-auto rounded-lg gap-2 border border-border1 px-3 py-2 flex items-center justify-between pointer-events-auto shadow-card [&>[data-content]]:flex-1',
+      'bg-surface3 w-full h-auto rounded-lg gap-2 border border-border1 px-3 py-2 flex items-center justify-between pointer-events-auto shadow-card :data-content:flex-1',
     title: 'text-xs font-medium text-neutral5',
     description: 'text-xs text-neutral3',
     cancelButton:
-      '!bg-transparent hover:!bg-surface2 !border-none !rounded-md !p-1.5 !m-0 !text-neutral3 hover:!text-neutral6 shrink-0 transition-all',
-    actionButton: '!bg-white flex items-center justify-center font-medium !text-black order-last hover:opacity-80',
+      'bg-transparent! hover:bg-surface2! border-none! rounded-md! p-1.5! m-0! text-neutral3! hover:text-neutral6! shrink-0 transition-all',
+    actionButton: 'bg-white! flex items-center justify-center font-medium text-black! order-last hover:opacity-80',
   },
 };
 

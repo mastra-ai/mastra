@@ -26,6 +26,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   get needsReflection() {
     return false;
   }
+  get rethrowOnFailure() {
+    return false;
+  }
 
   protected override generateCycleId(): string {
     return this.cycleId;
@@ -47,6 +50,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     return this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
+      observabilityContext: this.opts.observabilityContext,
     });
   }
 
@@ -95,7 +99,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   async persist(processed: ProcessedObservation) {
     if (!processed.observations) return;
 
-    const { record, messages } = this.opts;
+    const { record, threadId, resourceId, messages } = this.opts;
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
     await this.storage.updateBufferedObservations({
       id: record.id,
@@ -112,6 +116,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       },
       lastBufferedAtTime: processed.lastObservedAt,
     });
+
+    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {

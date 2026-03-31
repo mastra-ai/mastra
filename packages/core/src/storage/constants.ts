@@ -388,6 +388,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   tags: { type: 'jsonb', nullable: true },
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
