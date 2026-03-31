@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -8,10 +8,12 @@ import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import { Combobox } from '@/ds/components/Combobox';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
@@ -29,6 +31,7 @@ interface DatasetDetailViewProps {
   datasetTargetType?: string | null;
   datasetTargetIds?: string[] | null;
   activeScorers?: string[];
+  datasetScorerIds?: string[] | null;
   onGenerate: () => void;
   onViewExperiment: (experimentId: string) => void;
 }
@@ -68,6 +71,7 @@ export function DatasetDetailView({
   datasetTargetType,
   datasetTargetIds,
   activeScorers = [],
+  datasetScorerIds = [],
   onGenerate,
   onViewExperiment,
 }: DatasetDetailViewProps) {
@@ -76,8 +80,52 @@ export function DatasetDetailView({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [itemsCollapsed, setItemsCollapsed] = useState(false);
   const [runsCollapsed, setRunsCollapsed] = useState(false);
+  const [scorersCollapsed, setScorersCollapsed] = useState(false);
+  const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
+  const [attachScorerSearch, setAttachScorerSearch] = useState('');
   const [selectedDatasetVersion, setSelectedDatasetVersion] = useState<string>('');
   const [selectedAgentVersion, setSelectedAgentVersion] = useState<string>('');
+
+  // Scorers for dataset attachment
+  const { data: allScorers } = useScorers();
+  const { updateDataset } = useDatasetMutations();
+
+  const attachedScorerIds = useMemo(() => new Set(datasetScorerIds ?? []), [datasetScorerIds]);
+
+  const attachedScorerEntries = useMemo(() => {
+    if (!allScorers) return [];
+    return Object.entries(allScorers).filter(([id]) => attachedScorerIds.has(id));
+  }, [allScorers, attachedScorerIds]);
+
+  const unattachedScorerEntries = useMemo(() => {
+    if (!allScorers) return [];
+    return Object.entries(allScorers).filter(([id]) => !attachedScorerIds.has(id));
+  }, [allScorers, attachedScorerIds]);
+
+  const handleAttachScorer = useCallback(
+    async (scorerId: string) => {
+      const newScorerIds = [...(datasetScorerIds ?? []), scorerId];
+      try {
+        await updateDataset.mutateAsync({ datasetId, scorerIds: newScorerIds });
+      } catch (error) {
+        toast.error('Failed to attach scorer');
+        throw error;
+      }
+    },
+    [datasetId, datasetScorerIds, updateDataset],
+  );
+
+  const handleDetachScorer = useCallback(
+    async (scorerId: string) => {
+      const newScorerIds = (datasetScorerIds ?? []).filter(id => id !== scorerId);
+      try {
+        await updateDataset.mutateAsync({ datasetId, scorerIds: newScorerIds });
+      } catch {
+        toast.error('Failed to detach scorer');
+      }
+    },
+    [datasetId, datasetScorerIds, updateDataset],
+  );
 
   const { data: items = [], setEndOfListElement, isFetchingNextPage } = useDatasetItems(datasetId);
   const { data: experimentsData, refetch: refetchExperiments } = useDatasetExperiments(datasetId);
@@ -260,9 +308,76 @@ export function DatasetDetailView({
         </div>
       </div>
 
-      {/* Items + Past runs */}
+      {/* Scorers + Items + Past runs */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1 min-h-0">
+          {/* Scorers section (collapsible) */}
+          <div className="border-b border-border1">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setScorersCollapsed(prev => !prev)}
+                className="flex-1 px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+              >
+                <Icon size="sm" className="text-neutral3">
+                  {scorersCollapsed ? <ChevronRight /> : <ChevronDown />}
+                </Icon>
+                <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+                  Scorers ({attachedScorerEntries.length})
+                </Txt>
+              </button>
+              {unattachedScorerEntries.length > 0 && (
+                <div className="pr-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                    Attach
+                  </Button>
+                </div>
+              )}
+            </div>
+            {!scorersCollapsed &&
+              (attachedScorerEntries.length === 0 ? (
+                <div className="px-4 py-4 text-center">
+                  <Txt variant="ui-xs" className="text-neutral3">
+                    No scorers attached to this dataset.
+                  </Txt>
+                  {unattachedScorerEntries.length > 0 && (
+                    <div className="mt-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                        Attach a scorer
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="divide-y divide-border1">
+                  {attachedScorerEntries.map(([id, scorer]) => {
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center justify-between px-4 py-1.5 hover:bg-surface3 transition-colors group"
+                      >
+                        <Txt variant="ui-xs" className="text-neutral5 truncate">
+                          {name}
+                        </Txt>
+                        <button
+                          type="button"
+                          onClick={() => handleDetachScorer(id)}
+                          aria-label={`Detach "${name}" from this dataset`}
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-neutral3 hover:text-red-500 p-0.5"
+                          title="Detach scorer"
+                        >
+                          <Icon size="sm">
+                            <X />
+                          </Icon>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+          </div>
+
           {/* Items section (collapsible) */}
           <div className="border-b border-border1">
             <button
@@ -376,6 +491,67 @@ export function DatasetDetailView({
           </div>
         </ScrollArea>
       </div>
+
+      {/* Attach Scorer Dialog */}
+      <Dialog
+        open={showAttachScorerDialog}
+        onOpenChange={open => {
+          setShowAttachScorerDialog(open);
+          if (!open) setAttachScorerSearch('');
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Attach Scorer to Dataset</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="max-h-[50vh] overflow-y-auto">
+            {unattachedScorerEntries.length === 0 ? (
+              <Txt variant="ui-sm" className="text-neutral3 py-4 text-center">
+                No scorers available to attach.
+              </Txt>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Search scorers..."
+                  value={attachScorerSearch}
+                  onChange={e => setAttachScorerSearch(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-none focus:ring-1 focus:ring-accent1"
+                />
+                {unattachedScorerEntries
+                  .filter(([id, scorer]) => {
+                    if (!attachScorerSearch) return true;
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
+                    return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
+                  })
+                  .map(([id, scorer]) => {
+                    const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
+                        onClick={async () => {
+                          try {
+                            await handleAttachScorer(id);
+                            toast.success(`Attached "${name}" to this dataset`);
+                            setShowAttachScorerDialog(false);
+                          } catch {
+                            // error toast already shown by handleAttachScorer
+                          }
+                        }}
+                      >
+                        <Txt variant="ui-sm" className="font-medium">
+                          {name}
+                        </Txt>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

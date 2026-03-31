@@ -31,6 +31,20 @@ interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
 }
 
+function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; providerId: string }): string {
+  const fallbackEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+  if (!envVars?.length) return fallbackEnvVar;
+
+  const suffixPreferences = ['_API_TOKEN', '_API_KEY', '_TOKEN', '_KEY', '_PAT'];
+
+  for (const suffix of suffixPreferences) {
+    const preferredEnvVar = envVars.find(envVar => envVar.endsWith(suffix));
+    if (preferredEnvVar) return preferredEnvVar;
+  }
+
+  return envVars[0] || fallbackEnvVar;
+}
+
 function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
   return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
     const key = envVarName.trim();
@@ -126,9 +140,13 @@ export class ModelsDevGateway extends MastraModelGateway {
           continue;
         }
 
-        // Get the API key env var from the provider info
-        // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        // Prefer auth-like env vars over identifiers already consumed by the URL template.
+        const apiKeyEnvVar =
+          PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
+          selectApiKeyEnvVar({
+            envVars: providerInfo.env,
+            providerId: normalizedId,
+          });
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage

@@ -104,6 +104,9 @@ html.light {
   --overlay: rgba(15, 23, 42, 0.45);
   --border1: rgba(15, 23, 42, 0.12);
   --border2: rgba(15, 23, 42, 0.2);
+
+  --color-thumb: #e2e8f0;
+  --color-thumb-hover: #d2d7df;
 }
 
 /* width */
@@ -118,15 +121,23 @@ html.light {
   border-radius: 5px;
 }
 
+html.light::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
+}
+
+html.light::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
+}
+
 /* Handle */
-::-webkit-scrollbar-thumb {
-  background: #303030;
+html::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
   border-radius: 4px;
 }
 
 /* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
 }
 
 @theme {
@@ -143,8 +154,8 @@ html.light {
   :root {
     --radius: 0.5rem;
     --top-bar-height: 40px;
-    --color-thumb: rgb(64, 64, 64);
-    --color-thumb-hover: rgb(96, 96, 96);
+    --color-thumb: #404040;
+    --color-thumb-hover: #606060;
     --color-track: transparent;
   }
 }

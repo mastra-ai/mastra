@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
-import { createTool } from '@mastra/core/tools';
+import { createTool, isValidationError } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
@@ -515,8 +515,21 @@ export class MCPServer extends MCPServerBase {
 
         const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
-        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
+
+        // Check if the tool builder returned a validation error (e.g. input failed Zod validation
+        // after passing the JSON Schema first-pass validation above)
+        if (isValidationError(result)) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' returned a validation error in ${duration}ms.`, {
+            error: result.message,
+          });
+          return {
+            content: [{ type: 'text', text: result.message }],
+            isError: true,
+          };
+        }
+
+        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
 
         const response: CallToolResult = { isError: false, content: [] };
