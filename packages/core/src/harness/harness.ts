@@ -9,6 +9,7 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -953,9 +954,31 @@ export class Harness<TState = {}> {
       if (meta?.reflectorModelId) {
         updates.reflectorModelId = meta.reflectorModelId;
       }
+      const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
+      const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
+
+      if (hasObservationThreshold) {
+        updates.observationThreshold = meta.observationThreshold;
+      }
+      if (hasReflectionThreshold) {
+        updates.reflectionThreshold = meta.reflectionThreshold;
+      }
 
       if (Object.keys(updates).length > 0) {
-        void this.setState(updates as unknown as Partial<TState>);
+        await this.setState(updates as unknown as Partial<TState>);
+      }
+
+      if (!hasObservationThreshold) {
+        const observationThreshold = this.getObservationThreshold();
+        if (observationThreshold !== undefined) {
+          await this.setThreadSetting({ key: 'observationThreshold', value: observationThreshold });
+        }
+      }
+      if (!hasReflectionThreshold) {
+        const reflectionThreshold = this.getReflectionThreshold();
+        if (reflectionThreshold !== undefined) {
+          await this.setThreadSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
+        }
       }
     } catch {
       this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -2510,7 +2533,7 @@ export class Harness<TState = {}> {
         const tool = ds.activeTools.get(event.toolCallId);
         if (tool) {
           tool.partialResult =
-            typeof event.partialResult === 'string' ? event.partialResult : JSON.stringify(event.partialResult);
+            typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
         }
         break;
       }

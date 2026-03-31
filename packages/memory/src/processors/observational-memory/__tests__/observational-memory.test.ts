@@ -12,6 +12,7 @@ import {
   sortThreadsByOldestMessage,
   combineObservationsForBuffering,
 } from '../message-utils';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -1038,7 +1039,7 @@ describe('Observer Agent Helpers', () => {
         reflection: { observationTokens: 1000 },
       });
 
-      (om.observer as any).observerAgent = {
+      vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
         stream: async (prompt: any) => {
           capturedPrompt = prompt;
           return {
@@ -1048,7 +1049,7 @@ describe('Observer Agent Helpers', () => {
             }),
           };
         },
-      };
+      });
 
       const message = createTestMessage('ignored', 'user');
       message.content = {
@@ -1096,6 +1097,63 @@ describe('Observer Agent Helpers', () => {
           filename: 'floorplan.pdf',
         }),
       );
+    });
+  });
+
+  describe('ModelByInputTokens runtime routing', () => {
+    it('resolves observer and reflector models at call time from token tiers', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: {
+          model: new ModelByInputTokens({
+            upTo: {
+              10: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+          messageTokens: 1,
+          bufferTokens: false,
+        },
+        reflection: {
+          model: new ModelByInputTokens({
+            upTo: {
+              1: 'openai/gpt-4o-mini',
+              100: 'openai/gpt-4o',
+            },
+          }),
+        },
+      });
+
+      const observerResolveSpy = vi.spyOn(om as any, 'resolveObservationModel');
+      const reflectorResolveSpy = vi.spyOn(om as any, 'resolveReflectionModel');
+
+      const observerCreateAgentSpy = vi.spyOn((om as any).observer, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<observations>obs</observations>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      const reflectorCreateAgentSpy = vi.spyOn((om as any).reflector, 'createAgent').mockReturnValue({
+        stream: async () => ({
+          getFullOutput: async () => ({
+            text: '<reflections>ref</reflections>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        }),
+      } as any);
+
+      const observerMessages = [createTestMessage('01234567890', 'user')];
+
+      await om.observer.call(undefined, observerMessages);
+      await (om as any).reflector.call('01234567890');
+
+      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
     });
   });
 
@@ -1599,15 +1657,16 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('buildReflectorPrompt', () => {
-    it('should include observations to reflect on with ephemeral anchor IDs', () => {
+    it('should include plain observations to reflect on', () => {
       const observations = '- 🔴 User is building a React app';
       const prompt = buildReflectorPrompt(observations);
 
       expect(prompt).toContain('OBSERVATIONS TO REFLECT ON');
-      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+      expect(prompt).toContain('- 🔴 User is building a React app');
+      expect(prompt).not.toContain('[O1]');
     });
 
-    it('should render grouped observations as markdown sections for reflection', () => {
+    it('should strip observation group wrappers before building the reflection prompt', () => {
       const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -1618,12 +1677,12 @@ describe('Reflector Agent Helpers', () => {
 
       const prompt = buildReflectorPrompt(observations);
 
-      expect(prompt).toContain('## Group `group-a`');
-      expect(prompt).toContain('_range: `m1:m2`_');
-      expect(prompt).toContain('## Group `group-b`');
-      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
-      expect(prompt).toContain('[O2] - 🟡 Needs help with auth flow');
-      expect(prompt).not.toContain('[O1-N1] ## Group `group-a`');
+      expect(prompt).toContain('- 🔴 User is building a React app');
+      expect(prompt).toContain('- 🟡 Needs help with auth flow');
+      expect(prompt).not.toContain('[O1]');
+      expect(prompt).not.toContain('## Group `group-a`');
+      expect(prompt).not.toContain('_range: `m1:m2`_');
+      expect(prompt).not.toContain('<observation-group');
     });
 
     it('should include manual prompt guidance if provided', () => {
@@ -1726,9 +1785,9 @@ _range: \`ignored-by-reconciler\`_
       expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
         {
           id: 'merged-project',
-          range: 'm1:m2,m3:m4',
+          range: 'm1:m4',
+          kind: 'reflection',
           content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
-          sourceGroupIds: ['group-a', 'group-b'],
         },
       ]);
     });
@@ -1748,7 +1807,7 @@ _range: \`ignored-by-reconciler\`_
 - 🟡 Needs help with auth flow`;
 
       expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
-        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+        .toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -1804,8 +1863,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations)
-        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -1826,9 +1884,78 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" source-group-ids="group-a">
+      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" kind="reflection">
 - 🔴 User is building a React app
 </observation-group>`);
+    });
+
+    it('should compact merged ranges across already-merged source groups', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-c" range="m3:m4" kind="reflection">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+[O2] - 🟡 Needs help with auth flow
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+
+    it('should compact a real reflected group with bloated legacy reflection metadata', () => {
+      const sourceObservations = `<observation-group id="b02a82c879fc7470" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,70ed3b4a-061f-4d54-8d3b-1c647359ea9b:0087f0cd-6ee0-44dc-9b19-90fb2775dbd4,48e1dfec-5db1-488f-a0fd-11d49ac6e185:f90a7382-a022-4f4b-ad62-6993eea9efc5,e783ca03-1e88-4d37-a613-9d3ec0247d3c:2892a09a-351d-4ed0-b875-a05f06320434,98b8a7a1-a81f-4fa2-b573-eff69a0f69db:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,2d7b784d-b638-4aac-9528-95e2ebec7edb:f08cf1f9-93e0-4182-a59b-9e360917a8e8,f8b860b4-67d7-4b9c-b5aa-2943a5ddb84a:9fe9dbe7-1d0b-4cdb-b318-23a1dda318ec,2c35b1b5-f59d-4bb6-8f4a-f8dd9d2ecd9c:cb0a9f1c-f2eb-4e11-af52-faab1be1a5d9,5719cf4a-e597-423d-9715-5f6fc0b7fb9f:ce3ffdf6-7cb1-494d-9271-fe52bbc1c8d1,26114b9d-dafd-4da9-941f-6b2a03f652ae:8f1fda4f-f118-4756-ad69-41d13990500c,f84edc84-cc70-49be-a373-4dbb53a9e73d:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,a15c130d-25fc-4545-87c6-4a86fd6b2e03:b82a6a00-d723-438b-84e4-a8646b74c1ad,75b274fb-6284-47ba-b68f-b9fad548453b:3847b369-5406-47da-9a84-c6776709e74c,b25363d6-dc79-4f72-b3cb-2b6012b0f1ed:69c2b306-3f53-4d1d-aaee-8644a5702952,8c2353e5-53db-475e-8ffd-cde8c4705583:e2c93ad7-922d-49d3-8007-354919b3e790,c70381df-6870-4d60-91ec-74a8f98df96f:ad4f0164-9213-42f8-a1ab-e0597a20e946,abf4e97e-f532-4e9e-87ca-9af97b6aa76e:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,092065a5-351d-4b16-abac-65a1c8440681:79c7804e-b9b7-43ec-9318-fc22e5a662be,b03dbc3b-370a-4636-8cad-5be7cc5f2ccb:cd864363-1621-4567-aaed-e7e646ee9a70,5f2dc707-5d2e-4854-8f86-8ddbc520bc33:acbb10c8-6b57-4868-964a-1671b9b12185,7bf9339b-5eef-41e7-9470-4187ff2b2f13:63b60691-5cd0-47db-a03e-618c733994ca,59db30e7-4759-4ed1-a059-5bbb9cdb5cf4:ce02ea43-359f-44ca-91f2-b5db4074cbf1,8f4ec250-a8a3-4803-ae48-2424979514b9:1ab9ef15-da42-4527-8672-1d3209dd90a5,c156c8a3-3f4a-4f0c-986a-7ae9a9c1b5ed:10ca26ac-10e7-4a47-809e-d0e9e6cd8f3e,2fa74f4a-c8b9-48c8-a8b6-2a129b3c638c:2bac851a-ba93-4dd1-9bfb-96f9e9c26911,97b91de1-922f-4acf-9423-3d8732716b3a:a8329f20-350b-4215-ba8c-df08dcf7b901,15bc318d-ccd1-43bc-8258-55d6b48e6371:96e4311d-a07e-4d37-a885-3354337e010b,ee82cec7-2ef4-437d-b85c-c0dc3ce0c422:2d4a6e84-b92d-4091-84fe-c6d1c6c394d1,cf4e3a6f-da92-4b8f-a34b-ab2fc44fd4c7:9225e7ed-f8b5-421f-a6cc-9d01da6b7617,cd2e29ee-7567-43c4-a6ac-3aed94620e9e:18956442-dc45-4388-b2db-76f4bee7293e,40dca7fa-bdfd-4111-9455-bc5b0671bc8b:85ded820-3c56-453a-9733-c63072249276,ceb18582-13dc-479c-979b-9c9487a217a4:ae7d5315-8bab-49b5-8da7-70c76eab652b,32bf0848-5611-4dbe-a67c-0d903f4aaf31:27f2cb5b-d760-4089-8f01-00bd017046ec,3c4d9e9c-678b-4a8e-9c94-5cdca17d470f:82ef6cc8-9ef5-4834-8867-0b823b1f6627,34f37394-c3ce-43c0-90b2-f9ebeea0e85b:0f7b400b-61a9-46a1-b93e-d90aa880aff3,44991d14-dc65-4958-8df6-16698e08fe86:7eba5066-ca89-451a-8efb-3862a8333825,140178a1-bafe-49e0-89cf-0dd3658b752a:451f2170-7b70-475c-ab64-41d323f91606,6595b5c3-b509-4376-a421-495f894eeee2:f685b009-7033-4d1d-9318-ccdc0ad9bcb4,3a7b5792-5c75-41f0-9e66-f8634a3eeea4:efe5c434-5658-44a3-a0dc-f01faecb168a,11095a53-4036-4dc9-b13d-aff0772e6749:b1acd62a-4a20-4a9b-9f9d-90f9b2d5d148,451f2170-7b70-475c-ab64-41d323f91606:451f2170-7b70-475c-ab64-41d323f91606,00834e29-d8c9-4a3d-bfa1-533bd11eb31d:55cd0283-6ffd-464e-8572-455811a7d61c,ea4f0ef8-351c-4766-a341-9c0dc27c8587:cce1f4fc-4316-4ff6-9030-3016fc6f6d7c,74aba1a1-b27d-4a8c-b8fc-d7ec7d36f879:3fca3703-722f-4ef5-be57-a96b1085af18,23a07ab2-4904-46d9-9132-5fa17f044e49:bbeed355-22fc-4ef9-aead-386d8f46e067,6bbac5fc-337b-4717-8d2c-d1fdc5a07444:299913d7-23c1-4606-9c2c-d5e25247c696,14770d82-6855-441f-9f8d-7a2e9fcbd44c:a60b87a2-f93b-45bb-b153-b9b7b72a38ff,bbeed355-22fc-4ef9-aead-386d8f46e067:bbeed355-22fc-4ef9-aead-386d8f46e067,9025d90c-e274-4fa7-8fa3-378073863d80:0d5fb60c-0d91-46d2-b791-23c651362de2,168a713a-2049-413e-a122-d424f642070d:e1e4f158-eb82-45e5-a40c-f1f82f90d117,32863afc-ade2-4eda-9667-2a24de5e7ce4:26cbe75a-8fe0-4a26-ad21-44da25128f1c,8cd79662-308c-48e0-bfea-3da0f5289ff7:19563f5e-a3c8-44a8-b5c6-5965d0015337,c38f2399-5dad-4fee-be26-f5e34b2ac729:320ceb2c-71df-41d0-a742-3e46867ae5d4,ef6e0468-2982-4d4a-b0d7-b8db28984007:99716983-505f-4bba-981f-4642ddd086d8,6fd34cf6-7867-47d8-83f8-332b3c62495d:f3523cc5-3f60-40de-9de2-5c49ded97b52,9b599436-f4b4-482e-be11-f260e184d2d3:6a792350-3dfd-4cf7-bd99-52da42d7f17b,28387d0a-ef5b-4f83-85e4-22735fde7bd2:b9693350-a964-4e16-9c6b-2a4830fec1fc,be382e37-000b-420a-a184-450834f2ff7e:0d703290-a672-499a-9873-175e845bb2aa,962b3951-db61-4184-ba1d-90edcff6e87e:1a020c21-ff6b-47e6-8f20-ae6d0ab33826,2c774241-b800-4f09-9136-53315749b4ce:46072882-5860-4fe8-a9f4-a3802734f323,0f6402fa-cb17-4c16-801c-6e084d38ebab:922f645b-eff7-4233-bf2a-fff33f74b012,29140929-2ab8-451d-be23-0939afa7b937:5d3e015d-cd1c-4f85-8555-4ff0309986a4,04ee483e-e589-416d-b250-84ff6bbca6fb:b354a453-1074-4e55-95bd-2e7eed1a87af,8455bbac-8015-4017-8d77-daac6d5eccf7:a172fe73-2e02-4d19-9b68-8025a50f1b95">
+Date: Mar 25, 2026
+* 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+* 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+* 🟡 Investigation centered on savePerStep and finish-time assembly.
+</observation-group>`;
+      const output = `
+<observations>
+## Group \
+\`message-saving-debug\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] Date: Mar 25, 2026
+[O2] * 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+[O3] * 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+[O4] * 🟡 Investigation centered on savePerStep and finish-time assembly.
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations)
+        .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
+Date: Mar 25, 2026
+* 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+* 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+* 🟡 Investigation centered on savePerStep and finish-time assembly.
+</observation-group>`);
+
+      expect(parseObservationGroups(result.observations)).toEqual([
+        {
+          id: 'message-saving-debug',
+          range: '7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95',
+          kind: 'reflection',
+          content: `Date: Mar 25, 2026
+* 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
+* 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
+* 🟡 Investigation centered on savePerStep and finish-time assembly.`,
+        },
+      ]);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -3476,7 +3603,7 @@ Ask about favorite vegetarian dishes
       scope: 'thread',
     });
 
-    (om.observer as any).observerAgent = {
+    vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
         return {
@@ -3486,7 +3613,7 @@ Ask about favorite vegetarian dishes
           }),
         };
       },
-    };
+    });
 
     const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
     attachmentMessage.content = {
@@ -13071,5 +13198,768 @@ describe('Observer output threadTitle propagation', () => {
     });
     expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
     expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+  });
+});
+
+// =============================================================================
+// Message Ordering Regressions
+// =============================================================================
+
+describe('Message ordering regressions', () => {
+  /**
+   * Sets up a common scenario for ordering / persistence tests.
+   *
+   * Creates storage, seeds a thread + history messages + OM record,
+   * builds an ObservationalMemory + processor, and exposes helpers
+   * for adding messages and running steps.
+   */
+  async function setupOrderingScenario(opts: {
+    messageTokens: number;
+    bufferTokens?: number | false;
+    observerDelay?: number;
+  }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = `ordering-${Math.random().toString(36).slice(2)}`;
+    const resourceId = 'ordering-resource';
+
+    const delay = opts.observerDelay ?? 0;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        if (delay > 0) await new Promise(r => setTimeout(r, delay));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🟡 Observed user request\n</observations>\n<current-task>Handle user request</current-task>\n<suggested-response>Sure!</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // Resolve bufferTokens config
+    const bufferTokensConfig =
+      opts.bufferTokens === undefined || opts.bufferTokens === false ? false : opts.bufferTokens;
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: opts.messageTokens,
+        ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+      },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Ordering Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Seed some existing messages so OM thresholds can be met
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
+    const state: Record<string, unknown> = {};
+    const capturedParts: any[] = [];
+    const mockWriter = { custom: async (part: any) => capturedParts.push(part) };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    let messageList = new MessageList({ threadId, resourceId });
+    let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    let messageCounter = 0;
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      ctx.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
+      return ctx;
+    };
+
+    function addUserMessage(text = 'User question') {
+      const id = `user-${++messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text }] },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'input',
+      );
+      return id;
+    }
+
+    function addAssistantMessage(text = 'Assistant response') {
+      const id = `assistant-${++messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text }] },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'response',
+      );
+      return id;
+    }
+
+    function addToolCallMessage(toolName = 'search', toolCallId = `tc-${++messageCounter}`) {
+      const id = `tool-call-${messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId,
+                  toolName,
+                  state: 'result',
+                  args: { query: 'test' },
+                  result: { success: true },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'response',
+      );
+      return id;
+    }
+
+    async function runStep(stepNumber: number) {
+      await processor.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      });
+    }
+
+    async function finalize() {
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+        result: {} as any,
+        retryCount: 0,
+      });
+      // Wait for async buffering to settle
+      const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+      if (ops.size > 0) {
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    async function getStoredMessages() {
+      const result = await storage.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      return result.messages;
+    }
+
+    async function getOMRecord() {
+      return om.getRecord(threadId, resourceId);
+    }
+
+    async function getOMMetadata() {
+      const thread = await storage.getThreadById({ threadId });
+      return ((thread?.metadata as any)?.mastra?.om ?? {}) as any;
+    }
+
+    function resetForNewTurn() {
+      Object.keys(state).forEach(k => delete state[k]);
+      capturedParts.length = 0;
+      messageList = new MessageList({ threadId, resourceId });
+      processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    }
+
+    return {
+      storage,
+      om,
+      threadId,
+      resourceId,
+      state,
+      capturedParts,
+      messageList,
+      processor,
+      addUserMessage,
+      addAssistantMessage,
+      addToolCallMessage,
+      runStep,
+      finalize,
+      getStoredMessages,
+      getOMRecord,
+      getOMMetadata,
+      resetForNewTurn,
+      MessageList,
+      RequestContext,
+      get currentMessageList() {
+        return messageList;
+      },
+    };
+  }
+
+  // ─── Test 1: observation should not produce side effects during processOutputResult ───
+
+  it('1 — observation should not produce side effects during processOutputResult', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    s.addUserMessage('Tell me about React');
+    await s.runStep(0);
+    s.addAssistantMessage('React is a UI library.');
+    await s.finalize();
+
+    const record = await s.getOMRecord();
+    // observation must NOT have fired during finalize
+    expect(record?.activeObservations ?? '').toBe('');
+    expect(record?.lastObservedAt).toBeUndefined();
+
+    const omMetadata = await s.getOMMetadata();
+    expect(omMetadata?.currentTask).toBeUndefined();
+    expect(omMetadata?.suggestedResponse).toBeUndefined();
+  });
+
+  // ─── Test 2: deferred observation should happen at beginning of next turn ───
+
+  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    // Turn 1: single step
+    s.addUserMessage('Hello');
+    await s.runStep(0);
+    s.addAssistantMessage('Hi there');
+    await s.finalize();
+
+    // After turn 1: no observation yet
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations ?? '').toBe('');
+    expect(record?.lastObservedAt).toBeUndefined();
+
+    // Turn 2: multi-step (step 0 + step 1 triggers observation)
+    s.resetForNewTurn();
+    s.addUserMessage('Follow-up');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('Here are results');
+    await s.finalize();
+
+    // After turn 2 step 1: observation should have fired
+    record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+    expect(record?.lastObservedAt).toBeDefined();
+  });
+
+  // ─── Test 2b: next turn step 0 activates buffered chunks and loads correct context ───
+
+  it('2b — next turn step 0 activates buffered chunks and loads correct context', async () => {
+    // Use messageTokens: 3000, bufferTokens: 500. Seed provides ~2100 tokens
+    // (below observation threshold but above buffer threshold). Turn 1 user
+    // message adds ~1100 tokens. By turn 2, total > 3000 triggers activation.
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+    const longFiller = 'word '.repeat(800);
+
+    // Turn 1: triggers buffering (fire-and-forget)
+    s.addUserMessage(`Tell me about TypeScript. ${longFiller}`);
+    await s.runStep(0);
+    s.addAssistantMessage('TypeScript is great.');
+    await s.finalize();
+
+    // After turn 1: buffered chunks should exist, no observation yet
+    const status1 = await s.om.getStatus({
+      threadId: s.threadId,
+      resourceId: s.resourceId,
+      messages: s.currentMessageList.get.all.db(),
+    });
+    expect(status1.bufferedChunkCount).toBeGreaterThanOrEqual(1);
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations ?? '').toBe('');
+
+    // Turn 2 step 0: should activate buffered chunks
+    s.resetForNewTurn();
+    s.addUserMessage(`What about generics? ${longFiller}`);
+    await s.runStep(0);
+
+    // After activation: activeObservations populated, bufferCount drops
+    record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+
+    const status2 = await s.om.getStatus({
+      threadId: s.threadId,
+      resourceId: s.resourceId,
+    });
+    expect(status2.bufferedChunkCount).toBe(0);
+
+    // Turn 2's user message should be present in the live messageList
+    const allMsgs = s.currentMessageList.get.all.db();
+    const turn2User = allMsgs.find(m => {
+      const content = m.content as any;
+      return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('What about generics?'));
+    });
+    expect(turn2User).toBeDefined();
+
+    // Turn 1's user message must survive in storage even if removed from live list by activation
+    const storedAfterActivation = await s.getStoredMessages();
+    expect(
+      storedAfterActivation.some(m => {
+        const content = m.content as any;
+        return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('Tell me about TypeScript'));
+      }),
+    ).toBe(true);
+
+    // Messages should be in chronological order
+    for (let i = 1; i < allMsgs.length; i++) {
+      expect(new Date(allMsgs[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(allMsgs[i - 1]!.createdAt).getTime(),
+      );
+    }
+  });
+
+  // ─── Test 3: observer failure should not lose messages ───
+
+  it('3 — observer failure during sync observation should not lose previously persisted messages', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'fail-test-thread';
+    const resourceId = 'fail-test-resource';
+
+    const failingModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        throw new Error('Observer model failure');
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: failingModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Fail Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Seed messages so OM token threshold is exceeded at step > 0
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
+    const state: Record<string, unknown> = {};
+    const mockWriter = { custom: async () => {} };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      ctx.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
+      return ctx;
+    };
+
+    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    let ml = new MessageList({ threadId, resourceId });
+    let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    ml.add(
+      {
+        id: 'fail-user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello world' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+    await processor.processInputStep({
+      messageList: ml,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: failingModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    ml.add(
+      {
+        id: 'fail-assistant-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+    await processor.processOutputResult({
+      messageList: ml,
+      messages: ml.get.response.db(),
+      requestContext: makeCtx(),
+      state,
+      abort,
+      result: {} as any,
+      retryCount: 0,
+    });
+
+    // Verify Turn 1 messages persisted
+    let result = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+
+    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    Object.keys(state).forEach(k => delete state[k]);
+    ml = new MessageList({ threadId, resourceId });
+    processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    ml.add(
+      {
+        id: 'fail-user-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Follow-up question' }] },
+        createdAt: new Date('2025-01-01T10:02:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+    await processor.processInputStep({
+      messageList: ml,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: failingModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    // Step 1: threshold exceeded → sync observation fires → model throws → abort
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
+
+    // Despite observation failure, all previously persisted messages must survive
+    result = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    // Turn 2's user message was saved at step 1 *before* observation ran
+    expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
+  });
+
+  // ─── Test 4: all messages present in storage after processOutputResult ───
+
+  it('4 — all messages present in storage immediately after processOutputResult', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    s.addUserMessage('Question about testing');
+    await s.runStep(0);
+    s.addAssistantMessage('Here is the answer about testing.');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+    const runtimeMessages = s.currentMessageList.get.all.db();
+
+    // Every non-system message from runtime must exist in storage by exact ID
+    for (const msg of runtimeMessages) {
+      if (msg.role === 'system') continue;
+      const inStorage = stored.find(sm => sm.id === msg.id);
+      expect(inStorage).toBeDefined();
+    }
+  });
+
+  // ─── Test 5: multi-step turn persists tool calls in correct order ───
+
+  it('5 — multi-step turn with tool calls persists all messages in correct order', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000 });
+
+    // Step 0: user + tool call
+    s.addUserMessage('Search for React hooks');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+
+    // Step 1: observation fires, then final text
+    await s.runStep(1);
+    s.addAssistantMessage('Here are the React hooks results.');
+
+    // Step 2: optional extra step to trigger more processing
+    await s.runStep(2);
+    s.addAssistantMessage('Anything else?');
+
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // User message must exist
+    expect(stored.some(m => m.role === 'user')).toBe(true);
+
+    // At least one assistant message should exist
+    expect(stored.some(m => m.role === 'assistant')).toBe(true);
+
+    // Tool invocations appear within assistant messages (MessageMerger merges consecutive
+    // assistant messages). Check that any tool-invocation parts come before the final text.
+    const allParts: Array<{ type: string; msgIdx: number; partIdx: number }> = [];
+    for (let mi = 0; mi < stored.length; mi++) {
+      const msg = stored[mi]!;
+      if (msg.role !== 'assistant') continue;
+      const content = msg.content as any;
+      if (content?.parts) {
+        for (let pi = 0; pi < content.parts.length; pi++) {
+          allParts.push({ type: content.parts[pi].type, msgIdx: mi, partIdx: pi });
+        }
+      }
+    }
+
+    const lastToolIdx = allParts.map(p => p.type).lastIndexOf('tool-invocation');
+    const lastTextIdx = allParts.map(p => p.type).lastIndexOf('text');
+    expect(lastToolIdx).not.toBe(-1);
+    expect(lastTextIdx).not.toBe(-1);
+    expect(lastToolIdx).toBeLessThan(lastTextIdx);
+
+    // All message IDs should be unique
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 6: DB reload order matches runtime order after buffering ───
+
+  it('6 — DB reload order matches runtime order after buffering seals messages', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    s.addUserMessage('First question');
+    await s.runStep(0);
+    s.addAssistantMessage('First answer');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // Messages in storage should be in chronological order
+    for (let i = 1; i < stored.length; i++) {
+      expect(new Date(stored[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(stored[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // User and assistant should both be present
+    expect(stored.some(m => m.role === 'user')).toBe(true);
+    expect(stored.some(m => m.role === 'assistant')).toBe(true);
+  });
+
+  // ─── Test 7: no duplicate messages after buffer races ───
+
+  it('7 — no duplicate messages after buffer races with per-step save', async () => {
+    const s = await setupOrderingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      observerDelay: 10,
+    });
+
+    // Multi-step turn: user → tool call → assistant → assistant
+    s.addUserMessage('Search and summarize');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('Summary of results');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // No duplicate IDs
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 8: second turn loads correct messages after first turn ───
+
+  it('8 — second turn loads correct messages from storage after first turn', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    // Turn 1: multi-step
+    s.addUserMessage('First turn question');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('First turn answer.');
+    await s.finalize();
+
+    // Turn 2: fresh messageList and processor (mirrors production)
+    s.resetForNewTurn();
+    s.addUserMessage('Second turn question');
+    await s.runStep(0);
+
+    // After step 0 of turn 2, the messageList should have loaded history
+    const allMsgs = s.currentMessageList.get.all.db();
+    const userMsgs = allMsgs.filter(m => m.role === 'user');
+
+    // If observation fired in turn 1 step 1, then getContext may filter older messages.
+    // Either way, the turn 2 user message MUST be present.
+    expect(userMsgs.length).toBeGreaterThanOrEqual(1);
+    const turn2User = userMsgs.find(m => {
+      const content = m.content as any;
+      return content?.parts?.some((p: any) => p.text?.includes('Second turn question'));
+    });
+    expect(turn2User).toBeDefined();
+
+    // Messages must be in chronological order
+    for (let i = 1; i < allMsgs.length; i++) {
+      expect(new Date(allMsgs[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(allMsgs[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // No duplicate IDs
+    const ids = allMsgs.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 9: sealed ordering with real OM primitives ───
+
+  it('9 — sealed messages maintain correct chronological order after buffering', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    // Turn 1: trigger buffering (which seals messages)
+    s.addUserMessage('Tell me about sealed messages');
+    await s.runStep(0);
+    s.addAssistantMessage('Sealed messages are persisted early.');
+    await s.finalize();
+
+    // Turn 2: load from storage and verify ordering
+    s.resetForNewTurn();
+    s.addUserMessage('Continue the discussion');
+    await s.runStep(0);
+
+    const stored = await s.getStoredMessages();
+
+    // Messages must be in chronological order
+    for (let i = 1; i < stored.length; i++) {
+      expect(new Date(stored[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(stored[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // No duplicate IDs
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

@@ -12,7 +12,7 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, executeWithContextSync, SpanType } from '../../../observability';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -754,6 +754,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             Object.assign(currentStep, processInputStepResult);
 
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
+              modelSpanTracker.updateGeneration({
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                attributes: {
+                  ...(modelChanged
+                    ? {
+                        model: currentStep.model.modelId,
+                        provider: currentStep.model.provider,
+                      }
+                    : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
+                },
+              });
+            }
+
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
+              const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
+              if (agentSpan) {
+                const toolNames = activeToolsChanged
+                  ? (processInputStepResult.activeTools as string[])
+                  : currentStep.tools
+                    ? Object.keys(currentStep.tools)
+                    : undefined;
+                if (toolNames !== undefined) {
+                  agentSpan.update({
+                    attributes: {
+                      availableTools: toolNames,
+                    },
+                  });
+                }
+              }
+            }
+
             // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
             // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
             if (processInputStepResult.tools && currentStep.tools) {
@@ -785,6 +826,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
+              logger?.warn('Streaming input processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
               // Emit tripwire chunk to the stream
               safeEnqueue(controller, {
                 type: 'tripwire',
@@ -1210,6 +1256,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         } catch (error) {
           if (error instanceof TripWire) {
             processOutputStepTripwire = error;
+            logger?.warn('Output step processor tripwire triggered', {
+              reason: error.message,
+              processorId: error.processorId,
+              retry: error.options?.retry,
+            });
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {

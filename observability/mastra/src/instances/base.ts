@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -74,6 +74,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       includeInternalSpans: config.includeInternalSpans ?? false,
       requestContextKeys: config.requestContextKeys ?? [],
       serializationOptions: config.serializationOptions,
+      logging: config.logging,
     };
 
     // Initialize cardinality filter for metrics (uses user config or defaults)
@@ -352,13 +353,20 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * `observabilityContext.loggerVNext` is a real logger instead of no-op.
    */
   getLoggerContext(span?: AnySpan): LoggerContext {
+    if (this.config.logging?.enabled === false) {
+      return noOpLoggerContext;
+    }
+
     const correlationContext = span?.getCorrelationContext?.();
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new LoggerContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
       correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
+      minLevel: this.config.logging?.level,
     });
   }
 
@@ -372,6 +380,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
       correlationContext,
       metadata,
       cardinalityFilter: this.cardinalityFilter,
@@ -386,6 +396,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitObservabilityEvent(event: ObservabilityEvent): void {
     this.observabilityBus.emit(event);
+  }
+
+  /**
+   * Internal hook used by RecordedTrace/RecordedSpan hydration to route
+   * non-tracing annotation events back through the normal exporter pipeline.
+   */
+  __emitRecordedEvent(event: ObservabilityEvent): void {
+    this.emitObservabilityEvent(event);
   }
 
   // ============================================================================

@@ -135,7 +135,7 @@ function StatusBadge({ value, variant }: { value: string | number; variant: 'war
   return (
     <span
       className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-[1.25rem]',
+        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-5',
         variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >
