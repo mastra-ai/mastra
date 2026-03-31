@@ -166,6 +166,8 @@ export interface AgentLegacyCapabilities {
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
   tracingPolicy?: any;
+  /** Resolved version ID from stored config */
+  resolvedVersionId?: string;
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
@@ -264,6 +266,7 @@ export class AgentLegacyHandler {
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
             ],
+            ...(this.capabilities.resolvedVersionId ? { resolvedVersionId: this.capabilities.resolvedVersionId } : {}),
           },
           metadata: {
             runId,

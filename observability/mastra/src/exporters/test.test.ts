@@ -517,11 +517,9 @@ function createMockLogEvent(overrides: Partial<ExportedLog> = {}): LogEvent {
     type: 'log',
     log: {
       timestamp: new Date(),
+      traceId: 'trace-123',
       level: 'info',
       message: 'test log message',
-      correlationContext: {
-        traceId: 'trace-123',
-      },
       ...overrides,
     },
   };
@@ -601,9 +599,9 @@ describe('TestExporter - Log Events', () => {
   });
 
   it('should filter logs by traceId', async () => {
-    await exporter.onLogEvent(createMockLogEvent({ correlationContext: { traceId: 'trace-A' }, message: 'log A' }));
-    await exporter.onLogEvent(createMockLogEvent({ correlationContext: { traceId: 'trace-B' }, message: 'log B' }));
-    await exporter.onLogEvent(createMockLogEvent({ correlationContext: { traceId: 'trace-A' }, message: 'log A2' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-A', message: 'log A' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-B', message: 'log B' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-A', message: 'log A2' }));
 
     const logsA = exporter.getLogsByTraceId('trace-A');
     expect(logsA).toHaveLength(2);
@@ -798,7 +796,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
 
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
-    await exporter.onLogEvent(createMockLogEvent({ correlationContext: { traceId }, message: 'correlated log' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId, message: 'correlated log' }));
     await exporter.onScoreEvent(createMockScoreEvent({ traceId, scorerId: 'accuracy' }));
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId }));
 
@@ -816,7 +814,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
   it('should include trace IDs from all signal types in getTraceIds', async () => {
     const span = createMockSpan({ traceId: 'trace-from-span' });
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
-    await exporter.onLogEvent(createMockLogEvent({ correlationContext: { traceId: 'trace-from-log' } }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-from-log' }));
     await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-from-score' }));
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId: 'trace-from-feedback' }));
 

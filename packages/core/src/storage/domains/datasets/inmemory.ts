@@ -81,6 +81,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       requestContextSchema: input.requestContextSchema,
       targetType: input.targetType,
       targetIds: input.targetIds,
+      scorerIds: input.scorerIds ?? null,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -112,6 +113,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       tags: args.tags !== undefined ? args.tags : existing.tags,
       targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
       targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
+      scorerIds: args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds,
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
