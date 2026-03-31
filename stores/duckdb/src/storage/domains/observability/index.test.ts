@@ -903,6 +903,94 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores[0]!.source).toBe('manual');
       expect(filtered.scores[0]!.scoreSource).toBe('manual');
     });
+
+    it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'score-olap-1',
+            scorerId: 'relevance',
+            scoreSource: 'manual',
+            score: 0.8,
+            experimentId: 'exp-1',
+            entityName: 'agent-a',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:20:00Z'),
+            traceId: 'score-olap-2',
+            scorerId: 'relevance',
+            scoreSource: 'manual',
+            score: 0.6,
+            experimentId: 'exp-2',
+            entityName: 'agent-b',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:40:00Z'),
+            traceId: 'score-olap-3',
+            scorerId: 'relevance',
+            scoreSource: 'automated',
+            score: 0.2,
+            experimentId: 'exp-3',
+            entityName: 'agent-c',
+          },
+        ],
+      });
+
+      expect(
+        await storage.getScoreAggregate({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+        }),
+      ).toEqual({ value: 0.7 });
+
+      expect(
+        await storage.getScoreBreakdown({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+          groupBy: ['experimentId'],
+        }),
+      ).toEqual({
+        groups: [
+          { dimensions: { experimentId: 'exp-1' }, value: 0.8 },
+          { dimensions: { experimentId: 'exp-2' }, value: 0.6 },
+        ],
+      });
+
+      expect(
+        await storage.getScoreTimeSeries({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            name: 'relevance|manual',
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
+          },
+        ],
+      });
+
+      expect(
+        await storage.getScorePercentiles({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
+          },
+        ],
+      });
+    });
   });
 
   // ==========================================================================
@@ -1060,6 +1148,99 @@ describe('ObservabilityStorageDuckDB', () => {
           metadata: { severity: 'high' },
         }),
       ]);
+    });
+
+    it('supports feedback OLAP queries keyed by feedbackType and optional feedbackSource', async () => {
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'feedback-olap-1',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: 5,
+            entityName: 'agent-a',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:10:00Z'),
+            traceId: 'feedback-olap-2',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: '4',
+            entityName: 'agent-b',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:20:00Z'),
+            traceId: 'feedback-olap-3',
+            feedbackType: 'rating',
+            feedbackSource: 'system',
+            value: 1,
+            entityName: 'agent-a',
+          },
+          {
+            timestamp: new Date('2026-01-01T00:30:00Z'),
+            traceId: 'feedback-olap-4',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: 'needs-review',
+            entityName: 'agent-a',
+          },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackAggregate({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+        }),
+      ).toEqual({ value: 4.5 });
+
+      expect(
+        await storage.getFeedbackBreakdown({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        }),
+      ).toEqual({
+        groups: [
+          { dimensions: { entityName: 'agent-a' }, value: 5 },
+          { dimensions: { entityName: 'agent-b' }, value: 4 },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackTimeSeries({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            name: 'rating|user',
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackPercentiles({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      });
     });
   });
 });

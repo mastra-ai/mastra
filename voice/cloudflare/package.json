@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.12.1-alpha.0",
+  "version": "0.12.1",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -35,7 +35,7 @@
     "cloudflare": "^5.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260316.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
