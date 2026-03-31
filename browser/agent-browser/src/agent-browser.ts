@@ -1251,9 +1251,7 @@ export class AgentBrowser extends MastraBrowser {
         // Small delay to let agent-browser update its activePageIndex
         setTimeout(() => {
           if (stream.isActive()) {
-            stream.reconnect().catch(err => {
-              console.error('[AgentBrowser] Failed to reconnect screencast after tab change:', err);
-            });
+            stream.reconnect().catch(() => {});
           }
         }, 100);
       };
@@ -1292,10 +1290,17 @@ export class AgentBrowser extends MastraBrowser {
           }
           // Small delay to let agent-browser update its internal state
           setTimeout(() => {
-            if (stream.isActive() && browserManager.getPages().length > 0) {
-              stream.reconnect().catch((err: unknown) => {
-                console.error('[AgentBrowser] Failed to reconnect screencast after page close:', err);
-              });
+            const remainingPages = browserManager.getPages();
+            if (stream.isActive() && remainingPages.length > 0) {
+              stream.reconnect().catch(() => {});
+              // Emit the URL of the new active page
+              const activePage = remainingPages[browserManager.getActiveIndex()] || remainingPages[0];
+              if (activePage) {
+                const url = activePage.url();
+                if (url && url !== 'about:blank') {
+                  stream.emitUrl(url);
+                }
+              }
             }
           }, 100);
         };
