@@ -154,6 +154,6 @@ export {
   AzureOpenAIGateway,
   MastraGateway,
 } from './model/gateways';
-export type { AzureOpenAIGatewayConfig } from './model/gateways';
+export type { AzureOpenAIGatewayConfig, MastraGatewayConfig } from './model/gateways';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

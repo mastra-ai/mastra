@@ -38,7 +38,7 @@ export function setAuthStorage(storage: AuthStorage | undefined): void {
  * Middleware that injects the Claude Code identity system message
  * Required for Claude Max OAuth authentication
  */
-const claudeCodeMiddleware: LanguageModelMiddleware = {
+export const claudeCodeMiddleware: LanguageModelMiddleware = {
   specificationVersion: 'v3',
   transformParams: async ({ params }) => {
     // Prepend the Claude Code identity as the first system message
@@ -131,6 +131,56 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
 };
 
 /**
+ * Build a fetch function that handles Anthropic OAuth.
+ * Preserves non-auth headers from init (critical for X-Mastra-Authorization to survive
+ * when used with the gateway). Strips `authorization` and `x-api-key`.
+ */
+export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {}): typeof fetch {
+  return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const storage = opts.authStorage ?? getAuthStorage();
+    storage.reload();
+
+    const storedCred = storage.get('anthropic');
+    if (storedCred?.type === 'api_key') {
+      throw new Error(
+        'Anthropic API key credential is configured, but OAuth is required.',
+      );
+    }
+
+    const accessToken = await storage.getApiKey('anthropic');
+    if (!accessToken) {
+      throw new Error('Not logged in to Anthropic. Run /login first.');
+    }
+
+    // Preserve existing headers, strip auth-related ones
+    const headers = new Headers();
+    if (init?.headers) {
+      const source =
+        init.headers instanceof Headers
+          ? init.headers
+          : Array.isArray(init.headers)
+            ? new Headers(init.headers as Array<[string, string]>)
+            : new Headers(init.headers as Record<string, string>);
+      source.forEach((value, key) => {
+        const lower = key.toLowerCase();
+        if (lower !== 'authorization' && lower !== 'x-api-key') {
+          headers.set(key, value);
+        }
+      });
+    }
+
+    headers.set('Authorization', `Bearer ${accessToken}`);
+    headers.set(
+      'anthropic-beta',
+      'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
+    );
+    headers.set('anthropic-version', '2023-06-01');
+
+    return fetch(url, { ...init, headers });
+  }) as typeof fetch;
+}
+
+/**
  * Creates an Anthropic model using Claude Max OAuth authentication
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
@@ -146,44 +196,9 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
     });
   }
 
-  // Custom fetch that handles OAuth
-  const oauthFetch = async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
-    const authStorage = getAuthStorage();
-
-    // Reload from disk to handle multi-instance refresh
-    authStorage.reload();
-
-    const storedCred = authStorage.get('anthropic');
-    if (storedCred?.type === 'api_key') {
-      throw new Error(
-        'Anthropic API key credential is configured, but Claude Max OAuth provider requires OAuth credentials.',
-      );
-    }
-
-    // Get access token (auto-refreshes if expired)
-    const accessToken = await authStorage.getApiKey('anthropic');
-
-    if (!accessToken) {
-      throw new Error('Not logged in to Anthropic. Run /login first.');
-    }
-
-    // Make request with OAuth headers
-    return fetch(url, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'anthropic-beta':
-          'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
-        'anthropic-version': '2023-06-01',
-      },
-    });
-  };
-
   const anthropic = createAnthropic({
-    // Provide a dummy API key - the actual auth is handled via OAuth in oauthFetch
-    // This prevents the SDK from throwing "API key is missing" at model creation time
     apiKey: 'oauth-placeholder',
-    fetch: oauthFetch as any,
+    fetch: buildAnthropicOAuthFetch() as any,
   });
 
   // Wrap with middleware to inject Claude Code identity and enable prompt caching

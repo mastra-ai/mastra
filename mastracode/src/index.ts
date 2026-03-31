@@ -29,6 +29,7 @@ import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.j
 import {
   getCustomProviderId,
   loadSettings,
+  MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
   resolveOmModel,
   saveSettings,
@@ -113,6 +114,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
+    // Include the memory gateway key so it's loaded from AuthStorage into process.env
+    providerEnvVars[MEMORY_GATEWAY_PROVIDER] = 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
     // Non-fatal — provider registry may not be available
@@ -136,7 +139,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const memory = getDynamicMemory(storage);
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const memory = mgApiKey ? undefined : getDynamicMemory(storage);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
