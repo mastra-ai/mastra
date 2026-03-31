@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 1.18.1-alpha.1
+
+### Patch Changes
+
+- Streaming traces now end correctly when a model call fails or a request is aborted, so they no longer remain stuck "in progress" in observability tools. ([#14661](https://github.com/mastra-ai/mastra/pull/14661))
+
+- Fix getWorkflowRunById with withNestedWorkflows not returning nested steps for branch sub-workflows ([#14713](https://github.com/mastra-ai/mastra/pull/14713))
+
+- Tools that return objects with circular references no longer crash the agent with "Converting circular structure to JSON". Circular parts are replaced with `"[Circular]"` and the conversation continues normally. ([#14535](https://github.com/mastra-ai/mastra/pull/14535))
+
+- Fixed crashes when using `ModelRouterLanguageModel` with AI SDK v6's `generateObject()` or `generateText()`. The model router now correctly preserves usage and metadata from underlying models. ([#14283](https://github.com/mastra-ai/mastra/pull/14283))
+
+- Agents using structured output no longer fail when workflow tools are present. Setting toolChoice to 'none' now correctly prevents tools from being sent to the provider, fixing errors from providers like Gemini that reject structured output requests when tools are included. ([#14466](https://github.com/mastra-ai/mastra/pull/14466))
+
+- Fixed an issue where supervisor agent messages were being saved to the sub-agent thread, causing duplicate tool call badges to appear in the chat history when sub-agents are invoked multiple times. ([#13881](https://github.com/mastra-ai/mastra/pull/13881))
+
+- Fixed workspace vector indexing silently swallowing embedder and search engine errors during auto-indexing. File-read errors (binary files, invalid UTF-8) are still skipped, but indexing failures are now logged as warnings instead of being silently ignored. ([#14786](https://github.com/mastra-ai/mastra/pull/14786))
+
+- Fixed incorrect type cast for sub-agent context messages. The context option for new API methods (generate, stream, resumeGenerate, resumeStream) now correctly casts to ModelMessage[] instead of CoreMessage[]. ([#14895](https://github.com/mastra-ai/mastra/pull/14895))
+
 ## 1.18.1-alpha.0
 
 ### Patch Changes

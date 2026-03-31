@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- Fixed /subagents to show configured subagents from the harness config. ([#14804](https://github.com/mastra-ai/mastra/pull/14804))
+
+- Tools that return objects with circular references no longer crash the agent with "Converting circular structure to JSON". Circular parts are replaced with `"[Circular]"` and the conversation continues normally. ([#14535](https://github.com/mastra-ai/mastra/pull/14535))
+
+- Updated dependencies [[`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`e91c011`](https://github.com/mastra-ai/mastra/commit/e91c0119878d956fdaab9b60ac721f93f3221335), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c), [`66a7412`](https://github.com/mastra-ai/mastra/commit/66a7412ec0550f3dfa01cd05b057d8c6e5b062bc)]:
+  - @mastra/core@1.18.1-alpha.1
+  - @mastra/pg@1.8.5-alpha.0
+  - @mastra/mcp@1.4.0-alpha.0
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes
