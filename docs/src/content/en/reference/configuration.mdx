@@ -782,9 +782,9 @@ Return a `{ status, body }` object to override the default `400` response, or `u
 
 The `context` parameter indicates which part of the request failed validation:
 
-- `'query'` — query parameters
-- `'body'` — request body
-- `'path'` — path parameters
+- `'query'`: query parameters
+- `'body'`: request body
+- `'path'`: path parameters
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

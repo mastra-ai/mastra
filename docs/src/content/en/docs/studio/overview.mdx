@@ -55,7 +55,7 @@ View the input and output processors attached to each agent. The agent detail pa
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668517/processors_ka0lov.mp4" />
 
-See [Processors](/docs/agents/processors) and [Guardrails](/docs/agents/guardrails) for configuration details.
+See [processors](/docs/agents/processors) and [guardrails](/docs/agents/guardrails) for configuration details.
 
 ### MCP servers
 
@@ -73,13 +73,13 @@ Run tools in isolation to observe their behavior. Test them before assigning the
 
 Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
 
-See [Workspaces](/docs/workspace/overview) for configuration details.
+See [workspaces](/docs/workspace/overview) for configuration details.
 
 ### Request context
 
 Set runtime variables that flow into your agent's instructions and tools through dependency injection. Edit request context as JSON or use a schema-driven form when your agent defines a `requestContextSchema`. Values persist across test chats and experiments, so you can trigger conditional flows without restarting.
 
-See [Request context](/docs/server/request-context) for configuration details.
+See [request context](/docs/server/request-context) for configuration details.
 
 ## Evaluation
 
@@ -95,29 +95,37 @@ Create and manage collections of test cases to evaluate your agents and workflow
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/datasets_p35u2v.mp4" />
 
-See [Datasets overview](/docs/evals/datasets/overview) for the full API and versioning details.
+See [datasets overview](/docs/evals/datasets/overview) for the full API and versioning details.
 
 ### Experiments
 
 Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
 
-See [Datasets overview](/docs/evals/datasets/overview) for setup details.
+See [datasets overview](/docs/evals/datasets/overview) for setup details.
 
 ## Observability
 
 Visit the [Studio observability](/docs/studio/observability) docs to learn more.
 
-## Configuration
+## Settings
 
-By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and other options in the Mastra [`server`](/reference/configuration#server-options) configuration.
+Configure the connection between Studio and your Mastra server. The settings page includes:
 
-For production deployments, read the [Studio deployment](/docs/studio/deployment) docs to learn about hosting Studio alongside your server or as a standalone SPA.
+- **Mastra instance URL**: The base URL of your Mastra server (e.g. `http://localhost:4111`).
+- **API prefix**: Optional path prefix for all API requests (defaults to `/api`).
+- **Custom headers**: Add key-value pairs sent with every request, useful for authentication tokens or routing headers.
+- **Theme**: Switch between dark, light, or system theme.
 
-Add [authentication](/docs/server/auth) to control who can access Studio in production. Studio displays the appropriate login UI, which can be an SSO button, an email/password form, or both. All API routes require authentication. This applies to any request made to your Mastra API, whether from Studio or a direct API call.
+## Code configuration
+
+In addition to the [settings](#settings) UI, you can configure the local development server and Studio also through the [`server`](/reference/configuration#server-options) option in your `src/mastra/index.ts`.
+
+By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost) and [`port`](/reference/configuration#serverport).
 
 Mastra also supports HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
 
 ## Next steps
 
-- Learn more about Mastra's suggested [project structure](/docs/getting-started/project-structure).
-- Integrate Mastra with your frontend framework of choice - [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro).
+- Learn how to [deploy Studio](/docs/studio/deployment) for production use.
+- Add [authentication](/docs/studio/auth) to control access to your deployed Studio.
+- Explore [Studio observability](/docs/studio/observability) to monitor agent performance and gain insights through metrics, logs, and traces.
