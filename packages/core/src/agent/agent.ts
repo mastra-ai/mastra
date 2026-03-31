@@ -165,7 +165,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput, TRequestContext>, TRequestContext>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
@@ -262,7 +262,7 @@ export class Agent<
 
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
-    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
+    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput, TRequestContext>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
@@ -1282,8 +1282,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    | AgentExecutionOptions<TOutput, TRequestContext>
+    | Promise<AgentExecutionOptions<TOutput, TRequestContext>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -1416,13 +1416,10 @@ export class Agent<
     model,
   }: {
     requestContext?: RequestContext;
-    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+    model?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     const modelSelectionPromise = model
-      ? this.resolveModelSelection(
-          model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
-          requestContext,
-        )
+      ? this.resolveModelSelection(model, requestContext)
       : this.resolveModelSelection(this.model, requestContext);
 
     return modelSelectionPromise.then(modelSelection => {
@@ -4154,7 +4151,11 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
+  async #execute<OUTPUT>({
+    methodType,
+    resumeContext,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT, TRequestContext>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -4747,10 +4748,8 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<any>;
-    const modelOverride = (
-      mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig, TRequestContext> }
-    ).model;
+    ) as AgentExecutionOptions<any, TRequestContext>;
+    const modelOverride = mergedOptions.model;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -4795,7 +4794,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<any>;
+    } as unknown as InnerAgentExecutionOptions<any, TRequestContext>;
 
     const result = await this.#execute(executeOptions);
 
@@ -4867,12 +4866,8 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT>;
-    const modelOverride = (
-      mergedOptions as AgentExecutionOptions<OUTPUT> & {
-        model?: DynamicArgument<MastraModelConfig, TRequestContext>;
-      }
-    ).model;
+    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
+    const modelOverride = mergedOptions.model;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -4917,7 +4912,7 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>;
+    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>;
 
     const result = await this.#execute(executeOptions);
 
@@ -4995,13 +4990,9 @@ export class Agent<
     let mergedStreamOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
-    ) as typeof defaultOptions;
+    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
 
-    const modelOverride = (
-      mergedStreamOptions as AgentExecutionOptions<any> & {
-        model?: DynamicArgument<MastraModelConfig, TRequestContext>;
-      }
-    ).model;
+    const modelOverride = mergedStreamOptions.model;
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -5047,7 +5038,7 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -5123,11 +5114,9 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
-    ) as typeof defaultOptions;
+    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
 
-    const modelOverride = (
-      mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig, TRequestContext> }
-    ).model;
+    const modelOverride = mergedOptions.model;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -5179,7 +5168,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

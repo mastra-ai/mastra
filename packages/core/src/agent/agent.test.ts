@@ -272,6 +272,50 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toContain('Donald Trump');
     });
 
+    it.skipIf(version === 'v1')('should use a request-scoped model override for generate', async () => {
+      const overrideModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text: 'Override model response',
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Override model response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const electionAgent = new Agent({
+        id: 'us-election-agent',
+        name: 'US Election Agent',
+        instructions: 'You know about the past US elections',
+        model: electionModel,
+      });
+
+      const response = await electionAgent.generate('Who won the 2016 US presidential election?', {
+        model: overrideModel,
+      });
+
+      expect(response.text).toBe('Override model response');
+    });
+
     it('should get a structured response from the agent with', async () => {
       const electionAgent = new Agent({
         id: 'us-election-agent',
