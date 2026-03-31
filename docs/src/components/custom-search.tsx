@@ -162,7 +162,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     const isEmptyState = !search || !results.length
-    const emptyStateItemCount = 11 // Number of items in EmptyState
+    const emptyStateItemCount = 10 // Number of items in EmptyState
 
     switch (event.key) {
       case 'Tab':

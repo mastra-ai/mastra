@@ -64,7 +64,7 @@ It uses background agents for managing memory. When using `observationalMemory: 
 
 You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, then your brain reflects — reorganizing, combining, and condensing into long-term memory. OM works the same way.
 
-Every time an agent responds, it sees a context window containing its system prompt, recent message history, and any injected context. The context window is finite, even models with large token limits perform worse when the window is full. This causes two problems:
+Every time an agent responds, it sees a context window containing its system prompt, recent message history, and any injected context. The context window is finite; even models with large token limits perform worse when the window is full. This causes two problems:
 
 - **Context rot**: the more raw message history an agent carries, the worse it performs.
 - **Context waste**: most of that history contains tokens no longer needed to keep the agent on task.
@@ -110,7 +110,7 @@ The result is a three-tier system:
 Retrieval mode is experimental. The API may change in future releases.
 :::
 
-Normal OM compresses messages into observations, which is great for staying on task but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
+Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
 
 #### Browsing only
 
