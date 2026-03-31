@@ -4438,15 +4438,25 @@ export class Agent<
           shouldGenerate,
           model: titleModel,
           instructions: titleInstructions,
+          minMessages,
         } = this.resolveTitleGenerationConfig(
-          config.generateTitle as
+          config?.generateTitle as
             | boolean
-            | { model: DynamicArgument<MastraModelConfig, TRequestContext>; instructions?: DynamicArgument<string> }
+            | {
+                model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+                instructions?: DynamicArgument<string>;
+                minMessages?: number;
+              }
             | undefined,
         );
 
-        if (shouldGenerate && !thread.title) {
-          const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+        const uiMessages = messageList.get.all.ui();
+        const messages = messageList.get.all.core();
+        const requiredMessages = minMessages ?? 1;
+
+        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+          const userMessage = this.getMostRecentUserMessage(uiMessages);
+
           if (userMessage) {
             void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
               async title => {
@@ -5389,12 +5399,17 @@ export class Agent<
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig, TRequestContext>; instructions?: DynamicArgument<string> }
+      | {
+          model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+          instructions?: DynamicArgument<string>;
+          minMessages?: number;
+        }
       | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
+    minMessages?: number;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -5405,6 +5420,7 @@ export class Agent<
         shouldGenerate: true,
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
+        minMessages: generateTitleConfig.minMessages,
       };
     }
 
