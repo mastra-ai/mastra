@@ -15,7 +15,7 @@ const useCodemirrorTheme = () => {
       draculaInit({
         settings: {
           fontFamily: 'var(--geist-mono)',
-          fontSize: '0.8125rem',
+          fontSize: '0.75rem',
           lineHighlight: 'transparent',
           gutterBackground: 'transparent',
           gutterForeground: '#939393',
@@ -89,7 +89,6 @@ export function DataDetailsPanelCodeSection({
             theme={theme}
             value={finalCodeStr}
             editable={false}
-            basicSetup={{ lineNumbers: false, foldGutter: false }}
           />
         )}
       </div>

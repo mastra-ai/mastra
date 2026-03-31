@@ -1,12 +1,10 @@
 import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
-import { useInView, generateMockLogs } from '@mastra/playground-ui';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { useEffect, useMemo } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
-const MOCK_LOGS = generateMockLogs(500);
-
-const LOGS_PER_PAGE = 50;
+const LOGS_PER_PAGE = 20;
 
 export interface LogsFilters {
   filters?: ListLogsArgs['filters'];
@@ -50,9 +48,5 @@ export const useLogs = ({ filters }: LogsFilters = {}) => {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const data = query.data;
-
-  // const data = MOCK_LOGS;
-
-  return { ...query, data, setEndOfListElement };
+  return { ...query, data: query.data, setEndOfListElement };
 };

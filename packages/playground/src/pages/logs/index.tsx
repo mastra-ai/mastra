@@ -1,3 +1,4 @@
+import type { LogRecord, FeaturedIds } from '@mastra/playground-ui';
 import {
   MainHeader,
   LogsList,
@@ -6,9 +7,8 @@ import {
   useLogsFilters,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
-import type { FeaturedIds } from '@mastra/playground-ui';
 import { LogsIcon } from 'lucide-react';
-import { useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { useLogs } from '@/domains/logs/hooks/use-logs';
 
@@ -16,6 +16,14 @@ const PERIOD_PARAM = 'period';
 const LOG_PARAM = 'logId';
 const TRACE_PARAM = 'traceId';
 const SPAN_PARAM = 'spanId';
+
+const PRESET_TO_MS: Record<string, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '3d': 3 * 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+};
 
 export default function Logs() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,7 +74,20 @@ export default function Logs() {
     [setSearchParams],
   );
 
-  const { data: logs = [] } = useLogs();
+  const logsFilters = useMemo(() => {
+    const ms = PRESET_TO_MS[datePreset];
+    if (!ms) return undefined;
+    return { timestamp: { start: new Date(Date.now() - ms) } };
+  }, [datePreset]);
+
+  const {
+    data: logs = [],
+    isLoading: isLoadingLogs,
+    error: logsError,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useLogs({ filters: logsFilters });
 
   const {
     searchQuery,
@@ -76,8 +97,9 @@ export default function Logs() {
     toggleComparator,
     removeFilterGroup,
     clearAllFilters,
+    updateFilterGroups,
     filteredLogs,
-  } = useLogsFilters(logs);
+  } = useLogsFilters(logs as LogRecord[]);
 
   return (
     <EntityListPageLayout className="max-w-none">
@@ -99,11 +121,24 @@ export default function Logs() {
           onToggleComparator={toggleComparator}
           onRemoveFilterGroup={removeFilterGroup}
           onClearAllFilters={clearAllFilters}
+          onFilterGroupsChange={updateFilterGroups}
+          onReset={() => {
+            setSearchQuery('');
+            clearAllFilters();
+            handleTimePeriodChange('24h');
+          }}
+          isLoading={isLoadingLogs}
+          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
         />
       </EntityListPageLayout.Top>
 
       <LogsList
         logs={filteredLogs}
+        isLoading={isLoadingLogs}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        error={logsError instanceof Error ? logsError : null}
         hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
         featuredLogId={featuredLogId}
         featuredTraceId={featuredTraceId}

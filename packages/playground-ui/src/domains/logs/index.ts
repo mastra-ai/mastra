@@ -4,5 +4,4 @@ export { LogsList, type LogsListProps, type FeaturedIds } from './components/log
 export { LogsToolbar, type LogsToolbarProps } from './components/logs-toolbar';
 export { useLogsFilters, type FilterGroup, type FilterColumn } from './hooks/use-logs-filters';
 export { isValidLogsDatePreset, type LogsDatePreset } from './components/logs-date-range-selector';
-export { generateMockLogs } from './mock-data';
 export type { LogRecord, LogLevel } from './types';

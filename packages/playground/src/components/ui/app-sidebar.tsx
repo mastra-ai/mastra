@@ -153,6 +153,7 @@ const mainNavigation: SidebarSection[] = [
         icon: <BarChart3Icon />,
         isOnMastraPlatform: true,
         indent: true,
+        requiredPermission: 'observability:read',
       },
       {
         name: 'Traces',

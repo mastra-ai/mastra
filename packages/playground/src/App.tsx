@@ -213,6 +213,7 @@ const routes = [
       { path: '/metrics', element: <Metrics /> },
       { path: '/observability-overview', element: <ObservabilityOverview /> },
       { path: '/observability', element: <Observability /> },
+      { path: '/logs', element: <Logs /> },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
