@@ -10,10 +10,17 @@ interface AgentPlaygroundTestChatProps {
   agentId: string;
   agentName?: string;
   modelVersion?: string;
+  agentVersionId?: string;
   hasMemory: boolean;
 }
 
-export function AgentPlaygroundTestChat({ agentId, agentName, modelVersion, hasMemory }: AgentPlaygroundTestChatProps) {
+export function AgentPlaygroundTestChat({
+  agentId,
+  agentName,
+  modelVersion,
+  agentVersionId,
+  hasMemory,
+}: AgentPlaygroundTestChatProps) {
   // Generate a stable ephemeral thread ID for test chat sessions
   const testThreadId = useMemo(() => uuid(), [agentId]);
   const mergedRequestContext = useMergedRequestContext();
@@ -34,6 +41,7 @@ export function AgentPlaygroundTestChat({ agentId, agentName, modelVersion, hasM
               agentId={agentId}
               agentName={agentName}
               modelVersion={modelVersion}
+              agentVersionId={agentVersionId}
               threadId={testThreadId}
               memory={hasMemory}
               refreshThreadList={async () => {}}

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.1.15-alpha.2",
+  "version": "1.1.15",
   "description": "",
   "type": "module",
   "files": [
@@ -45,7 +45,7 @@
     "@babel/core": "^7.29.0",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
-    "cloudflare": "^4.5.0",
+    "cloudflare": "^5.2.0",
     "rollup": "^4.59.0",
     "rollup-plugin-esbuild": "^6.2.1"
   },

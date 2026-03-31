@@ -758,10 +758,26 @@ export interface ObservationalMemoryConfig {
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
    *
+   * Use `{ vector: true }` to also index emitted observation groups into the
+   * configured vector store for semantic recall, and `scope` to limit recall
+   * browsing to the current thread instead of the whole resource.
+   *
    * @experimental
    * @default false
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+
+  /**
+   * Optional callback used to index emitted observation groups for semantic retrieval.
+   */
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
 
   /**
    * Model for both Observer and Reflector agents.

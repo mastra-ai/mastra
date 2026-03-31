@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.9.3-alpha.4",
+  "version": "0.10.0",
   "description": "",
   "type": "module",
   "files": [
@@ -62,6 +62,7 @@
     "@ast-grep/napi": "^0.42.0",
     "@mariozechner/pi-tui": "^0.60.0",
     "@mastra/core": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
