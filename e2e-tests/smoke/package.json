@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "npx mastra build",
+    "dev": "npx mastra dev",
     "build:studio": "npx mastra build --studio",
     "test": "vitest run",
     "test:ui": "playwright test",

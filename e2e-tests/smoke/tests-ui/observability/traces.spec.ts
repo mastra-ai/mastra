@@ -37,8 +37,7 @@ test.describe('Observability', () => {
     await selectEntityFilter(page, 'sequential-steps');
 
     // Should show at least one trace containing the workflow name
-    await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
-    await expect(traceEntries(page).first()).toContainText('sequential-steps');
+    await expect(traceEntries(page).filter({ hasText: 'sequential-steps' }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('traces appear after agent chat', async ({ page }) => {
