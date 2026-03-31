@@ -248,7 +248,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                     },
                     payload.error,
                   );
-
+            // End the AGENT_RUN span so the trace is exported.
+            // Without this, the span is orphaned and exporters that wait
+            // for the root span to end (e.g. Datadog) never emit the trace.
             agentSpan?.error({ error, endSpan: true });
             return;
           }
