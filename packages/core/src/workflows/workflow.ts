@@ -820,6 +820,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         systemMessages,
         streamParts,
         state,
+        processorStates,
         result: outputResult,
         finishReason,
         toolCalls,
