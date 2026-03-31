@@ -435,4 +435,231 @@ describe('ObservabilityInMemory', () => {
       },
     ]);
   });
+
+  it('score OLAP queries key by scorerId', async () => {
+    await storage.batchCreateScores({
+      scores: [
+        {
+          timestamp: new Date('2026-01-02T12:00:00.000Z'),
+          traceId: 'trace-1',
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          score: 0.8,
+          experimentId: 'exp-1',
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:30:00.000Z'),
+          traceId: 'trace-2',
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          score: 0.6,
+          experimentId: 'exp-2',
+          entityName: 'agent-b',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:45:00.000Z'),
+          traceId: 'trace-3',
+          scorerId: 'toxicity',
+          scoreSource: 'manual',
+          score: 0.1,
+          experimentId: 'exp-1',
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:50:00.000Z'),
+          traceId: 'trace-4',
+          scorerId: 'relevance',
+          scoreSource: 'automated',
+          score: 0.2,
+          experimentId: 'exp-3',
+          entityName: 'agent-c',
+        },
+      ],
+    });
+
+    const aggregate = await storage.getScoreAggregate({
+      scorerId: 'relevance',
+      scoreSource: 'manual',
+      aggregation: 'avg',
+    });
+    expect(aggregate.value).toBeCloseTo(0.7);
+
+    const breakdown = await storage.getScoreBreakdown({
+      scorerId: 'relevance',
+      scoreSource: 'manual',
+      aggregation: 'avg',
+      groupBy: ['experimentId'],
+    });
+    expect(breakdown.groups).toEqual([
+      { dimensions: { experimentId: 'exp-1' }, value: 0.8 },
+      { dimensions: { experimentId: 'exp-2' }, value: 0.6 },
+    ]);
+
+    const series = await storage.getScoreTimeSeries({
+      scorerId: 'relevance',
+      scoreSource: 'manual',
+      aggregation: 'avg',
+      interval: '1h',
+    });
+    expect(series.series).toEqual([
+      {
+        name: 'relevance|manual',
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.7 }],
+      },
+    ]);
+
+    const percentiles = await storage.getScorePercentiles({
+      scorerId: 'relevance',
+      scoreSource: 'manual',
+      percentiles: [0.5],
+      interval: '1h',
+    });
+    expect(percentiles.series).toEqual([
+      {
+        percentile: 0.5,
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.7 }],
+      },
+    ]);
+  });
+
+  it('score last aggregation uses the latest timestamp, not insertion order', async () => {
+    await storage.batchCreateScores({
+      scores: [
+        {
+          timestamp: new Date('2026-01-02T12:30:00.000Z'),
+          traceId: 'trace-last-1',
+          scorerId: 'relevance',
+          score: 0.3,
+        },
+        {
+          timestamp: new Date('2026-01-02T12:45:00.000Z'),
+          traceId: 'trace-last-2',
+          scorerId: 'relevance',
+          score: 0.9,
+        },
+        {
+          timestamp: new Date('2026-01-02T12:15:00.000Z'),
+          traceId: 'trace-last-3',
+          scorerId: 'relevance',
+          score: 0.1,
+        },
+      ],
+    });
+
+    expect(
+      await storage.getScoreAggregate({
+        scorerId: 'relevance',
+        aggregation: 'last',
+      }),
+    ).toEqual({ value: 0.9 });
+
+    expect(
+      await storage.getScoreBreakdown({
+        scorerId: 'relevance',
+        aggregation: 'last',
+        groupBy: ['scorerId'],
+      }),
+    ).toEqual({
+      groups: [{ dimensions: { scorerId: 'relevance' }, value: 0.9 }],
+    });
+
+    expect(
+      await storage.getScoreTimeSeries({
+        scorerId: 'relevance',
+        aggregation: 'last',
+        interval: '1h',
+      }),
+    ).toEqual({
+      series: [
+        {
+          name: 'relevance',
+          points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 0.9 }],
+        },
+      ],
+    });
+  });
+
+  it('feedback OLAP queries key by feedbackType and optionally feedbackSource, ignoring non-numeric values', async () => {
+    await storage.batchCreateFeedback({
+      feedbacks: [
+        {
+          timestamp: new Date('2026-01-02T12:00:00.000Z'),
+          traceId: 'trace-1',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: 5,
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:15:00.000Z'),
+          traceId: 'trace-2',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: '4',
+          entityName: 'agent-b',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:30:00.000Z'),
+          traceId: 'trace-3',
+          feedbackType: 'rating',
+          feedbackSource: 'system',
+          value: 1,
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-02T12:45:00.000Z'),
+          traceId: 'trace-4',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: 'needs-review',
+          entityName: 'agent-a',
+        },
+      ],
+    });
+
+    const aggregate = await storage.getFeedbackAggregate({
+      feedbackType: 'rating',
+      feedbackSource: 'user',
+      aggregation: 'avg',
+    });
+    expect(aggregate.value).toBe(4.5);
+
+    const breakdown = await storage.getFeedbackBreakdown({
+      feedbackType: 'rating',
+      feedbackSource: 'user',
+      aggregation: 'avg',
+      groupBy: ['entityName'],
+    });
+    expect(breakdown.groups).toEqual([
+      { dimensions: { entityName: 'agent-a' }, value: 5 },
+      { dimensions: { entityName: 'agent-b' }, value: 4 },
+    ]);
+
+    const series = await storage.getFeedbackTimeSeries({
+      feedbackType: 'rating',
+      feedbackSource: 'user',
+      aggregation: 'avg',
+      interval: '1h',
+    });
+    expect(series.series).toEqual([
+      {
+        name: 'rating|user',
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 4.5 }],
+      },
+    ]);
+
+    const percentiles = await storage.getFeedbackPercentiles({
+      feedbackType: 'rating',
+      feedbackSource: 'user',
+      percentiles: [0.5],
+      interval: '1h',
+    });
+    expect(percentiles.series).toEqual([
+      {
+        percentile: 0.5,
+        points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 4.5 }],
+      },
+    ]);
+  });
 });

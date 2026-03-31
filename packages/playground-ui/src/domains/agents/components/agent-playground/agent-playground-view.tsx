@@ -10,6 +10,7 @@ interface AgentPlaygroundViewProps {
   agentId: string;
   agentName?: string;
   modelVersion?: string;
+  agentVersionId?: string;
   hasMemory: boolean;
   activeVersionId?: string;
   selectedVersionId?: string;
@@ -92,6 +93,7 @@ export function AgentPlaygroundView({
   agentId,
   agentName,
   modelVersion,
+  agentVersionId,
   hasMemory,
   activeVersionId,
   selectedVersionId,
@@ -141,6 +143,7 @@ export function AgentPlaygroundView({
                 agentId={agentId}
                 agentName={agentName}
                 modelVersion={modelVersion}
+                agentVersionId={agentVersionId}
                 hasMemory={hasMemory}
               />
             </div>

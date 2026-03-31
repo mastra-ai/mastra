@@ -85,6 +85,52 @@ export type DateRange = z.input<typeof dateRangeSchema>;
 
 export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
 
+/** Aggregation type schema shared across OLAP-style observability queries. */
+export const aggregationTypeSchema = z
+  .enum(['sum', 'avg', 'min', 'max', 'count', 'last'])
+  .describe('Aggregation function');
+export type AggregationType = z.infer<typeof aggregationTypeSchema>;
+
+/** Aggregation interval schema shared across OLAP-style observability queries. */
+export const aggregationIntervalSchema = z.enum(['1m', '5m', '15m', '1h', '1d']).describe('Time bucket interval');
+export type AggregationInterval = z.infer<typeof aggregationIntervalSchema>;
+
+/** Compare period for aggregate queries with period-over-period comparison. */
+export const comparePeriodSchema = z
+  .enum(['previous_period', 'previous_day', 'previous_week'])
+  .describe('Comparison period for aggregate queries');
+export type ComparePeriod = z.infer<typeof comparePeriodSchema>;
+
+/** Shared groupBy schema for OLAP-style breakdown and time-series queries. */
+export const groupBySchema = z.array(z.string()).min(1).describe('Fields to group by');
+export type GroupBy = z.infer<typeof groupBySchema>;
+
+/** Shared percentiles schema for percentile queries. */
+export const percentilesSchema = z.array(z.number().min(0).max(1)).min(1).describe('Percentile values (0-1)');
+export type Percentiles = z.infer<typeof percentilesSchema>;
+
+/** Shared fields for aggregate OLAP responses across observability signals. */
+export const aggregateResponseFields = {
+  value: z.number().nullable().describe('Aggregated value'),
+  previousValue: z.number().nullable().optional().describe('Value from comparison period'),
+  changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
+} as const;
+
+/** Shared field for OLAP breakdown dimension values. */
+export const dimensionsField = z.record(z.string(), z.string().nullable()).describe('Dimension values for this group');
+
+/** Shared field for non-null OLAP aggregated values. */
+export const aggregatedValueField = z.number().describe('Aggregated value');
+
+/** Shared field for OLAP bucket timestamps. */
+export const bucketTimestampField = z.date().describe('Bucket timestamp');
+
+/** Shared field for percentile identifiers in OLAP responses. */
+export const percentileField = z.number().describe('Percentile value');
+
+/** Shared field for percentile values within a time bucket. */
+export const percentileBucketValueField = z.number().describe('Percentile value at this bucket');
+
 export const entityTypeField = z
   .nativeEnum(EntityType)
   .describe(`Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow')`);

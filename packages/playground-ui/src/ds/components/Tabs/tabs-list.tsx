@@ -9,16 +9,16 @@ export type TabListProps = {
   alignment?: 'left' | 'full-width';
 };
 
-export const TabList = ({ children, variant = 'default', alignment = 'full-width', className }: TabListProps) => {
+export const TabList = ({ children, variant = 'default', alignment = 'left', className }: TabListProps) => {
   return (
     <div className={cn('w-full overflow-x-auto', className)}>
       <RadixTabs.List
         className={cn(
-          'flex items-center relative',
+          'flex items-center relative w-max min-w-full',
           {
             // variant: default
-            'text-ui-lg': variant === 'default',
-            '[&>button]:py-2 [&>button]:px-6 [&>button]:font-normal [&>button]:text-neutral3 [&>button]:border-b [&>button]:border-border1':
+            'text-ui-lg border-b border-border1': variant === 'default',
+            '[&>button]:py-2 [&>button]:px-6 [&>button]:font-normal [&>button]:text-neutral3 [&>button]:border-b-2 [&>button]:border-transparent':
               variant === 'default',
             '[&>button]:flex-1': variant === 'default' && alignment === 'full-width',
             [`[&>button]:${transitions.colors} [&>button]:hover:text-neutral4`]: variant === 'default',

@@ -9,12 +9,28 @@ import {
   listScoresResponseSchema as obsListScoresResponseSchema,
   createScoreBodySchema,
   createScoreResponseSchema,
+  getScoreAggregateArgsSchema,
+  getScoreAggregateResponseSchema,
+  getScoreBreakdownArgsSchema,
+  getScoreBreakdownResponseSchema,
+  getScoreTimeSeriesArgsSchema,
+  getScoreTimeSeriesResponseSchema,
+  getScorePercentilesArgsSchema,
+  getScorePercentilesResponseSchema,
   // Feedback
   feedbackFilterSchema,
   feedbackOrderBySchema,
   listFeedbackResponseSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
+  getFeedbackAggregateArgsSchema,
+  getFeedbackAggregateResponseSchema,
+  getFeedbackBreakdownArgsSchema,
+  getFeedbackBreakdownResponseSchema,
+  getFeedbackTimeSeriesArgsSchema,
+  getFeedbackTimeSeriesResponseSchema,
+  getFeedbackPercentilesArgsSchema,
+  getFeedbackPercentilesResponseSchema,
   // Metrics OLAP
   getMetricAggregateArgsSchema,
   getMetricAggregateResponseSchema,
@@ -74,7 +90,7 @@ function createNewRoute<
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       if (!coreFeatures.has('observability:v1.13.2')) {
         throw new HTTPException(501, {
-          message: 'New observability endpoints require @mastra/core >= 1.13.3, please upgrade.',
+          message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
         });
       }
 
@@ -139,6 +155,46 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   },
 });
 
+export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGREGATE, {
+  bodySchema: getScoreAggregateArgsSchema,
+  responseSchema: getScoreAggregateResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getScoreAggregateArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getScoreAggregate(args);
+  },
+});
+
+export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAKDOWN, {
+  bodySchema: getScoreBreakdownArgsSchema,
+  responseSchema: getScoreBreakdownResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getScoreBreakdownArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getScoreBreakdown(args);
+  },
+});
+
+export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIME_SERIES, {
+  bodySchema: getScoreTimeSeriesArgsSchema,
+  responseSchema: getScoreTimeSeriesResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getScoreTimeSeriesArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getScoreTimeSeries(args);
+  },
+});
+
+export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PERCENTILES, {
+  bodySchema: getScorePercentilesArgsSchema,
+  responseSchema: getScorePercentilesResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getScorePercentilesArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getScorePercentiles(args);
+  },
+});
+
 // ============================================================================
 // Feedback Routes
 // ============================================================================
@@ -165,6 +221,46 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createFeedback({ feedback: { ...feedback, timestamp: new Date() } });
     return { success: true };
+  },
+});
+
+export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_AGGREGATE, {
+  bodySchema: getFeedbackAggregateArgsSchema,
+  responseSchema: getFeedbackAggregateResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getFeedbackAggregateArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getFeedbackAggregate(args);
+  },
+});
+
+export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_BREAKDOWN, {
+  bodySchema: getFeedbackBreakdownArgsSchema,
+  responseSchema: getFeedbackBreakdownResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getFeedbackBreakdownArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getFeedbackBreakdown(args);
+  },
+});
+
+export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_TIME_SERIES, {
+  bodySchema: getFeedbackTimeSeriesArgsSchema,
+  responseSchema: getFeedbackTimeSeriesResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getFeedbackTimeSeriesArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getFeedbackTimeSeries(args);
+  },
+});
+
+export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_PERCENTILES, {
+  bodySchema: getFeedbackPercentilesArgsSchema,
+  responseSchema: getFeedbackPercentilesResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    const args = pickParams(getFeedbackPercentilesArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.getFeedbackPercentiles(args);
   },
 });
 
@@ -302,8 +398,16 @@ export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
+  GET_SCORE_AGGREGATE,
+  GET_SCORE_BREAKDOWN,
+  GET_SCORE_TIME_SERIES,
+  GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  GET_FEEDBACK_AGGREGATE,
+  GET_FEEDBACK_BREAKDOWN,
+  GET_FEEDBACK_TIME_SERIES,
+  GET_FEEDBACK_PERCENTILES,
   GET_METRIC_AGGREGATE,
   GET_METRIC_BREAKDOWN,
   GET_METRIC_TIME_SERIES,

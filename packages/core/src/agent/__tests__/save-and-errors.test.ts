@@ -1661,3 +1661,210 @@ describe('savePerStep should persist messages during step execution (issue #1398
     expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
   });
 });
+
+/**
+ * Regression test for orphaned AGENT_RUN spans.
+ *
+ * When an LLM call throws (e.g. AI_APICallError), the `onFinish` callback
+ * in map-results-step returns early for `finishReason === 'error'`, which
+ * used to skip `executeOnFinish` — the only place `agentSpan.end()` is called.
+ *
+ * The result: the AGENT_RUN span was never ended, so exporters (like
+ * Datadog) that wait for the root span to end never emitted the trace.
+ */
+describe('AGENT_RUN span must be ended on LLM errors', () => {
+  function createMockModelSpanTracker() {
+    return {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+    };
+  }
+
+  function createMockSpan(name: string, parentSpan?: any) {
+    const span: Record<string, any> = {
+      id: `mock-${name}-id`,
+      traceId: 'mock-trace-id',
+      name,
+      type: name,
+      startTime: new Date(),
+      isInternal: false,
+      isEvent: false,
+      isValid: true,
+      isRootSpan: !parentSpan,
+      parent: parentSpan,
+
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+      exportSpan: vi.fn(),
+      getParentSpanId: vi.fn(() => parentSpan?.id),
+      findParent: vi.fn(),
+      executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),
+      executeInContextSync: vi.fn((fn: () => any) => fn()),
+      get externalTraceId() {
+        return 'mock-trace-id';
+      },
+
+      createTracker: vi.fn(() => createMockModelSpanTracker()),
+      createChildSpan: vi.fn((_opts: any) => createMockSpan(_opts?.type ?? 'child', span)),
+      createEventSpan: vi.fn((_opts: any) => createMockSpan(_opts?.type ?? 'event', span)),
+      getCorrelationContext: vi.fn(),
+      observabilityInstance: {} as any,
+    };
+
+    return span;
+  }
+
+  async function mockGetOrCreateSpan() {
+    let agentRunSpan: any;
+
+    const mod = await import('../../observability/utils');
+    const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
+      const span = createMockSpan(opts.type ?? opts.name ?? 'unknown');
+      if (opts.type === 'agent_run') {
+        agentRunSpan = span;
+      }
+      return span as any;
+    });
+
+    return { spy, getAgentRunSpan: () => agentRunSpan };
+  }
+
+  it('should end the AGENT_RUN span when the model throws during doStream', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const errorModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new Error('LLM API call failed');
+        },
+        doStream: async () => {
+          throw new Error('LLM API call failed');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span',
+        name: 'Test Orphaned Span',
+        model: errorModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span when the model stream emits an error chunk mid-stream', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const streamError = new Error('LLM mid-stream error');
+      const errorMidStreamModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw streamError;
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'partial ' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'error' as const, error: streamError },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-midstream',
+        name: 'Test Orphaned Span MidStream',
+        model: errorMidStreamModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span on successful stream (control test)', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const successModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Hello!' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-span-success',
+        name: 'Test Span Success',
+        model: successModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
