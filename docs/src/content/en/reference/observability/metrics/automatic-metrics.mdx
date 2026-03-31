@@ -19,13 +19,12 @@ Metrics are routed through an internal event bus to the `DefaultExporter`, which
 
 ### What affects whether a metric is available
 
-Four conditions must be true for a metric to reach storage:
+Two conditions must be true for a metric to reach storage:
 
-1. The span is sampled (not dropped by the sampling strategy).
 1. `DefaultExporter` is configured as an exporter.
 1. The storage backend supports metrics (`DuckDB` or `InMemory`).
 
-If metrics aren't appearing, see [Troubleshooting](#troubleshooting).
+If metrics aren't appearing, see [troubleshooting](#troubleshooting).
 
 ## Duration metrics
 
