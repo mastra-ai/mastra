@@ -73,7 +73,7 @@ export const ErrorAwareText = () => {
 
       return (
         <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
             <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
@@ -86,7 +86,7 @@ export const ErrorAwareText = () => {
 
       return (
         <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
             <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
@@ -101,7 +101,7 @@ export const ErrorAwareText = () => {
     // Fallback to displaying the raw text if something goes wrong
     return (
       <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-        <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 flex-shrink-0" />
+        <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
         <div className="flex-1">
           <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
           <p className="text-sm text-red-700 dark:text-red-300">{String(text)}</p>

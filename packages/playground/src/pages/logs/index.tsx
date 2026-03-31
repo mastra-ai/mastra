@@ -4,7 +4,6 @@ import {
   LogsToolbar,
   isValidLogsDatePreset,
   useLogsFilters,
-  useExperimentalFeatures,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
 import type { FeaturedIds } from '@mastra/playground-ui';
@@ -19,7 +18,6 @@ const TRACE_PARAM = 'traceId';
 const SPAN_PARAM = 'spanId';
 
 export default function Logs() {
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
@@ -80,10 +78,6 @@ export default function Logs() {
     clearAllFilters,
     filteredLogs,
   } = useLogsFilters(logs);
-
-  if (!experimentalFeaturesEnabled) {
-    return null;
-  }
 
   return (
     <EntityListPageLayout className="max-w-none">

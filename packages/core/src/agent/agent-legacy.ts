@@ -146,18 +146,18 @@ export interface AgentLegacyCapabilities {
     userMessage: UIMessage | UIMessageWithMetadata,
     requestContext: RequestContext,
     observabilityContext: ObservabilityContext,
-    titleModel?: DynamicArgument<MastraModelConfig>,
+    titleModel?: DynamicArgument<MastraModelConfig, any>,
     titleInstructions?: DynamicArgument<string>,
   ): Promise<string | undefined>;
   /** Resolve title generation config */
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig, any>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, any>;
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
@@ -166,6 +166,8 @@ export interface AgentLegacyCapabilities {
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
   tracingPolicy?: any;
+  /** Resolved version ID from stored config */
+  resolvedVersionId?: string;
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
@@ -260,6 +262,7 @@ export class AgentLegacyHandler {
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
             ],
+            ...(this.capabilities.resolvedVersionId ? { resolvedVersionId: this.capabilities.resolvedVersionId } : {}),
           },
           metadata: {
             runId,

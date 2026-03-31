@@ -44,6 +44,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   instructions: SystemMessage;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
+  isResume?: boolean;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -56,6 +57,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   instructions,
   memoryConfig,
   memory,
+  isResume,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -87,13 +89,22 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwire } = await capabilities.runInputProcessors({
-          requestContext,
-          ...observabilityContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-          processorStates,
-        });
+
+        // Skip input processors during resume — the messageList has no user messages
+        // (resumeStream passes messages: []) and the real conversation state lives in the
+        // workflow snapshot. Running processors on an empty messageList would cause
+        // processors like TokenLimiterProcessor to throw a TripWire.
+        let tripwire;
+        if (!isResume) {
+          ({ tripwire } = await capabilities.runInputProcessors({
+            requestContext,
+            ...observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+            processorStates,
+          }));
+        }
+
         return {
           threadExists: false,
           thread: undefined,
@@ -159,13 +170,20 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwire } = await capabilities.runInputProcessors({
-        requestContext,
-        ...observabilityContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-        processorStates,
-      });
+      // Skip input processors during resume — the messageList has no user messages
+      // (resumeStream passes messages: []) and the real conversation state lives in the
+      // workflow snapshot. Running processors on an empty messageList would cause
+      // processors like TokenLimiterProcessor to throw a TripWire.
+      let tripwire;
+      if (!isResume) {
+        ({ tripwire } = await capabilities.runInputProcessors({
+          requestContext,
+          ...observabilityContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+          processorStates,
+        }));
+      }
 
       return {
         thread: threadObject,

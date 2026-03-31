@@ -17,7 +17,7 @@ export const NoDatasetsInfo = () => (
         <Button
           variant="ghost"
           as="a"
-          href="https://mastra.ai/docs/observability/datasets/overview"
+          href="https://mastra.ai/docs/evals/datasets/overview"
           target="_blank"
           rel="noopener noreferrer"
         >

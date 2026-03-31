@@ -4,7 +4,7 @@ export interface ObservationGroup {
   id: string;
   range: string;
   content: string;
-  sourceGroupIds?: string[];
+  kind?: string;
 }
 
 interface ReflectionObservationGroupSection {
@@ -63,11 +63,12 @@ export function wrapInObservationGroup(
   observations: string,
   range: string,
   id = generateAnchorId(),
-  sourceGroupIds?: string[],
+  _sourceGroupIds?: string[],
+  kind?: string,
 ): string {
   const content = observations.trim();
-  const sourceGroupIdsAttr = sourceGroupIds?.length ? ` source-group-ids="${sourceGroupIds.join(',')}"` : '';
-  return `<observation-group id="${id}" range="${range}"${sourceGroupIdsAttr}>\n${content}\n</observation-group>`;
+  const kindAttr = kind ? ` kind="${kind}"` : '';
+  return `<observation-group id="${id}" range="${range}"${kindAttr}>\n${content}\n</observation-group>`;
 }
 
 export function parseObservationGroups(observations: string): ObservationGroup[] {
@@ -90,11 +91,8 @@ export function parseObservationGroups(observations: string): ObservationGroup[]
     groups.push({
       id,
       range,
+      kind: attributes.kind,
       content: match[2]!.trim(),
-      sourceGroupIds: attributes['source-group-ids']
-        ?.split(',')
-        .map(part => part.trim())
-        .filter(Boolean),
     });
   }
 
@@ -112,15 +110,29 @@ export function stripObservationGroups(observations: string): string {
     .trim();
 }
 
+function getRangeSegments(range: string): string[] {
+  return range
+    .split(',')
+    .map(segment => segment.trim())
+    .filter(Boolean);
+}
+
 export function combineObservationGroupRanges(groups: ObservationGroup[]): string {
-  return Array.from(
-    new Set(
-      groups
-        .flatMap(group => group.range.split(','))
-        .map(range => range.trim())
-        .filter(Boolean),
-    ),
-  ).join(',');
+  const segments = groups.flatMap(group => getRangeSegments(group.range));
+  if (segments.length === 0) {
+    return '';
+  }
+
+  const firstSegment = segments[0];
+  const lastSegment = segments[segments.length - 1];
+  const firstStart = firstSegment?.split(':')[0]?.trim();
+  const lastEnd = lastSegment?.split(':').at(-1)?.trim();
+
+  if (firstStart && lastEnd) {
+    return `${firstStart}:${lastEnd}`;
+  }
+
+  return Array.from(new Set(segments)).join(',');
 }
 
 export function renderObservationGroupsForReflection(observations: string): string | null {
@@ -170,16 +182,13 @@ export function deriveObservationGroupProvenance(content: string, groups: Observ
 
     const fallbackGroup = groups[Math.min(index, groups.length - 1)];
     const resolvedGroups = matchingGroups.length > 0 ? matchingGroups : fallbackGroup ? [fallbackGroup] : [];
-    const sourceGroupIds = Array.from(
-      new Set(resolvedGroups.flatMap(group => [group.id, ...(group.sourceGroupIds ?? [])])),
-    );
     const canonicalGroupId = getCanonicalGroupId(section.heading, index);
 
     return {
       id: canonicalGroupId,
       range: combineObservationGroupRanges(resolvedGroups),
+      kind: 'reflection',
       content: section.body,
-      sourceGroupIds,
     };
   });
 }
@@ -198,7 +207,7 @@ export function reconcileObservationGroupsFromReflection(content: string, source
   const derivedGroups = deriveObservationGroupProvenance(normalizedContent, sourceGroups);
   if (derivedGroups.length > 0) {
     return derivedGroups
-      .map(group => wrapInObservationGroup(group.content, group.range, group.id, group.sourceGroupIds))
+      .map(group => wrapInObservationGroup(group.content, group.range, group.id, undefined, group.kind))
       .join('\n\n');
   }
 
@@ -206,6 +215,7 @@ export function reconcileObservationGroupsFromReflection(content: string, source
     normalizedContent,
     combineObservationGroupRanges(sourceGroups),
     generateAnchorId(),
-    Array.from(new Set(sourceGroups.flatMap(group => [group.id, ...(group.sourceGroupIds ?? [])]))),
+    undefined,
+    'reflection',
   );
 }

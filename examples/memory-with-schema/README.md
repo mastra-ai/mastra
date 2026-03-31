@@ -184,5 +184,5 @@ Working memory stores data in `.json` format, which would look similar to the be
 ## Related
 
 - [Calling Agents](https://mastra.ai/docs/agents/overview#referencing-an-agent)
-- [Agent Memory](https://mastra.ai/docs/agents/agent-memory)
+- [Agent Memory](https://mastra.ai/docs/memory/overview)
 - [Serverless Deployment](https://mastra.ai/reference/storage/libsql)
