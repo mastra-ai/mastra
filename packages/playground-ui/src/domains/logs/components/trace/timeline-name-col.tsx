@@ -19,15 +19,15 @@ type TimelineNameColProps = {
 
 export function TimelineNameCol({
   span,
-  spanUI,
+  spanUI: _spanUI,
   isFaded,
   depth = 0,
   onSpanClick,
   selectedSpanId,
   isLastChild,
-  hasChildren,
+  hasChildren: _hasChildren,
   isRootSpan,
-  isExpanded,
+  isExpanded: _isExpanded,
 }: TimelineNameColProps) {
   return (
     <div

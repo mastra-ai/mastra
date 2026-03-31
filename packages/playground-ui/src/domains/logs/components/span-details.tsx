@@ -12,7 +12,6 @@ export interface SpanDetailsProps {
 }
 
 export function SpanDetails({ span, onClose }: SpanDetailsProps) {
-  const finishReason = span?.attributes?.finishReason as string | undefined;
   const durationMs =
     span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
 

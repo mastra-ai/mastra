@@ -14,7 +14,6 @@ type TraceTimelineSpanProps = {
   isLastChild?: boolean;
   overallLatency?: number;
   overallStartTime?: string;
-  overallEndTime?: string;
   fadedTypes?: string[];
   searchPhrase?: string;
   featuredSpanIds?: string[];
@@ -30,7 +29,6 @@ export function TraceTimelineSpan({
   isLastChild,
   overallLatency,
   overallStartTime,
-  overallEndTime,
   fadedTypes,
   searchPhrase,
   featuredSpanIds,
@@ -50,11 +48,13 @@ export function TraceTimelineSpan({
 
   useEffect(() => {
     if (!featuredSpanIds || !span.spans || span.spans.length === 0) return;
+    if (isExpanded) return;
     const hasFeaturedChildren = span.spans.some(childSpan => featuredSpanIds.includes(childSpan.id));
-    if (!isExpanded && hasFeaturedChildren) {
-      toggleChildren();
+    if (hasFeaturedChildren && setExpandedSpanIds) {
+      setExpandedSpanIds(prev => (prev ? [...prev, span.id] : [span.id]));
     }
-  }, [featuredSpanIds, span.spans, span.id, isExpanded, setExpandedSpanIds, expandedSpanIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [featuredSpanIds]);
 
   const toggleChildren = () => {
     if (!setExpandedSpanIds || !expandedSpanIds) return;
@@ -108,7 +108,6 @@ export function TraceTimelineSpan({
         isFaded={isFaded}
         overallLatency={overallLatency}
         overallStartTime={overallStartTime}
-        overallEndTime={overallEndTime}
         color={spanUI?.color}
       />
 

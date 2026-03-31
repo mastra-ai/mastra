@@ -11,7 +11,6 @@ type TimelineTimingColProps = {
   isFaded?: boolean;
   overallLatency?: number;
   overallStartTime?: string;
-  overallEndTime?: string;
   color?: string;
 };
 

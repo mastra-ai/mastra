@@ -27,6 +27,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
         onSpanSelect?.(span);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, traceData?.spans]);
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(traceData?.spans ?? []), [traceData?.spans]);
