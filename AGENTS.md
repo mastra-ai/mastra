@@ -54,6 +54,8 @@ This file provides guidance to coding agents when working in this repository.
 - Code changes must include related documentation updates when needed.
 - Follow `docs/AGENTS.md` and the styleguides under `docs/styleguides/` when editing docs.
 
+**Important:** If you add a new package, you also MUST add new documentation for that package in `@docs/`.
+
 ## Changelogs
 
 - After code changes, create a changeset.

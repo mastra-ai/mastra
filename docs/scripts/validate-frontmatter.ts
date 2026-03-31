@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'docs/index.mdx',
     'models/',
     'docs/build-with-ai/skills.mdx',
+    'docs/studio/cloud.mdx',
   ],
   // Allow for @mastra/* packages + mastra + create-mastra + mastracode
   packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,
