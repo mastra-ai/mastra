@@ -164,7 +164,7 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
         const initialIds = [
           '1000',
           '5c56c793-69f3-4fbf-87e6-c4bf54c28c26',
-          'urn:uuid:F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4'
+          'urn:uuid:F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4',
         ];
 
         const returnedIds = await config.vector.upsert({
