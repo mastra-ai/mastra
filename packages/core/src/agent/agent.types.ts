@@ -2,18 +2,16 @@ import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
-  ModelWithRetries,
   ToolsetsInput,
   ToolsInput,
   StructuredOutputOptions,
@@ -435,7 +433,7 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
  */
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
-export type AgentExecutionOptionsBase<OUTPUT, TRequestContext = unknown> = {
+export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -456,9 +454,6 @@ export type AgentExecutionOptionsBase<OUTPUT, TRequestContext = unknown> = {
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
-
-  /** Optional request-scoped model override for this execution */
-  model?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -612,29 +607,22 @@ export type AgentExecutionOptionsBase<OUTPUT, TRequestContext = unknown> = {
  * Public-facing agent execution options that accept PublicSchema types (Zod, AI SDK Schema, JSON Schema, StandardSchemaWithJSON).
  * Use this type for public method signatures.
  */
-export type PublicAgentExecutionOptions<OUTPUT = unknown, TRequestContext = unknown> = AgentExecutionOptionsBase<
-  OUTPUT,
-  TRequestContext
-> &
+export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
   (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
-export type AgentExecutionOptions<OUTPUT = unknown, TRequestContext = unknown> = AgentExecutionOptionsBase<
-  OUTPUT,
-  TRequestContext
-> &
+export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
   (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
 
-export type InnerAgentExecutionOptions<OUTPUT = unknown, TRequestContext = unknown> = AgentExecutionOptionsBase<
-  OUTPUT,
-  TRequestContext
-> & {
+export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
+  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+  model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */
   resumeContext?: {
     resumeData: any;

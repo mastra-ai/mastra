@@ -165,7 +165,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput, TRequestContext>, TRequestContext>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
@@ -262,7 +262,7 @@ export class Agent<
 
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
-    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput, TRequestContext>);
+    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
@@ -1283,8 +1283,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput, TRequestContext>
-    | Promise<AgentExecutionOptions<TOutput, TRequestContext>> {
+    | AgentExecutionOptions<TOutput>
+    | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -1402,13 +1402,13 @@ export class Agent<
   }
 
   /**
-   * Gets or creates the LLM instance configured for this agent.
-   * The returned LLM wraps the underlying language model with Mastra-specific
-   * capabilities like tracing, error handling, and primitive registration.
+   * Gets or creates an LLM instance based on the provided or configured model.
+   * The LLM wraps the language model with additional capabilities like error handling.
    *
    * @example
    * ```typescript
    * const llm = await agent.getLLM();
+   * // Use with custom model
    * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
    * ```
    */
@@ -1417,10 +1417,13 @@ export class Agent<
     model,
   }: {
     requestContext?: RequestContext;
-    model?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     const modelSelectionPromise = model
-      ? this.resolveModelSelection(model, requestContext)
+      ? this.resolveModelSelection(
+          model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
+          requestContext,
+        )
       : this.resolveModelSelection(this.model, requestContext);
 
     return modelSelectionPromise.then(modelSelection => {
@@ -4152,11 +4155,7 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({
-    methodType,
-    resumeContext,
-    ...options
-  }: InnerAgentExecutionOptions<OUTPUT, TRequestContext>) {
+  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -4193,7 +4192,10 @@ export class Agent<
       );
     }
 
-    const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
+    const llm = (await this.getLLM({
+      requestContext,
+      model: options.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    })) as MastraLLMVNext;
 
     // Apply null→undefined transform for OpenAI structured output validation.
     // OpenAI strict mode sends null for optional fields, but schemas like Zod's .optional()
@@ -4722,26 +4724,26 @@ export class Agent<
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
   async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
@@ -4752,12 +4754,11 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<any, TRequestContext>;
-    const modelOverride = mergedOptions.model;
+    ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
-      model: modelOverride,
+      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
     const modelInfo = llm.getModel();
@@ -4798,7 +4799,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<any, TRequestContext>;
+    } as unknown as InnerAgentExecutionOptions<any>;
 
     const result = await this.#execute(executeOptions);
 
@@ -4840,26 +4841,26 @@ export class Agent<
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async stream(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
@@ -4870,12 +4871,11 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
-    const modelOverride = mergedOptions.model;
+    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
-      model: modelOverride,
+      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
     const modelInfo = llm.getModel();
@@ -4916,7 +4916,7 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>;
+    } as unknown as InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
 
@@ -4964,28 +4964,28 @@ export class Agent<
     streamOptions: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async resumeStream<OUTPUT extends {}>(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStream(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async resumeStream<OUTPUT = TOutput>(
     resumeData: any,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -4994,13 +4994,11 @@ export class Agent<
     let mergedStreamOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
-
-    const modelOverride = mergedStreamOptions.model;
+    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
-      model: modelOverride,
+      model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
     if (!isSupportedLanguageModel(llm.getModel())) {
@@ -5042,7 +5040,7 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
-    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -5088,28 +5086,28 @@ export class Agent<
     options: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
   async resumeGenerate<OUTPUT extends {}>(
     resumeData: any,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
   async resumeGenerate(
     resumeData: any,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
   async resumeGenerate<OUTPUT = TOutput>(
     resumeData: any,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
       toolCallId?: string;
-    },
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -5118,13 +5116,11 @@ export class Agent<
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT, TRequestContext>;
-
-    const modelOverride = mergedOptions.model;
+    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
-      model: modelOverride,
+      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
     const modelInfo = llm.getModel();
@@ -5172,7 +5168,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT, TRequestContext>);
+    } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -5309,17 +5305,26 @@ export class Agent<
    */
   async generateLegacy(
     messages: MessageListInput,
-    args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
+    args?: AgentGenerateOptions<undefined, undefined> & {
+      output?: never;
+      experimental_output?: never;
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<GenerateTextResult<any, undefined>>;
   async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
-    args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
+    args?: AgentGenerateOptions<OUTPUT, undefined> & {
+      output?: OUTPUT;
+      experimental_output?: never;
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<GenerateObjectResult<OUTPUT>>;
   async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
+      model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
   async generateLegacy<
@@ -5327,7 +5332,9 @@ export class Agent<
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: MessageListInput,
-    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      model?: DynamicArgument<MastraModelConfig>;
+    } = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     return this.getLegacyHandler().generateLegacy(messages, generateOptions);
   }
@@ -5349,14 +5356,22 @@ export class Agent<
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: never;
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<StreamTextResult<any, OUTPUT>>;
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: OUTPUT;
+      experimental_output?: never;
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties>;
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -5366,6 +5381,7 @@ export class Agent<
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
+      model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<
     StreamTextResult<any, EXPERIMENTAL_OUTPUT> & {
@@ -5377,7 +5393,9 @@ export class Agent<
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: MessageListInput,
-    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      model?: DynamicArgument<MastraModelConfig>;
+    } = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)

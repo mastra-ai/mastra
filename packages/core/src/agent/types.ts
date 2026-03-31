@@ -243,7 +243,7 @@ export interface AgentConfig<
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput, TRequestContext>, TRequestContext>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
