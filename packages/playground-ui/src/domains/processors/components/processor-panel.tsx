@@ -176,7 +176,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
               placeholder="Enter a test message..."
               rows={4}
-              className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-none focus:ring-2 focus:ring-accent1"
+              className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
             />
           </div>
 

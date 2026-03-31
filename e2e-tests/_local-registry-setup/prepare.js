@@ -96,6 +96,28 @@ function cleanup(monorepoDir, resetChanges = false) {
   }
 }
 
+function stripWorkspaceTrustPolicy(monorepoDir) {
+  const workspacePath = join(monorepoDir, 'pnpm-workspace.yaml');
+  const trustPolicySettings = ['blockExoticSubdeps', 'trustPolicy', 'trustPolicyIgnoreAfter'];
+
+  try {
+    const content = readFileSync(workspacePath, 'utf8');
+    const nextContent = content
+      .split('\n')
+      .filter(line => !trustPolicySettings.some(setting => line.startsWith(`${setting}:`)))
+      .join('\n');
+
+    if (nextContent !== content) {
+      console.log('Removing pnpm trust-policy settings for local registry tests');
+      writeFileSync(workspacePath, nextContent);
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
 /**
  *
  * @param {string} monorepoDir
@@ -128,6 +150,8 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       });
       shelvedChanges = true;
     }
+
+    stripWorkspaceTrustPolicy(monorepoDir);
 
     console.log('Updating workspace dependencies to use * instead of ^');
     await (async function updateWorkspaceDependencies() {

@@ -14,11 +14,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -920,6 +936,26 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -932,6 +968,26 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
   }
 
   // --------------------------------------------------------------------------

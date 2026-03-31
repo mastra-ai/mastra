@@ -64,7 +64,7 @@ export function SearchFieldBlock({
           />
           <SearchIcon
             aria-hidden="true"
-            className="text-neutral4 opacity-50 group-has-[:focus]:opacity-100 absolute top-2 left-3 w-5 h-5"
+            className="text-neutral4 opacity-50 group-has-focus:opacity-100 absolute top-2 left-3 w-5 h-5"
           />
           {onReset && value && (
             <button
@@ -78,7 +78,7 @@ export function SearchFieldBlock({
                 '[&:hover>svg]:text-neutral5',
               )}
             >
-              <XIcon className="text-neutral3 w-[1rem] h-[1rem]" />
+              <XIcon className="text-neutral3 w-4 h-4" />
             </button>
           )}
         </div>

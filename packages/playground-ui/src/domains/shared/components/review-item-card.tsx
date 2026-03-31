@@ -193,7 +193,7 @@ export function ReviewItemCard({
             <Txt variant="ui-xs" className="text-neutral3 font-medium block mb-1">
               Input
             </Txt>
-            <pre className="text-xs text-neutral4 bg-surface3 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-24 overflow-y-auto">
+            <pre className="text-xs text-neutral4 bg-surface3 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -205,7 +205,7 @@ export function ReviewItemCard({
             </Txt>
             <pre
               className={cn(
-                'text-xs rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-24 overflow-y-auto',
+                'text-xs rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto',
                 item.error ? 'text-negative1 bg-negative1/10' : 'text-neutral4 bg-surface3',
               )}
             >

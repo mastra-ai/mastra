@@ -131,7 +131,7 @@ export function EvaluationDatasetsList({
             value={search}
             onChange={e => setSearch(e.target.value)}
             onReset={() => setSearch('')}
-            className="w-full max-w-[20rem]"
+            className="w-full max-w-80"
           />
           <ButtonsGroup>
             <SelectFieldBlock
@@ -214,7 +214,7 @@ export function EvaluationDatasetsList({
               <EntityList.Cell>
                 {Array.isArray(ds.tags) && ds.tags.length > 0 ? (
                   <div
-                    className="flex items-center gap-1 max-w-[12rem] overflow-hidden"
+                    className="flex items-center gap-1 max-w-48 overflow-hidden"
                     title={(ds.tags as string[]).join(', ')}
                   >
                     {(ds.tags as string[]).slice(0, 2).map(tag => (

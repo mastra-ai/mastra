@@ -27,6 +27,7 @@ import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { safeStringify } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
@@ -588,7 +589,7 @@ export class CoreToolBuilder extends MastraBase {
             category: ErrorCategory.USER,
             details: {
               errorMessage: String(err),
-              argsJson: JSON.stringify(args),
+              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },

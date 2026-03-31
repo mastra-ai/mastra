@@ -146,7 +146,7 @@ export function MCPClientList() {
         {mcpClients.length === 0 && (
           <div className="rounded-xl border border-border2 border-dashed py-8 text-center">
             <EmptyState
-              className="!py-4"
+              className="py-4!"
               iconSlot={
                 <div className="size-6 text-neutral3 rounded-full bg-surface3 p-2 flex items-center justify-center">
                   <LaptopMinimal className="size-6" />

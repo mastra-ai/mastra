@@ -121,6 +121,7 @@
         "gpt-5.2-chat-latest",
         "gpt-5.2-codex",
         "gpt-5.2-pro",
+        "gpt-5.3-chat-latest",
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
@@ -777,7 +778,8 @@
         "mimo-v2-pro-free",
         "minimax-m2.5",
         "minimax-m2.5-free",
-        "nemotron-3-super-free"
+        "nemotron-3-super-free",
+        "qwen3.6-plus-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -2168,6 +2170,7 @@
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwen3.5-397b-a17b",
         "qwen/qwen3.5-plus-02-15",
+        "qwen/qwen3.6-plus-preview:free",
         "sourceful/riverflow-v2-fast-preview",
         "sourceful/riverflow-v2-max-preview",
         "sourceful/riverflow-v2-standard-preview",
@@ -2201,7 +2204,7 @@
       "npm": "@openrouter/ai-sdk-provider"
     },
     "zenmux": {
-      "url": "https://zenmux.ai/api/anthropic/v1",
+      "url": "https://zenmux.ai/api/v1",
       "apiKeyEnvVar": "ZENMUX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "ZenMux",
@@ -2224,7 +2227,6 @@
         "google/gemini-2.5-flash-lite",
         "google/gemini-2.5-pro",
         "google/gemini-3-flash-preview",
-        "google/gemini-3-pro-image-preview",
         "google/gemini-3-pro-preview",
         "google/gemini-3.1-flash-lite-preview",
         "google/gemini-3.1-pro-preview",
@@ -2294,8 +2296,7 @@
         "z-ai/glm-5-turbo"
       ],
       "docUrl": "https://docs.zenmux.ai",
-      "gateway": "models.dev",
-      "npm": "@ai-sdk/anthropic"
+      "gateway": "models.dev"
     },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
@@ -2712,6 +2713,7 @@
         "inception/mercury-2",
         "inception/mercury-coder-small",
         "kwaipilot/kat-coder-pro-v1",
+        "kwaipilot/kat-coder-pro-v2",
         "meituan/longcat-flash-chat",
         "meituan/longcat-flash-thinking",
         "meituan/longcat-flash-thinking-2601",
@@ -2757,6 +2759,7 @@
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
         "nvidia/nemotron-3-nano-30b-a3b",
+        "nvidia/nemotron-3-super-120b-a12b",
         "nvidia/nemotron-nano-12b-v2-vl",
         "nvidia/nemotron-nano-9b-v2",
         "openai/codex-mini",
@@ -3358,6 +3361,7 @@
         "mistral-medium-latest",
         "mistral-nemo",
         "mistral-small-2506",
+        "mistral-small-2603",
         "mistral-small-latest",
         "open-mistral-7b",
         "open-mixtral-8x22b",
@@ -3443,17 +3447,7 @@
       "apiKeyEnvVar": "VULTR_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Vultr",
-      "models": [
-        "DeepSeek-R1-Distill-Llama-70B",
-        "DeepSeek-R1-Distill-Qwen-32B",
-        "DeepSeek-V3.2",
-        "GLM-5-FP8",
-        "Kimi-K2.5",
-        "Llama-3_1-Nemotron-Ultra-253B-v1",
-        "MiniMax-M2.5",
-        "NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
-        "gpt-oss-120b"
-      ],
+      "models": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
       "docUrl": "https://api.vultrinference.com/",
       "gateway": "models.dev"
     },
@@ -4100,7 +4094,7 @@
     },
     "cloudflare-workers-ai": {
       "url": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-      "apiKeyEnvVar": "CLOUDFLARE_ACCOUNT_ID",
+      "apiKeyEnvVar": "CLOUDFLARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Cloudflare Workers AI",
       "models": [
@@ -4430,7 +4424,6 @@
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-flash-image",
         "gemini/gemini-2.5-flash-lite",
-        "gemini/gemini-2.5-flash-lite-preview-09-2025",
         "gemini/gemini-2.5-pro",
         "gemini/gemini-3-flash-preview",
         "gemini/gemini-3-pro-image-preview",
@@ -4558,6 +4551,7 @@
       "gpt-5.2-chat-latest",
       "gpt-5.2-codex",
       "gpt-5.2-pro",
+      "gpt-5.3-chat-latest",
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
@@ -5063,7 +5057,8 @@
       "mimo-v2-pro-free",
       "minimax-m2.5",
       "minimax-m2.5-free",
-      "nemotron-3-super-free"
+      "nemotron-3-super-free",
+      "qwen3.6-plus-free"
     ],
     "berget": [
       "BAAI/bge-reranker-v2-m3",
@@ -6264,6 +6259,7 @@
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwen3.5-397b-a17b",
       "qwen/qwen3.5-plus-02-15",
+      "qwen/qwen3.6-plus-preview:free",
       "sourceful/riverflow-v2-fast-preview",
       "sourceful/riverflow-v2-max-preview",
       "sourceful/riverflow-v2-standard-preview",
@@ -6311,7 +6307,6 @@
       "google/gemini-2.5-flash-lite",
       "google/gemini-2.5-pro",
       "google/gemini-3-flash-preview",
-      "google/gemini-3-pro-image-preview",
       "google/gemini-3-pro-preview",
       "google/gemini-3.1-flash-lite-preview",
       "google/gemini-3.1-pro-preview",
@@ -6687,6 +6682,7 @@
       "inception/mercury-2",
       "inception/mercury-coder-small",
       "kwaipilot/kat-coder-pro-v1",
+      "kwaipilot/kat-coder-pro-v2",
       "meituan/longcat-flash-chat",
       "meituan/longcat-flash-thinking",
       "meituan/longcat-flash-thinking-2601",
@@ -6732,6 +6728,7 @@
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
       "nvidia/nemotron-3-nano-30b-a3b",
+      "nvidia/nemotron-3-super-120b-a12b",
       "nvidia/nemotron-nano-12b-v2-vl",
       "nvidia/nemotron-nano-9b-v2",
       "openai/codex-mini",
@@ -7243,6 +7240,7 @@
       "mistral-medium-latest",
       "mistral-nemo",
       "mistral-small-2506",
+      "mistral-small-2603",
       "mistral-small-latest",
       "open-mistral-7b",
       "open-mixtral-8x22b",
@@ -7295,17 +7293,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "vultr": [
-      "DeepSeek-R1-Distill-Llama-70B",
-      "DeepSeek-R1-Distill-Qwen-32B",
-      "DeepSeek-V3.2",
-      "GLM-5-FP8",
-      "Kimi-K2.5",
-      "Llama-3_1-Nemotron-Ultra-253B-v1",
-      "MiniMax-M2.5",
-      "NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
-      "gpt-oss-120b"
-    ],
+    "vultr": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
     "github-models": [
       "ai21-labs/ai21-jamba-1.5-large",
       "ai21-labs/ai21-jamba-1.5-mini",
@@ -8162,7 +8150,6 @@
       "gemini/gemini-2.5-flash",
       "gemini/gemini-2.5-flash-image",
       "gemini/gemini-2.5-flash-lite",
-      "gemini/gemini-2.5-flash-lite-preview-09-2025",
       "gemini/gemini-2.5-pro",
       "gemini/gemini-3-flash-preview",
       "gemini/gemini-3-pro-image-preview",

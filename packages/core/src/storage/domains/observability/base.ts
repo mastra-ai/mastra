@@ -18,7 +18,20 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
 } from './discovery';
-import type { BatchCreateFeedbackArgs, CreateFeedbackArgs, ListFeedbackArgs, ListFeedbackResponse } from './feedback';
+import type {
+  BatchCreateFeedbackArgs,
+  CreateFeedbackArgs,
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+} from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
   BatchCreateMetricsArgs,
@@ -33,7 +46,20 @@ import type {
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
 } from './metrics';
-import type { BatchCreateScoresArgs, CreateScoreArgs, ListScoresArgs, ListScoresResponse } from './scores';
+import type {
+  BatchCreateScoresArgs,
+  CreateScoreArgs,
+  ListScoresArgs,
+  ListScoresResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+} from './scores';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -408,6 +434,42 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  async getScoreAggregate(_args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_AGGREGATE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score aggregation',
+    });
+  }
+
+  async getScoreBreakdown(_args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_BREAKDOWN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score breakdown',
+    });
+  }
+
+  async getScoreTimeSeries(_args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_TIME_SERIES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score time series',
+    });
+  }
+
+  async getScorePercentiles(_args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_PERCENTILES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score percentiles',
+    });
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -445,6 +507,42 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  async getFeedbackAggregate(_args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_AGGREGATE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback aggregation',
+    });
+  }
+
+  async getFeedbackBreakdown(_args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BREAKDOWN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback breakdown',
+    });
+  }
+
+  async getFeedbackTimeSeries(_args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_TIME_SERIES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback time series',
+    });
+  }
+
+  async getFeedbackPercentiles(_args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_PERCENTILES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback percentiles',
     });
   }
 }

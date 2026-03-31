@@ -252,7 +252,7 @@ function ObservationItem({
         )}
       >
         {observation.isNested && (
-          <span className={cn('flex-shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
+          <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
         <span
           className={cn(
@@ -266,7 +266,7 @@ function ObservationItem({
         {observation.time && (
           <span
             className={cn(
-              'flex-shrink-0 font-mono text-[10px] ml-2',
+              'shrink-0 font-mono text-[10px] ml-2',
               useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
             )}
           >
@@ -379,7 +379,7 @@ export function ObservationRenderer({
   return (
     <div className={cn('text-sm overflow-hidden', className)}>
       <div
-        className={cn('break-words', maxHeight && 'overflow-y-auto pr-1')}
+        className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
       >
         {parsed.threads.map((thread, i) => (
