@@ -49,6 +49,17 @@ export interface ValidationError<T = unknown> {
   message: string;
   validationErrors: FormattedValidationErrors<T>;
 }
+
+export function isValidationError(value: unknown): value is ValidationError {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error === true &&
+    'validationErrors' in value
+  );
+}
+
 /**
  * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
  */

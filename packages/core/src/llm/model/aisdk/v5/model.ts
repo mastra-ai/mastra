@@ -45,6 +45,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
     const result = await this.#model.doGenerate(options);
 
     return {
+      ...result,
       request: result.request!,
       response: result.response as unknown as StreamResult['response'],
       stream: createStreamFromGenerateResult(result),

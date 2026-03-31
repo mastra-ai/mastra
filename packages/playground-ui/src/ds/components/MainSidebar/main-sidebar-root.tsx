@@ -55,8 +55,8 @@ export function MainSidebarRoot({ children, className, footerSlot }: MainSidebar
                   'inline-flex w-auto items-center text-neutral3 h-8 px-3 rounded-md',
                   'hover:bg-surface4 hover:text-neutral5',
                   'transition-all duration-normal ease-out-custom',
-                  'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
-                  '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
+                  'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+                  '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
                 )}
                 aria-label="Toggle sidebar"
               >

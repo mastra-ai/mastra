@@ -1,4 +1,5 @@
 // packages/core/src/observability/types/scores.ts
+import type { CorrelationContext } from './core';
 
 // ============================================================================
 // ScoreInput (User Input)
@@ -6,7 +7,7 @@
 
 /**
  * User-provided score data for evaluating span/trace quality.
- * Used with span.addScore() and trace.addScore().
+ * Used by evaluator/scorer flows to attach score data to a recorded span or trace.
  */
 export interface ScoreInput {
   /** Identifier of the scorer (e.g., "relevance", "accuracy", "toxicity") */
@@ -15,8 +16,14 @@ export interface ScoreInput {
   /** Version of the scorer */
   scorerVersion?: string;
 
-  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  /**
+   * @deprecated Use `scoreSource` instead.
+   * Source of the score (e.g., "manual", "automated", "experiment")
+   */
   source?: string;
+
+  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  scoreSource?: string;
 
   /** Numeric score value (typically 0-1 or 0-100) */
   score: number;
@@ -24,7 +31,9 @@ export interface ScoreInput {
   /** Human-readable explanation of the score */
   reason?: string;
 
-  /** Experiment identifier for A/B testing or evaluation runs */
+  /**
+   * @deprecated Derived from the target trace/span. Use `correlationContext.experimentId` on the exported event instead.
+   */
   experimentId?: string;
 
   /** Trace ID of the scoring run itself (for debugging score generation) */
@@ -42,9 +51,9 @@ export interface ScoreInput {
  * Score data transported via the event bus.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Context fields (organizationId, userId, environment, etc.) are stored
- * in metadata, following the same pattern as tracing spans. The metadata
- * is inherited from the span/trace being scored.
+ * Descriptive correlation metadata travels in `correlationContext`.
+ * Signal identity stays on the top-level `traceId` / `spanId` fields.
+ * User-defined metadata is inherited from the span/trace being scored.
  */
 export interface ExportedScore {
   /** When the score was recorded */
@@ -62,8 +71,14 @@ export interface ExportedScore {
   /** Version of the scorer */
   scorerVersion?: string;
 
-  /** Source of the score */
+  /**
+   * @deprecated Use `scoreSource` instead.
+   * Source of the score
+   */
   source?: string;
+
+  /** Source of the score */
+  scoreSource?: string;
 
   /** Numeric score value */
   score: number;
@@ -71,17 +86,20 @@ export interface ExportedScore {
   /** Human-readable explanation */
   reason?: string;
 
-  /** Experiment identifier for A/B testing */
+  /**
+   * @deprecated Use `correlationContext.experimentId` instead.
+   */
   experimentId?: string;
 
   /** Trace ID of the scoring run itself (for debugging score generation) */
   scoreTraceId?: string;
 
+  /** Canonical correlation context for this score event */
+  correlationContext?: CorrelationContext;
+
   /**
    * User-defined metadata.
    * Inherited from the span/trace being scored, merged with score-specific metadata.
-   * Contains context fields: organizationId, userId, environment, serviceName,
-   * entityType, entityName, etc.
    */
   metadata?: Record<string, unknown>;
 }

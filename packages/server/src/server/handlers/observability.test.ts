@@ -28,8 +28,16 @@ const createMockObservabilityStore = () => ({
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  getScoreAggregate: vi.fn(),
+  getScoreBreakdown: vi.fn(),
+  getScoreTimeSeries: vi.fn(),
+  getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  getFeedbackAggregate: vi.fn(),
+  getFeedbackBreakdown: vi.fn(),
+  getFeedbackTimeSeries: vi.fn(),
+  getFeedbackPercentiles: vi.fn(),
   getMetricAggregate: vi.fn(),
   getMetricBreakdown: vi.fn(),
   getMetricTimeSeries: vi.fn(),
@@ -1218,6 +1226,298 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric aggregate'");
+    });
+  });
+
+  describe('GET_SCORE_AGGREGATE_ROUTE', () => {
+    it('should return score aggregate successfully', async () => {
+      const mockResult = {
+        value: 0.82,
+        previousValue: 0.8,
+        changePercent: 2.5,
+      };
+
+      (mockObservabilityStore.getScoreAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_SCORE_AGGREGATE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        aggregation: 'avg',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getScoreAggregate).toHaveBeenCalledWith({
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        aggregation: 'avg',
+      });
+    });
+  });
+
+  describe('GET_SCORE_BREAKDOWN_ROUTE', () => {
+    it('should return score breakdown successfully', async () => {
+      const mockResult = {
+        groups: [{ dimensions: { experimentId: 'exp-1' }, value: 0.82 }],
+      };
+
+      (mockObservabilityStore.getScoreBreakdown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_SCORE_BREAKDOWN.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scorerId: 'relevance',
+        groupBy: ['experimentId'],
+        aggregation: 'avg',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getScoreBreakdown).toHaveBeenCalledWith({
+        scorerId: 'relevance',
+        groupBy: ['experimentId'],
+        aggregation: 'avg',
+      });
+    });
+  });
+
+  describe('GET_SCORE_TIME_SERIES_ROUTE', () => {
+    it('should return score time series successfully', async () => {
+      const mockResult = {
+        series: [
+          {
+            name: 'relevance|manual',
+            points: [{ timestamp: new Date('2024-01-01T00:00:00Z'), value: 0.82 }],
+          },
+        ],
+      };
+
+      (mockObservabilityStore.getScoreTimeSeries as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_SCORE_TIME_SERIES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['experimentId'],
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getScoreTimeSeries).toHaveBeenCalledWith({
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['experimentId'],
+      });
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Score time series query failed');
+      (mockObservabilityStore.getScoreTimeSeries as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.GET_SCORE_TIME_SERIES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          scorerId: 'relevance',
+          interval: '1h',
+          aggregation: 'avg',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get score time series'");
+    });
+  });
+
+  describe('GET_SCORE_PERCENTILES_ROUTE', () => {
+    it('should return score percentiles successfully', async () => {
+      const mockResult = {
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2024-01-01T00:00:00Z'), value: 0.82 }],
+          },
+        ],
+      };
+
+      (mockObservabilityStore.getScorePercentiles as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_SCORE_PERCENTILES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        percentiles: [0.5],
+        interval: '1h',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getScorePercentiles).toHaveBeenCalledWith({
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        percentiles: [0.5],
+        interval: '1h',
+      });
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Score percentile query failed');
+      (mockObservabilityStore.getScorePercentiles as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.GET_SCORE_PERCENTILES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          scorerId: 'relevance',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get score percentiles'");
+    });
+  });
+
+  describe('GET_FEEDBACK_AGGREGATE_ROUTE', () => {
+    it('should return feedback aggregate successfully', async () => {
+      const mockResult = {
+        value: 4.5,
+        previousValue: 4.2,
+        changePercent: 7.14,
+      };
+
+      (mockObservabilityStore.getFeedbackAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_FEEDBACK_AGGREGATE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getFeedbackAggregate).toHaveBeenCalledWith({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+      });
+    });
+  });
+
+  describe('GET_FEEDBACK_BREAKDOWN_ROUTE', () => {
+    it('should return feedback breakdown successfully', async () => {
+      const mockResult = {
+        groups: [{ dimensions: { entityName: 'agent-a' }, value: 4.5 }],
+      };
+
+      (mockObservabilityStore.getFeedbackBreakdown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_FEEDBACK_BREAKDOWN.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackType: 'rating',
+        groupBy: ['entityName'],
+        aggregation: 'avg',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getFeedbackBreakdown).toHaveBeenCalledWith({
+        feedbackType: 'rating',
+        groupBy: ['entityName'],
+        aggregation: 'avg',
+      });
+    });
+  });
+
+  describe('GET_FEEDBACK_TIME_SERIES_ROUTE', () => {
+    it('should return feedback time series successfully', async () => {
+      const mockResult = {
+        series: [
+          {
+            name: 'rating|user',
+            points: [{ timestamp: new Date('2024-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      };
+
+      (mockObservabilityStore.getFeedbackTimeSeries as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_FEEDBACK_TIME_SERIES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getFeedbackTimeSeries).toHaveBeenCalledWith({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Feedback time series query failed');
+      (mockObservabilityStore.getFeedbackTimeSeries as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.GET_FEEDBACK_TIME_SERIES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackType: 'rating',
+          interval: '1h',
+          aggregation: 'avg',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get feedback time series'");
+    });
+  });
+
+  describe('GET_FEEDBACK_PERCENTILES_ROUTE', () => {
+    it('should return feedback percentiles successfully', async () => {
+      const mockResult = {
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2024-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      };
+
+      (mockObservabilityStore.getFeedbackPercentiles as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await NEW_ROUTES.GET_FEEDBACK_PERCENTILES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        percentiles: [0.5],
+        interval: '1h',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.getFeedbackPercentiles).toHaveBeenCalledWith({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        percentiles: [0.5],
+        interval: '1h',
+      });
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Feedback percentile query failed');
+      (mockObservabilityStore.getFeedbackPercentiles as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.GET_FEEDBACK_PERCENTILES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackType: 'rating',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get feedback percentiles'");
     });
   });
 

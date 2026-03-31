@@ -2,8 +2,6 @@
 title: "Tracing | Observability"
 description: "Set up Tracing for Mastra applications"
 packages:
-  - "@mastra/arize"
-  - "@mastra/core"
   - "@mastra/observability"
 ---
 
@@ -40,7 +38,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new DefaultExporter(), // Persists traces to storage for Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
@@ -61,7 +59,7 @@ This configuration includes:
 - **Service Name**: `"mastra"` - identifies your service in traces
 - **Sampling**: `"always"` by default (100% of traces)
 - **Exporters**:
-  - `DefaultExporter` - Persists traces to your configured storage for Mastra Studio
+  - `DefaultExporter` - Persists traces to your configured storage for Studio
   - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
