@@ -3079,7 +3079,7 @@ ${formattedMessages}
 
       hooks?.onObservationStart?.();
       try {
-        await ObservationStrategy.create(this, {
+        observed = await ObservationStrategy.create(this, {
           record: freshRecord,
           threadId,
           resourceId,
@@ -3089,7 +3089,6 @@ ${formattedMessages}
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();
-        observed = true;
       } finally {
         hooks?.onObservationEnd?.();
       }

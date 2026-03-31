@@ -153,12 +153,17 @@ export interface AgentLegacyCapabilities {
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig, any>; instructions?: DynamicArgument<string> }
+      | {
+          model?: DynamicArgument<MastraModelConfig, any>;
+          instructions?: DynamicArgument<string>;
+          minMessages?: number;
+        }
       | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraModelConfig, any>;
     instructions?: DynamicArgument<string>;
+    minMessages?: number;
   };
   /** Save step messages */
   saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
@@ -553,31 +558,40 @@ export class AgentLegacyHandler {
 
             // Add title generation to promises if needed
             const config = memory.getMergedThreadConfig(memoryConfig);
-            const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
             const {
               shouldGenerate,
               model: titleModel,
               instructions: titleInstructions,
+              minMessages,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            if (shouldGenerate && !thread.title && userMessage) {
-              const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-              promises.push(
-                this.capabilities
-                  .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                  .then(title => {
-                    if (title) {
-                      return memory.createThread({
-                        threadId: thread.id,
-                        resourceId,
-                        memoryConfig,
-                        title,
-                        metadata: thread.metadata,
-                      });
-                    }
-                  }),
-              );
+            const uiMessages = messageList.get.all.ui();
+            const messages = messageList.get.all.core();
+            const requiredMessages = minMessages ?? 1;
+
+            if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+              const userMessage = this.capabilities.getMostRecentUserMessage(uiMessages);
+
+              if (userMessage) {
+                const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
+                promises.push(
+                  this.capabilities
+                    .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
+                    .then(title => {
+                      if (title) {
+                        return memory.createThread({
+                          threadId: thread.id,
+                          resourceId,
+                          memoryConfig,
+                          title,
+                          metadata: thread.metadata,
+                        });
+                      }
+                    }),
+                );
+              }
             }
 
             if (promises.length > 0) {
