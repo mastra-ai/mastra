@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
+
 export interface DataDetailsPanelContentProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function DataDetailsPanelContent({ children }: DataDetailsPanelContentProps) {

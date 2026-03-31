@@ -47,14 +47,14 @@ export function TraceTimelineSpan({
   const isFaded = isFadedByType || isFadedBySearch;
 
   useEffect(() => {
-    if (!featuredSpanIds || !span.spans || span.spans.length === 0) return;
+    if (!featuredSpanIds || allDescendantIds.length === 0) return;
     if (isExpanded) return;
-    const hasFeaturedChildren = span.spans.some(childSpan => featuredSpanIds.includes(childSpan.id));
-    if (hasFeaturedChildren && setExpandedSpanIds) {
+    const hasFeaturedDescendant = allDescendantIds.some(id => featuredSpanIds.includes(id));
+    if (hasFeaturedDescendant && setExpandedSpanIds) {
       setExpandedSpanIds(prev => (prev ? [...prev, span.id] : [span.id]));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [featuredSpanIds]);
+  }, [featuredSpanIds, allDescendantIds]);
 
   const toggleChildren = () => {
     if (!setExpandedSpanIds || !expandedSpanIds) return;

@@ -1,5 +1,5 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LogRecord } from '../types';
 import { LogDetails } from './log-details';
 import { NoLogsInfo } from './no-logs-info';
@@ -74,18 +74,30 @@ export function LogsList({
 
   const updateFeatured = useCallback(
     (ids: FeaturedIds) => {
+      const merged = {
+        logId: ids.logId !== undefined ? ids.logId : featuredLogId,
+        traceId: ids.traceId !== undefined ? ids.traceId : featuredTraceId,
+        spanId: ids.spanId !== undefined ? ids.spanId : featuredSpanId,
+      };
       if (onFeaturedChange) {
-        onFeaturedChange(ids);
+        onFeaturedChange(merged);
       } else {
-        setInternalIds(prev => ({ ...prev, ...ids }));
+        setInternalIds(merged);
       }
     },
-    [onFeaturedChange],
+    [onFeaturedChange, featuredLogId, featuredTraceId, featuredSpanId],
   );
 
   // SpanRecord cached from TraceDetails callback (needed for SpanDetails rendering)
   const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
+
+  // Clear cached span when controlled spanId is removed or changed
+  useEffect(() => {
+    if (!featuredSpanId || (featuredSpanRecord && featuredSpanRecord.spanId !== featuredSpanId)) {
+      setFeaturedSpanRecord(undefined);
+    }
+  }, [featuredSpanId, featuredSpanRecord]);
 
   const logIdMap = useMemo(() => getLogIds(logs), [logs]);
   const idToLog = useMemo(() => {

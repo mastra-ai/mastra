@@ -10,8 +10,9 @@ import { cn } from '@/lib/utils';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(value);
+function toDate(value: Date | string): Date | null {
+  const date = value instanceof Date ? value : new Date(value);
+  return isNaN(date.getTime()) ? null : date;
 }
 
 const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
@@ -54,7 +55,7 @@ export function LogsDataListDateCell({ timestamp }: LogsDataListDateCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {isToday(date) ? 'Today' : format(date, 'MMM dd')}
+      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
     </DataListCell>
   );
 }
@@ -71,8 +72,14 @@ export function LogsDataListTimeCell({ timestamp }: LogsDataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3 flex">
-      {format(date, 'HH:mm:ss')}
-      <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
+      {date ? (
+        <>
+          {format(date, 'HH:mm:ss')}
+          <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
+        </>
+      ) : (
+        '-'
+      )}
     </DataListCell>
   );
 }
@@ -141,7 +148,14 @@ export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
   }
 
   const summary = Object.entries(data)
-    .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .map(([k, v]) => {
+      if (typeof v === 'string') return `${k}: ${v}`;
+      try {
+        return `${k}: ${JSON.stringify(v)}`;
+      } catch {
+        return `${k}: <unserializable>`;
+      }
+    })
     .join(', ');
 
   return (
