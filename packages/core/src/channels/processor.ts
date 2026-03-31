@@ -1,5 +1,5 @@
 import type { CardElement } from 'chat';
-import { Card, CardText } from 'chat';
+import { Actions, Button, Card, CardText } from 'chat';
 
 import type {
   ProcessInputArgs,
@@ -16,6 +16,9 @@ import type { ChannelContext } from './types';
 const TOOL_PREFIXES = ['mastra_workspace_'];
 const MAX_ARG_SUMMARY_LENGTH = 40;
 const MAX_RESULT_LENGTH = 300;
+
+/** Message content that can be posted to a channel. */
+export type PostableMessage = string | CardElement;
 
 export function stripToolPrefix(name: string): string {
   for (const prefix of TOOL_PREFIXES) {
@@ -63,6 +66,111 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+// ---------------------------------------------------------------------------
+// Tool header formatting
+// ---------------------------------------------------------------------------
+
+/** Format the tool header line: **toolName** `args` */
+export function formatToolHeader(toolName: string, argsSummary: string): string {
+  return argsSummary ? `*${toolName}* \`${argsSummary}\`` : `*${toolName}*`;
+}
+
+// ---------------------------------------------------------------------------
+// Tool message formatting (cards vs plain text)
+// ---------------------------------------------------------------------------
+
+/** Format a "running" tool call message */
+export function formatToolRunning(toolName: string, argsSummary: string, useCards: boolean): PostableMessage {
+  const header = formatToolHeader(toolName, argsSummary);
+  if (useCards) {
+    return Card({ children: [CardText(`${header} ⋯`)] });
+  }
+  return `${header} ⋯`;
+}
+
+/** Format a tool result message */
+export function formatToolResult(
+  toolName: string,
+  argsSummary: string,
+  resultText: string,
+  isError: boolean,
+  durationMs: number | undefined,
+  useCards: boolean,
+): PostableMessage {
+  const status = durationMs != null ? `${formatDuration(durationMs)} ${isError ? '✗' : '✓'}` : isError ? '✗' : '✓';
+  const header = formatToolHeader(toolName, argsSummary);
+
+  if (useCards) {
+    const headerWithStatus = `${header} · ${status}`;
+    const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
+    return Card({
+      children: [CardText(headerWithStatus), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
+    });
+  }
+
+  // Plain text format
+  const resultBody = isError ? `Error: ${resultText}` : resultText;
+  return `${header} · ${status}\n${resultBody}`;
+}
+
+/** Format a tool approval request message */
+export function formatToolApproval(
+  toolName: string,
+  argsSummary: string,
+  toolCallId: string,
+  useCards: boolean,
+): PostableMessage {
+  const header = formatToolHeader(toolName, argsSummary);
+
+  if (useCards) {
+    return Card({
+      children: [
+        CardText(header),
+        CardText('Requires approval to run.'),
+        Actions([
+          Button({ id: `tool_approve:${toolCallId}`, label: 'Approve', style: 'primary' }),
+          Button({ id: `tool_deny:${toolCallId}`, label: 'Deny', style: 'danger' }),
+        ]),
+      ],
+    });
+  }
+
+  // Plain text — no buttons possible, just show the request
+  return `${header}\n⏸ Requires approval to run. Reply "approve" or "deny".`;
+}
+
+/** Format an "approved" status message (shown while tool runs) */
+export function formatToolApproved(toolName: string, argsSummary: string, useCards: boolean): PostableMessage {
+  const header = formatToolHeader(toolName, argsSummary);
+
+  if (useCards) {
+    return Card({ children: [CardText(`${header} ⋯`), CardText('✓ Approved')] });
+  }
+
+  return `${header} ⋯\n✓ Approved`;
+}
+
+/** Format a "denied" status message */
+export function formatToolDenied(
+  toolName: string,
+  argsSummary: string,
+  byUser: string | undefined,
+  useCards: boolean,
+): PostableMessage {
+  const header = formatToolHeader(toolName, argsSummary);
+  const suffix = byUser ? ` by ${byUser}` : '';
+
+  if (useCards) {
+    return Card({ children: [CardText(`${header} ✗`), CardText(`✗ Denied${suffix}`)] });
+  }
+
+  return `${header} ✗\n✗ Denied${suffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy helper (for backwards compatibility with custom formatToolCall)
+// ---------------------------------------------------------------------------
+
 export function buildToolResultCard(
   toolName: string,
   argsSummary: string,
@@ -70,12 +178,7 @@ export function buildToolResultCard(
   isError?: boolean,
   durationMs?: number,
 ): CardElement {
-  const status = durationMs != null ? ` ${formatDuration(durationMs)} ${isError ? '✗' : '✓'}` : '';
-  const header = argsSummary ? `*${toolName}* \`${argsSummary}\`${status}` : `*${toolName}*${status}`;
-  const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
-  return Card({
-    children: [CardText(header), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
-  });
+  return formatToolResult(toolName, argsSummary, resultText, !!isError, durationMs, true) as CardElement;
 }
 
 // ---------------------------------------------------------------------------

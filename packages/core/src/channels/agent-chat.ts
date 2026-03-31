@@ -46,6 +46,15 @@ export interface ChannelAdapterConfig {
   gateway?: boolean;
 
   /**
+   * Use rich card formatting for tool calls, approvals, and results.
+   * Set to `false` to use plain text formatting instead.
+   *
+   * Some platforms (e.g. Discord) may have rendering issues with cards.
+   * @default true
+   */
+  cards?: boolean;
+
+  /**
    * Override how tool calls are rendered in the chat.
    * Called once per tool invocation after the result is available.
    * Return `null` to suppress the message entirely.
@@ -542,7 +551,6 @@ export class AgentChat {
     // Stream the agent response
     const stream = await agent.stream(streamInput, {
       requestContext,
-      savePerStep: true,
       memory: {
         thread: mastraThread,
         resource: threadResourceId,
@@ -740,6 +748,12 @@ export class AgentChat {
         }
         continue;
       }
+    }
+
+    // Check for errors that occurred during streaming
+    if (stream.error) {
+      this.log('error', `[${platform}] Stream completed with error`, { error: JSON.stringify(stream.error, null, 2) });
+      await sdkThread.post(`❌ Error: ${stream.error.message}`);
     }
   }
 
