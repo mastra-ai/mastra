@@ -45,10 +45,6 @@ export class MastraBase {
    */
   __setLogger(logger: IMastraLogger) {
     this.logger = logger;
-
-    if (this.component !== RegisteredLogger.LLM) {
-      this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
-    }
   }
 }
 

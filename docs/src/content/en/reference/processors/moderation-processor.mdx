@@ -19,6 +19,7 @@ const processor = new ModerationProcessor({
   threshold: 0.7,
   strategy: 'block',
   categories: ['hate', 'harassment', 'violence'],
+  lastMessageOnly: true,
 })
 ```
 
@@ -77,6 +78,14 @@ const processor = new ModerationProcessor({
             name: 'includeScores',
             type: 'boolean',
             description: 'Whether to include confidence scores in logs. Useful for tuning thresholds and debugging',
+            isOptional: true,
+            default: 'false',
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description:
+              'Whether to run moderation only on the most recent message in the batch instead of checking every message. Use this to avoid an extra LLM call for each earlier message in long conversations.',
             isOptional: true,
             default: 'false',
           },
