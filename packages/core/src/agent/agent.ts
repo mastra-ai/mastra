@@ -1400,13 +1400,31 @@ export class Agent<
     });
   }
 
-  private resolveLLMFromSelection({
-    requestContext,
-    modelSelectionPromise,
+  /**
+   * Gets or creates the LLM instance configured for this agent.
+   * The returned LLM wraps the underlying language model with Mastra-specific
+   * capabilities like tracing, error handling, and primitive registration.
+   *
+   * @example
+   * ```typescript
+   * const llm = await agent.getLLM();
+   * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
+   * ```
+   */
+  public getLLM({
+    requestContext = new RequestContext(),
+    model,
   }: {
-    requestContext: RequestContext;
-    modelSelectionPromise: Promise<ResolvedModelSelection>;
-  }): MastraLLM | Promise<MastraLLM> {
+    requestContext?: RequestContext;
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+  } = {}): MastraLLM | Promise<MastraLLM> {
+    const modelSelectionPromise = model
+      ? this.resolveModelSelection(
+          model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
+          requestContext,
+        )
+      : this.resolveModelSelection(this.model, requestContext);
+
     return modelSelectionPromise.then(modelSelection => {
       const firstEnabledModel = Array.isArray(modelSelection)
         ? modelSelection.find(m => m.enabled)?.model
@@ -1457,30 +1475,6 @@ export class Agent<
           return resolvedLLM;
         }) as MastraLLM;
       });
-    });
-  }
-
-  /**
-   * Gets or creates the LLM instance configured for this agent.
-   * The returned LLM wraps the underlying language model with Mastra-specific
-   * capabilities like tracing, error handling, and primitive registration.
-   *
-   * @example
-   * ```typescript
-   * const llm = await agent.getLLM();
-   * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
-   * ```
-   */
-  public getLLM({
-    requestContext = new RequestContext(),
-    model,
-  }: {
-    requestContext?: RequestContext;
-    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
-  } = {}): MastraLLM | Promise<MastraLLM> {
-    return this.resolveLLMFromSelection({
-      requestContext,
-      modelSelectionPromise: this.resolveModelSelection(model ?? this.model, requestContext),
     });
   }
 
