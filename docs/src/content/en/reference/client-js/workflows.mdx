@@ -121,8 +121,6 @@ const result = await workflow.runById(run.runId)
 
 This is useful for long-running workflows where you want to start execution and check results later.
 
-> **Note:** The naming convention for `start()` and `startAsync()` in the client SDK differs from `@mastra/core`. In `@mastra/core`, `start()` waits for completion and `startAsync()` is fire-and-forget. In the client SDK, the behavior is reversed: `start()` is fire-and-forget and `startAsync()` waits for the result.
-
 ### `resumeAsync()`
 
 Resume a suspended workflow step and await the full result:
