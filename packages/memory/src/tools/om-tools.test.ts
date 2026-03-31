@@ -143,7 +143,51 @@ describe('om-tools', () => {
       expect(result.messages).toContain('Message 5');
     });
 
-    it('should reject cursors from a different thread', async () => {
+    it('should browse the cursor thread in resource scope when the cursor belongs to another thread', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'other-thread',
+          resourceId,
+          title: 'Other thread',
+          createdAt: new Date('2024-01-01T11:00:00Z'),
+          updatedAt: new Date('2024-01-01T11:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'other-1',
+            threadId: 'other-thread',
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Wrong thread' }] },
+            createdAt: new Date('2024-01-01T11:00:00Z'),
+          },
+          {
+            id: 'other-2',
+            threadId: 'other-thread',
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Follow-up in other thread' }] },
+            createdAt: new Date('2024-01-01T11:01:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'other-1',
+      });
+
+      expect(result.count).toBe(1);
+      expect(result.messages).toContain('Follow-up in other thread');
+      expect(result.messages).not.toContain('Cursor does not belong to the active thread');
+    });
+
+    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
       await memory.saveThread({
         thread: {
           id: 'other-thread',
@@ -172,11 +216,13 @@ describe('om-tools', () => {
         threadId,
         resourceId,
         cursor: 'other-1',
+        threadScope: threadId,
       });
 
       expect(result.count).toBe(0);
       expect(result.messages).toContain('Cursor does not belong to the active thread');
-      expect(result.messages).toContain('other-thread');
+      expect(result.messages).toContain('Pass threadId="other-thread"');
+      expect(result.messages).toContain('omit threadId and use this cursor directly in resource scope');
     });
 
     it('should return a hint when cursor is a colon-delimited range', async () => {
@@ -453,6 +499,35 @@ describe('om-tools', () => {
       expect(result.messages).toContain('partIndex=1');
     });
 
+    it('should keep next-message continuation hints compatible with part overflow fallback', async () => {
+      const highDetail = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        page: 1,
+        limit: 10,
+        detail: 'high',
+      });
+
+      expect(highDetail.messages).toContain('next message: partIndex=0 on cursor="msg-3"');
+
+      const continued = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-2',
+        partIndex: 1,
+      });
+
+      expect(continued.messageId).toBe('msg-3');
+      expect(continued.partIndex).toBe(0);
+      expect(continued.text).toContain(
+        'Part index 1 not found in message msg-2; showing partIndex 0 from next message msg-3.',
+      );
+      expect(continued.text).toContain('Message 3');
+    });
+
     // ── Pagination flags ────────────────────────────────────────────
 
     it('should report hasNextPage when more messages exist forward', async () => {
@@ -659,16 +734,19 @@ describe('om-tools', () => {
       ).rejects.toThrow('Could not resolve cursor message');
     });
 
-    it('should reject cursor from a different thread in thread scope', async () => {
-      await expect(
-        recallMessages({
-          memory: memory as any,
-          threadId,
-          resourceId,
-          cursor: 'owner-msg-1',
-          threadScope: 'different-thread',
-        }),
-      ).rejects.toThrow('Could not resolve cursor message');
+    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId: 'different-thread',
+        resourceId,
+        cursor: 'owner-msg-1',
+        threadScope: 'different-thread',
+      });
+
+      expect(result.count).toBe(0);
+      expect(result.messages).toContain('Cursor does not belong to the active thread');
+      expect(result.messages).toContain('different-thread');
+      expect(result.messages).toContain(threadId);
     });
 
     it('should allow cursor from same resource in resource scope', async () => {
@@ -692,6 +770,44 @@ describe('om-tools', () => {
           partIndex: 0,
         }),
       ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should allow recallPart to resolve a cursor from another thread in the same resource', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'same-resource-other-thread',
+          resourceId,
+          title: 'Same resource other thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'same-resource-other-msg-1',
+            threadId: 'same-resource-other-thread',
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Same resource other thread message' }] },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        threadScope: threadId,
+        cursor: 'same-resource-other-msg-1',
+        partIndex: 0,
+      });
+
+      expect(result.messageId).toBe('same-resource-other-msg-1');
+      expect(result.partIndex).toBe(0);
+      expect(result.text).toContain('Same resource other thread message');
     });
 
     it('should reject recallThreadFromStart for a thread from another resource', async () => {
@@ -790,7 +906,110 @@ describe('om-tools', () => {
       expect(result.text).toContain('export function main()');
     });
 
-    it('should throw for invalid part index', async () => {
+    it('should fall forward to the first part of the next visible message when partIndex overflows', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-single',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Only part here' }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+          {
+            id: 'msg-next-visible',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'This is the next visible message' }],
+            },
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-single',
+        partIndex: 1,
+      });
+
+      expect(result.messageId).toBe('msg-next-visible');
+      expect(result.partIndex).toBe(0);
+      expect(result.role).toBe('user');
+      expect(result.type).toBe('text');
+      expect(result.text).toContain(
+        'Part index 1 not found in message msg-single; showing partIndex 0 from next message msg-next-visible.',
+      );
+      expect(result.text).toContain('This is the next visible message');
+    });
+
+    it('should skip data-only messages when falling forward to the next visible message', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-overflow-source',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Source message' }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+          {
+            id: 'msg-hidden-middle',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-om-buffering-start',
+                  data: { cycleId: 'test-cycle', operationType: 'observation' },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+          {
+            id: 'msg-visible-after-hidden',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Visible after hidden' }],
+            },
+            createdAt: new Date('2024-01-01T10:04:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-overflow-source',
+        partIndex: 1,
+      });
+
+      expect(result.messageId).toBe('msg-visible-after-hidden');
+      expect(result.text).toContain('Visible after hidden');
+      expect(result.text).not.toContain('msg-hidden-middle');
+    });
+
+    it('should throw for invalid part index when there is no next visible message', async () => {
       await expect(
         recallPart({
           memory: memory as any,
@@ -1715,12 +1934,105 @@ describe('om-tools', () => {
       ).rejects.toThrow('Either cursor or threadId is required for mode="messages"');
     });
 
-    it('should require an active thread when browsing by cursor only', async () => {
+    it('should allow cursor-only browsing in resource scope by resolving the cursor thread', async () => {
       const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const recallMock = vi.fn().mockResolvedValue({ messages: [] });
 
-      await expect(
-        tool.execute?.({ mode: 'messages', cursor: 'msg-1' }, { memory: {}, agent: { resourceId: 'res-a' } } as any),
-      ).rejects.toThrow('Current thread is required when browsing by cursor');
+      const memory = {
+        getMemoryStore: async () => ({
+          listMessagesById: async () => ({
+            messages: [
+              {
+                id: 'msg-1',
+                threadId: 'thread-from-cursor',
+                resourceId: 'res-a',
+                role: 'user',
+                content: { format: 2, parts: [{ type: 'text', text: 'Message 1' }] },
+                createdAt: new Date('2024-01-01T10:00:00Z'),
+              },
+            ],
+          }),
+        }),
+        recall: recallMock,
+      };
+
+      const result = await tool.execute?.({ mode: 'messages', cursor: 'msg-1' }, {
+        memory,
+        agent: { resourceId: 'res-a' },
+      } as any);
+
+      expect((result as any)?.cursor).toBe('msg-1');
+      expect(recallMock).toHaveBeenCalled();
+    });
+
+    it('should resolve a visible cursor from resource recall when direct lookup misses', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const listThreadsMock = vi.fn().mockResolvedValue({
+        threads: [
+          {
+            id: 'thread-from-recall',
+            resourceId: 'res-a',
+            title: 'Recovered thread',
+            createdAt: new Date('2024-01-01T09:00:00Z'),
+            updatedAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+        total: 1,
+        hasMore: false,
+        page: 0,
+      });
+      const recoveredMessage = {
+        id: 'visible-msg',
+        threadId: 'thread-from-recall',
+        resourceId: 'res-a',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Recovered message' }] },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+      const recallMock = vi
+        .fn()
+        .mockResolvedValueOnce({
+          messages: [recoveredMessage],
+        })
+        .mockResolvedValueOnce({
+          messages: [recoveredMessage],
+        })
+        .mockResolvedValueOnce({
+          messages: [],
+        });
+      const memory = {
+        getMemoryStore: async () => ({
+          listMessagesById: async () => ({ messages: [] }),
+        }),
+        listThreads: listThreadsMock,
+        recall: recallMock,
+      };
+
+      const result = await tool.execute?.({ mode: 'messages', cursor: 'visible-msg' }, {
+        memory,
+        agent: { resourceId: 'res-a' },
+      } as any);
+
+      expect((result as any)?.cursor).toBe('visible-msg');
+      expect(listThreadsMock).toHaveBeenCalledWith({
+        page: 0,
+        perPage: 100,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+        filter: { resourceId: 'res-a' },
+      });
+      expect(recallMock).toHaveBeenNthCalledWith(1, {
+        threadId: 'thread-from-recall',
+        resourceId: 'res-a',
+        page: 0,
+        perPage: false,
+      });
+      expect(recallMock).toHaveBeenNthCalledWith(2, {
+        threadId: 'thread-from-recall',
+        resourceId: 'res-a',
+        page: 0,
+        perPage: false,
+      });
+      expect(recallMock).toHaveBeenNthCalledWith(3, expect.objectContaining({ threadId: 'thread-from-recall' }));
     });
 
     it('should reject threadId values outside the active resource', async () => {
