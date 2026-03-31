@@ -1,5 +1,15 @@
 # @mastra/fastify
 
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added error handling for datastream-response stream processing. The read loop now catches reader.read() rejections and logs them with context instead of silently terminating the response. Also added a listener on the response stream for socket-level write errors (backpressure, connection resets), which cancels the reader gracefully. ([#14862](https://github.com/mastra-ai/mastra/pull/14862))
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+  - @mastra/server@1.20.0-alpha.0
+
 ## 1.3.2
 
 ### Patch Changes
