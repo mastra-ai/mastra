@@ -503,7 +503,7 @@ type CreateToolOpts<
   TContext extends ToolExecutionContext<
     InferSchema<TSuspendSchema>,
     InferSchema<TResumeSchema>,
-    TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+    InferSchema<TRequestContextSchema>
   >,
 > = Omit<
   ToolAction<
@@ -513,7 +513,7 @@ type CreateToolOpts<
     InferSchema<TResumeSchema>,
     TContext,
     TId,
-    TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+    InferSchema<TRequestContextSchema>
   >,
   'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema' | 'requestContextSchema'
 > & {
@@ -533,12 +533,8 @@ export function createTool<
   TContext extends ToolExecutionContext<
     InferSchema<TSuspendSchema>,
     InferSchema<TResumeSchema>,
-    TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
-  > = ToolExecutionContext<
-    InferSchema<TSuspendSchema>,
-    InferSchema<TResumeSchema>,
-    TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
-  >,
+    InferSchema<TRequestContextSchema>
+  > = ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, InferSchema<TRequestContextSchema>>,
 >(
   opts: CreateToolOpts<
     TId,
@@ -556,7 +552,7 @@ export function createTool<
   InferSchema<TResumeSchema>,
   TContext,
   TId,
-  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferSchema<TRequestContextSchema>
 > {
   return new Tool(opts);
 }
