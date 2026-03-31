@@ -13478,10 +13478,22 @@ describe('Message ordering regressions', () => {
     });
     expect(status2.bufferedChunkCount).toBe(0);
 
-    // Both turns' user messages should be present in the messageList
+    // Turn 2's user message should be present in the live messageList
     const allMsgs = s.currentMessageList.get.all.db();
-    const userMsgs = allMsgs.filter(m => m.role === 'user');
-    expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+    const turn2User = allMsgs.find(m => {
+      const content = m.content as any;
+      return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('What about generics?'));
+    });
+    expect(turn2User).toBeDefined();
+
+    // Turn 1's user message must survive in storage even if removed from live list by activation
+    const storedAfterActivation = await s.getStoredMessages();
+    expect(
+      storedAfterActivation.some(m => {
+        const content = m.content as any;
+        return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('Tell me about TypeScript'));
+      }),
+    ).toBe(true);
 
     // Messages should be in chronological order
     for (let i = 1; i < allMsgs.length; i++) {
@@ -13754,7 +13766,7 @@ describe('Message ordering regressions', () => {
   // ─── Test 6: DB reload order matches runtime order after buffering ───
 
   it('6 — DB reload order matches runtime order after buffering seals messages', async () => {
-    const s = await setupOrderingScenario({ messageTokens: 1 });
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
 
     s.addUserMessage('First question');
     await s.runStep(0);
