@@ -579,8 +579,8 @@ describe('detectRuntime', () => {
 });
 
 describe('injectStudioHtmlConfig', () => {
-  it('should inject MASTRA_THEME_TOGGLE placeholder', () => {
-    const html = "window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';";
+  it('should inject MASTRA_EXPERIMENTAL_UI placeholder', () => {
+    const html = "window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';";
 
     const result = injectStudioHtmlConfig(html, {
       host: "'localhost'",
@@ -591,13 +591,13 @@ describe('injectStudioHtmlConfig', () => {
       hideCloudCta: "'false'",
       cloudApiEndpoint: "''",
       experimentalFeatures: "'false'",
+      templates: "'false'",
       telemetryDisabled: "''",
       requestContextPresets: "''",
-      themeToggle: "'true'",
-      experimentalUI: "'false'",
+      experimentalUI: "'true'",
       autoDetectUrl: "'false'",
     });
 
-    expect(result).toBe("window.MASTRA_THEME_TOGGLE = 'true';");
+    expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
   });
 });

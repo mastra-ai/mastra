@@ -86,6 +86,7 @@ export type ProviderModelsMap = {
     'gpt-5.2-chat-latest',
     'gpt-5.2-codex',
     'gpt-5.2-pro',
+    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
@@ -592,6 +593,7 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
+    'qwen3.6-plus-free',
   ];
   readonly berget: readonly [
     'BAAI/bge-reranker-v2-m3',
@@ -1737,7 +1739,7 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-super-120b-a12b',
-    'nvidia/nemotron-3-super-120b-a12b-free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -1792,6 +1794,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
+    'qwen/qwen3.6-plus-preview:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
@@ -1839,7 +1842,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
-    'google/gemini-3-pro-image-preview',
     'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
@@ -2221,6 +2223,7 @@ export type ProviderModelsMap = {
     'inception/mercury-2',
     'inception/mercury-coder-small',
     'kwaipilot/kat-coder-pro-v1',
+    'kwaipilot/kat-coder-pro-v2',
     'meituan/longcat-flash-chat',
     'meituan/longcat-flash-thinking',
     'meituan/longcat-flash-thinking-2601',
@@ -2266,6 +2269,7 @@ export type ProviderModelsMap = {
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-nano-12b-v2-vl',
     'nvidia/nemotron-nano-9b-v2',
     'openai/codex-mini',
@@ -2777,6 +2781,7 @@ export type ProviderModelsMap = {
     'mistral-medium-latest',
     'mistral-nemo',
     'mistral-small-2506',
+    'mistral-small-2603',
     'mistral-small-latest',
     'open-mistral-7b',
     'open-mixtral-8x22b',
@@ -2829,17 +2834,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly vultr: readonly [
-    'DeepSeek-R1-Distill-Llama-70B',
-    'DeepSeek-R1-Distill-Qwen-32B',
-    'DeepSeek-V3.2',
-    'GLM-5-FP8',
-    'Kimi-K2.5',
-    'Llama-3_1-Nemotron-Ultra-253B-v1',
-    'MiniMax-M2.5',
-    'NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
-    'gpt-oss-120b',
-  ];
+  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -3414,6 +3409,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7',
     'zai-org/glm-4.7-flash',
     'zai-org/glm-5',
+    'zai-org/glm-5.1',
+    'zai-org/glm-5.1:thinking',
     'zai-org/glm-5:thinking',
   ];
   readonly clarifai: readonly [
@@ -3694,7 +3691,6 @@ export type ProviderModelsMap = {
     'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image',
     'gemini/gemini-2.5-flash-lite',
-    'gemini/gemini-2.5-flash-lite-preview-09-2025',
     'gemini/gemini-2.5-pro',
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3-pro-image-preview',

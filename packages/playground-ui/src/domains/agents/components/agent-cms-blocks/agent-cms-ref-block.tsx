@@ -122,7 +122,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
                     aria-label={`Open actions for ${promptBlock.name}`}
                     className="ml-auto rounded p-0.5 hover:bg-surface4/50 transition-colors duration-150 text-neutral3 hover:text-neutral5"
                   >
-                    <Icon className="!h-3 !w-3">
+                    <Icon className="h-3! w-3!">
                       <ChevronDown />
                     </Icon>
                   </button>
@@ -144,7 +144,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
                       className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
                       onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                     >
-                      <Icon className="!h-3.5 !w-3.5 text-neutral3">
+                      <Icon className="h-3.5! w-3.5! text-neutral3">
                         <ExternalLink />
                       </Icon>
                       Open original
@@ -158,7 +158,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
                           onDereference(localContent);
                         }}
                       >
-                        <Icon className="!h-3.5 !w-3.5 text-neutral3">
+                        <Icon className="h-3.5! w-3.5! text-neutral3">
                           <X />
                         </Icon>
                         De-reference block
@@ -170,7 +170,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
                         className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
                         onClick={onDelete}
                       >
-                        <Icon className="!h-3.5 !w-3.5">
+                        <Icon className="h-3.5! w-3.5!">
                           <X />
                         </Icon>
                         Remove block
@@ -200,7 +200,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
               value={localContent}
               onChange={handleContentChange}
               placeholder="Referenced block is empty..."
-              className="border-none rounded-none bg-transparent min-h-[3rem]"
+              className="border-none rounded-none bg-transparent min-h-12"
               language="markdown"
               highlightVariables
               showCopyButton={false}
