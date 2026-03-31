@@ -118,9 +118,9 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
             'text-xs font-medium px-2 py-0.5 rounded',
             value
               ? badge === 'info'
-                ? 'bg-blue-500/20 text-blue-400'
-                : 'bg-green-500/20 text-green-400'
-              : 'bg-red-500/20 text-red-400',
+                ? 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600'
+                : 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600'
+              : 'dark:bg-red-500/20 dark:text-red-400 bg-red-500/10 text-red-600',
           )}
         >
           {value ? 'Yes' : 'No'}

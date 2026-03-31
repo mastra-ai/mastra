@@ -140,7 +140,7 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
     return <span className="text-neutral3">Thread {id ? id.substring(id.length - 5) : null}</span>;
   }
 
-  return <span className="truncate max-w-[14rem] text-neutral3">{title}</span>;
+  return <span className="truncate max-w-56 text-neutral3">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

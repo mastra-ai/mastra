@@ -826,7 +826,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [step('search'), step('summarize')] };
         const b = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(a, b, { strictOrder: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         expect(result.score).toBe(1);
       });
@@ -835,7 +835,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [step('summarize'), step('search')] };
         const b = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(a, b, { strictOrder: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         expect(result.score).toBe(0);
         expect(result.outOfOrderSteps).toContain('summarize');
@@ -846,7 +846,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search'), step('summarize'), step('format')] };
         const expected = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict' });
 
         // 2 matched / 2 expected = 1.0, extra penalty: (1/2) * 0.5 = 0.25, score = 0.75
         expect(result.score).toBe(0.75);
@@ -857,7 +857,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search')] };
         const expected = { steps: [step('search'), step('summarize'), step('format')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict' });
 
         // Position 0: match. Positions 1,2: actual is undefined -> no match
         expect(result.matchedSteps).toBe(1);
@@ -870,7 +870,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search'), step('search'), step('summarize')] };
         const expected = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true, allowRepeatedSteps: false });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict', allowRepeatedSteps: false });
 
         expect(result.repeatedSteps).toEqual(['search']);
         // Position 0: match. Position 1: search vs summarize -> no match.
@@ -880,31 +880,31 @@ describe('Scorer Utils', () => {
       });
     });
 
-    describe('step data comparison', () => {
-      it('should match steps with same toolArgs when compareStepData is true', () => {
+    describe('step data comparison (auto-detected from expected fields)', () => {
+      it('should match steps with same toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });
 
-      it('should not match steps with different toolArgs when compareStepData is true', () => {
+      it('should not match steps with different toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'world' } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
       });
 
-      it('should not match steps with different toolResult when compareStepData is true', () => {
+      it('should not match steps with different toolResult', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolResult: { count: 5 } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolResult: { count: 10 } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
       });
@@ -913,7 +913,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'process' }] };
         const b = { steps: [{ stepType: 'workflow_step' as const, name: 'process' }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
         expect(result.matchedSteps).toBe(0);
@@ -930,14 +930,15 @@ describe('Scorer Utils', () => {
             },
           ],
         };
+        // Expected step only specifies stepType, no toolArgs/toolResult → matches by name+type only
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search' }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(1);
       });
 
-      it('should work with compareStepData in strict mode', () => {
+      it('should auto-compare data fields in strict mode', () => {
         const a = {
           steps: [
             { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'a' } },
@@ -951,7 +952,7 @@ describe('Scorer Utils', () => {
           ],
         };
 
-        const result = compareTrajectories(a, b, { strictOrder: true, compareStepData: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         // Position 0 matches, position 1 name matches but data doesn't -> not matched
         expect(result.matchedSteps).toBe(1);
@@ -1006,26 +1007,6 @@ describe('Scorer Utils', () => {
       });
     });
 
-    describe('ordering option backward compat', () => {
-      it('should treat strictOrder: true the same as ordering: strict', () => {
-        const a: Trajectory = {
-          steps: [
-            { stepType: 'tool_call' as const, name: 'b' },
-            { stepType: 'tool_call' as const, name: 'a' },
-          ],
-        };
-        const b: Trajectory = {
-          steps: [
-            { stepType: 'tool_call' as const, name: 'a' },
-            { stepType: 'tool_call' as const, name: 'b' },
-          ],
-        };
-        const r1 = compareTrajectories(a, b, { strictOrder: true });
-        const r2 = compareTrajectories(a, b, { ordering: 'strict' });
-        expect(r1.score).toBe(r2.score);
-      });
-    });
-
     describe('ExpectedStep matching', () => {
       it('should match ExpectedStep by name only (no stepType)', () => {
         const actual: Trajectory = {
@@ -1072,41 +1053,41 @@ describe('Scorer Utils', () => {
         expect(result.missingSteps).toEqual(['search']);
       });
 
-      it('should match ExpectedStep with data comparison', () => {
+      it('should match ExpectedStep when toolArgs match', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'hello' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         };
 
-        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });
 
-      it('should fail data comparison when toolArgs differ', () => {
+      it('should fail when expected toolArgs differ from actual', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         };
 
-        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(0);
         expect(result.matchedSteps).toBe(0);
       });
 
-      it('should match without data comparison even when data differs', () => {
+      it('should match by name+type only when no data fields are specified', () => {
         const actual: Trajectory = {
-          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'anything' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          // No toolArgs specified → data comparison skipped, matches by name+type
+          steps: [{ name: 'search', stepType: 'tool_call' }],
         };
 
-        // compareStepData defaults to false
         const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
@@ -1152,7 +1133,7 @@ describe('Scorer Utils', () => {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } }],
         };
 
-        const result = compareTrajectories(actual, expectedAsTrajectory, { compareStepData: true });
+        const result = compareTrajectories(actual, expectedAsTrajectory);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });

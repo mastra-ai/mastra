@@ -224,6 +224,23 @@ export type ServerConfig = {
   bodySizeLimit?: number;
 
   /**
+   * MCP transport options applied to all MCP HTTP and SSE routes.
+   * Use this to enable stateless mode for serverless environments
+   * (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
+   */
+  mcpOptions?: {
+    /**
+     * Run MCP in stateless mode without session management
+     * @default false
+     */
+    serverless?: boolean;
+    /**
+     * Custom session ID generator function
+     */
+    sessionIdGenerator?: () => string;
+  };
+
+  /**
    * Authentication configuration for the server.
    *
    * Handles WHO the user is (authentication only).
