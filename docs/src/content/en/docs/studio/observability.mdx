@@ -10,10 +10,9 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 # Studio observability
 
-Studio includes three observability views:
+Studio includes these observability views:
 
 - **Metrics** for aggregate performance data
-- **Logs** for TODO
 - **Traces** for individual request inspection
 
 All require an [observability storage backend](#quickstart) to be configured.
@@ -22,23 +21,21 @@ All require an [observability storage backend](#quickstart) to be configured.
 
 A dashboard that summarizes agent, workflow, and tool performance over a configurable time range (last 24 hours to 30 days). The top row shows total agent runs, model cost, token consumption, and average scorer performance. Below that, detailed cards break down model usage and cost per model, token usage per agent, trace volume with completed and error counts, latency percentiles (p50 and p95), and scorer trends over time.
 
+Visit the [metrics overview](/docs/observability/metrics/overview) for more details.
+
 :::note
 
-Metrics require DuckDB or in-memory observability storage. PostgreSQL, LibSQL, and other relational databases don't support metrics collection. If you use in-memory storage, metrics reset on every server restart.
+Metrics requires DuckDB. PostgreSQL, LibSQL, and other relational databases don't support metrics collection. If you use in-memory storage, metrics reset on every server restart.
 
 :::
-
-## Logs
-
-TODO
 
 ## Traces
 
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
+Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [tracing overview](/docs/observability/tracing/overview) for more details.
 
-Tracing filters out low-level framework details so your traces stay focused and readable.
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
 
 ## Quickstart
 
@@ -94,3 +91,4 @@ export const mastra = new Mastra({
 
 - [Observability overview](/docs/observability/overview)
 - [Metrics overview](/docs/observability/metrics/overview)
+- [Tracing overview](/docs/observability/tracing/overview)
