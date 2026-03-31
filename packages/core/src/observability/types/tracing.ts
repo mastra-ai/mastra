@@ -5,12 +5,14 @@
  * For top-level observability infrastructure (instances, exporters, bridges, config),
  * see observability.ts.
  */
+import { EntityType } from '@internal/core/storage';
+
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -56,27 +58,7 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
-/** Types of entities that can produce observability spans. */
-export enum EntityType {
-  /** Agent/Model execution */
-  AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
-  /** Input Processor */
-  INPUT_PROCESSOR = 'input_processor',
-  /** Input Step Processor */
-  INPUT_STEP_PROCESSOR = 'input_step_processor',
-  /** Output Processor */
-  OUTPUT_PROCESSOR = 'output_processor',
-  /** Output Step Processor */
-  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
-  /** Workflow Step */
-  WORKFLOW_STEP = 'workflow_step',
-  /** Tool */
-  TOOL = 'tool',
-  /** Workflow */
-  WORKFLOW_RUN = 'workflow_run',
-}
+export { EntityType };
 
 // ============================================================================
 // Type-Specific Attributes Interfaces
@@ -101,6 +83,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** The resolved agent version ID used for this execution */
+  resolvedVersionId?: string;
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -492,6 +476,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
 
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
+
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
@@ -628,6 +618,7 @@ export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
 }
@@ -658,6 +649,10 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * - Spans loaded from storage for evaluation
  * - Spans from completed traces being annotated
  * - Post-hoc quality scoring and user feedback
+ *
+ * RecordedSpan objects are hydrated runtime wrappers and should not be treated as
+ * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
+ * top-level observability annotation APIs after resume.
  */
 export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
@@ -670,13 +665,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -689,7 +684,10 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
+ * RecordedTrace objects are hydrated runtime wrappers and should not be stored
+ * across durable workflow serialization boundaries. Persist identifiers instead
+ * and rehydrate, or use top-level observability annotation APIs after resume.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -712,13 +710,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
@@ -832,6 +830,8 @@ export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOption
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Span name override */
+  name?: string;
   /** Input data */
   input?: any;
   /** Output data */
@@ -981,6 +981,8 @@ export interface TracingContext {
 export type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced). */
   traceId?: string;
+  /** Root span ID used on the execution (if the execution was traced). */
+  spanId?: string;
 };
 
 // ============================================================================

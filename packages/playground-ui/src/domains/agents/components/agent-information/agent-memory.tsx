@@ -1,10 +1,8 @@
-import { AgentWorkingMemory } from './agent-working-memory';
+import { ExternalLink, Copy } from 'lucide-react';
+import { useCallback } from 'react';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { AgentObservationalMemory } from './agent-observational-memory';
-import { useCallback } from 'react';
-import { cn } from '@/lib/utils';
-import { ExternalLink, Copy } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
+import { AgentWorkingMemory } from './agent-working-memory';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -13,9 +11,11 @@ import {
   useMemoryWithOMStatus,
   useThread,
 } from '@/domains/memory/hooks';
-import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { MemorySearch } from '@/lib/ai-ui/memory-search';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 interface AgentMemoryProps {
   agentId: string;

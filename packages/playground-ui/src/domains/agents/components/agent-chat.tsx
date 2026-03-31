@@ -1,13 +1,13 @@
+import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { MastraUIMessage } from '@mastra/react';
+import { useEffect, useMemo } from 'react';
+import { useAgentSettings } from '../context/agent-context';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { Thread } from '@/lib/ai-ui/thread';
 
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
-import { ChatProps } from '@/types';
-import { useAgentSettings } from '../context/agent-context';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
-import { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo } from 'react';
-import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import type { ChatProps } from '@/types';
 
 export const AgentChat = ({
   agentId,
@@ -16,10 +16,16 @@ export const AgentChat = ({
   memory,
   refreshThreadList,
   modelVersion,
+  agentVersionId,
   modelList,
   messageId,
   isNewThread,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
+  hideModelSwitcher,
+}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & {
+  messageId?: string;
+  isNewThread?: boolean;
+  hideModelSwitcher?: boolean;
+}) => {
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
@@ -60,6 +66,7 @@ export const AgentChat = ({
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
+      agentVersionId={agentVersionId}
       threadId={threadId}
       initialMessages={v5Messages}
       initialLegacyMessages={v4Messages}
@@ -68,7 +75,13 @@ export const AgentChat = ({
       settings={settings}
       requestContext={requestContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <Thread
+        agentName={agentName ?? ''}
+        hasMemory={memory}
+        agentId={agentId}
+        hasModelList={Boolean(modelList)}
+        hideModelSwitcher={hideModelSwitcher}
+      />
     </MastraRuntimeProvider>
   );
 };

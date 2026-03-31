@@ -1,6 +1,3 @@
-import { useState } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import {
   CirclePause,
   HourglassIcon,
@@ -11,8 +8,11 @@ import {
   RefreshCw,
   Tag,
 } from 'lucide-react';
+import { useState } from 'react';
 import { WorkflowCard } from './workflow-card';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
+import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 
 export interface TripwireInfo {
   reason?: string;
@@ -80,7 +80,7 @@ const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: 
     <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-3 p-4">
-        <ShieldAlert className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+        <ShieldAlert className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-amber-200 mb-1">Content Blocked</p>
           <p className="text-sm text-amber-300/90">{tripwire.reason || 'Tripwire triggered'}</p>

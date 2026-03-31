@@ -517,6 +517,7 @@ function createMockLogEvent(overrides: Partial<ExportedLog> = {}): LogEvent {
     type: 'log',
     log: {
       timestamp: new Date(),
+      traceId: 'trace-123',
       level: 'info',
       message: 'test log message',
       ...overrides,

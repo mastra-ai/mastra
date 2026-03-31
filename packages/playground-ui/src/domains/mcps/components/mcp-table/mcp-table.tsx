@@ -1,22 +1,22 @@
-import { McpServerListResponse } from '@mastra/client-js';
+import type { McpServerListResponse } from '@mastra/client-js';
+import type { ColumnDef } from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import React, { useMemo, useState } from 'react';
+import { columns } from './columns';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
-
-import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 
-import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { McpCoinIcon, McpServerIcon } from '@/ds/icons';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Icon } from '@/ds/icons/Icon';
+
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface MCPTableProps {
   mcpServers: McpServerListResponse['servers'];

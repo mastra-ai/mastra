@@ -118,6 +118,9 @@ export function setupKeyboardShortcuts(
     for (const sc of state.allSlashCommandComponents) {
       sc.setExpanded(state.toolOutputExpanded);
     }
+    for (const reminder of state.allSystemReminderComponents) {
+      reminder.setExpanded(state.toolOutputExpanded);
+    }
     state.ui.requestRender();
   });
 
@@ -148,11 +151,11 @@ export function setupKeyboardShortcuts(
   // Enter - submit immediately when idle, queue follow-up input while streaming
   state.editor.onAction('followUp', () => {
     if (!state.harness.isRunning()) {
-      state.editor.onSubmit?.(state.editor.getText());
+      state.editor.onSubmit?.(state.editor.getExpandedText());
       return true;
     }
 
-    const text = state.editor.getText().trim();
+    const text = state.editor.getExpandedText().trim();
     if (!text) {
       return true;
     }
@@ -248,6 +251,7 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'clone', description: 'Clone the current thread' },
+    { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
@@ -386,7 +390,15 @@ export function setupKeyHandlers(
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   const listener: HarnessEventListener = async event => {
-    await handleEvent(event);
+    try {
+      await handleEvent(event);
+    } catch (err) {
+      // Log but don't crash — individual event errors shouldn't kill the process
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+      if (stack) process.stderr.write(stack + '\n');
+    }
   };
   state.unsubscribe = state.harness.subscribe(listener);
 }

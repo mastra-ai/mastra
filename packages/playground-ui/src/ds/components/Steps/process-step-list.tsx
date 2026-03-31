@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
-import { type ProcessStep } from './shared';
 import { ProcessStepListItem } from './process-step-list-item';
+import type { ProcessStep } from './shared';
+import { cn } from '@/lib/utils';
 
 export type ProcessStepListProps = {
   currentStep: ProcessStep | null;

@@ -91,6 +91,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const apiPrefix = server?.apiPrefix ?? '/api';
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
@@ -145,6 +146,8 @@ export async function createHonoServer(
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
+    prefix: apiPrefix,
+    mcpOptions: server?.mcpOptions,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -216,7 +219,7 @@ export async function createHonoServer(
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
-      '/api',
+      apiPrefix,
       describeRoute({
         description: 'API Welcome Page',
         tags: ['system'],
@@ -283,7 +286,7 @@ export async function createHonoServer(
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/api/openapi.json' }),
+      swaggerUI({ url: `${apiPrefix}/openapi.json` }),
     );
   }
 
@@ -368,8 +371,8 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
-      requestPath === '/api' ||
-      requestPath.startsWith('/api/') ||
+      requestPath === apiPrefix ||
+      requestPath.startsWith(`${apiPrefix}/`) ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
     ) {
@@ -392,7 +395,8 @@ export async function createHonoServer(
       // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
-      const host = serverOptions?.host ?? 'localhost';
+      const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+      const host = bindHost ?? 'localhost';
       const key =
         serverOptions?.https?.key ??
         (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
@@ -400,9 +404,16 @@ export async function createHonoServer(
         serverOptions?.https?.cert ??
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
+      // Studio host/protocol/port for Studio URL injection — allows bind address
+      // (e.g. 0.0.0.0) to differ from the domain browsers should connect to
+      const studioHost = serverOptions?.studioHost ?? host;
+      const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+      const studioPort = serverOptions?.studioPort ?? port;
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
+      const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -421,16 +432,18 @@ export async function createHonoServer(
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
       indexHtml = injectStudioHtmlConfig(indexHtml, {
-        host: `'${host}'`,
-        port: `'${port}'`,
-        protocol: `'${protocol}'`,
+        host: `'${studioHost}'`,
+        port: `'${studioPort}'`,
+        protocol: `'${studioProtocol}'`,
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
+        templates: `'${templatesEnabled}'`,
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        experimentalUI: `'${experimentalUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -465,6 +478,7 @@ export async function createHonoServer(
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
+  const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -474,15 +488,19 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const host = serverOptions?.host ?? 'localhost';
+  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+  const host = bindHost ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
+  const studioHost = serverOptions?.studioHost ?? host;
+  const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+  const studioPort = serverOptions?.studioPort ?? port;
 
   const server = serve(
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host,
+      hostname: bindHost,
       ...(isHttpsEnabled
         ? {
             createServer: https.createServer,
@@ -495,10 +513,10 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
+      logger.info(` Mastra API running on ${protocol}://${host}:${port}${apiPrefix}`);
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
-        const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
+        const studioUrl = `${studioProtocol}://${studioHost}:${studioPort}${studioBasePath}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 

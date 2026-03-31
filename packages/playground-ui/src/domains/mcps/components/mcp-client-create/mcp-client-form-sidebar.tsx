@@ -1,19 +1,19 @@
-import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, PlusIcon, XIcon } from 'lucide-react';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { MCPServerCombobox } from '../mcp-server-combobox';
+import type { MCPClientFormValues } from './use-mcp-client-form';
+import { SectionHeader } from '@/domains/cms';
 import { Button } from '@/ds/components/Button';
 import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
-import { Icon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { SectionHeader } from '@/domains/cms';
-import { MCPServerCombobox } from '../mcp-server-combobox';
-
-import type { MCPClientFormValues } from './use-mcp-client-form';
+import { Spinner } from '@/ds/components/Spinner';
+import { Textarea } from '@/ds/components/Textarea';
+import { Icon } from '@/ds/icons';
 
 interface MCPClientFormSidebarProps {
   form: UseFormReturn<MCPClientFormValues>;
@@ -255,7 +255,7 @@ export function MCPClientFormSidebar({
       </ScrollArea>
 
       {(showSubmit ?? !readOnly) && (
-        <div className="flex-shrink-0 p-4 flex flex-col gap-2">
+        <div className="shrink-0 p-4 flex flex-col gap-2">
           {!readOnly &&
             (() => {
               const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
