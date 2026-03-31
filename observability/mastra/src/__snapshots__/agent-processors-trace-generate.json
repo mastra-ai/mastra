@@ -376,7 +376,8 @@
                     }
                   },
                   "isContinued": false,
-                  "finishReason": "stop"
+                  "finishReason": "stop",
+                  "warnings": []
                 },
                 "metadata": {
                   "runId": "<runId-1>",
