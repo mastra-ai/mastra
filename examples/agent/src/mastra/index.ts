@@ -54,6 +54,7 @@ const libsqlStore = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
+// const observability = await new InMemoryStore({ id: 'observability' }).getStore('observability');
 const duckdbStore = new DuckDBStore({ path: './mastra-observability.duckdb' });
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
