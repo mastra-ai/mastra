@@ -344,7 +344,6 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
     // Listen for navigation events (URL changes)
     const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
-
       // Only emit URL for main frame navigations (no parentId)
       if (!params.frame.parentId && params.frame.url) {
         this.lastUrl = params.frame.url;
