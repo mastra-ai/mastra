@@ -1,11 +1,10 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { ListTreeIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTraceSpans } from '../hooks/use-trace-spans';
-import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
 import { getAllSpanIds } from './trace/get-descendant-ids';
 import { TraceTimeline } from './trace/trace-timeline';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 export interface TraceDetailsProps {
   traceId: string;

@@ -20,5 +20,13 @@ export interface LogsDateRangeSelectorProps {
 }
 
 export function LogsDateRangeSelector({ value, onChange }: LogsDateRangeSelectorProps) {
-  return <SelectFieldBlock name="logs-date-range" labelIsHidden value={value} options={DATE_PRESETS} onValueChange={onChange} />;
+  return (
+    <SelectFieldBlock
+      name="logs-date-range"
+      labelIsHidden
+      value={value}
+      options={DATE_PRESETS}
+      onValueChange={onChange}
+    />
+  );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import type { InputProps } from '@/ds/components/Input';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import type { InputProps } from '@/ds/components/Input';
 
 export type ListSearchProps = {
   onSearch: (search: string) => void;

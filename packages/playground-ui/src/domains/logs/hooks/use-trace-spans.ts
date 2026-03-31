@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 
 export function useTraceSpans(traceId: string | null | undefined) {
   const client = useMastraClient();

@@ -1,8 +1,7 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
-import { BracesIcon, FileInputIcon, FileOutputIcon, HashIcon } from 'lucide-react';
+import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
-import { cn } from '@/lib/utils';
 
 const KV = DataDetailsPanel.KeyValueList;
 

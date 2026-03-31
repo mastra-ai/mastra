@@ -8,9 +8,5 @@ export type DataListRowProps = {
 };
 
 export function DataListRow({ children, className }: DataListRowProps) {
-  return (
-    <div className={cn(...dataListRowStyles, className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn(...dataListRowStyles, className)}>{children}</div>;
 }

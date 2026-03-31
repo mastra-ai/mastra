@@ -1,5 +1,5 @@
-import type { UISpan } from './types';
 import { TraceTimelineSpan } from './trace-timeline-span';
+import type { UISpan } from './types';
 import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 

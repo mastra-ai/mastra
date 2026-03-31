@@ -1,11 +1,11 @@
 import { DataDetailsPanel as Root } from './data-details-panel';
 import { DataDetailsPanelCloseButton } from './data-details-panel-close-button';
+import { DataDetailsPanelCodeSection } from './data-details-panel-code-section';
 import { DataDetailsPanelContent } from './data-details-panel-content';
 import { DataDetailsPanelHeader } from './data-details-panel-header';
 import { DataDetailsPanelHeading } from './data-details-panel-heading';
-import { DataDetailsPanelLoadingData } from './data-details-panel-loading-data';
 import { DataDetailsPanelKeyValueList } from './data-details-panel-key-value-list';
-import { DataDetailsPanelCodeSection } from './data-details-panel-code-section';
+import { DataDetailsPanelLoadingData } from './data-details-panel-loading-data';
 import { DataDetailsPanelNoData } from './data-details-panel-no-data';
 
 const DataDetailsPanel = Object.assign(Root, {

@@ -18,7 +18,10 @@ export function DataListNextPageLoading({
   }
 
   return (
-    <div ref={setEndOfListElement} className="col-span-full text-ui-md text-neutral3 opacity-50 flex py-4 justify-center">
+    <div
+      ref={setEndOfListElement}
+      className="col-span-full text-ui-md text-neutral3 opacity-50 flex py-4 justify-center"
+    >
       {isLoading && loadingText}
       {!hasMore && !isLoading && noMoreDataText}
     </div>

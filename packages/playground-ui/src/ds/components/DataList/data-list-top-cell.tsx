@@ -84,8 +84,6 @@ export function DataListTopCellSmart({
   }
 
   return (
-    <DataListTopCell className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}>
-      {content}
-    </DataListTopCell>
+    <DataListTopCell className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}>{content}</DataListTopCell>
   );
 }

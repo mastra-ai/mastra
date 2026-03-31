@@ -10,11 +10,7 @@ export type DataListRowButtonProps = {
 
 export function DataListRowButton({ children, onClick, className }: DataListRowButtonProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(...dataListRowStyles, 'text-left', className)}
-    >
+    <button type="button" onClick={onClick} className={cn(...dataListRowStyles, 'text-left', className)}>
       {children}
     </button>
   );
