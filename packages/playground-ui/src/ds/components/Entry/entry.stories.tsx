@@ -54,7 +54,7 @@ export const WithLongContent: Story = {
 
 export const MultipleEntries: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-[300px]">
+    <div className="flex flex-col gap-4 w-dropdown-max-height">
       <Entry label="Name">
         <Txt variant="ui-md" className="text-neutral6">
           My Agent

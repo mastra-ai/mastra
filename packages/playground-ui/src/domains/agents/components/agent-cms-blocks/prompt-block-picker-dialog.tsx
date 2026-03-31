@@ -62,7 +62,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="flex-1 bg-transparent text-ui-sm text-neutral6 placeholder:text-neutral3 outline-none"
+                className="flex-1 bg-transparent text-ui-sm text-neutral6 placeholder:text-neutral3 outline-hidden"
               />
             </div>
 
@@ -77,7 +77,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="flex flex-col gap-1 max-h-[300px] overflow-y-auto">
+              <div className="flex flex-col gap-1 max-h-dropdown-max-height overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}

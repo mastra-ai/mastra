@@ -38,7 +38,7 @@ export function MetricsDashboard() {
             <Button
               variant="ghost"
               as="a"
-              href="https://mastra.ai/en/docs/observability/metrics"
+              href="https://mastra.ai/docs/observability/metrics/overview"
               target="_blank"
               rel="noopener noreferrer"
             >
