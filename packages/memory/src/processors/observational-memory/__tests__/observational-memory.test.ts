@@ -13221,6 +13221,11 @@ describe('Message ordering regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
+
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -13577,6 +13582,11 @@ describe('Message ordering regressions', () => {
   it('3 — observer failure during sync observation should not lose previously persisted messages', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
+
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
