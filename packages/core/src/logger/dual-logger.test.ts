@@ -89,29 +89,51 @@ describe('DualLogger', () => {
   });
 
   describe('args adaptation', () => {
-    it('extracts first object arg as data for loggerVNext', () => {
+    it('extracts first object arg and collects extra args for loggerVNext', () => {
       const dual = new DualLogger(inner, () => vnext);
       dual.info('msg', { a: 1 }, 'extra', { b: 2 });
 
       // Inner gets all args as-is
       expect(inner.info).toHaveBeenCalledWith('msg', { a: 1 }, 'extra', { b: 2 });
-      // VNext gets the first object as data
-      expect(vnext.info).toHaveBeenCalledWith('msg', { a: 1 });
+      // VNext gets normalized: first object as base, remaining non-error/non-object as args
+      expect(vnext.info).toHaveBeenCalledWith('msg', { a: 1, args: ['extra', { b: 2 }] });
     });
 
-    it('forwards with undefined data when no object args', () => {
+    it('forwards with empty object when no object args', () => {
       const dual = new DualLogger(inner, () => vnext);
       dual.info('string only');
 
       expect(inner.info).toHaveBeenCalledWith('string only');
-      expect(vnext.info).toHaveBeenCalledWith('string only', undefined);
+      expect(vnext.info).toHaveBeenCalledWith('string only', {});
     });
 
     it('skips null args when finding data object', () => {
       const dual = new DualLogger(inner, () => vnext);
       dual.info('msg', null, { actual: 'data' });
 
-      expect(vnext.info).toHaveBeenCalledWith('msg', { actual: 'data' });
+      expect(vnext.info).toHaveBeenCalledWith('msg', { actual: 'data', args: [null] });
+    });
+
+    it('serializes Error args into structured error data', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      const err = new Error('boom');
+      dual.error('failed', err);
+
+      expect(inner.error).toHaveBeenCalledWith('failed', err);
+      expect(vnext.error).toHaveBeenCalledWith('failed', {
+        error: { name: 'Error', message: 'boom', stack: err.stack },
+      });
+    });
+
+    it('merges object data and Error args', () => {
+      const dual = new DualLogger(inner, () => vnext);
+      const err = new Error('boom');
+      dual.error('failed', { context: 'test' }, err);
+
+      expect(vnext.error).toHaveBeenCalledWith('failed', {
+        context: 'test',
+        error: { name: 'Error', message: 'boom', stack: err.stack },
+      });
     });
   });
 
