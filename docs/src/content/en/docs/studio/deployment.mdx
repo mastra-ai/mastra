@@ -1,25 +1,25 @@
 ---
-title: "Deploying Studio | Deployment"
-description: "Learn how to deploy and use Studio on your own infrastructure."
+title: "Deployment | Studio"
+description: Learn how to deploy Studio on your own infrastructure or on Mastra Cloud
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Deploying Studio
+# Studio deployment
 
-[Studio](/docs/getting-started/studio) provides an interactive UI for building and testing your agents. It's a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
+Studio is a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
 
 You can deploy Studio in two primary ways:
 
-- [Mastra Cloud](/docs/mastra-cloud/overview) hosts Studio for you and allows you to share access with your team via link
+- [Cloud](/docs/mastra-cloud/overview) hosts Studio for you and allows you to share access with your team via link
 - You can self-host Studio on your own infrastructure, either alongside your Mastra server or separately as a standalone SPA
 
 On this page you'll learn how to deploy Studio on your own infrastructure. As the finer details of deployment can vary widely based on your needs and setup, we'll cover the general principles and options available to you.
 
-## Fundamentals
+## Quickstart
 
 The easiest way to run Studio is the [`mastra studio`](/reference/cli/mastra#mastra-studio) command.
 
@@ -57,7 +57,7 @@ Running `mastra studio` as a long-running process is no different from running a
 
 Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
 
-Visit the [Authentication](/docs/server/auth/) docs to learn more.
+Visit the [Authentication](/docs/studio/auth) docs to learn more.
 
 :::
 
@@ -79,7 +79,15 @@ MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs
 
 ## Using a CDN
 
-Currently, you can't directly deploy the built Studio assets to a CDN, as the UI relies on some dynamic configuration. With a bit of extra setup, you can create a standalone SPA out of the built assets and deploy it to any static hosting service like Netlify, Vercel, etc.
+### Automatic
+
+Some of the [Cloud providers](/docs/deployment/cloud-providers) offer an option to deploy Studio alongside your serverless function. Currently, the supported providers are:
+
+- [`VercelDeployer`](/reference/deployer/vercel)
+
+### Manual
+
+You can't directly deploy the built Studio assets to a CDN, as the UI relies on some dynamic configuration. With a bit of extra setup, you can create a standalone SPA out of the built assets and deploy it to any static hosting service.
 
 Follow the example below to create a SPA using Vite.
 
@@ -172,24 +180,24 @@ Follow the example below to create a SPA using Vite.
     MASTRA_SERVER_PORT=4111
     MASTRA_SERVER_PROTOCOL=http
     MASTRA_API_PREFIX=/api
-    MASTRA_STUDIO_BASE_PATH=
-    MASTRA_TELEMETRY_DISABLED=true
     MASTRA_HIDE_CLOUD_CTA=false
-    MASTRA_TEMPLATES=false
     MASTRA_CLOUD_API_ENDPOINT=
     MASTRA_EXPERIMENTAL_FEATURES=false
+    MASTRA_TEMPLATES=false
+    MASTRA_TELEMETRY_DISABLED=true
     MASTRA_REQUEST_CONTEXT_PRESETS=
+    MASTRA_THEME_TOGGLE=false
+    MASTRA_EXPERIMENTAL_UI=false
+    MASTRA_STUDIO_BASE_PATH=
     ```
+  </StepItem>
 
-    ````
-    </StepItem>
-
-    <StepItem>
+  <StepItem>
     Run the build script to generate the static files in the `dist` folder:
 
     ```bash npm2yarn
     npm run build
-    ````
+    ```
   </StepItem>
 
   <StepItem>
