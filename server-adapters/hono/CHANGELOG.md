@@ -1,5 +1,19 @@
 # @mastra/hono
 
+## 1.3.2-alpha.1
+
+### Patch Changes
+
+- fix(hono): stream MCP HTTP notifications incrementally instead of buffering ([#14782](https://github.com/mastra-ai/mastra/pull/14782))
+
+  Do not await `server.startHTTP()` in the MCP HTTP transport handler so that
+  SSE notifications are streamed to the client as they are written, rather than
+  being buffered and delivered all at once when the final response completes.
+
+- Updated dependencies [[`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`fce2cb1`](https://github.com/mastra-ai/mastra/commit/fce2cb1ac3c3d49302b35507448a85d6a0e614c1), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.18.1-alpha.1
+  - @mastra/server@1.18.1-alpha.1
+
 ## 1.3.2-alpha.0
 
 ### Patch Changes
