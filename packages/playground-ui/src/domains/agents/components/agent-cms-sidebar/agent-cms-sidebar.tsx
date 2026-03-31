@@ -82,12 +82,12 @@ const SidebarLink = ({
         )}
       >
         {done ? (
-          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center flex-shrink-0">
+          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center shrink-0">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (
           <Txt
-            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono flex-shrink-0"
+            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono shrink-0"
             variant="ui-sm"
           >
             {index + 1}

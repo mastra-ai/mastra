@@ -116,7 +116,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -190,7 +190,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>

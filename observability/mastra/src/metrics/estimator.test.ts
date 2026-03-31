@@ -154,7 +154,55 @@ describe('estimateCosts', () => {
     });
   });
 
-  it('suppresses totals when a mode has at least one successful detail cost', () => {
+  it('sums successfully priced detail rows onto totals and marks partial coverage', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        usage: {
+          inputTokens: 500,
+          outputTokens: 200,
+          inputDetails: {
+            text: 400,
+            cacheRead: 50,
+            cacheWrite: 30,
+            audio: 15,
+            image: 5,
+          },
+          outputDetails: {
+            text: 150,
+            reasoning: 30,
+            audio: 10,
+            image: 10,
+          },
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.00006375);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'partial_cost',
+    });
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.00009);
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'partial_cost',
+    });
+    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00006);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00000375);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00009);
+    expect(costs.get(TokenMetrics.OUTPUT_REASONING)?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
+      error: 'no_pricing_for_usage_type',
+    });
+  });
+
+  it('adds summed detail costs onto totals when a mode has successful detail costs', () => {
     const costs = estimateCosts(
       {
         provider: 'anthropic',
@@ -174,8 +222,8 @@ describe('estimateCosts', () => {
       pricingRegistry,
     );
 
-    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toBeUndefined();
-    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)).toBeUndefined();
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.000372);
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.0006);
     expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00036);
     expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.000012);
     expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0006);

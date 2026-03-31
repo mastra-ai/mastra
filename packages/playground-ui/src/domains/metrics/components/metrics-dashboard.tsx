@@ -1,6 +1,6 @@
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { LatencyCard } from './latency-card';
-import { AgentRunsKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
+import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
 import { ModelUsageCostCard } from './model-usage-cost-card';
 import { ScoresCard } from './scores-card';
 import { TokenUsageByAgentCard } from './token-usage-by-agent-card';
@@ -38,7 +38,7 @@ export function MetricsDashboard() {
             <Button
               variant="ghost"
               as="a"
-              href="https://mastra.ai/en/docs/observability/metrics"
+              href="https://mastra.ai/docs/observability/metrics/overview"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -64,10 +64,7 @@ export function MetricsDashboard() {
 
       <MetricsFlexGrid>
         <AgentRunsKpiCard />
-        {/*
-          Cost metrics hidden for now
-          <ModelCostKpiCard />
-        */}
+        <ModelCostKpiCard />
         <TotalTokensKpiCard />
         <AvgScoreKpiCard />
       </MetricsFlexGrid>

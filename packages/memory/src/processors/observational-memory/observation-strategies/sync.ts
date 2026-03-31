@@ -98,6 +98,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
+      observabilityContext: this.opts.observabilityContext,
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
@@ -153,7 +154,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async persist(processed: ProcessedObservation) {
-    const { record, threadId, messages } = this.opts;
+    const { record, threadId, resourceId, messages } = this.opts;
 
     const thread = await this.storage.getThreadById({ threadId });
     let threadUpdateMarker: ReturnType<typeof createThreadUpdateMarker> | undefined;
@@ -195,6 +196,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       lastObservedAt: processed.lastObservedAt,
       observedMessageIds: processed.observedMessageIds,
     });
+
+    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
