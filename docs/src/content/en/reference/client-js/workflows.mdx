@@ -62,7 +62,7 @@ The `resourceId` parameter associates the workflow run with a specific resource 
 
 ### `startAsync()`
 
-Start a workflow run and await the full result:
+Start a workflow run and wait for the full result. Despite the name, this method awaits completion and returns the workflow output:
 
 ```typescript
 const run = await workflow.createRun()
@@ -104,7 +104,7 @@ const result = await run.startAsync({
 
 ### `start()`
 
-Start a workflow run without waiting for completion:
+Start a workflow run without waiting for completion (fire-and-forget). Returns immediately with a success message. Use `runById()` on the workflow instance to check results later:
 
 ```typescript
 const run = await workflow.createRun()
@@ -120,6 +120,8 @@ const result = await workflow.runById(run.runId)
 ```
 
 This is useful for long-running workflows where you want to start execution and check results later.
+
+> **Note:** The naming convention for `start()` and `startAsync()` in the client SDK differs from `@mastra/core`. In `@mastra/core`, `start()` waits for completion and `startAsync()` is fire-and-forget. In the client SDK, the behavior is reversed: `start()` is fire-and-forget and `startAsync()` waits for the result.
 
 ### `resumeAsync()`
 
