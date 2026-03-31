@@ -62,7 +62,7 @@ The `resourceId` parameter associates the workflow run with a specific resource 
 
 ### `startAsync()`
 
-Start a workflow run and wait for the full result. Despite the name, this method awaits completion and returns the workflow output:
+Start a workflow run and await its completion, returning the full result as the workflow output.
 
 ```typescript
 const run = await workflow.createRun()
