@@ -1,5 +1,27 @@
 # mastracode
 
+## 0.10.1
+
+### Patch Changes
+
+- Fixed /subagents to show configured subagents from the harness config. ([#14804](https://github.com/mastra-ai/mastra/pull/14804))
+
+- Tools that return objects with circular references no longer crash the agent with "Converting circular structure to JSON". Circular parts are replaced with `"[Circular]"` and the conversation continues normally. ([#14535](https://github.com/mastra-ai/mastra/pull/14535))
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599), [`25bbff6`](https://github.com/mastra-ai/mastra/commit/25bbff67dadc01d5a18095574421f6266f610b17), [`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`542977f`](https://github.com/mastra-ai/mastra/commit/542977fe5043678df071ad3982b6bcbc78d95f02), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`e91c011`](https://github.com/mastra-ai/mastra/commit/e91c0119878d956fdaab9b60ac721f93f3221335), [`d2d0bea`](https://github.com/mastra-ai/mastra/commit/d2d0beaafba2e25b9ad368015ce91312c372f6a5), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c), [`66a7412`](https://github.com/mastra-ai/mastra/commit/66a7412ec0550f3dfa01cd05b057d8c6e5b062bc)]:
+  - @mastra/core@1.19.0
+  - @mastra/memory@1.12.0
+  - @mastra/pg@1.8.5
+  - @mastra/mcp@1.4.0
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`542977f`](https://github.com/mastra-ai/mastra/commit/542977fe5043678df071ad3982b6bcbc78d95f02), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`d2d0bea`](https://github.com/mastra-ai/mastra/commit/d2d0beaafba2e25b9ad368015ce91312c372f6a5)]:
+  - @mastra/memory@1.12.0-alpha.1
+  - @mastra/core@1.19.0-alpha.2
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

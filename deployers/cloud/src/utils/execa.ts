@@ -50,7 +50,7 @@ export async function runWithExeca({
     const { stdout, stderr, exitCode } = await subprocess;
     return { stdout, stderr, success: exitCode === 0 };
   } catch (error) {
-    logger.error(`Process failed: ${error}`);
+    logger.error('Process failed', { error });
     return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
 }

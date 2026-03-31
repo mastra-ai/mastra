@@ -58,6 +58,7 @@ interface LogOptions {
 interface LogMessageOptions {
   start: string;
   error: string;
+  logData: Record<string, unknown>;
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -292,20 +293,11 @@ export class CoreToolBuilder extends MastraBase {
   }
 
   private createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
-    // If no agent name, use default format
-    if (!agentName) {
-      return {
-        start: `Executing tool ${toolName}`,
-        error: `Failed tool execution`,
-      };
-    }
-
-    const prefix = `[Agent:${agentName}]`;
     const toolType = type === 'toolset' ? 'toolset' : 'tool';
-
     return {
-      start: `${prefix} - Executing ${toolType} ${toolName}`,
-      error: `${prefix} - Failed ${toolType} execution`,
+      start: `Executing ${toolType}`,
+      error: `Failed ${toolType} execution`,
+      logData: { agent: agentName, tool: toolName },
     };
   }
 
@@ -327,7 +319,7 @@ export class CoreToolBuilder extends MastraBase {
       specificationVersion: model?.specificationVersion,
     };
 
-    const { start, error } = this.createLogMessageOptions({
+    const { start, logData } = this.createLogMessageOptions({
       agentName: options.agentName,
       toolName: options.name,
       type: logType,
@@ -553,7 +545,7 @@ export class CoreToolBuilder extends MastraBase {
       });
 
       try {
-        logger.debug(start, { ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
@@ -563,7 +555,7 @@ export class CoreToolBuilder extends MastraBase {
         const suspendedToolRunIdErrToIgnore =
           error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
         if (error && !suspendedToolRunIdErrToIgnore) {
-          logger.warn(error.message);
+          logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
           toolSpan?.end({ output: error, attributes: { success: false } });
           return error;
         }
@@ -596,8 +588,7 @@ export class CoreToolBuilder extends MastraBase {
           err,
         );
         toolSpan?.error({ error: mastraError, attributes: { success: false } });
-        logger.trackException(mastraError);
-        logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
         throw mastraError;
       }
     };

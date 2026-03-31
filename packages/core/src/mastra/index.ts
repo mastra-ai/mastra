@@ -13,7 +13,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
-import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
@@ -603,6 +603,14 @@ export class Mastra<
       this.#observability = new NoOpObservability();
     }
 
+    // Wrap the logger in a DualLogger so all existing this.logger.info(...) calls
+    // also forward to loggerVNext (observability structured logging).
+    // This is transparent — no call sites need to change.
+    // Uses a lazy getter so loggerVNext is always resolved at call time
+    // (observability may not be fully initialized yet at this point).
+    const dualLogger = new DualLogger(this.#logger, () => this.loggerVNext);
+    this.#logger = dualLogger as unknown as TLogger;
+
     this.#storage = storage;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
@@ -936,8 +944,6 @@ export class Mastra<
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1209,8 +1215,6 @@ export class Mastra<
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Vector with key ${vectorKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1351,8 +1355,6 @@ export class Mastra<
     }
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Workspace with key ${workspaceKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1550,9 +1552,13 @@ export class Mastra<
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
-        this.#logger.debug(`Restarted ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}`);
+        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
       } catch (error) {
-        this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
+        this.#logger.error('Failed to restart workflow run', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+          error,
+        });
       }
     }
   }
@@ -1616,8 +1622,6 @@ export class Mastra<
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1783,8 +1787,6 @@ export class Mastra<
   public addPromptBlock(promptBlock: StorageResolvedPromptBlockType, key?: string): void {
     const blockKey = key || promptBlock.id;
     if (this.#promptBlocks[blockKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Prompt block with key ${blockKey} already exists. Skipping addition.`);
       return;
     }
     this.#promptBlocks[blockKey] = promptBlock;
@@ -1989,8 +1991,6 @@ export class Mastra<
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Tool with key ${toolKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2140,8 +2140,6 @@ export class Mastra<
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2324,8 +2322,6 @@ export class Mastra<
     const memoryKey = key || memory.id;
     const memoryRegistry = this.#memory as Record<string, MastraMemory>;
     if (memoryRegistry[memoryKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Memory with key ${memoryKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2394,8 +2390,6 @@ export class Mastra<
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2436,7 +2430,9 @@ export class Mastra<
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
-    this.#logger = logger;
+    // Wrap the new logger in a DualLogger to maintain dual-write to loggerVNext
+    const dualLogger = new DualLogger(logger, () => this.loggerVNext);
+    this.#logger = dualLogger as unknown as TLogger;
 
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
@@ -2490,7 +2486,8 @@ export class Mastra<
       });
     }
 
-    this.#observability.setLogger({ logger: this.#logger });
+    // Pass the raw logger (not the DualLogger) to observability to avoid circular forwarding
+    this.#observability.setLogger({ logger });
   }
 
   /**
@@ -2882,8 +2879,6 @@ export class Mastra<
     const serverKey = key ?? resolvedId;
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
-      const logger = this.getLogger();
-      logger.debug(`MCP server with key ${serverKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -3209,8 +3204,6 @@ export class Mastra<
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Gateway with key ${gatewayKey} already exists. Skipping addition.`);
       return;
     }
 
