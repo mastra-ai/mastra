@@ -518,13 +518,24 @@ export function validateToolInput<T = unknown>(
   // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
   // using "prompt" to "query", "message", or "input" after repeated sub-agent
   // tool calls in the same thread. Coerce these aliases to "prompt" and retry.
-  if (normalizedInput != null && typeof normalizedInput === 'object' && !Array.isArray(normalizedInput)) {
+  // Only applies when the schema actually declares a "prompt" field.
+  const promptJsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+  const schemaExpectsPrompt =
+    promptJsonSchema.type === 'object' &&
+    promptJsonSchema.properties != null &&
+    'prompt' in promptJsonSchema.properties;
+
+  if (
+    schemaExpectsPrompt &&
+    normalizedInput != null &&
+    typeof normalizedInput === 'object' &&
+    !Array.isArray(normalizedInput)
+  ) {
     const obj = normalizedInput as Record<string, unknown>;
     if (obj.prompt == null) {
-      const alias = obj.query ?? obj.message ?? obj.input;
-      if (typeof alias === 'string') {
-        const { query: _q, message: _m, input: _i, ...rest } = obj;
-        const coercedPromptInput = { ...rest, prompt: alias };
+      const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
+      if (alias !== undefined) {
+        const coercedPromptInput = { ...obj, prompt: alias };
         const coercedPromptValidation = safeValidate(schema, coercedPromptInput);
         if ('value' in coercedPromptValidation) {
           return { data: coercedPromptValidation.value };

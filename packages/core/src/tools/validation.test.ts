@@ -2265,10 +2265,21 @@ describe('prompt alias normalization (GitHub #14154)', () => {
   });
 
   it('should not normalize aliases for schemas without a "prompt" field', () => {
-    const otherSchema = z.object({
-      name: z.string(),
-    });
-    const result = validateToolInput(otherSchema, { query: 'give me insights' });
+    const otherSchema = z
+      .object({
+        name: z.string(),
+      })
+      .strict();
+    const result = validateToolInput(otherSchema, { name: 'ok', query: 'give me insights' });
     expect(result.error).toBeDefined();
+  });
+
+  it('should skip non-string aliases and fall back to the next string alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 123,
+      message: 'from message',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from message' });
   });
 });
