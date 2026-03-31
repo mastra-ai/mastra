@@ -174,7 +174,9 @@ jobs:
 
       - name: Get CLI version
         id: cli-version
-        run: echo "version=$(node -p \"require('./packages/cli/package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Upload studio assets to R2
         if: ${{ !inputs.dry_run }}
