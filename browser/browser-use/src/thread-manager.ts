@@ -6,7 +6,7 @@
  */
 
 import { ThreadManager } from '@mastra/core/browser';
-import type { ThreadSession, ThreadManagerConfig, BrowserState } from '@mastra/core/browser';
+import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { BrowserUse } from 'browser-use-sdk';
 import type { BrowserConfig, BrowserSessionInfo } from './types';
 

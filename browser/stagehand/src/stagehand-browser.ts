@@ -162,7 +162,7 @@ export class StagehandBrowser extends MastraBrowser {
       // For 'browser' isolation, don't launch a shared browser here.
       // Each thread will get its own Stagehand instance via getStagehandForThread().
       // We still need a placeholder so the base class knows we're "launched".
-      this.logger.debug?.('Browser isolation mode - skipping shared browser launch');
+
       return;
     }
 
@@ -183,7 +183,6 @@ export class StagehandBrowser extends MastraBrowser {
     const context = stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
     if (context?.on) {
       context.on('close', () => {
-        this.logger.debug?.('Browser context closed event received');
         this.handleBrowserDisconnected();
       });
     }
@@ -960,13 +959,21 @@ export class StagehandBrowser extends MastraBrowser {
       return;
     }
 
-    this.logger.debug?.('Setting up tab change detection via CDP');
+    // Track targetId -> sessionId for manual tab registration
+    const targetSessions = new Map<string, string>();
+
+    // Debounce timer for target info changes (separate from tab change timer)
+    let targetInfoDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Helper to check if Stagehand is tracking a target
+    const isTrackedByStagehand = (targetId: string): boolean => {
+      const pages = stagehand.context?.pages() || [];
+      return pages.some(p => p.targetId() === targetId);
+    };
 
     // Listen for new tab creation
     const onTargetCreated = (params: { targetInfo: { type: string; targetId: string; url: string } }) => {
       if (params.targetInfo.type !== 'page') return;
-
-      this.logger.debug?.(`New page target created: ${params.targetInfo.url}`);
 
       // Debounce to avoid rapid reconnects
       if (this.tabChangeDebounceTimer) {
@@ -981,9 +988,86 @@ export class StagehandBrowser extends MastraBrowser {
       }, 300);
     };
 
+    // Listen for target attached (to capture sessionId for later registration)
+    const onTargetAttached = (params: {
+      sessionId: string;
+      targetInfo: { type: string; targetId: string; url: string };
+      waitingForDebugger?: boolean;
+    }) => {
+      if (params.targetInfo.type !== 'page') return;
+      // Always store the sessionId - we may need it for manual registration
+      targetSessions.set(params.targetInfo.targetId, params.sessionId);
+    };
+
+    // Listen for target info changes (URL updates after navigation)
+    // Store latest params for debounced handler
+    let pendingTargetInfo: { targetInfo: { type: string; targetId: string; url: string } } | null = null;
+
+    const onTargetInfoChanged = (params: { targetInfo: { type: string; targetId: string; url: string } }) => {
+      if (params.targetInfo.type !== 'page') return;
+
+      // Skip if Stagehand already tracks this target
+      if (isTrackedByStagehand(params.targetInfo.targetId)) return;
+
+      const sessionId = targetSessions.get(params.targetInfo.targetId);
+      if (!sessionId) return;
+
+      // Debounce to handle rapid URL changes
+      pendingTargetInfo = params;
+      if (targetInfoDebounceTimer) {
+        clearTimeout(targetInfoDebounceTimer);
+      }
+      targetInfoDebounceTimer = setTimeout(async () => {
+        targetInfoDebounceTimer = null;
+        if (!pendingTargetInfo) return;
+
+        const info = pendingTargetInfo.targetInfo;
+        const sid = targetSessions.get(info.targetId);
+        pendingTargetInfo = null;
+
+        // Re-check if already tracked after debounce
+        if (isTrackedByStagehand(info.targetId) || !sid) return;
+
+        // Try to register with Stagehand
+        const contextAny = stagehand.context as unknown as {
+          onAttachedToTarget?: (
+            info: { type: string; targetId: string; url: string },
+            sessionId: string,
+          ) => Promise<void>;
+        };
+
+        if (contextAny?.onAttachedToTarget) {
+          try {
+            await contextAny.onAttachedToTarget(info, sid);
+
+            // Check if Stagehand actually registered it
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            if (isTrackedByStagehand(info.targetId)) {
+              this.logger.debug?.('Page registered successfully, setting as active');
+              const pages = stagehand.context?.pages() || [];
+              const newPage = pages.find(p => p.targetId() === info.targetId);
+              if (newPage && stagehand.context) {
+                stagehand.context.setActivePage(newPage);
+              }
+              void this.reconnectScreencast('manual tab tracked');
+              void setupPageNavigationListener();
+            } else {
+              this.logger.debug?.('Stagehand did not register the page (non-injectable URL)');
+            }
+          } catch (e) {
+            this.logger.debug?.('Failed to register page with Stagehand', e);
+          }
+        }
+      }, 300);
+    };
+
     // Listen for tab destruction
-    const onTargetDestroyed = (_params: { targetId: string }) => {
+    const onTargetDestroyed = (params: { targetId: string }) => {
       this.logger.debug?.('Page target destroyed');
+
+      // Clean up session tracking
+      targetSessions.delete(params.targetId);
 
       if (this.tabChangeDebounceTimer) {
         clearTimeout(this.tabChangeDebounceTimer);
@@ -991,6 +1075,8 @@ export class StagehandBrowser extends MastraBrowser {
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
         void this.reconnectScreencast('tab closed');
+        // Re-setup navigation listener for the new active page
+        void setupPageNavigationListener();
         // Note: Don't save state here - races with browser shutdown.
         // State is saved via tool handlers instead.
       }, 300);
@@ -1000,7 +1086,6 @@ export class StagehandBrowser extends MastraBrowser {
     const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
       // Only emit URL for main frame navigations (no parentId)
       if (!params.frame.parentId && params.frame.url) {
-        this.logger.debug?.(`Frame navigated to: ${params.frame.url}`);
         stream.emitUrl(params.frame.url);
         // Update session state on navigation
         this.updateSessionBrowserState(threadId);
@@ -1045,6 +1130,8 @@ export class StagehandBrowser extends MastraBrowser {
     try {
       connection.on?.('Target.targetCreated', onTargetCreated);
       connection.on?.('Target.targetDestroyed', onTargetDestroyed);
+      connection.on?.('Target.attachedToTarget', onTargetAttached);
+      connection.on?.('Target.targetInfoChanged', onTargetInfoChanged);
 
       // Set up navigation listener on the current page
       await setupPageNavigationListener();
@@ -1055,8 +1142,14 @@ export class StagehandBrowser extends MastraBrowser {
           clearTimeout(this.tabChangeDebounceTimer);
           this.tabChangeDebounceTimer = null;
         }
+        if (targetInfoDebounceTimer) {
+          clearTimeout(targetInfoDebounceTimer);
+          targetInfoDebounceTimer = null;
+        }
         connection.off?.('Target.targetCreated', onTargetCreated);
         connection.off?.('Target.targetDestroyed', onTargetDestroyed);
+        connection.off?.('Target.attachedToTarget', onTargetAttached);
+        connection.off?.('Target.targetInfoChanged', onTargetInfoChanged);
         // Clean up page session listener
         if (pageSession?.off) {
           pageSession.off('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
