@@ -112,6 +112,7 @@
       "client-js-e2e-tests-zod-v4>zod": "^4.3.6",
       "better-auth": "^1.4.18",
       "js-yaml": "^4.1.0",
+      "gray-matter>js-yaml": "^3.13.1",
       "glob@<=10.5.0": "10.5.0",
       "body-parser@<=2.2.1": "2.2.2",
       "fast-xml-parser@<=5.3.8": "5.5.7"
