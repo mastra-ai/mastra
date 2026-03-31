@@ -67,10 +67,10 @@ export function LogsToolbar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <ListSearch onSearch={onSearchChange} label="Search logs" placeholder="Search name, ID, content..." />
+        <ListSearch onSearch={onSearchChange} size="md" label="Search logs" placeholder="Search name, ID, content..." />
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
-            <Button variant="inputLike">
+            <Button variant="inputLike" size="md">
               <CalendarIcon /> {DATE_PRESET_LABELS[datePreset]} <ChevronDownIcon />
             </Button>
           </DropdownMenu.Trigger>
@@ -82,7 +82,13 @@ export function LogsToolbar({
             ))}
           </DropdownMenu.Content>
         </DropdownMenu>
-        <SelectDataFilter categories={categories} value={filterState} onChange={onFilterGroupsChange} align="end" disabled={isLoading} />
+        <SelectDataFilter
+          categories={categories}
+          value={filterState}
+          onChange={onFilterGroupsChange}
+          align="end"
+          disabled={isLoading}
+        />
         {onReset && hasActiveFilters && (
           <Button variant="outline" size="md" disabled={isLoading} onClick={onReset} className="ml-auto">
             <XIcon />
@@ -90,42 +96,6 @@ export function LogsToolbar({
           </Button>
         )}
       </div>
-
-      {/* {filterGroups.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {filterGroups.map(group => {
-            const col = filterColumns.find(c => c.field === group.field);
-            const displayValue =
-              group.values.length > 1 ? `${group.values.length} ${col?.plural ?? 'values'}` : group.values[0];
-            return (
-              <div
-                key={group.id}
-                className="flex h-7 items-center overflow-hidden rounded-md border border-border1 bg-surface3 text-xs"
-              >
-                <span className="px-2 text-neutral2">{group.field}</span>
-                <button
-                  type="button"
-                  onClick={() => onToggleComparator(group.id)}
-                  className="h-full cursor-pointer whitespace-nowrap border-x border-border1 px-1.5 text-neutral2 transition-colors hover:bg-surface4 hover:text-neutral5"
-                >
-                  {group.values.length > 1 ? `${group.comparator} any of` : group.comparator}
-                </button>
-                <span className="px-2 text-neutral5">{displayValue}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveFilterGroup(group.id)}
-                  className="h-full border-l border-border1 px-1.5 text-neutral2 transition-colors hover:bg-surface4 hover:text-neutral5"
-                >
-                  x
-                </button>
-              </div>
-            );
-          })}
-          <button type="button" onClick={onClearAllFilters} className="px-2 text-xs text-neutral2 hover:text-neutral5">
-            Clear all
-          </button>
-        </div>
-      )} */}
     </div>
   );
 }

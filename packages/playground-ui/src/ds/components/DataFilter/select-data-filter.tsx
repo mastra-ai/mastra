@@ -241,7 +241,7 @@ export function SelectDataFilter({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenu.Trigger asChild>
-        <Button variant="outline" disabled={disabled}>
+        <Button variant="outline" disabled={disabled} size="md">
           <FilterIcon />
           {label}
           {activeFilterCount > 0 && (

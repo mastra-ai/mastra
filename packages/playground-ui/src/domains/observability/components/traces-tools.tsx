@@ -724,7 +724,7 @@ export function TracesTools({
 
         {/* Reset */}
         {onReset && (
-          <Button disabled={isLoading} onClick={() => onReset()}>
+          <Button disabled={isLoading} size="md" onClick={() => onReset()}>
             <XIcon />
             Reset
           </Button>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import type { InputProps } from '@/ds/components/Input';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 
 export type ListSearchProps = {
@@ -7,9 +8,10 @@ export type ListSearchProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
+  size?: InputProps['size'];
 };
 
-export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300 }: ListSearchProps) => {
+export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300, size }: ListSearchProps) => {
   const id = useId();
   const [value, setValue] = useState('');
 
@@ -42,6 +44,7 @@ export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300 }: L
       value={value}
       onChange={handleChange}
       onReset={handleReset}
+      size={size}
       className="w-full max-w-[30rem]"
     />
   );
