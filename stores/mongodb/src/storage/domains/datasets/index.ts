@@ -149,6 +149,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       tags: typeof row.tags === 'string' ? safelyParseJSON(row.tags) : (row.tags ?? undefined),
       targetType: row.targetType ?? undefined,
       targetIds: typeof row.targetIds === 'string' ? safelyParseJSON(row.targetIds) : (row.targetIds ?? undefined),
+      scorerIds: typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : (row.scorerIds ?? undefined),
       version: row.version ?? 0,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
@@ -205,6 +206,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         requestContextSchema: input.requestContextSchema ?? null,
         targetType: input.targetType ?? null,
         targetIds: input.targetIds ?? null,
+        scorerIds: input.scorerIds ?? null,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -268,6 +270,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       if (args.tags !== undefined) updateDoc.tags = args.tags;
       if (args.targetType !== undefined) updateDoc.targetType = args.targetType;
       if (args.targetIds !== undefined) updateDoc.targetIds = args.targetIds;
+      if (args.scorerIds !== undefined) updateDoc.scorerIds = args.scorerIds;
 
       await collection.updateOne({ id: args.id }, { $set: updateDoc });
 

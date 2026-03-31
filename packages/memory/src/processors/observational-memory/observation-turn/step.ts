@@ -92,6 +92,7 @@ export class ObservationStep {
         threadId,
         writer: this.turn.writer,
         requestContext: this.turn.requestContext,
+        observabilityContext: this.turn.observabilityContext,
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -133,6 +134,7 @@ export class ObservationStep {
           record: statusSnapshot.record,
           writer: this.turn.writer,
           requestContext: this.turn.requestContext,
+          observabilityContext: this.turn.observabilityContext,
           beforeBuffer: async (candidates: MastraDBMessage[]) => {
             if (candidates.length === 0) {
               return;
@@ -313,6 +315,7 @@ export class ObservationStep {
           writer: this.turn.writer,
           messageList,
           requestContext: this.turn.requestContext,
+          observabilityContext: this.turn.observabilityContext,
         });
 
         return {
@@ -331,6 +334,7 @@ export class ObservationStep {
       messages: messageList.get.all.db(),
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
+      observabilityContext: this.turn.observabilityContext,
     });
 
     return { succeeded: obsResult.observed, record: obsResult.record };

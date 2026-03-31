@@ -46,7 +46,7 @@ import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
-import { createStorage } from './utils/storage-factory.js';
+import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
@@ -138,7 +138,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const memory = getDynamicMemory(storage);
+  // Vector store for recall search (separate DB file to avoid bloating main storage)
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  const memory = getDynamicMemory(storage, vectorStore);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
@@ -249,6 +252,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
   const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
+  const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -286,6 +291,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveOmModel) {
     globalInitialState.observerModelId = effectiveOmModel;
     globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (effectiveObservationThreshold !== undefined) {
+    globalInitialState.observationThreshold = effectiveObservationThreshold;
+  }
+  if (effectiveReflectionThreshold !== undefined) {
+    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

@@ -30,7 +30,7 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={!isNetworkAvailable} />
       <Label
-        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && '!text-neutral3 cursor-not-allowed')}
+        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -175,7 +175,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
         {hasSamplingRestriction &&
           (settings?.modelSettings?.temperature !== undefined || settings?.modelSettings?.topP !== undefined) && (
             <div className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2">
-              <Info className="w-3.5 h-3.5 flex-shrink-0" />
+              <Info className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {settings?.modelSettings?.temperature !== undefined
                   ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
