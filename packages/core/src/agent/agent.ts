@@ -3141,6 +3141,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as CoreMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3158,6 +3159,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as CoreMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
