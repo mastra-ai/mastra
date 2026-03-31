@@ -3,7 +3,6 @@ import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod/v3';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
@@ -36,8 +35,8 @@ import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-
 import type {
+  ZodSchema,
   AgentGenerateOptions,
   AgentStreamOptions,
   AgentInstructions,
@@ -45,6 +44,7 @@ import type {
   ToolsInput,
   AgentMethodType,
 } from './types';
+
 import { resolveThreadIdFromArgs } from './utils';
 
 /**
@@ -146,18 +146,18 @@ export interface AgentLegacyCapabilities {
     userMessage: UIMessage | UIMessageWithMetadata,
     requestContext: RequestContext,
     observabilityContext: ObservabilityContext,
-    titleModel?: DynamicArgument<MastraModelConfig>,
+    titleModel?: DynamicArgument<MastraModelConfig, any>,
     titleInstructions?: DynamicArgument<string>,
   ): Promise<string | undefined>;
   /** Resolve title generation config */
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig, any>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, any>;
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
@@ -166,6 +166,8 @@ export interface AgentLegacyCapabilities {
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
   tracingPolicy?: any;
+  /** Resolved version ID from stored config */
+  resolvedVersionId?: string;
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
@@ -264,6 +266,7 @@ export class AgentLegacyHandler {
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
             ],
+            ...(this.capabilities.resolvedVersionId ? { resolvedVersionId: this.capabilities.resolvedVersionId } : {}),
           },
           metadata: {
             runId,
@@ -1254,8 +1257,8 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties)
+    | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+    | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
     const defaultStreamOptionsLegacy = await Promise.resolve(
       this.capabilities.getDefaultStreamOptionsLegacy({
@@ -1369,8 +1372,8 @@ export class AgentLegacyHandler {
       };
 
       return emptyResult as unknown as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
@@ -1439,8 +1442,8 @@ export class AgentLegacyHandler {
       (streamResult as any).spanId = spanId;
 
       return streamResult as unknown as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
@@ -1517,6 +1520,7 @@ export class AgentLegacyHandler {
     (streamObjectResult as any).traceId = traceId;
     (streamObjectResult as any).spanId = spanId;
 
-    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties;
+    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> &
+      TracingProperties;
   }
 }

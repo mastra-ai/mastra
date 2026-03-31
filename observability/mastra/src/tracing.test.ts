@@ -7,6 +7,8 @@ import type {
   ModelGenerationAttributes,
   ObservabilityInstance,
   ExportedSpan,
+  LogEvent,
+  MetricEvent,
 } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -78,9 +80,19 @@ afterAll(() => {
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  logEvents: LogEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async onLogEvent(event: LogEvent): Promise<void> {
+    this.logEvents.push(event);
+  }
+
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
   }
 
   async shutdown(): Promise<void> {
@@ -93,6 +105,8 @@ class TestExporter implements ObservabilityExporter {
 
   reset(): void {
     this.events = [];
+    this.logEvents = [];
+    this.metricEvents = [];
   }
 }
 
@@ -1366,6 +1380,118 @@ describe('Tracing', () => {
       const endedEvent = testExporter.events[1];
       expect(endedEvent.type).toBe(TracingEventType.SPAN_ENDED);
       expect(endedEvent.exportedSpan.tags).toEqual(['batch-processing', 'priority-high']);
+    });
+
+    it('should include root tags in correlation context for root and child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      expect(rootSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+      expect(childSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getLoggerContext should emit logs with span correlation and root tags in correlationContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      observability.getLoggerContext(childSpan).info('tool running', { attempt: 1 });
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log).toMatchObject({
+        traceId: childSpan.traceId,
+        spanId: childSpan.id,
+        message: 'tool running',
+        data: { attempt: 1 },
+        correlationContext: {
+          entityName: childSpan.entityName,
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getMetricsContext should emit user metrics with correlationContext only', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent-run',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const modelSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: {
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+        } satisfies Partial<ModelGenerationAttributes>,
+      });
+
+      observability.getMetricsContext(modelSpan).emit('user_metric', 1, { status: 'ok' });
+
+      expect(testExporter.metricEvents).toHaveLength(1);
+      expect(testExporter.metricEvents[0]!.metric).toMatchObject({
+        traceId: modelSpan.traceId,
+        spanId: modelSpan.id,
+        name: 'user_metric',
+        value: 1,
+        labels: { status: 'ok' },
+        correlationContext: {
+          entityName: modelSpan.entityName,
+        },
+      });
+      expect(testExporter.metricEvents[0]!.metric.costContext).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.provider).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.model).toBeUndefined();
+
+      modelSpan.end();
+      rootSpan.end();
     });
 
     it('should not include tags in exported child spans', () => {

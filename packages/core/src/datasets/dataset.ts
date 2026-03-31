@@ -4,7 +4,14 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { DatasetRecord, DatasetItem, DatasetItemRow, DatasetVersion } from '../storage/types.js';
+import type {
+  DatasetRecord,
+  DatasetItem,
+  DatasetItemRow,
+  DatasetVersion,
+  TargetType,
+  UpdateExperimentResultInput,
+} from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
@@ -115,6 +122,10 @@ export class Dataset {
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
     requestContextSchema?: Record<string, unknown> | null;
+    tags?: string[] | null;
+    targetType?: TargetType | null;
+    targetIds?: string[] | null;
+    scorerIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -327,15 +338,17 @@ export class Dataset {
       name: config.name,
       description: config.description,
       metadata: config.metadata,
+      agentVersion: config.agentVersion,
     });
 
     const experimentId = run.id;
 
-    // Fire-and-forget — update experiment to failed on unexpected errors
+    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
       ...config,
+      version: targetVersion,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({
@@ -383,6 +396,14 @@ export class Dataset {
   /**
    * Delete an experiment (run) by ID.
    */
+  /**
+   * Update an experiment result's status or tags.
+   */
+  async updateExperimentResult(input: UpdateExperimentResultInput) {
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.updateExperimentResult(input);
+  }
+
   async deleteExperiment(args: { experimentId: string }) {
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.deleteExperiment({ id: args.experimentId });

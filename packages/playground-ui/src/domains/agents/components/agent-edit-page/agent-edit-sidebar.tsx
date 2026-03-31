@@ -1,23 +1,24 @@
-import { useCallback, useMemo, type RefObject } from 'react';
-import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, PlusIcon } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
+import type { RefObject } from 'react';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { Button } from '@/ds/components/Button';
-import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { Label } from '@/ds/components/Label';
-import { SectionHeader } from '@/domains/cms';
-import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
-import type { JsonSchema } from '@/lib/json-schema';
-
-import { LLMProviders, LLMModels } from '@/domains/llm';
-
-import type { AgentFormValues } from './utils/form-validation';
 import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
+import type { AgentFormValues } from './utils/form-validation';
+import { SectionHeader } from '@/domains/cms';
+import { LLMProviders, LLMModels } from '@/domains/llm';
+import { Button } from '@/ds/components/Button';
+import { Input } from '@/ds/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
+import { Textarea } from '@/ds/components/Textarea';
+import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
+import type { JsonSchema } from '@/lib/json-schema';
 
 function RecursiveFieldRenderer({
   field,
@@ -79,7 +80,6 @@ interface AgentEditSidebarProps {
   formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
   readOnly?: boolean;
-  hideSubAgentCreate?: boolean;
 }
 
 export function AgentEditSidebar({
@@ -90,7 +90,6 @@ export function AgentEditSidebar({
   formRef,
   mode = 'create',
   readOnly = false,
-  hideSubAgentCreate,
 }: AgentEditSidebarProps) {
   const {
     register,
@@ -112,7 +111,7 @@ export function AgentEditSidebar({
   return (
     <div className="h-full flex flex-col">
       <Tabs defaultTab="identity" className="flex-1 min-h-0 flex flex-col">
-        <TabList className="flex-shrink-0">
+        <TabList className="shrink-0">
           <Tab value="identity">
             <Icon size="sm">
               <AgentIcon />
@@ -274,7 +273,7 @@ export function AgentEditSidebar({
 
       {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
-        <div className="flex-shrink-0 p-4">
+        <div className="shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>

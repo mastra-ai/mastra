@@ -2,7 +2,7 @@ import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 
@@ -2258,6 +2258,95 @@ describe('toUIMessage', () => {
           runId: 'wf-run-1',
         },
       });
+    });
+
+    it('should preserve streamed childMessages when agent tool-result adds backend subagent data', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'agent',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: {},
+              output: {
+                childMessages: [{ type: 'text', content: 'Hello from stream' }],
+              },
+            } as any,
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'agent',
+          result: {
+            text: 'final text',
+            subAgentThreadId: 'thread-123',
+            subAgentToolResults: [{ toolCallId: 'nested-call-1', toolName: 'calculator', result: 42 }],
+          },
+          isError: false,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      const toolPart = result[0].parts[0] as any;
+      expect(toolPart.output).toMatchObject({
+        text: 'final text',
+        subAgentThreadId: 'thread-123',
+        subAgentToolResults: [{ toolCallId: 'nested-call-1', toolName: 'calculator', result: 42 }],
+      });
+      expect(toolPart.output.childMessages).toEqual([{ type: 'text', content: 'Hello from stream' }]);
+    });
+
+    it('should preserve backend childMessages when streamed childMessages are empty', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'agent',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: {},
+              output: {
+                childMessages: [],
+              },
+            } as any,
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'agent',
+          result: {
+            childMessages: [{ type: 'text', content: 'Restored from backend' }],
+            subAgentThreadId: 'thread-1',
+          } as any,
+          isError: false,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      const toolPart = result[0].parts[0] as any;
+      expect(toolPart.output.childMessages).toEqual([{ type: 'text', content: 'Restored from backend' }]);
+      expect(toolPart.output.subAgentThreadId).toBe('thread-1');
     });
 
     it('should return unchanged if no tool part found', () => {

@@ -1,11 +1,8 @@
-import { useState } from 'react';
 import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Spinner } from '@/ds/components/Spinner';
-import { Txt } from '@/ds/components/Txt/Txt';
+import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
-import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
-import { cn } from '@/lib/utils';
+import { usePackageUpdates } from '../hooks/use-package-updates';
+import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +12,12 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { SelectField } from '@/ds/components/FormFields';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { cn } from '@/lib/utils';
 
 export interface MastraVersionFooterProps {
   collapsed?: boolean;
@@ -41,8 +42,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
     outdatedCount,
     deprecatedCount,
   } = usePackageUpdates(installedPackages);
-
-  const hasUpdates = outdatedCount > 0 || deprecatedCount > 0;
 
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
@@ -136,7 +135,7 @@ function StatusBadge({ value, variant }: { value: string | number; variant: 'war
   return (
     <span
       className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-[1.25rem]',
+        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-5',
         variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >

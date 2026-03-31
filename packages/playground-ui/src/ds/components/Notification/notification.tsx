@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { XIcon, InfoIcon, AlertTriangleIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { XIcon, InfoIcon, AlertTriangleIcon } from 'lucide-react';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type NotificationProps = {
   children: React.ReactNode;
@@ -80,7 +80,7 @@ export function Notification({
         className,
       )}
     >
-      <div className={cn('flex-shrink-0 mt-0.5', iconStyles[type])}>
+      <div className={cn('shrink-0 mt-0.5', iconStyles[type])}>
         {type === 'error' || type === 'warning' ? (
           <AlertTriangleIcon className="h-4 w-4" />
         ) : (
@@ -91,7 +91,7 @@ export function Notification({
       {dismissible && (
         <Button
           variant="ghost"
-          className={cn('h-6 w-6 p-0 flex-shrink-0', transitions.colors, 'hover:bg-surface5')}
+          className={cn('h-6 w-6 p-0 shrink-0', transitions.colors, 'hover:bg-surface5')}
           onClick={handleDismiss}
         >
           <XIcon className="h-4 w-4" />

@@ -2,9 +2,9 @@ import { Command as CommandPrimitive } from 'cmdk';
 import { Search } from 'lucide-react';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -56,11 +56,11 @@ const CommandDialog = ({
           filter={filter}
           onKeyDown={handleKeyDown}
           className={cn(
-            '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-neutral3',
-            '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2',
+            '**:[[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-neutral3',
+            '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
             '[&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5',
-            '[&_[cmdk-input]]:h-12',
-            '[&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3',
+            '**:[[cmdk-input]]:h-12',
+            '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-3',
             '[&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5',
           )}
         >
@@ -82,7 +82,7 @@ const CommandInput = React.forwardRef<
       className={cn(
         'flex h-10 w-full rounded-md bg-transparent py-3 text-sm',
         'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-        'outline-none',
+        'outline-hidden',
         transitions.colors,
         className,
       )}
@@ -118,7 +118,7 @@ const CommandGroup = React.forwardRef<
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-neutral5',
-      '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-neutral3',
+      '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-neutral3',
       className,
     )}
     {...props}
@@ -141,7 +141,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none',
+      'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden',
       transitions.colors,
       'data-[selected=true]:bg-surface5 data-[selected=true]:text-neutral5',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',

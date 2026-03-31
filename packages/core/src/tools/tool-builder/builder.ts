@@ -22,6 +22,7 @@ import {
   getOrCreateSpan,
   createObservabilityContext,
 } from '../../observability';
+import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool } from '../../tools/toolchecks';
@@ -332,40 +333,11 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
-      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
-      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
-      const tracingContext = execOptions.tracingContext || options.tracingContext;
+    // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
+    const mcpMeta =
+      !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-      // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
-      const mcpMeta =
-        !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
-
-      // Create tool span - either as child of existing span or as new root span (e.g. MCP tools)
-      const toolRequestContext = execOptions.requestContext ?? options.requestContext;
-      const toolSpan = getOrCreateSpan({
-        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
-        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
-        input: args,
-        entityType: EntityType.TOOL,
-        entityId: options.name,
-        entityName: options.name,
-        attributes: mcpMeta
-          ? {
-              mcpServer: mcpMeta.serverName,
-              serverVersion: mcpMeta.serverVersion,
-              toolDescription: options.description,
-            }
-          : {
-              toolDescription: options.description,
-              toolType: logType || 'tool',
-            },
-        tracingPolicy: options.tracingPolicy,
-        tracingContext: tracingContext,
-        requestContext: toolRequestContext,
-        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
-      });
-
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
       try {
         let result;
         let suspendData = null;
@@ -458,6 +430,7 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               agent: {
+                agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
@@ -548,6 +521,35 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
+
+      // Create tool span early so validation failures are always observable.
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions?.tracingContext || options.tracingContext;
+      const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
+      const toolSpan = getOrCreateSpan({
+        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
+        input: args,
+        entityType: EntityType.TOOL,
+        entityId: options.name,
+        entityName: options.name,
+        attributes: mcpMeta
+          ? {
+              mcpServer: mcpMeta.serverName,
+              serverVersion: mcpMeta.serverVersion,
+              toolDescription: options.description,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
+        tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
+        requestContext: toolRequestContext,
+        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
+      });
+
       try {
         logger.debug(start, { ...rest, model: logModelObject, args });
 
@@ -560,6 +562,7 @@ export class CoreToolBuilder extends MastraBase {
           error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
         if (error && !suspendedToolRunIdErrToIgnore) {
           logger.warn(error.message);
+          toolSpan?.end({ output: error, attributes: { success: false } });
           return error;
         }
         // Use validated/transformed data
@@ -569,7 +572,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!);
+              const result = await execFunction(args, execOptions!, toolSpan);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -590,6 +593,7 @@ export class CoreToolBuilder extends MastraBase {
           },
           err,
         );
+        toolSpan?.error({ error: mastraError, attributes: { success: false } });
         logger.trackException(mastraError);
         logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
         throw mastraError;

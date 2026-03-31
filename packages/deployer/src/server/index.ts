@@ -147,6 +147,7 @@ export async function createHonoServer(
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
     prefix: apiPrefix,
+    mcpOptions: server?.mcpOptions,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -394,7 +395,8 @@ export async function createHonoServer(
       // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
-      const host = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+      const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+      const host = bindHost ?? 'localhost';
       const key =
         serverOptions?.https?.key ??
         (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
@@ -410,9 +412,9 @@ export async function createHonoServer(
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
-      const themeToggle = process.env.MASTRA_THEME_TOGGLE === 'true' ? 'true' : 'false';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
       const escapeForHtml = (json: string): string => {
@@ -441,7 +443,7 @@ export async function createHonoServer(
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
-        themeToggle: `'${themeToggle}'`,
+        experimentalUI: `'${experimentalUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -486,7 +488,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const host = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
+  const host = bindHost ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
   const studioHost = serverOptions?.studioHost ?? host;
@@ -497,7 +500,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: host,
+      hostname: bindHost,
       ...(isHttpsEnabled
         ? {
             createServer: https.createServer,

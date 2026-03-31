@@ -12,7 +12,7 @@ import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { interactivePrompt } from '../init/utils.js';
 import type { LLMProvider } from '../init/utils.js';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, isGitInitialized } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -179,7 +179,6 @@ export const createMastraProject = async ({
     (await p.text({
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
-      defaultValue: 'my-mastra-app',
       validate: value => {
         if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
@@ -196,6 +195,8 @@ export const createMastraProject = async ({
   let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
+    const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
+
     result = await interactivePrompt({
       options: { showBanner: false },
       skip: {
@@ -203,6 +204,8 @@ export const createMastraProject = async ({
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        directory: true,
+        gitInit: skipGitInit,
       },
     });
   }

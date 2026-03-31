@@ -15,9 +15,11 @@ import {
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -112,6 +114,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
+      agentVersion: (row.agentVersion as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
@@ -140,6 +143,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
+      status: (row.status as ExperimentResult['status']) ?? null,
+      tags: row.tags ? safelyParseJSON(row.tags) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -161,6 +166,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           metadata: input.metadata ?? null,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
+          agentVersion: input.agentVersion ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           status: 'pending',
@@ -182,6 +188,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         metadata: input.metadata,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
+        agentVersion: input.agentVersion ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         status: 'pending',
@@ -408,6 +415,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags ?? null,
           createdAt: nowIso,
         },
       });
@@ -425,12 +434,78 @@ export class ExperimentsPG extends ExperimentsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
+        status: input.status ?? null,
+        tags: input.tags ?? null,
         createdAt: now,
       };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (input.status !== undefined) {
+        setClauses.push(`"status" = $${paramIndex++}`);
+        values.push(input.status);
+      }
+      if (input.tags !== undefined) {
+        setClauses.push(`"tags" = $${paramIndex++}`);
+        values.push(JSON.stringify(input.tags));
+      }
+
+      if (setClauses.length === 0) {
+        const existing = await this.getExperimentResultById({ id: input.id });
+        if (!existing) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { resultId: input.id },
+          });
+        }
+        return existing;
+      }
+
+      values.push(input.id);
+      let whereClause = `"id" = $${paramIndex}`;
+      if (input.experimentId) {
+        paramIndex++;
+        values.push(input.experimentId);
+        whereClause += ` AND "experimentId" = $${paramIndex}`;
+      }
+      const row = await this.#db.client.oneOrNone(
+        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
+        values,
+      );
+
+      if (!row) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: input.id },
+        });
+      }
+
+      return this.transformExperimentResultRow(row);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -509,6 +584,41 @@ export class ExperimentsPG extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_EXPERIMENT_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  // --- Aggregation ---
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const rows = await this.#db.client.manyOrNone(
+        `SELECT
+          "experimentId",
+          COUNT(*)::int as total,
+          SUM(CASE WHEN status = 'needs-review' THEN 1 ELSE 0 END)::int as "needsReview",
+          SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END)::int as reviewed,
+          SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END)::int as complete
+        FROM ${tableName}
+        GROUP BY "experimentId"`,
+      );
+
+      return (rows || []).map(row => ({
+        experimentId: row.experimentId as string,
+        total: Number(row.total ?? 0),
+        needsReview: Number(row.needsReview ?? 0),
+        reviewed: Number(row.reviewed ?? 0),
+        complete: Number(row.complete ?? 0),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_REVIEW_SUMMARY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
