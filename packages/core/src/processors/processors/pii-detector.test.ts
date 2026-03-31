@@ -198,6 +198,19 @@ describe('PIIDetector', () => {
       expect(result[0]).toBe(messages[0]);
     });
 
+    it('should only inspect the last message when lastMessageOnly is enabled', async () => {
+      const model = setupMockModel(createMockPIIResult([], []));
+      const detector = new PIIDetector({ model, lastMessageOnly: true });
+      const messages = [
+        createTestMessage('My email is secret@example.com', 'user', 'msg1'),
+        createTestMessage('No sensitive data here', 'user', 'msg2'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect(result).toEqual(messages);
+    });
+
     it('should detect multiple PII types', async () => {
       const detections: PIIDetection[] = [
         {
