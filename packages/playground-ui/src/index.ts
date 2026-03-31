@@ -95,6 +95,7 @@ export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
 export * from './ds/components/Chip';
 export * from './ds/components/Tree';
+export * from './ds/components/DataFilter';
 export * from './ds/components/DataList';
 export * from './ds/components/EntityList';
 export * from './ds/components/LogsDataList';

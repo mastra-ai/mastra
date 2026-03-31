@@ -1,4 +1,5 @@
 import { DataListCell, DataListTextCell, DataListNameCell, DataListDescriptionCell } from './data-list-cells';
+import { DataListNextPageLoading } from './data-list-next-page-loading';
 import { DataListNoMatch } from './data-list-no-match';
 import { DataListRoot } from './data-list-root';
 import { DataListRow } from './data-list-row';
@@ -20,4 +21,5 @@ export const DataList = Object.assign(DataListRoot, {
   NameCell: DataListNameCell,
   DescriptionCell: DataListDescriptionCell,
   NoMatch: DataListNoMatch,
+  NextPageLoading: DataListNextPageLoading,
 });
