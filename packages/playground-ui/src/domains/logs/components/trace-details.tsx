@@ -17,15 +17,19 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
   const { data: traceData, isLoading } = useTraceSpans(traceId);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
-  // Auto-select span when trace data loads with an initialSpanId
+  // Sync selected span when initialSpanId or trace data changes
   useEffect(() => {
     if (initialSpanId && traceData?.spans) {
       const span = traceData.spans.find(s => s.spanId === initialSpanId);
       if (span) {
         setSelectedSpanId(initialSpanId);
         onSpanSelect?.(span);
+        return;
       }
     }
+    // Clear stale selection when initialSpanId is null/missing or span not found
+    setSelectedSpanId(undefined);
+    onSpanSelect?.(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, traceData?.spans]);
 

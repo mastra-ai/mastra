@@ -1,4 +1,4 @@
-import type { LogRecord, FeaturedIds } from '@mastra/playground-ui';
+import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
 import {
   MainHeader,
   LogsList,
@@ -17,7 +17,7 @@ const LOG_PARAM = 'logId';
 const TRACE_PARAM = 'traceId';
 const SPAN_PARAM = 'spanId';
 
-const PRESET_TO_MS: Record<string, number> = {
+const PRESET_TO_MS: Record<LogsDatePreset, number> = {
   '24h': 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
@@ -36,7 +36,7 @@ export default function Logs() {
   const featuredSpanId = searchParams.get(SPAN_PARAM);
 
   const handleTimePeriodChange = useCallback(
-    (preset: string) => {
+    (preset: LogsDatePreset) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);

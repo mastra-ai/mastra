@@ -39,9 +39,11 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 
 // Helper function to read documentation content from a path
 async function readDocsContent(docPath: string, queryKeywords: string[]): Promise<ReadDocsResult> {
-  const fullPath = path.resolve(path.join(docsBaseDir, docPath));
-  if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
-    void logger.error('Path traversal attempt detected');
+  const basePath = path.resolve(docsBaseDir);
+  const fullPath = path.resolve(path.join(basePath, docPath));
+  const relativePath = path.relative(basePath, fullPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    void logger.error('Path traversal attempt detected', { path: docPath, resolvedPath: fullPath });
     return { found: false, isSecurityViolation: true };
   }
   void logger.debug('Reading docs content', { path: fullPath });

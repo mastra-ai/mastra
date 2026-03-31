@@ -1,15 +1,6 @@
 ---
 '@mastra/core': minor
 '@mastra/observability': minor
-'@mastra/mcp-docs-server': patch
-'@mastra/agent-builder': patch
-'@mastra/deployer': patch
-'@mastra/deployer-cloud': patch
-'@mastra/memory': patch
-'@mastra/server': patch
-'mastra': patch
-'@mastra/mcp': patch
-'@mastra/rag': patch
 ---
 
 Added DualLogger that transparently forwards all infrastructure logger calls (debug, info, warn, error, trackException) to the observability system (loggerVNext). This means all internal Mastra logs now automatically appear in your observability storage (e.g. DuckDB) without any code changes.

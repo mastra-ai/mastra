@@ -54,6 +54,7 @@ export function DataDetailsPanelCodeSection({
   }, [codeStr]);
 
   const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
+  const usePlainTextView = simplified || showAsMultilineText;
 
   if (!codeStr || codeStr === 'null') return null;
 
@@ -72,22 +73,26 @@ export function DataDetailsPanelCodeSection({
         <ButtonsGroup>
           <CopyButton content={codeStr || 'No content'} size="sm" />
           {hasMultilineText && (
-            <Button size="sm" onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button
+              size="sm"
+              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+              onClick={() => setShowAsMultilineText(v => !v)}
+            >
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}
         </ButtonsGroup>
       </div>
       <div className="bg-black/20 p-3 overflow-hidden rounded-lg border border-white/10 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
-        {simplified ? (
+        {usePlainTextView ? (
           <div className="text-neutral4 font-mono break-all">
-            <pre className="text-wrap">{codeStr}</pre>
+            <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
           <ReactCodeMirror
             extensions={[json(), EditorView.lineWrapping]}
             theme={theme}
-            value={finalCodeStr}
+            value={codeStr}
             editable={false}
           />
         )}

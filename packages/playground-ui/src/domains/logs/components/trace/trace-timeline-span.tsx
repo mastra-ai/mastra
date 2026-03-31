@@ -57,20 +57,20 @@ export function TraceTimelineSpan({
   }, [featuredSpanIds, allDescendantIds]);
 
   const toggleChildren = () => {
-    if (!setExpandedSpanIds || !expandedSpanIds) return;
-
-    if (isExpanded) {
-      const idsToRemove = [span.id, ...allDescendantIds];
-      setExpandedSpanIds(expandedSpanIds.filter(id => !idsToRemove.includes(id)));
-    } else {
-      setExpandedSpanIds([...expandedSpanIds, span.id]);
-    }
+    if (!setExpandedSpanIds) return;
+    setExpandedSpanIds(prev => {
+      if (!prev) return prev;
+      const idsToRemove = new Set([span.id, ...allDescendantIds]);
+      return isExpanded ? prev.filter(id => !idsToRemove.has(id)) : [...prev, span.id];
+    });
   };
 
   const expandAllDescendants = () => {
-    if (!setExpandedSpanIds || !expandedSpanIds) return;
-
-    setExpandedSpanIds([...expandedSpanIds, span.id, ...allDescendantIds]);
+    if (!setExpandedSpanIds) return;
+    setExpandedSpanIds(prev => {
+      if (!prev) return prev;
+      return Array.from(new Set([...prev, span.id, ...allDescendantIds]));
+    });
   };
 
   const allDescendantsExpanded = allDescendantIds.every(id => expandedSpanIds?.includes(id));

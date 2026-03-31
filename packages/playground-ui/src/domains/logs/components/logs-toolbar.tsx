@@ -8,7 +8,7 @@ import { SelectDataFilter } from '@/ds/components/DataFilter';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { ListSearch } from '@/ds/components/ListSearch/list-search';
 
-const DATE_PRESET_LABELS: Record<string, string> = {
+const DATE_PRESET_LABELS: Record<LogsDatePreset, string> = {
   '24h': 'Last 24 hours',
   '3d': 'Last 3 days',
   '7d': 'Last 7 days',
@@ -19,7 +19,7 @@ const DATE_PRESET_LABELS: Record<string, string> = {
 export interface LogsToolbarProps {
   onSearchChange: (query: string) => void;
   datePreset: LogsDatePreset;
-  onDatePresetChange: (preset: string) => void;
+  onDatePresetChange: (preset: LogsDatePreset) => void;
   filterGroups: FilterGroup[];
   filterColumns: FilterColumn[];
   onToggleComparator: (id: string) => void;
@@ -75,9 +75,9 @@ export function LogsToolbar({
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content>
-            {Object.entries(DATE_PRESET_LABELS).map(([value, label]) => (
+            {(Object.keys(DATE_PRESET_LABELS) as LogsDatePreset[]).map(value => (
               <DropdownMenu.Item key={value} onSelect={() => onDatePresetChange(value)}>
-                {label}
+                {DATE_PRESET_LABELS[value]}
               </DropdownMenu.Item>
             ))}
           </DropdownMenu.Content>
