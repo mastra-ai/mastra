@@ -1,5 +1,20 @@
 # @mastra/memory
 
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- Added more forgiving raw message browsing in the recall tool for agent follow-up calls. ([#14873](https://github.com/mastra-ai/mastra/pull/14873))
+
+  When an agent requests a `partIndex` greater than the highest visible part in a message, recall now returns the first visible part from the next visible message instead of failing. This makes it easier for agents using `recall` to keep browsing raw messages even when they guess the wrong part index.
+
+### Patch Changes
+
+- Fixed synchronous observation error handling in Observational Memory. `observe()` now throws when synchronous (thread/resource-scoped) observation fails, instead of continuing silently with stale observations. Async buffered observation failures remain non-fatal. ([#14843](https://github.com/mastra-ai/mastra/pull/14843))
+
+- Updated dependencies [[`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57)]:
+  - @mastra/core@1.19.0-alpha.2
+
 ## 1.11.1-alpha.0
 
 ### Patch Changes

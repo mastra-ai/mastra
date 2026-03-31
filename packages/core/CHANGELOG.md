@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.19.0-alpha.2
+
+### Minor Changes
+
+- feat(memory): add minMessages option to generateTitle config ([#14778](https://github.com/mastra-ai/mastra/pull/14778))
+
+  Delay automatic title generation until a minimum number of messages is reached, improving title quality and reducing unnecessary LLM calls.
+
+### Patch Changes
+
+- Sub-agent tool calls no longer fail when LLMs use `query`, `message`, or `input` instead of `prompt` during repeated sub-agent calls via custom gateways. These common aliases are now automatically recognized and mapped to `prompt` when the schema expects it. ([#14219](https://github.com/mastra-ai/mastra/pull/14219))
+
 ## 1.18.1-alpha.1
 
 ### Patch Changes

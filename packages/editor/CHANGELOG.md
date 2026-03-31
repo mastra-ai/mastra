@@ -1,5 +1,15 @@
 # @mastra/editor
 
+## 0.7.10-alpha.1
+
+### Patch Changes
+
+- Code-defined agents no longer get overridden with draft version data when no version has been explicitly published. When requesting `published` status and no `activeVersionId` is set, the agent's code defaults are preserved instead of falling back to the latest draft. ([#14894](https://github.com/mastra-ai/mastra/pull/14894))
+
+- Updated dependencies [[`542977f`](https://github.com/mastra-ai/mastra/commit/542977fe5043678df071ad3982b6bcbc78d95f02), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`d2d0bea`](https://github.com/mastra-ai/mastra/commit/d2d0beaafba2e25b9ad368015ce91312c372f6a5)]:
+  - @mastra/memory@1.12.0-alpha.1
+  - @mastra/core@1.19.0-alpha.2
+
 ## 0.7.10-alpha.0
 
 ### Patch Changes
