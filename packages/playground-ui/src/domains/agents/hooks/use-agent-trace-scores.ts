@@ -24,7 +24,6 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
       let page = 0;
       const scores: ScoreRecord[] = [];
 
-       
       while (true) {
         const res = await client.listScores({
           filters: {
