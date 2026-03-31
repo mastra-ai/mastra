@@ -221,6 +221,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       return agent;
     }
 
+    // If requesting published status but no version has been published, don't override the code-defined agent
+    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    if (requestedPublished && !storedConfig.activeVersionId) {
+      this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
+      return agent;
+    }
+
     // Save the original code-defined values before first override,
     // then restore to a clean state before re-applying (so updated stored configs work correctly)
     this.saveCodeDefaults(agent);
