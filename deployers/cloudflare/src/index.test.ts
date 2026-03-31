@@ -44,6 +44,46 @@ describe('CloudflareDeployer', () => {
   });
 
   describe('writeFiles', () => {
+    describe('environment variable handling', () => {
+      it('should exclude .env variables from wrangler config vars', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { NODE_ENV: 'production' },
+        });
+
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(
+          new Map([
+            ['OPENAI_API_KEY', 'sk-secret-key'],
+            ['DATABASE_URL', 'postgres://user:pass@host/db'],
+          ]),
+        );
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).not.toHaveProperty('OPENAI_API_KEY');
+        expect(wranglerConfig.vars).not.toHaveProperty('DATABASE_URL');
+        expect(wranglerConfig.vars).toHaveProperty('NODE_ENV', 'production');
+      });
+
+      it('should include only user-provided vars when no .env file exists', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { APP_MODE: 'live' },
+        });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).toEqual({ APP_MODE: 'live' });
+      });
+    });
+
     describe('TypeScript stub for bundle size optimization', () => {
       it('should create typescript-stub.mjs and configure wrangler alias', async () => {
         deployer = new CloudflareDeployer({ name: 'test-worker' });
@@ -86,6 +126,47 @@ describe('CloudflareDeployer', () => {
         // User's alias should override the default, other aliases preserved
         expect(wranglerConfig.alias.typescript).toBe('./custom-typescript-stub.js');
         expect(wranglerConfig.alias['other-module']).toBe('./other.js');
+      });
+    });
+
+    describe('readable-stream stub for Workers compatibility', () => {
+      it('should create readable-stream-stub.mjs that re-exports from node:stream', async () => {
+        deployer = new CloudflareDeployer({ name: 'test-worker' });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const stubPath = join(tempDir, 'output', 'readable-stream-stub.mjs');
+        const stub = await import(stubPath);
+
+        expect(stub.Readable).toBeDefined();
+        expect(stub.Writable).toBeDefined();
+        expect(stub.Duplex).toBeDefined();
+        expect(stub.Transform).toBeDefined();
+        expect(stub.PassThrough).toBeDefined();
+        expect(typeof stub.Readable.from).toBe('function');
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.alias['readable-stream']).toBe('./readable-stream-stub.mjs');
+      });
+
+      it('should allow user to override the readable-stream alias', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          alias: {
+            'readable-stream': './custom-stream.js',
+          },
+        });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.alias['readable-stream']).toBe('./custom-stream.js');
       });
     });
   });

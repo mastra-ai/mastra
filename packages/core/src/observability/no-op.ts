@@ -4,12 +4,15 @@ import type {
   ConfigSelector,
   ConfigSelectorOptions,
   Counter,
+  FeedbackInput,
   Gauge,
   Histogram,
   LoggerContext,
   MetricsContext,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  RecordedTrace,
+  ScoreInput,
   TracingContext,
 } from './types';
 
@@ -65,6 +68,7 @@ export const noOpLoggerContext: LoggerContext = {
  * Used when observability is not configured.
  */
 export const noOpMetricsContext: MetricsContext = {
+  emit() {},
   counter() {
     return noOpCounter;
   },
@@ -80,6 +84,7 @@ export const noOpMetricsContext: MetricsContext = {
 // No-Op Observability
 // ============================================================================
 
+/** No-op observability entrypoint that silently discards all operations. */
 export class NoOpObservability implements ObservabilityEntrypoint {
   setMastraContext(_options: { mastra: Mastra }): void {
     return;
@@ -90,6 +95,18 @@ export class NoOpObservability implements ObservabilityEntrypoint {
   }
 
   getSelectedInstance(_options: ConfigSelectorOptions): ObservabilityInstance | undefined {
+    return;
+  }
+
+  async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
+    return null;
+  }
+
+  async addScore(_args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void> {
+    return;
+  }
+
+  async addFeedback(_args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void> {
     return;
   }
 

@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import {
   File,
   Folder,
   FolderOpen,
   ChevronRight,
-  ChevronDown,
   FileText,
   FileCode,
   FileJson,
@@ -19,16 +17,17 @@ import {
   Database,
   HardDrive,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { Button } from '@/ds/components/Button';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { AmazonIcon } from '@/ds/icons/AmazonIcon';
-import { GoogleIcon } from '@/ds/icons/GoogleIcon';
-import { AzureIcon } from '@/ds/icons/AzureIcon';
 import type { FileEntry } from '../types';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
+import { AmazonIcon } from '@/ds/icons/AmazonIcon';
+import { AzureIcon } from '@/ds/icons/AzureIcon';
+import { GoogleIcon } from '@/ds/icons/GoogleIcon';
 
 // =============================================================================
 // Type Definitions
@@ -289,7 +288,7 @@ export function FileBrowser({
                 const name = prompt('Directory name:');
                 if (name) {
                   const fullPath = isRoot ? name : `${currentPath}/${name}`;
-                  onCreateDirectory(fullPath);
+                  void onCreateDirectory(fullPath);
                 }
               }}
             >

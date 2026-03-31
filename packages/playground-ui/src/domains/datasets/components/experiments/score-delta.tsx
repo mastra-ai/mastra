@@ -1,6 +1,6 @@
+import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Chip } from '@/index';
 import { cn } from '@/lib/utils';
-import { ArrowDownIcon, ArrowUpIcon, EqualIcon } from 'lucide-react';
 
 interface ScoreDeltaProps {
   /** Difference between scores (B - A) */
@@ -24,7 +24,7 @@ export function ScoreDelta({ delta }: ScoreDeltaProps) {
     ) : null;
 
   return (
-    <span className={cn('font-mono text-sm text-neutral4 min-w-[5rem]')}>
+    <span className={cn('font-mono text-sm text-neutral4 min-w-20')}>
       <span className="w-3 inline-block">{delta > 0 ? '+ ' : delta < 0 ? '- ' : ''}</span>
       {Math.abs(delta).toFixed(2)}&nbsp;{arrow}
     </span>

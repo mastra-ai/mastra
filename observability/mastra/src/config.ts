@@ -13,6 +13,8 @@ import type {
   SpanOutputProcessor,
   ConfigSelector,
   SerializationOptions,
+  CardinalityConfig,
+  LogLevel,
 } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 
@@ -80,6 +82,22 @@ export interface ObservabilityInstanceConfig {
    * Use these to customize truncation limits for large payloads.
    */
   serializationOptions?: SerializationOptions;
+  /**
+   * Cardinality protection settings for metrics.
+   * Controls which labels are blocked and whether UUID-like values are filtered.
+   * Applied to all metrics (auto-extracted and user-defined).
+   */
+  cardinality?: CardinalityConfig;
+  /**
+   * Configuration for the observability logger (loggerVNext).
+   * Controls log level filtering and whether dual-write logging is enabled.
+   */
+  logging?: {
+    /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
+    enabled?: boolean;
+    /** Minimum log level to write to observability storage. Defaults to `'debug'`. */
+    level?: LogLevel;
+  };
 }
 
 /**
@@ -152,6 +170,7 @@ export const observabilityInstanceConfigSchema = z
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
     serializationOptions: serializationOptionsSchema,
+    cardinality: z.any().optional(),
   })
   .refine(
     data => {

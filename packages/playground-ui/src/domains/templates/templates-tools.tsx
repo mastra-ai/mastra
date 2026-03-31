@@ -1,8 +1,8 @@
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import { Button } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button/Button';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { cn } from '@/lib/utils';
 
 type TemplatesToolsProps = {
   selectedTag: string;

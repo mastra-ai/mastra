@@ -12,7 +12,13 @@ import type { ObservabilityContext } from '../observability';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { createWorkflow, createStep } from '../workflows';
-import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
+import type {
+  ScoringSamplingConfig,
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  Trajectory,
+  TrajectoryExpectation,
+} from './types';
 
 interface ScorerStepDefinition {
   name: string;
@@ -25,6 +31,10 @@ type ScorerTypeShortcuts = {
   agent: {
     input: ScorerRunInputForAgent;
     output: ScorerRunOutputForAgent;
+  };
+  trajectory: {
+    input: ScorerRunInputForAgent;
+    output: Trajectory;
   };
 };
 
@@ -54,6 +64,8 @@ interface ScorerRun<TInput = any, TOutput = any> extends Partial<ObservabilityCo
   input?: TInput;
   output: TOutput;
   groundTruth?: any;
+  /** Expected trajectory config for trajectory scorers. Flows from dataset items or scorer constructor. */
+  expectedTrajectory?: TrajectoryExpectation;
   requestContext?: Record<string, any>;
 }
 
@@ -68,7 +80,7 @@ interface PromptObject<
   description: string;
   /**
    * Schema defining the expected output structure.
-   * Accepts any schema type supported by Mastra (Zod v3, Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
+   * Accepts any schema type supported by Mastra (Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
    * Will be converted to StandardSchemaWithJSON at runtime via toStandardSchema().
    *
    * The TOutput generic is inferred from this schema's output type.

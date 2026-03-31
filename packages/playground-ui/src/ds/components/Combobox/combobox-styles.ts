@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export const comboboxStyles = {
   /** Root wrapper */
@@ -19,16 +19,16 @@ export const comboboxStyles = {
 
   /** Popup container */
   popup: cn(
-    'min-w-[var(--anchor-width)] w-max max-w-[500px] rounded-md bg-surface3 text-neutral5',
+    'min-w-(--anchor-width) w-max max-w-[500px] rounded-md bg-surface3 text-neutral5',
     'shadow-elevated',
-    'origin-[var(--transform-origin)]',
+    'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',
-    'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
-    'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
+    'data-starting-style:scale-95 data-starting-style:opacity-0',
+    'data-ending-style:scale-95 data-ending-style:opacity-0',
   ),
 
   /** Positioner */
-  positioner: 'z-[100]',
+  positioner: 'z-50 pointer-events-auto',
 
   /** Search input container */
   searchContainer: cn('flex items-center border-b border-border1 px-3 py-2', transitions.colors),
@@ -40,12 +40,12 @@ export const comboboxStyles = {
   searchInput: cn(
     'flex h-8 w-full rounded-md bg-transparent py-1 text-sm',
     'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-    'outline-none',
+    'outline-hidden',
     transitions.colors,
   ),
 
   /** Empty state */
-  empty: '[&:not(:empty)]:block hidden py-6 text-center text-sm text-neutral3',
+  empty: 'not-empty:block hidden py-6 text-center text-sm text-neutral3',
 
   /** Options list */
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
@@ -54,11 +54,11 @@ export const comboboxStyles = {
   item: cn(
     'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm',
     transitions.colors,
-    'data-[highlighted]:bg-surface5 data-[highlighted]:text-neutral5',
+    'data-highlighted:bg-surface5 data-highlighted:text-neutral5',
   ),
 
   /** Option item with selected state (single select) */
-  itemSelected: 'data-[selected]:bg-accent1Dark data-[selected]:text-accent1',
+  itemSelected: 'data-selected:bg-accent1Dark data-selected:text-accent1',
 
   /** Check indicator container */
   checkContainer: 'mr-2 flex h-4 w-4 shrink-0 items-center justify-center',

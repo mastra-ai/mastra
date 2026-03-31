@@ -19,6 +19,56 @@ import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/** Create a SKILL.md file with valid frontmatter */
+function skillContent(name: string, description: string): string {
+  return `---
+name: ${name}
+description: ${description}
+---
+
+Instructions for the ${name} skill. This skill helps with ${description}.
+`;
+}
+
+/** Create skill directories with SKILL.md files inside a base directory */
+async function createSkillFixtures(baseDir: string): Promise<void> {
+  await fs.mkdir(path.join(baseDir, 'skills', 'travel-tips'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'travel-tips', 'SKILL.md'),
+    skillContent('travel-tips', 'providing travel tips and recommendations'),
+  );
+
+  await fs.mkdir(path.join(baseDir, 'skills', 'language-helper'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'language-helper', 'SKILL.md'),
+    skillContent('language-helper', 'translating common phrases for travelers'),
+  );
+  await fs.mkdir(path.join(baseDir, 'skills', 'language-helper', 'references'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'language-helper', 'references', 'phrases.md'),
+    'Common Japanese phrases: konnichiwa, arigatou, sumimasen',
+  );
+}
+
+/** Create travel guide content files inside a base directory */
+async function createDocsFixtures(baseDir: string): Promise<void> {
+  await fs.mkdir(path.join(baseDir, 'docs', 'london'), { recursive: true });
+  await fs.mkdir(path.join(baseDir, 'docs', 'tokyo'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'docs', 'london', 'activities.md'),
+    'London has many activities including visiting the Tower of London and Big Ben',
+  );
+  await fs.writeFile(
+    path.join(baseDir, 'docs', 'tokyo', 'activities.md'),
+    'Tokyo offers amazing experiences like visiting Shibuya crossing and Senso-ji temple',
+  );
+  await fs.writeFile(path.join(baseDir, 'docs', 'overview.txt'), 'A travel guide covering major cities worldwide');
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -503,6 +553,266 @@ Line 3 conclusion`;
       const skills1 = workspace.skills;
       const skills2 = workspace.skills;
       expect(skills1).toBe(skills2);
+    });
+
+    // =========================================================================
+    // Skills + search interaction (regression tests for shared SearchEngine)
+    // =========================================================================
+
+    describe('search with skills configured', () => {
+      beforeEach(async () => {
+        await createDocsFixtures(tempDir);
+        await createSkillFixtures(tempDir);
+      });
+
+      it('should search with plain autoIndexPaths and skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const results = await workspace.search('London');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should search with glob autoIndexPaths and skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs/**/*.md'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const results = await workspace.search('London');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+        // Should NOT include .txt files
+        const overviewResults = await workspace.search('travel guide worldwide');
+        expect(overviewResults.every(r => r.id.endsWith('.md'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should find content from multiple subdirectories with skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const londonResults = await workspace.search('Tower London Big Ben');
+        expect(londonResults.length).toBeGreaterThan(0);
+
+        const tokyoResults = await workspace.search('Shibuya Senso temple');
+        expect(tokyoResults.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after accessing skills.list()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Access skills (triggers lazy initialization via #ensureInitialized)
+        const skillsList = await workspace.skills!.list();
+        expect(skillsList.length).toBe(2);
+
+        // Search should STILL work after skills initialization
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.search()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Search skills (triggers skills initialization + skill search)
+        const skillResults = await workspace.skills!.search('travel');
+        expect(skillResults).toBeDefined();
+
+        // Workspace search should STILL work
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.refresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Trigger skills refresh (this is the destructive operation)
+        await workspace.skills!.refresh();
+
+        // Search should STILL work after refresh
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+        expect(resultsAfter.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.maybeRefresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Trigger maybeRefresh (called by SkillsProcessor on step 0)
+        await workspace.skills!.maybeRefresh();
+
+        // Search should STILL work
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve search after skills refresh with stale detection', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Initialize skills
+        await workspace.skills!.list();
+
+        // Wait for staleness cooldown to expire
+        await new Promise(resolve => setTimeout(resolve, 2100));
+
+        // Modify a skill to trigger staleness
+        await fs.writeFile(
+          path.join(tempDir, 'skills', 'travel-tips', 'SKILL.md'),
+          skillContent('travel-tips', 'updated travel tips and recommendations'),
+        );
+
+        // Touch the skill directory to update mtime
+        const now = new Date();
+        await fs.utimes(path.join(tempDir, 'skills', 'travel-tips'), now, now);
+
+        // maybeRefresh should detect staleness and call refresh()
+        await workspace.skills!.maybeRefresh();
+
+        // Search should STILL work (this is the key test)
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+        expect(resultsAfter.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve manually indexed content after skills.refresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          skills: ['skills'],
+        });
+
+        // Manually index content (no autoIndexPaths)
+        await workspace.index('custom-doc', 'London has amazing historical landmarks and museums');
+
+        // Initialize then refresh skills
+        await workspace.skills!.list();
+        await workspace.skills!.refresh();
+
+        // Manual index should still be searchable
+        const results = await workspace.search('London landmarks');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id === 'custom-doc')).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should find skill content via workspace.skills.search()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Skills search should find skill content
+        const results = await workspace.skills!.search('travel tips');
+        expect(results.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should find both workspace and skill content after init + skills access', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Access skills to trigger initialization
+        await workspace.skills!.list();
+
+        // Should find workspace content
+        const workspaceResults = await workspace.search('London Tower');
+        expect(workspaceResults.length).toBeGreaterThan(0);
+
+        // Should find skill content via skills.search
+        const skillResults = await workspace.skills!.search('travel tips');
+        expect(skillResults.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
     });
   });
 
@@ -1310,6 +1620,41 @@ Line 3 conclusion`;
 
       await workspace.destroy();
     });
+
+    it('should log warning when search engine indexing fails', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      const searchEngine = (workspace as any)._searchEngine;
+      vi.spyOn(searchEngine, 'index').mockRejectedValue(new Error('embedder failed'));
+
+      // __setLogger is normally called by Mastra; we call it directly for unit testing
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      (workspace as any).__setLogger(mockLogger);
+
+      await workspace.init();
+
+      expect(workspace.status).toBe('ready');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to index file'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+
+      vi.restoreAllMocks();
+      await workspace.destroy();
+    });
   });
 
   // ===========================================================================
@@ -1462,6 +1807,65 @@ Line 3 conclusion`;
 
       const noteResults = await workspace.search('deployment');
       expect(noteResults.some(r => r.id === '/backup/notes.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should support search across mounts WITH skills configured', async () => {
+      await createDocsFixtures(tempDirA);
+      await createSkillFixtures(tempDirA);
+      await fs.writeFile(path.join(tempDirB, 'notes.txt'), 'Notes about Paris travel planning');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/data': new LocalFilesystem({ basePath: tempDirA }),
+          '/extra': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({
+        filesystem: cfs,
+        bm25: true,
+        autoIndexPaths: ['/data/docs', '/extra'],
+        skills: ['/data/skills'],
+      });
+
+      await workspace.init();
+
+      const londonResults = await workspace.search('London');
+      expect(londonResults.length).toBeGreaterThan(0);
+
+      const parisResults = await workspace.search('Paris travel');
+      expect(parisResults.length).toBeGreaterThan(0);
+
+      await workspace.destroy();
+    });
+
+    it('should support search with glob across mounts and skills', async () => {
+      await createDocsFixtures(tempDirA);
+      await createSkillFixtures(tempDirA);
+      await fs.writeFile(path.join(tempDirB, 'notes.md'), 'Notes about Paris travel planning');
+      await fs.writeFile(path.join(tempDirB, 'todo.txt'), 'Todo list for trip');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/data': new LocalFilesystem({ basePath: tempDirA }),
+          '/extra': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({
+        filesystem: cfs,
+        bm25: true,
+        autoIndexPaths: ['/data/docs/**/*.md', '/extra/**/*.md'],
+        skills: ['/data/skills'],
+      });
+
+      await workspace.init();
+
+      const londonResults = await workspace.search('London');
+      expect(londonResults.length).toBeGreaterThan(0);
+
+      const parisResults = await workspace.search('Paris travel');
+      expect(parisResults.length).toBeGreaterThan(0);
 
       await workspace.destroy();
     });

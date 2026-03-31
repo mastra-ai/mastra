@@ -1,9 +1,9 @@
-import React from 'react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { cn } from '@/lib/utils';
-import { useLinkComponent } from '@/lib/framework';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
+import React from 'react';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type KeyValueListItemValue = {
   id: string;
@@ -23,13 +23,12 @@ export type KeyValueListItemData = {
 type Value = React.ReactNode | KeyValueListItemValue[];
 export type KeyValueListProps = {
   data: KeyValueListItemData[];
-  LinkComponent: React.ComponentType;
   labelsAreHidden?: boolean;
   className?: string;
   isLoading?: boolean;
 };
 
-export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, isLoading }: KeyValueListProps) {
+export function KeyValueList({ data, className, labelsAreHidden, isLoading }: KeyValueListProps) {
   const { Link } = useLinkComponent();
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;

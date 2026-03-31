@@ -12,7 +12,7 @@ import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { interactivePrompt } from '../init/utils.js';
 import type { LLMProvider } from '../init/utils.js';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, isGitInitialized } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -94,7 +94,7 @@ Start the development server:
 ${packageManager} run dev
 \`\`\`
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/getting-started/studio). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
 
 You can start editing files inside the \`src/mastra\` directory. The development server will automatically reload whenever you make changes.
 
@@ -179,7 +179,6 @@ export const createMastraProject = async ({
     (await p.text({
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
-      defaultValue: 'my-mastra-app',
       validate: value => {
         if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
@@ -196,6 +195,8 @@ export const createMastraProject = async ({
   let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
+    const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
+
     result = await interactivePrompt({
       options: { showBanner: false },
       skip: {
@@ -203,6 +204,8 @@ export const createMastraProject = async ({
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        directory: true,
+        gitInit: skipGitInit,
       },
     });
   }

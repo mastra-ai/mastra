@@ -1,6 +1,6 @@
 import { createContext, useContext, useLayoutEffect, useState } from 'react';
-import { StudioConfig } from '../types';
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
+import type { StudioConfig } from '../types';
 
 export type StudioConfigContextType = StudioConfig & {
   isLoading: boolean;

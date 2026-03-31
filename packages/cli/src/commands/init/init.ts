@@ -111,6 +111,11 @@ export const init = async ({
           await installWithFallback(depService, '@mastra/memory', packageVersionTag);
         }
       }
+      
+      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
+      if (needsDuckDB) {
+        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
+      }
 
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
@@ -186,7 +191,7 @@ export const init = async ({
         // Write CLAUDE.md only if claude-code is in skills list
         const shouldWriteClaudeMd = skills?.includes('claude-code');
         if (shouldWriteClaudeMd) {
-          await writeClaudeMarkdown({ skills, mcpServer });
+          await writeClaudeMarkdown();
         }
       } catch (error) {
         // Don't fail initialization if markdown files fail to write

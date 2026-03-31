@@ -15,6 +15,7 @@ describe('ModelsDevGateway', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('fetchProviders', () => {
@@ -59,6 +60,16 @@ describe('ModelsDevGateway', () => {
         },
         env: ['FIREWORKS_API_KEY'],
         api: 'https://api.fireworks.ai/inference/v1',
+        npm: '@ai-sdk/openai-compatible',
+      },
+      'cloudflare-workers-ai': {
+        id: 'cloudflare-workers-ai',
+        name: 'Cloudflare Workers AI',
+        models: {
+          '@cf/meta/llama-3.1-8b-instruct': { name: 'Llama 3.1 8B Instruct' },
+        },
+        env: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_KEY'],
+        api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
         npm: '@ai-sdk/openai-compatible',
       },
       'unknown-provider': {
@@ -125,6 +136,44 @@ describe('ModelsDevGateway', () => {
       expect(providers['fireworks-ai'].name).toBe('Fireworks AI');
       // But env var should use underscores
       expect(providers['fireworks-ai'].apiKeyEnvVar).toBe('FIREWORKS_API_KEY');
+    });
+
+    it('should ignore URL placeholder env vars when selecting the auth env var', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['cloudflare-workers-ai']).toBeDefined();
+      expect(providers['cloudflare-workers-ai'].url).toBe(
+        'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+      );
+      expect(providers['cloudflare-workers-ai'].apiKeyEnvVar).toBe('CLOUDFLARE_API_KEY');
+    });
+
+    it('should prefer token-like env vars over other auth candidates', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          'example-provider': {
+            id: 'example-provider',
+            name: 'Example Provider',
+            models: {
+              'example-model': { name: 'Example Model' },
+            },
+            env: ['EXAMPLE_ACCOUNT_ID', 'EXAMPLE_API_KEY', 'EXAMPLE_API_TOKEN'],
+            api: 'https://api.example.com/accounts/${EXAMPLE_ACCOUNT_ID}/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['example-provider']).toBeDefined();
+      expect(providers['example-provider'].apiKeyEnvVar).toBe('EXAMPLE_API_TOKEN');
     });
 
     it('should filter out deprecated models', async () => {
@@ -240,6 +289,13 @@ describe('ModelsDevGateway', () => {
             env: ['OPENAI_API_KEY'],
             api: 'https://api.openai.com/v1',
           },
+          'cloudflare-workers-ai': {
+            id: 'cloudflare-workers-ai',
+            name: 'Cloudflare Workers AI',
+            models: { '@cf/meta/llama-3.1-8b-instruct': {} },
+            env: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_KEY'],
+            api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+          },
         }),
       });
       await gateway.fetchProviders();
@@ -256,6 +312,36 @@ describe('ModelsDevGateway', () => {
         OPENAI_BASE_URL: 'https://custom.openai.proxy/v1',
       });
       expect(url).toBe('https://custom.openai.proxy/v1');
+    });
+
+    it('should interpolate URL template variables from env vars', () => {
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: 'account-123',
+      });
+
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1');
+    });
+
+    it('should not fall back to process.env when env vars explicitly provide an empty string', () => {
+      vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'account-123');
+
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: '',
+      });
+
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts//ai/v1');
+    });
+
+    it('should throw when a required URL template variable is missing', () => {
+      const previous = process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      try {
+        expect(() => gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct', {})).toThrow(
+          'Missing environment variable CLOUDFLARE_ACCOUNT_ID required to build provider URL',
+        );
+      } finally {
+        if (previous !== undefined) process.env.CLOUDFLARE_ACCOUNT_ID = previous;
+      }
     });
 
     it('should return false for invalid model ID format', () => {

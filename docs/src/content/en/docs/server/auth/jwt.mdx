@@ -1,6 +1,6 @@
 ---
-title: "MastraJwtAuth class | Auth"
-description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
+title: "JSON Web Token | Auth"
+description: "Documentation for JSON Web Token usage inside Mastra."
 packages:
   - "@mastra/auth"
   - "@mastra/client-js"
@@ -10,7 +10,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# MastraJwtAuth class
+# JSON Web Token
 
 The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
@@ -22,7 +22,21 @@ Before you can use the `MastraJwtAuth` class you have to install the `@mastra/au
 npm install @mastra/auth@latest
 ```
 
+## Creating a JWT
+
+To authenticate requests to your Mastra server, you'll need a valid JSON Web Token (JWT) signed with your `MASTRA_JWT_SECRET`.
+
+The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
+
+1. Select **JWT Encoder**.
+1. Scroll down to the **Sign JWT: Secret** section.
+1. Enter your secret (for example: `supersecretdevkeythatishs256safe!`).
+1. Click **Generate example** to create a valid JWT.
+1. Copy the generated token and set it as `MASTRA_JWT_TOKEN` in your `.env` file.
+
 ## Usage example
+
+Take your generated JWT and use it to configure `MastraJwtAuth` in your Mastra server:
 
 ```typescript {2,6-8} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -42,6 +56,8 @@ export const mastra = new Mastra({
 Visit [MastraJwtAuth](/reference/auth/jwt) for all available configuration options.
 
 :::
+
+Inside [Studio](/docs/studio/overview), go to **Settings** and under **Headers** select the **"Add Header"** button. Enter `Authorization` as the header name and `Bearer <your-jwt>` as the value.
 
 ## Configuring `MastraClient`
 
@@ -98,15 +114,3 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     ```
   </TabItem>
 </Tabs>
-
-## Creating a JWT
-
-To authenticate requests to your Mastra server, you'll need a valid JSON Web Token (JWT) signed with your `MASTRA_JWT_SECRET`.
-
-The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
-
-1. Select **JWT Encoder**.
-1. Scroll down to the **Sign JWT: Secret** section.
-1. Enter your secret (for example: `supersecretdevkeythatishs256safe!`).
-1. Click **Generate example** to create a valid JWT.
-1. Copy the generated token and set it as `MASTRA_JWT_TOKEN` in your `.env` file.

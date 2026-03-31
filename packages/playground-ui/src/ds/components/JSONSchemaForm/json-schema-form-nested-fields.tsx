@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import { JSONSchemaFormNestedProvider } from './json-schema-form-nested-context';
 import { createField } from './types';
+import { cn } from '@/lib/utils';
 
 export interface JSONSchemaFormNestedFieldsProps {
   className?: string;

@@ -1,15 +1,14 @@
-import { DynamicForm } from '@/lib/form';
-import { Button } from '@/ds/components/Button/Button';
-import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import CodeMirror from '@uiw/react-codemirror';
-import { useEffect, useState } from 'react';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { Label } from '@/ds/components/Label';
 import { Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { ZodSchema } from 'zod';
+import { Button } from '@/ds/components/Button/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Label } from '@/ds/components/Label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 
-import { ZodSchema } from 'zod';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { DynamicForm } from '@/lib/form';
 import { cn } from '@/lib/utils';
 
 type InputType = 'simple' | 'form' | 'json';
@@ -58,20 +57,20 @@ export const WorkflowInputData = ({
           {isProcessorWorkflow && (
             <div className="flex items-center gap-3">
               <RadioGroupItem value="simple" id="simple" />
-              <Label htmlFor="simple" className="!text-neutral3 text-ui-sm">
+              <Label htmlFor="simple" className="text-neutral3! text-ui-sm">
                 Simple
               </Label>
             </div>
           )}
           <div className="flex items-center gap-3">
             <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="!text-neutral3 text-ui-sm">
+            <Label htmlFor="form" className="text-neutral3! text-ui-sm">
               Form
             </Label>
           </div>
           <div className="flex items-center gap-3">
             <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="!text-neutral3 text-ui-sm">
+            <Label htmlFor="json" className="text-neutral3! text-ui-sm">
               JSON
             </Label>
           </div>
@@ -143,7 +142,7 @@ const JSONInput = ({
       } else {
         onSubmit(result.data);
       }
-    } catch (e) {
+    } catch {
       setErrors(['Invalid JSON provided']);
     }
   };
@@ -196,7 +195,6 @@ const PROCESSOR_PHASES = [
 
 const SimpleProcessorInput = ({
   schema,
-  defaultValues,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -237,7 +235,7 @@ const SimpleProcessorInput = ({
       } else {
         onSubmit(result.data);
       }
-    } catch (e) {
+    } catch {
       setErrors(['Error processing input']);
     }
   };
@@ -289,7 +287,7 @@ const SimpleProcessorInput = ({
           onChange={e => setMessage(e.target.value)}
           placeholder="Enter a test message..."
           rows={4}
-          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-none focus:ring-2 focus:ring-accent1"
+          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
         />
       </div>
 

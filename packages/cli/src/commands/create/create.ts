@@ -56,6 +56,8 @@ export const create = async (args: {
   const needsInteractive =
     args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
 
+  const directory = args.directory || 'src/';
+
   const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
@@ -66,7 +68,6 @@ export const create = async (args: {
     mcpServer: args?.mcpServer,
     needsInteractive,
   });
-  const directory = args.directory || 'src/';
 
   if (needsInteractive && result) {
     // Track model provider selection from interactive prompt
@@ -84,11 +85,20 @@ export const create = async (args: {
     if (connectionMethod === 'gateway') {
       await setupGateway(projectName);
     }
+    
+    const interactiveComponents: Component[] = ['agents', 'tools', 'workflows', 'scorers'];
+
+    if (analytics) {
+      analytics.trackEvent('cli_components_selected', {
+        components: interactiveComponents,
+        selection_method: 'interactive',
+      });
+    }
 
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
-      components: ['agents', 'tools', 'workflows', 'scorers'],
+      components: interactiveComponents,
       addExample: true,
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
@@ -103,10 +113,19 @@ export const create = async (args: {
   const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
 
   // Track model provider selection from CLI args
-  const analytics = getAnalytics();
-  if (analytics) {
-    analytics.trackEvent('cli_model_provider_selected', {
+  const cliAnalytics = getAnalytics();
+  if (cliAnalytics) {
+    cliAnalytics.trackEvent('cli_model_provider_selected', {
       provider: llmProvider,
+      selection_method: 'cli_args',
+    });
+
+    cliAnalytics.trackEvent('cli_components_selected', {
+      components,
+      has_agents: components.includes('agents'),
+      has_tools: components.includes('tools'),
+      has_workflows: components.includes('workflows'),
+      has_scorers: components.includes('scorers'),
       selection_method: 'cli_args',
     });
   }

@@ -12,11 +12,15 @@ packages:
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
 
 :::warning[Pricing]
+
 When using Mastra with Upstash, the pay-as-you-go model can result in unexpectedly high costs due to the high volume of Redis commands generated during agent conversations. We strongly recommend using a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
+
 :::
 
 :::warning[Observability Not Supported]
-Upstash storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to Upstash, and Mastra Studio's observability features won't work with Upstash as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
+Upstash storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to Upstash, and [Studio's](/docs/studio/overview) observability features won't work with Upstash as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
 :::
 
 ## Installation
@@ -114,7 +118,7 @@ export const upstashAgent = new Agent({
   name: 'Upstash Agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',

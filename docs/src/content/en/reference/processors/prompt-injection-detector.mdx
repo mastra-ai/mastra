@@ -19,6 +19,7 @@ const processor = new PromptInjectionDetector({
   threshold: 0.8,
   strategy: 'rewrite',
   detectionTypes: ['injection', 'jailbreak', 'system-override'],
+  lastMessageOnly: true,
 })
 ```
 
@@ -81,6 +82,14 @@ const processor = new PromptInjectionDetector({
             default: 'false',
           },
           {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description:
+              'Whether to inspect only the most recent message in the batch instead of checking every message. Use this to avoid extra LLM calls for earlier conversation history.',
+            isOptional: true,
+            default: 'false',
+          },
+          {
             name: 'providerOptions',
             type: 'ProviderOptions',
             description:
@@ -129,7 +138,7 @@ import { PromptInjectionDetector } from '@mastra/core/processors'
 export const agent = new Agent({
   name: 'secure-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new PromptInjectionDetector({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',

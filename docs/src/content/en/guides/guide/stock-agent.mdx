@@ -35,7 +35,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
       name: 'Stock Agent',
       instructions:
         'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
     })
     ```
   </StepItem>
@@ -102,7 +102,7 @@ The Stock Agent doesn't yet know anything about current stock prices. To change 
       name: 'Stock Agent',
       instructions:
         'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       tools: {
         stockPrices,
       },
@@ -123,7 +123,7 @@ Learn how to interact with your agent through Mastra's API.
     mastra dev
     ```
 
-    This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
+    This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/studio/overview) you can test your `stockAgent` and `stockPrices` tool through a UI.
   </StepItem>
 
   <StepItem>

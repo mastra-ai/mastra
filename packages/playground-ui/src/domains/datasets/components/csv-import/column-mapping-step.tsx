@@ -1,8 +1,9 @@
-import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { Icon } from '@/ds/icons';
-import { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 
 export interface ColumnMappingStepProps {
   headers: string[];
@@ -68,7 +69,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={`
-                      min-h-[48px] rounded-lg border-2 border-dashed p-2
+                      min-h-header-default rounded-lg border-2 border-dashed p-2
                       flex flex-wrap gap-2 items-center
                       transition-colors
                       ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-surface4'}

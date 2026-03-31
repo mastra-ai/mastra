@@ -1,5 +1,87 @@
 # create-mastra
 
+## 1.3.17
+
+## 1.3.17-alpha.2
+
+## 1.3.17-alpha.1
+
+## 1.3.17-alpha.0
+
+## 1.3.16
+
+## 1.3.16-alpha.8
+
+## 1.3.16-alpha.7
+
+## 1.3.16-alpha.6
+
+## 1.3.16-alpha.5
+
+## 1.3.16-alpha.4
+
+## 1.3.16-alpha.3
+
+## 1.3.16-alpha.2
+
+## 1.3.16-alpha.1
+
+## 1.3.16-alpha.0
+
+## 1.3.15
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.5
+
+## 1.3.15-alpha.4
+
+## 1.3.15-alpha.3
+
+## 1.3.15-alpha.2
+
+## 1.3.15-alpha.1
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.0
+
+## 1.3.14
+
+## 1.3.14-alpha.4
+
+## 1.3.14-alpha.3
+
+## 1.3.14-alpha.2
+
+## 1.3.14-alpha.1
+
+## 1.3.14-alpha.0
+
+## 1.3.13
+
+## 1.3.13-alpha.3
+
+## 1.3.13-alpha.2
+
+## 1.3.13-alpha.1
+
+## 1.3.13-alpha.0
+
+## 1.3.12
+
+## 1.3.12-alpha.0
+
+## 1.3.11
+
+## 1.3.10
+
+## 1.3.10-alpha.0
+
 ## 1.3.9
 
 ## 1.3.9-alpha.1

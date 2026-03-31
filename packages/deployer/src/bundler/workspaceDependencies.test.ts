@@ -159,7 +159,7 @@ describe('workspaceDependencies', () => {
       });
 
       expect(mockDepsServiceMethods.pack).toHaveBeenCalledTimes(3);
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully packaged 3'));
+      expect(mockLogger.info).toHaveBeenCalledWith('Successfully packaged workspace dependencies', { count: 3 });
     });
 
     it('should do nothing with empty workspace packages', async () => {
