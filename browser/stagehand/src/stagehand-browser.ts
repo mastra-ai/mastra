@@ -791,47 +791,16 @@ export class StagehandBrowser extends MastraBrowser {
     // On reconnect, this will get a fresh CDP session for whatever page is currently active
     const provider = {
       getCdpSession: async () => {
-        // Try Stagehand's page tracking first
         const page = await this.getPageForThread(threadId ?? '');
-        if (page) {
-          return this.getCdpSessionForPage(page);
+        if (!page) {
+          throw new Error('No page available for screencast');
         }
 
-        // Fallback: use CDP directly to find the active target
-        // This handles cases where Stagehand doesn't track the page (e.g., target="_blank" links)
-        const stagehand = await this.getStagehandForThread(threadId);
-        if (!stagehand?.context) {
-          throw new Error('No Stagehand context available');
+        const session = this.getCdpSessionForPage(page);
+        if (!session) {
+          throw new Error('No CDP session available for page');
         }
 
-        // Use Stagehand's public CDP connection API
-        const conn = stagehand.context.conn;
-        if (!conn) {
-          throw new Error('No CDP connection available');
-        }
-
-        // Get all page targets using the public getTargets() method
-        const targets = await conn.getTargets();
-        const pageTargets = targets.filter((t: { type: string; attached: boolean }) => t.type === 'page' && t.attached);
-
-        if (pageTargets.length === 0) {
-          throw new Error('No page targets available');
-        }
-
-        // Use the last page target (most recently created)
-        const targetInfo = pageTargets[pageTargets.length - 1];
-        if (!targetInfo) {
-          throw new Error('No page targets available');
-        }
-
-        // Attach to this target to get a CDP session
-        const result = (await conn.send('Target.attachToTarget', {
-          targetId: targetInfo.targetId,
-          flatten: true,
-        })) as { sessionId: string };
-
-        // Return the session
-        const session = conn.getSession?.(result.sessionId) ?? conn;
         return session;
       },
       isBrowserRunning: () => this.isBrowserRunning(),
@@ -911,7 +880,6 @@ export class StagehandBrowser extends MastraBrowser {
 
     // Listen for navigation events (URL changes) on the PAGE-specific CDP session
     const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
-
       // Only emit URL for main frame navigations (no parentId)
       if (!params.frame.parentId && params.frame.url) {
         this.logger.debug?.(`Frame navigated to: ${params.frame.url}`);
@@ -920,7 +888,10 @@ export class StagehandBrowser extends MastraBrowser {
     };
 
     // Track the page session for cleanup
-    let pageSession: { on?: (event: string, handler: (...args: unknown[]) => void) => void; off?: (event: string, handler: (...args: unknown[]) => void) => void } | null = null;
+    let pageSession: {
+      on?: (event: string, handler: (...args: unknown[]) => void) => void;
+      off?: (event: string, handler: (...args: unknown[]) => void) => void;
+    } | null = null;
 
     // Set up page-level navigation listener
     const setupPageNavigationListener = async () => {
@@ -941,11 +912,9 @@ export class StagehandBrowser extends MastraBrowser {
         await session.send('Page.enable');
         session.on('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
 
-
         // Emit the current URL immediately (since framenavigated won't fire for already-loaded pages)
         const currentUrl = page.url();
         if (currentUrl && currentUrl !== 'about:blank') {
-
           stream.emitUrl(currentUrl);
         }
       } catch (error) {
