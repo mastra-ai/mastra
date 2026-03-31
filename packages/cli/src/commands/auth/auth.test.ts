@@ -4,6 +4,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 /*  Mocks                                                              */
 /* ------------------------------------------------------------------ */
 
+const mockPlatformFetch = vi.fn();
+
 vi.mock('./client.js', () => ({
   MASTRA_PLATFORM_API_URL: 'http://localhost:9999',
   createApiClient: vi.fn(() => ({
@@ -15,6 +17,7 @@ vi.mock('./client.js', () => ({
     if (orgId) h['x-organization-id'] = orgId;
     return h;
   }),
+  platformFetch: (...args: unknown[]) => mockPlatformFetch(...args),
 }));
 
 const mockGetToken = vi.fn().mockResolvedValue('test-token');
@@ -165,23 +168,20 @@ describe('listOrgsAction', () => {
 
 describe('createTokenAction', () => {
   it('creates a token and displays the secret', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            token: {
-              id: 't1',
-              name: 'ci-token',
-              obfuscatedValue: 'msk_***',
-              lastUsedAt: null,
-              createdAt: '2025-01-01',
-            },
-            secret: 'msk_secret_value',
-          }),
-      }),
-    );
+    mockPlatformFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          token: {
+            id: 't1',
+            name: 'ci-token',
+            obfuscatedValue: 'msk_***',
+            lastUsedAt: null,
+            createdAt: '2025-01-01',
+          },
+          secret: 'msk_secret_value',
+        }),
+    });
 
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { createTokenAction } = await import('./tokens.js');
@@ -205,18 +205,15 @@ describe('createTokenAction', () => {
 
 describe('listTokensAction', () => {
   it('lists tokens', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            tokens: [
-              { id: 't1', name: 'ci-token', obfuscatedValue: 'msk_***abc', lastUsedAt: null, createdAt: '2025-01-01' },
-            ],
-          }),
-      }),
-    );
+    mockPlatformFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          tokens: [
+            { id: 't1', name: 'ci-token', obfuscatedValue: 'msk_***abc', lastUsedAt: null, createdAt: '2025-01-01' },
+          ],
+        }),
+    });
 
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { listTokensAction } = await import('./tokens.js');
@@ -229,13 +226,10 @@ describe('listTokensAction', () => {
   });
 
   it('shows message when no tokens exist', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ tokens: [] }),
-      }),
-    );
+    mockPlatformFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ tokens: [] }),
+    });
 
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { listTokensAction } = await import('./tokens.js');
@@ -249,7 +243,7 @@ describe('listTokensAction', () => {
 
 describe('revokeTokenAction', () => {
   it('revokes a token', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true }));
+    mockPlatformFetch.mockResolvedValueOnce({ ok: true });
 
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { revokeTokenAction } = await import('./tokens.js');
@@ -262,14 +256,11 @@ describe('revokeTokenAction', () => {
   });
 
   it('throws on failed revocation', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        text: () => Promise.resolve('not found'),
-      }),
-    );
+    mockPlatformFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('not found'),
+    });
 
     const { revokeTokenAction } = await import('./tokens.js');
     await expect(revokeTokenAction('bad-id')).rejects.toThrow('Failed to revoke token: 404');
