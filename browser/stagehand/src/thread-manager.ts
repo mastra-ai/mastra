@@ -143,14 +143,15 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       session.stagehand = stagehand;
       this.threadStagehands.set(threadId, stagehand);
 
-      // Notify parent browser so it can set up close listeners
-      this.onBrowserCreated?.(stagehand, threadId);
-
-      // Restore browser state if available
+      // Restore browser state if available (before notifying parent to avoid screencast race)
       if (savedState && savedState.tabs.length > 0) {
         this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
         await this.restoreBrowserState(stagehand, savedState);
       }
+
+      // Notify parent browser so it can set up close listeners
+      // This is done after restoration so the screencast starts on the correct active page
+      this.onBrowserCreated?.(stagehand, threadId);
     }
     // For 'none' isolation, no session setup needed - all threads share the instance
 
@@ -182,13 +183,12 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
         }
       }
 
-      // Switch to the active tab if it wasn't the last one opened
-      if (state.activeTabIndex !== state.tabs.length - 1) {
-        const pages = context.pages();
-        const targetPage = pages[state.activeTabIndex];
-        if (targetPage) {
-          context.setActivePage(targetPage);
-        }
+      // Always switch to the correct active tab
+      // (newPage() makes the new page active, so we need to switch back if needed)
+      const pages = context.pages();
+      const targetPage = pages[state.activeTabIndex];
+      if (targetPage && targetPage !== context.activePage()) {
+        context.setActivePage(targetPage);
       }
     } catch (error) {
       this.logger?.warn?.(`Failed to restore browser state: ${error}`);

@@ -107,14 +107,15 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       session.manager = manager;
       this.threadBrowsers.set(threadId, manager);
 
-      // Notify parent browser so it can set up close listeners
-      this.onBrowserCreated?.(manager, threadId);
-
-      // Restore browser state if available
+      // Restore browser state if available (before notifying parent to avoid screencast race)
       if (savedState && savedState.tabs.length > 0) {
         this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
         await this.restoreBrowserState(manager, savedState);
       }
+
+      // Notify parent browser so it can set up close listeners
+      // This is done after restoration so the screencast starts on the correct active page
+      this.onBrowserCreated?.(manager, threadId);
     }
     // For 'none' isolation, no session setup needed - all threads share the manager
 
@@ -148,8 +149,8 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
         }
       }
 
-      // Switch to the active tab
-      if (state.activeTabIndex > 0 && state.activeTabIndex < state.tabs.length) {
+      // Switch to the active tab (always switch after opening tabs since newTab() changes active)
+      if (state.tabs.length > 1 && state.activeTabIndex >= 0 && state.activeTabIndex < state.tabs.length) {
         await manager.switchTo(state.activeTabIndex);
       }
     } catch (error) {

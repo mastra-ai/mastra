@@ -649,6 +649,8 @@ export class StagehandBrowser extends MastraBrowser {
           const newPage = await context.newPage(input.url);
           // newPage automatically becomes active in Stagehand
           await this.reconnectScreencast('new tab via tool');
+          // Save state after new tab
+          this.updateSessionBrowserState();
           return {
             success: true,
             index: context.pages().length - 1,
@@ -675,12 +677,19 @@ export class StagehandBrowser extends MastraBrowser {
             );
           }
           const targetPage = pages[input.index]!;
+          const targetUrl = targetPage.url();
           context.setActivePage(targetPage);
           await this.reconnectScreencast('tab switch via tool');
+          // Emit URL directly since we have the target page
+          if (targetUrl && this.activeScreencastStream?.isActive()) {
+            this.activeScreencastStream.emitUrl(targetUrl);
+          }
+          // Save state after switch (captures activeIndex change)
+          this.updateSessionBrowserState();
           return {
             success: true,
             index: input.index,
-            url: targetPage.url(),
+            url: targetUrl,
             title: await targetPage.title(),
             hint: 'Tab switched. Use stagehand_observe to discover actions.',
           };
@@ -699,6 +708,8 @@ export class StagehandBrowser extends MastraBrowser {
           const pageToClose = pages[indexToClose]!;
           await pageToClose.close();
           await this.reconnectScreencast('tab close via tool');
+          // Save state AFTER close (remaining tabs)
+          this.updateSessionBrowserState();
           const remainingPages = context.pages();
           return {
             success: true,
@@ -966,8 +977,7 @@ export class StagehandBrowser extends MastraBrowser {
         void this.reconnectScreencast('new tab');
         // Re-setup navigation listener for the new active page
         void setupPageNavigationListener();
-        // Update session state when new tab opens
-        this.updateSessionBrowserState(threadId);
+        // Note: State is saved via tool handlers (new/switch/close), not CDP events
       }, 300);
     };
 
@@ -981,8 +991,8 @@ export class StagehandBrowser extends MastraBrowser {
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
         void this.reconnectScreencast('tab closed');
-        // Update session state after tab close
-        this.updateSessionBrowserState(threadId);
+        // Note: Don't save state here - races with browser shutdown.
+        // State is saved via tool handlers instead.
       }, 300);
     };
 
@@ -1078,6 +1088,15 @@ export class StagehandBrowser extends MastraBrowser {
       // Small delay to let tab state settle
       await new Promise(resolve => setTimeout(resolve, 150));
       await stream.reconnect();
+
+      // Emit the URL of the new active page after reconnecting
+      const activePage = this.stagehand?.context?.activePage();
+      if (activePage) {
+        const url = activePage.url();
+        if (url) {
+          stream.emitUrl(url);
+        }
+      }
     } catch (error) {
       this.logger.debug?.('Screencast reconnect failed', error);
     }

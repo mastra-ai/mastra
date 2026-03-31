@@ -1156,6 +1156,8 @@ export class AgentBrowser extends MastraBrowser {
             const page = await this.getPage();
             await page.goto(input.url);
           }
+          // Save state after new tab
+          this.updateSessionBrowserState();
           return {
             success: true,
             ...result,
@@ -1175,10 +1177,17 @@ export class AgentBrowser extends MastraBrowser {
           // Reconnect screencast to show the new active tab
           await this.reconnectScreencast('tab switch');
           const page = browser.getPage();
+          const pageUrl = page.url();
+          // Emit URL directly after switch
+          if (pageUrl && this.activeScreencastStream?.isActive()) {
+            this.activeScreencastStream.emitUrl(pageUrl);
+          }
+          // Save state after switch (captures activeIndex change)
+          this.updateSessionBrowserState();
           return {
             success: true,
             index: input.index,
-            url: page.url(),
+            url: pageUrl,
             title: await page.title(),
             hint: 'Tab switched. Take a snapshot to see its content.',
           };
@@ -1195,6 +1204,8 @@ export class AgentBrowser extends MastraBrowser {
           await browser.closeTab(input.index);
           // Reconnect screencast - it may now be pointing to a different tab
           await this.reconnectScreencast('tab close');
+          // Save state AFTER close (remaining tabs)
+          this.updateSessionBrowserState();
           const tabsList = (await browser.listTabs?.()) ?? [];
           return {
             success: true,
@@ -1305,6 +1316,18 @@ export class AgentBrowser extends MastraBrowser {
       if (this.activeScreencastStream?.isActive()) {
         try {
           await this.activeScreencastStream.reconnect();
+
+          // Emit the URL of the new active page after reconnecting
+          // Use thread-specific manager in browser isolation mode
+          const threadId = this.getCurrentThread();
+          const manager = this.threadManager.getExistingManagerForThread(threadId) ?? this.browserManager;
+          const activePage = manager?.getPage();
+          if (activePage) {
+            const url = activePage.url();
+            if (url) {
+              this.activeScreencastStream.emitUrl(url);
+            }
+          }
         } catch (err) {
           console.error('[AgentBrowser] Failed to reconnect screencast:', err);
         }
@@ -1400,8 +1423,8 @@ export class AgentBrowser extends MastraBrowser {
                   stream.emitUrl(url);
                 }
               }
-              // Update session state after tab close
-              this.updateSessionBrowserState(threadId);
+              // Note: Don't save state here - races with browser shutdown.
+              // State is saved via tool handlers instead.
             }
           }, 100);
         };
@@ -1425,8 +1448,7 @@ export class AgentBrowser extends MastraBrowser {
         if (url && url !== 'about:blank') {
           stream.emitUrl(url);
         }
-        // Update session state when new tab opens
-        this.updateSessionBrowserState(threadId);
+        // Note: State is saved via tool handlers (new/switch/close), not events
         onNewPage(newPage);
       };
 
