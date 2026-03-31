@@ -11,7 +11,6 @@ const RegistryEntrySchema = z.object({
   servers_url: z.string().url().optional(),
   tags: z.array(z.string()).optional(),
   count: z.union([z.number(), z.string()]).optional(),
-  logoUrl: z.string().url().optional(),
 });
 
 // Define the schema for the registry file for validation
@@ -83,7 +82,6 @@ export function formatRegistryResponse(registries: RegistryEntry[], detailed: bo
         servers_url: registry.servers_url,
         tags: registry.tags || [],
         count: registry.count,
-        logoUrl: registry.logoUrl,
       })),
     };
   }

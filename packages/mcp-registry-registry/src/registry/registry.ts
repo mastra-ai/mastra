@@ -37,7 +37,6 @@ export const registryData: RegistryFile = {
       servers_url: 'https://api.apify.com/v2/store',
       tags: ['verified'],
       count: '17000+',
-      logoUrl: 'https://apify.com/img/apify-logo/apify-symbol-200x200.svg',
       postProcessServers: processApifyServers,
     },
     {
