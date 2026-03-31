@@ -2786,6 +2786,7 @@ export class Agent<
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
+            const subAgentAbortOptions = context?.abortSignal !== undefined ? { abortSignal: context.abortSignal } : {};
 
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
@@ -3038,6 +3039,7 @@ export class Agent<
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
+                      ...subAgentAbortOptions,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
@@ -3053,6 +3055,7 @@ export class Agent<
                   : await agent.generate(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
+                      ...subAgentAbortOptions,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
@@ -3127,6 +3130,7 @@ export class Agent<
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
                 result = { text: generateResult.text };
               } else if (
@@ -3138,6 +3142,7 @@ export class Agent<
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
+                      ...subAgentAbortOptions,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
@@ -3155,6 +3160,7 @@ export class Agent<
                   : await agent.stream(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
+                      ...subAgentAbortOptions,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
@@ -3273,6 +3279,7 @@ export class Agent<
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
 
                 let fullText = '';

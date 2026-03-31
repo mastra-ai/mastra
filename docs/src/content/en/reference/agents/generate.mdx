@@ -430,7 +430,7 @@ const response = await agent.generate('Help me organize my day', {
             type: 'AbortSignal',
             isOptional: true,
             description:
-              "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
+              "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated, including in-flight work inside delegated subagents when using a supervisor pattern.",
           },
           {
             name: 'prepareStep',
