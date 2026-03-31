@@ -32,7 +32,7 @@ const headlessOptions = {
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
-/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue). */
+/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model). */
 export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const { values, positionals } = parseArgs({
     args: argv.slice(2),
@@ -205,6 +205,42 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     }, args.timeout * 1000);
   }
 
+  function failEarly(msg: string): 1 {
+    if (emit) emit({ type: 'error', error: { message: msg } });
+    else process.stderr.write(`Error: ${msg}\n`);
+    if (timeoutId) clearTimeout(timeoutId);
+    return 1;
+  }
+
+  // --- Pre-flight checks (before subscribing to events) ---
+
+  if (args.continue_) {
+    const threads = await harness.listThreads();
+    if (threads.length > 0) {
+      const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      await harness.switchThread({ threadId: sorted[0]!.id });
+      if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
+    } else if (!emit) {
+      process.stderr.write(`[info] No existing threads found, starting new thread\n`);
+    }
+  }
+
+  if (args.model) {
+    const available = await harness.listAvailableModels();
+    const match = available.find(m => m.id === args.model);
+    if (!match) {
+      return failEarly(`Unknown model: "${args.model}"`);
+    }
+    if (!match.hasApiKey) {
+      const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+      return failEarly(`Model "${args.model}" has no API key configured.${keyHint}`);
+    }
+    await harness.switchModel({ modelId: args.model });
+    if (!emit) process.stderr.write(`[model] ${args.model}\n`);
+  }
+
+  // --- Subscribe and send (after all pre-flight checks pass) ---
+
   const streamCtx = { lastTextLength: 0 };
 
   const done = new Promise<number>(resolve => {
@@ -229,39 +265,6 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
       }
     });
   });
-
-  if (args.continue_) {
-    const threads = await harness.listThreads();
-    if (threads.length > 0) {
-      const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      await harness.switchThread({ threadId: sorted[0]!.id });
-      if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
-    } else if (!emit) {
-      process.stderr.write(`[info] No existing threads found, starting new thread\n`);
-    }
-  }
-
-  if (args.model) {
-    const available = await harness.listAvailableModels();
-    const match = available.find(m => m.id === args.model);
-    if (!match) {
-      const msg = `Unknown model: "${args.model}"`;
-      if (emit) emit({ type: 'error', error: { message: msg } });
-      else process.stderr.write(`Error: ${msg}\n`);
-      if (timeoutId) clearTimeout(timeoutId);
-      return 1;
-    }
-    if (!match.hasApiKey) {
-      const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-      const msg = `Model "${args.model}" has no API key configured.${keyHint}`;
-      if (emit) emit({ type: 'error', error: { message: msg } });
-      else process.stderr.write(`Error: ${msg}\n`);
-      if (timeoutId) clearTimeout(timeoutId);
-      return 1;
-    }
-    await harness.switchModel({ modelId: args.model });
-    if (!emit) process.stderr.write(`[model] ${args.model}\n`);
-  }
 
   await harness.sendMessage({ content: args.prompt });
 

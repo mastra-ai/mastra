@@ -1,10 +1,14 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
-import { describe, it, expect, vi } from 'vitest';
+import { afterAll, describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
@@ -230,6 +234,15 @@ describe('headless mode — event-driven auto-resolution', () => {
   });
 });
 
+const tempStorePaths: string[] = [];
+afterAll(() => {
+  for (const p of tempStorePaths) {
+    try {
+      rmSync(p, { recursive: true, force: true });
+    } catch {}
+  }
+});
+
 describe('headless mode — --model flag', () => {
   function createHarnessWithModels(opts: {
     doStream: () => Promise<{ stream: ReadableStream }>;
@@ -367,32 +380,26 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
-    const stdoutLines: string[] = [];
-    const originalWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      stdoutLines.push(chunk);
-      return true;
-    }) as any;
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    try {
-      const exitCode = await runHeadless(harness, {
-        prompt: 'Hello',
-        format: 'json',
-        continue_: false,
-        model: 'nonexistent/model',
-      });
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'json',
+      continue_: false,
+      model: 'nonexistent/model',
+    });
 
-      expect(exitCode).toBe(1);
+    expect(exitCode).toBe(1);
 
-      const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
-      expect(errorLine).toBeDefined();
-      const parsed = JSON.parse(errorLine!.trim());
-      expect(parsed.type).toBe('error');
-      expect(parsed.error.message).toContain('Unknown model');
-      expect(parsed.error.message).toContain('nonexistent/model');
-    } finally {
-      process.stdout.write = originalWrite;
-    }
+    const stdoutLines = writeSpy.mock.calls.map(c => String(c[0]));
+    writeSpy.mockRestore();
+
+    const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
+    expect(errorLine).toBeDefined();
+    const parsed = JSON.parse(errorLine!.trim());
+    expect(parsed.type).toBe('error');
+    expect(parsed.error.message).toContain('Unknown model');
+    expect(parsed.error.message).toContain('nonexistent/model');
   });
 
   it('emits JSON error for model without API key in json format', async () => {
@@ -412,32 +419,26 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
-    const stdoutLines: string[] = [];
-    const originalWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      stdoutLines.push(chunk);
-      return true;
-    }) as any;
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    try {
-      const exitCode = await runHeadless(harness, {
-        prompt: 'Hello',
-        format: 'json',
-        continue_: false,
-        model: 'openai/gpt-4o',
-      });
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'json',
+      continue_: false,
+      model: 'openai/gpt-4o',
+    });
 
-      expect(exitCode).toBe(1);
+    expect(exitCode).toBe(1);
 
-      const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
-      expect(errorLine).toBeDefined();
-      const parsed = JSON.parse(errorLine!.trim());
-      expect(parsed.type).toBe('error');
-      expect(parsed.error.message).toContain('no API key configured');
-      expect(parsed.error.message).toContain('OPENAI_API_KEY');
-    } finally {
-      process.stdout.write = originalWrite;
-    }
+    const stdoutLines = writeSpy.mock.calls.map(c => String(c[0]));
+    writeSpy.mockRestore();
+
+    const errorLine = stdoutLines.find(l => l.includes('"type":"error"'));
+    expect(errorLine).toBeDefined();
+    const parsed = JSON.parse(errorLine!.trim());
+    expect(parsed.type).toBe('error');
+    expect(parsed.error.message).toContain('no API key configured');
+    expect(parsed.error.message).toContain('OPENAI_API_KEY');
   });
 
   it('does not switch model when --model is not provided', async () => {
