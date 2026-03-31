@@ -19,6 +19,7 @@ export interface RegistryEntry {
   servers_url?: string;
   tags?: string[];
   count?: number | string;
+  logoUrl?: string;
   // Custom post-processing function for this registry's server data
   postProcessServers?: (data: unknown) => ServerEntry[];
 }
