@@ -10,6 +10,8 @@
 import type { Stagehand } from '@browserbasehq/stagehand';
 import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
+  BrowserState,
+  BrowserTabState,
   BrowserToolError,
   ScreencastOptions,
   ScreencastStream,
@@ -253,9 +255,12 @@ export class StagehandBrowser extends MastraBrowser {
       }
       // Will throw if browser is disconnected
       const url = pages[0]?.url();
-      // Save URL for potential restore on relaunch
+      // Save browser state for potential restore on relaunch
       if (url && url !== 'about:blank') {
-        this.lastUrl = url;
+        const state = this.getBrowserStateFromStagehand(this.stagehand);
+        if (state) {
+          this.lastBrowserState = state;
+        }
       }
       return true;
     } catch (error) {
@@ -739,9 +744,12 @@ export class StagehandBrowser extends MastraBrowser {
       }
       const page = stagehand.context.activePage() as V3Page | null;
       const url = page?.url() ?? null;
-      // Save URL for potential restore on relaunch (before external close)
+      // Save browser state for potential restore on relaunch (before external close)
       if (url && url !== 'about:blank') {
-        this.threadManager.updateLastUrl(effectiveThreadId, url);
+        const state = this.getBrowserStateFromStagehand(stagehand);
+        if (state) {
+          this.threadManager.updateBrowserState(effectiveThreadId, state);
+        }
       }
       return url;
     }
@@ -752,9 +760,12 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       const url = page.url();
-      // Save URL for potential restore on relaunch (before external close)
+      // Save browser state for potential restore on relaunch (before external close)
       if (url && url !== 'about:blank') {
-        this.lastUrl = url;
+        const state = this.getBrowserStateFromStagehand(this.stagehand);
+        if (state) {
+          this.lastBrowserState = state;
+        }
       }
       return url;
     } catch {
@@ -776,6 +787,99 @@ export class StagehandBrowser extends MastraBrowser {
       });
     } catch {
       // Silently ignore navigation errors during restore
+    }
+  }
+
+  /**
+   * Get the current browser state (all tabs and active tab index).
+   */
+  override async getBrowserState(threadId?: string): Promise<BrowserState | null> {
+    if (!this.isBrowserRunning()) {
+      return null;
+    }
+    try {
+      const isolation = this.threadManager.getIsolationMode();
+      const effectiveThreadId = threadId ?? this.getCurrentThread();
+
+      if (isolation === 'browser' && effectiveThreadId) {
+        const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+        if (!stagehand) return null;
+        return this.getBrowserStateFromStagehand(stagehand);
+      }
+
+      return this.getBrowserStateFromStagehand(this.stagehand);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get browser state from a specific Stagehand instance.
+   */
+  private getBrowserStateFromStagehand(stagehand: Stagehand | null): BrowserState | null {
+    if (!stagehand?.context) return null;
+
+    try {
+      const pages = stagehand.context.pages();
+      const activePage = stagehand.context.activePage();
+      let activeIndex = 0;
+
+      const tabs: BrowserTabState[] = pages.map((page, index) => {
+        if (page === activePage) {
+          activeIndex = index;
+        }
+        return { url: page.url() };
+      });
+
+      return {
+        tabs,
+        activeTabIndex: activeIndex,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get all open tabs with their URLs and titles.
+   */
+  override async getTabState(threadId?: string): Promise<BrowserTabState[]> {
+    const state = await this.getBrowserState(threadId);
+    return state?.tabs ?? [];
+  }
+
+  /**
+   * Get the active tab index.
+   */
+  override async getActiveTabIndex(threadId?: string): Promise<number> {
+    const state = await this.getBrowserState(threadId);
+    return state?.activeTabIndex ?? 0;
+  }
+
+  /**
+   * Update the browser state in the thread session.
+   * Called on navigation, tab open/close to keep state fresh.
+   */
+  private updateSessionBrowserState(threadId?: string): void {
+    try {
+      const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+      const isolation = this.threadManager.getIsolationMode();
+
+      let stagehand: Stagehand | null | undefined = null;
+      if (isolation === 'browser') {
+        stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+      } else {
+        stagehand = this.stagehand;
+      }
+
+      if (stagehand) {
+        const state = this.getBrowserStateFromStagehand(stagehand);
+        if (state) {
+          this.threadManager.updateBrowserState(effectiveThreadId, state);
+        }
+      }
+    } catch {
+      // Silently ignore errors during state update
     }
   }
 
@@ -862,6 +966,8 @@ export class StagehandBrowser extends MastraBrowser {
         void this.reconnectScreencast('new tab');
         // Re-setup navigation listener for the new active page
         void setupPageNavigationListener();
+        // Update session state when new tab opens
+        this.updateSessionBrowserState(threadId);
       }, 300);
     };
 
@@ -875,6 +981,8 @@ export class StagehandBrowser extends MastraBrowser {
       this.tabChangeDebounceTimer = setTimeout(() => {
         this.tabChangeDebounceTimer = null;
         void this.reconnectScreencast('tab closed');
+        // Update session state after tab close
+        this.updateSessionBrowserState(threadId);
       }, 300);
     };
 
@@ -884,6 +992,8 @@ export class StagehandBrowser extends MastraBrowser {
       if (!params.frame.parentId && params.frame.url) {
         this.logger.debug?.(`Frame navigated to: ${params.frame.url}`);
         stream.emitUrl(params.frame.url);
+        // Update session state on navigation
+        this.updateSessionBrowserState(threadId);
       }
     };
 

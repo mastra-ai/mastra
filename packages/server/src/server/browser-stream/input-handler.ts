@@ -154,7 +154,7 @@ function isDisconnectionError(err: unknown): boolean {
 function isExpectedInjectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
-  return msg.includes('no cdp session');
+  return msg.includes('no cdp session') || msg.includes('browser not launched');
 }
 
 /**
@@ -175,8 +175,9 @@ function notifyBrowserClosed(toolset: MastraBrowser): void {
  * If there was a previous URL, navigate back to it.
  */
 async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promise<void> {
-  const lastUrl = toolset.getLastUrl(threadId);
-  console.info(`[InputHandler] Relaunching browser...${lastUrl ? ` (restoring: ${lastUrl})` : ''}`);
+  const lastState = toolset.getLastBrowserState(threadId);
+  const firstUrl = lastState?.tabs[0]?.url;
+  console.info(`[InputHandler] Relaunching browser...${firstUrl ? ` (restoring: ${firstUrl})` : ''}`);
 
   // Set the current thread before ensuring ready so the session is created for this thread
   if (threadId) {
@@ -185,9 +186,10 @@ async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promi
 
   await toolset.ensureReady();
 
-  // Restore the last URL if available
-  if (lastUrl) {
-    await toolset.navigateTo(lastUrl);
+  // Note: Full state restoration (multiple tabs) happens in createSession.
+  // This is a fallback for providers that don't support full restoration.
+  if (firstUrl && !lastState?.tabs.slice(1).length) {
+    await toolset.navigateTo(firstUrl);
   }
 }
 

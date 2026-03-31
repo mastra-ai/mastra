@@ -6,7 +6,7 @@
  */
 
 import { ThreadManager } from '@mastra/core/browser';
-import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
+import type { ThreadSession, ThreadManagerConfig, BrowserState } from '@mastra/core/browser';
 import { BrowserUse } from 'browser-use-sdk';
 import type { BrowserConfig, BrowserSessionInfo } from './types';
 
@@ -133,7 +133,7 @@ export class BrowserUseThreadManager extends ThreadManager<BrowserSessionInfo> {
       return {
         threadId,
         createdAt: Date.now(),
-        lastUrl: this.getSavedLastUrl(threadId),
+        browserState: this.getSavedBrowserState(threadId),
         sessionInfo: existing,
         cdpUrl: existing.cdpUrl ?? undefined,
       };
@@ -168,7 +168,7 @@ export class BrowserUseThreadManager extends ThreadManager<BrowserSessionInfo> {
     return {
       threadId,
       createdAt: Date.now(),
-      lastUrl: this.getSavedLastUrl(threadId),
+      browserState: this.getSavedBrowserState(threadId),
       sessionInfo,
       cdpUrl: sessionInfo.cdpUrl ?? undefined,
     };

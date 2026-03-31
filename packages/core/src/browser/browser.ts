@@ -28,7 +28,7 @@ import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
-import type { ThreadIsolationMode, ThreadManager } from './thread-manager';
+import type { BrowserState, BrowserTabState, ThreadIsolationMode, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
@@ -211,8 +211,8 @@ export abstract class MastraBrowser extends MastraBase {
   /** Error message when status is 'error' */
   error?: string;
 
-  /** Last known URL before browser was closed (for restore on relaunch) */
-  protected lastUrl?: string;
+  /** Last known browser state before browser was closed (for restore on relaunch) */
+  protected lastBrowserState?: BrowserState;
 
   /** Configuration */
   protected readonly config: BrowserConfig;
@@ -328,10 +328,10 @@ export abstract class MastraBrowser extends MastraBase {
       await this.config.onClose({ browser: this });
     }
 
-    // Save last URL before closing for potential restore on relaunch
-    const currentUrl = await this.getCurrentUrl();
-    if (currentUrl && currentUrl !== 'about:blank') {
-      this.lastUrl = currentUrl;
+    // Save browser state before closing for potential restore on relaunch
+    const currentState = await this.getBrowserState();
+    if (currentState && currentState.tabs.length > 0) {
+      this.lastBrowserState = currentState;
     }
 
     this.status = 'closing';
@@ -360,7 +360,7 @@ export abstract class MastraBrowser extends MastraBase {
   async ensureReady(): Promise<void> {
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
-      // checkBrowserAlive() should save lastUrl internally if it detects closure
+      // checkBrowserAlive() should save lastBrowserState internally if it detects closure
       const stillAlive = await this.checkBrowserAlive();
       if (stillAlive) {
         return;
@@ -597,20 +597,53 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Get the last known URL before the browser was closed.
+   * Get the current browser state (all tabs and active tab index).
+   * Override in subclass to provide actual tab state.
+   * @param _threadId - Optional thread ID for thread-isolated sessions
+   * @returns The browser state, or null if not available
+   */
+  async getBrowserState(_threadId?: string): Promise<BrowserState | null> {
+    // Default implementation returns null - providers override
+    return null;
+  }
+
+  /**
+   * Get the last known browser state before the browser was closed.
    * Useful for restoring state on relaunch.
    * @param threadId - Optional thread ID for thread-isolated sessions
-   * @returns The last URL string, or undefined if not available
+   * @returns The last browser state, or undefined if not available
    */
-  getLastUrl(threadId?: string): string | undefined {
+  getLastBrowserState(threadId?: string): BrowserState | undefined {
     // For thread isolation, check thread manager first
     if (threadId && this.threadManager) {
-      const savedUrl = this.threadManager.getSavedLastUrl(threadId);
-      if (savedUrl) {
-        return savedUrl;
+      const savedState = this.threadManager.getSavedBrowserState(threadId);
+      if (savedState) {
+        return savedState;
       }
     }
-    return this.lastUrl;
+    return this.lastBrowserState;
+  }
+
+  /**
+   * Get all open tabs with their URLs and titles.
+   * Override in subclass to provide actual tab info.
+   * @param _threadId - Optional thread ID for thread-isolated sessions
+   * @returns Array of tab states
+   */
+  async getTabState(_threadId?: string): Promise<BrowserTabState[]> {
+    // Default implementation returns empty array - providers override
+    return [];
+  }
+
+  /**
+   * Get the active tab index.
+   * Override in subclass to provide actual active tab index.
+   * @param _threadId - Optional thread ID for thread-isolated sessions
+   * @returns The active tab index (0-based), or 0 if not available
+   */
+  async getActiveTabIndex(_threadId?: string): Promise<number> {
+    // Default implementation returns 0 - providers override
+    return 0;
   }
 
   /**

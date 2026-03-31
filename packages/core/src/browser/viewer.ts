@@ -25,6 +25,7 @@ import { MastraBrowser } from './browser';
 import type { BrowserConfig, MouseEventParams, KeyboardEventParams } from './browser';
 import { ScreencastStream } from './screencast/screencast-stream';
 import type { CdpSessionLike, CdpSessionProvider, ScreencastOptions } from './screencast/types';
+import type { BrowserState } from './thread-manager';
 
 // ---------------------------------------------------------------------------
 // CLI Provider Types
@@ -291,6 +292,9 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   private _lastCdpUrl: string | null = null;
   private browserPollTimer: ReturnType<typeof setTimeout> | null = null;
   private _isPollingForBrowser = false;
+
+  /** Last known URL (BrowserViewer is single-page, not multi-tab) */
+  private lastUrl?: string;
 
   /**
    * Handle to the browser process spawned via processManager.
@@ -964,9 +968,24 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
   /**
    * Get the last known URL (for context injection when disconnected).
+   * BrowserViewer is single-page, so this returns the last URL directly.
    */
-  override getLastUrl(): string | undefined {
+  getLastUrl(): string | undefined {
     return this.lastUrl;
+  }
+
+  /**
+   * Get the last browser state for restoration.
+   * BrowserViewer is single-page, so we construct state from lastUrl.
+   */
+  override getLastBrowserState(): BrowserState | undefined {
+    if (this.lastUrl) {
+      return {
+        tabs: [{ url: this.lastUrl }],
+        activeTabIndex: 0,
+      };
+    }
+    return undefined;
   }
 
   // ---------------------------------------------------------------------------

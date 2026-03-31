@@ -18,6 +18,22 @@ export type ThreadIsolationMode = 'none' | 'browser';
 export const DEFAULT_THREAD_ID = '__default__';
 
 /**
+ * Represents a single tab's state for persistence.
+ */
+export interface BrowserTabState {
+  url: string;
+  title?: string;
+}
+
+/**
+ * Full browser state for persistence and restoration.
+ */
+export interface BrowserState {
+  tabs: BrowserTabState[];
+  activeTabIndex: number;
+}
+
+/**
  * Represents an active thread session.
  */
 export interface ThreadSession {
@@ -25,8 +41,8 @@ export interface ThreadSession {
   threadId: string;
   /** Timestamp when session was created */
   createdAt: number;
-  /** Last known URL for this thread (for restore on relaunch) */
-  lastUrl?: string;
+  /** Full browser state for this thread (for restore on relaunch) */
+  browserState?: BrowserState;
 }
 
 /**
@@ -54,8 +70,8 @@ export abstract class ThreadManager<TManager = unknown> {
   protected readonly sessions = new Map<string, ThreadSession>();
   protected activeThreadId: string = DEFAULT_THREAD_ID;
 
-  /** Preserved lastUrl values that survive session clears (for browser restore) */
-  protected readonly savedLastUrls = new Map<string, string>();
+  /** Preserved browser state that survives session clears (for browser restore) */
+  protected readonly savedBrowserStates = new Map<string, BrowserState>();
 
   private readonly onSessionCreated?: (session: ThreadSession) => void;
   private readonly onSessionDestroyed?: (threadId: string) => void;
@@ -178,31 +194,40 @@ export abstract class ThreadManager<TManager = unknown> {
   }
 
   /**
-   * Update the last URL for a thread session.
-   * Also saves to persistent storage so URL survives session clears.
+   * Update the browser state for a thread session.
+   * Also saves to persistent storage so state survives session clears.
    */
-  updateLastUrl(threadId: string, url: string): void {
-    if (url && url !== 'about:blank') {
-      const session = this.sessions.get(threadId);
-      if (session) {
-        session.lastUrl = url;
-      }
-      // Also save to persistent map so it survives session clears
-      this.savedLastUrls.set(threadId, url);
+  updateBrowserState(threadId: string, state: BrowserState): void {
+    // Filter out empty/blank tabs
+    const filteredTabs = state.tabs.filter(tab => tab.url && tab.url !== 'about:blank');
+    if (filteredTabs.length === 0) {
+      return;
     }
+
+    const filteredState: BrowserState = {
+      tabs: filteredTabs,
+      activeTabIndex: Math.min(state.activeTabIndex, filteredTabs.length - 1),
+    };
+
+    const session = this.sessions.get(threadId);
+    if (session) {
+      session.browserState = filteredState;
+    }
+    // Also save to persistent map so it survives session clears
+    this.savedBrowserStates.set(threadId, filteredState);
   }
 
   /**
-   * Get the saved last URL for a thread (survives session clears).
+   * Get the saved browser state for a thread (survives session clears).
    */
-  getSavedLastUrl(threadId: string): string | undefined {
+  getSavedBrowserState(threadId: string): BrowserState | undefined {
     // First check current session
     const session = this.sessions.get(threadId);
-    if (session?.lastUrl) {
-      return session.lastUrl;
+    if (session?.browserState) {
+      return session.browserState;
     }
-    // Fall back to saved URL
-    return this.savedLastUrls.get(threadId);
+    // Fall back to saved state
+    return this.savedBrowserStates.get(threadId);
   }
 
   // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@
  */
 
 import { ThreadManager } from '@mastra/core/browser';
-import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
+import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { BrowserConfig } from './types';
@@ -82,13 +82,13 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
    * Create a new session for a thread.
    */
   protected async createSession(threadId: string): Promise<AgentBrowserSession> {
-    // Check for saved lastUrl before creating new session (for browser restore)
-    const savedUrl = this.getSavedLastUrl(threadId);
+    // Check for saved browser state before creating new session (for browser restore)
+    const savedState = this.getSavedBrowserState(threadId);
 
     const session: AgentBrowserSession = {
       threadId,
       createdAt: Date.now(),
-      lastUrl: savedUrl, // Restore saved URL
+      browserState: savedState,
     };
 
     if (this.isolation === 'browser') {
@@ -110,22 +110,51 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       // Notify parent browser so it can set up close listeners
       this.onBrowserCreated?.(manager, threadId);
 
-      // Restore last URL if available
-      if (savedUrl) {
-        this.logger?.debug?.(`Restoring URL for thread ${threadId}: ${savedUrl}`);
-        try {
-          const page = manager.getPage();
-          if (page) {
-            await page.goto(savedUrl, { waitUntil: 'domcontentloaded' });
-          }
-        } catch (error) {
-          this.logger?.warn?.(`Failed to restore URL for thread ${threadId}: ${error}`);
-        }
+      // Restore browser state if available
+      if (savedState && savedState.tabs.length > 0) {
+        this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
+        await this.restoreBrowserState(manager, savedState);
       }
     }
     // For 'none' isolation, no session setup needed - all threads share the manager
 
     return session;
+  }
+
+  /**
+   * Restore browser state (multiple tabs) to a browser manager.
+   */
+  private async restoreBrowserState(manager: BrowserManager, state: BrowserState): Promise<void> {
+    try {
+      // Navigate first tab to first URL
+      const firstTab = state.tabs[0];
+      if (firstTab?.url) {
+        const page = manager.getPage();
+        if (page) {
+          await page.goto(firstTab.url, { waitUntil: 'domcontentloaded' });
+        }
+      }
+
+      // Open additional tabs
+      for (let i = 1; i < state.tabs.length; i++) {
+        const tab = state.tabs[i];
+        if (tab?.url) {
+          // newTab() creates a blank tab, then we navigate to the URL
+          await manager.newTab();
+          const page = manager.getPage();
+          if (page) {
+            await page.goto(tab.url, { waitUntil: 'domcontentloaded' });
+          }
+        }
+      }
+
+      // Switch to the active tab
+      if (state.activeTabIndex > 0 && state.activeTabIndex < state.tabs.length) {
+        await manager.switchTo(state.activeTabIndex);
+      }
+    } catch (error) {
+      this.logger?.warn?.(`Failed to restore browser state: ${error}`);
+    }
   }
 
   /**
@@ -207,14 +236,14 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   /**
    * Clear a specific thread's session without closing the browser.
    * Used when a thread's browser has been externally closed.
-   * Preserves the lastUrl for potential restoration.
+   * Preserves the browser state for potential restoration.
    * @param threadId - The thread ID to clear
    */
   clearSession(threadId: string): void {
-    // Save the lastUrl before clearing so it can be restored on relaunch
+    // Save the browser state before clearing so it can be restored on relaunch
     const session = this.sessions.get(threadId);
-    if (session?.lastUrl) {
-      this.savedLastUrls.set(threadId, session.lastUrl);
+    if (session?.browserState) {
+      this.savedBrowserStates.set(threadId, session.browserState);
     }
     this.threadBrowsers.delete(threadId);
     this.sessions.delete(threadId);

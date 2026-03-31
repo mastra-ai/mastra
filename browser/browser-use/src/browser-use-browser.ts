@@ -10,6 +10,8 @@
 import { EventEmitter } from 'node:events';
 import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
+  BrowserState,
+  BrowserTabState,
   ScreencastOptions,
   ScreencastStream,
   CdpSessionLike,
@@ -175,6 +177,9 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
   /** Browser config */
   private browserConfig: BrowserConfig;
+
+  /** Last known browser URL (for single-tab fallback) */
+  private lastBrowserUrl: string | null = null;
 
   constructor(config: BrowserConfig = {}) {
     super(config);
@@ -346,7 +351,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
     const onFrameNavigated = (params: { frame: { url: string; parentId?: string } }) => {
       // Only emit URL for main frame navigations (no parentId)
       if (!params.frame.parentId && params.frame.url) {
-        this.lastUrl = params.frame.url;
+        this.lastBrowserUrl = params.frame.url;
         // Emit URL update to screencast stream
         if (this._screencastStream?.isActive()) {
           this._screencastStream.emitUrl(params.frame.url);
@@ -581,14 +586,26 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
       const url = result?.result?.value;
       if (url) {
-        this.lastUrl = url;
+        this.lastBrowserUrl = url;
         const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
-        this.threadManager.updateLastUrl(effectiveThreadId, url);
+        const state = this.getBrowserStateFromUrl(url);
+        this.threadManager.updateBrowserState(effectiveThreadId, state);
       }
       return url ?? null;
     } catch {
-      return this.lastUrl ?? null;
+      return this.lastBrowserUrl ?? null;
     }
+  }
+
+  /**
+   * Create a BrowserState from a single URL.
+   * Browser-use currently only tracks single tabs via CDP.
+   */
+  private getBrowserStateFromUrl(url: string): BrowserState {
+    return {
+      tabs: [{ url }],
+      activeTabIndex: 0,
+    };
   }
 
   /**
@@ -617,7 +634,35 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   override async navigateTo(url: string, threadId?: string): Promise<void> {
     const client = await this.getCdpClientForThread(threadId);
     await client.send('Page.navigate', { url });
-    this.lastUrl = url;
+    this.lastBrowserUrl = url;
+  }
+
+  /**
+   * Get the current browser state (all tabs and active tab index).
+   * Note: Browser-use currently only tracks single tabs via CDP.
+   */
+  override async getBrowserState(_threadId?: string): Promise<BrowserState | null> {
+    const url = this.lastBrowserUrl;
+    if (!url) return null;
+    return this.getBrowserStateFromUrl(url);
+  }
+
+  /**
+   * Get all open tabs with their URLs.
+   * Note: Browser-use currently only tracks single tabs via CDP.
+   */
+  override async getTabState(_threadId?: string): Promise<BrowserTabState[]> {
+    const url = this.lastBrowserUrl;
+    if (!url) return [];
+    return [{ url }];
+  }
+
+  /**
+   * Get the active tab index.
+   * Note: Browser-use currently only tracks single tabs via CDP.
+   */
+  override async getActiveTabIndex(_threadId?: string): Promise<number> {
+    return 0;
   }
 
   // ---------------------------------------------------------------------------

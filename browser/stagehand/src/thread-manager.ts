@@ -10,7 +10,7 @@
 
 import type { Stagehand } from '@browserbasehq/stagehand';
 import { ThreadManager } from '@mastra/core/browser';
-import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
+import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 
 // Type aliases for Stagehand v3
 // V3 is the Stagehand instance, V3Page is the page type from context.activePage()
@@ -123,13 +123,13 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    * Create a new session for a thread.
    */
   protected override async createSession(threadId: string): Promise<StagehandThreadSession> {
-    // Check for saved lastUrl before creating new session (for browser restore)
-    const savedUrl = this.getSavedLastUrl(threadId);
+    // Check for saved browser state before creating new session (for browser restore)
+    const savedState = this.getSavedBrowserState(threadId);
 
     const session: StagehandThreadSession = {
       threadId,
       createdAt: Date.now(),
-      lastUrl: savedUrl, // Restore saved URL
+      browserState: savedState,
     };
 
     if (this.isolation === 'browser') {
@@ -146,22 +146,53 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       // Notify parent browser so it can set up close listeners
       this.onBrowserCreated?.(stagehand, threadId);
 
-      // Restore last URL if available
-      if (savedUrl) {
-        this.logger?.debug?.(`Restoring URL for thread ${threadId}: ${savedUrl}`);
-        try {
-          const page = stagehand.context.activePage();
-          if (page) {
-            await page.goto(savedUrl, { waitUntil: 'domcontentloaded' });
-          }
-        } catch (error) {
-          this.logger?.warn?.(`Failed to restore URL for thread ${threadId}: ${error}`);
-        }
+      // Restore browser state if available
+      if (savedState && savedState.tabs.length > 0) {
+        this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
+        await this.restoreBrowserState(stagehand, savedState);
       }
     }
     // For 'none' isolation, no session setup needed - all threads share the instance
 
     return session;
+  }
+
+  /**
+   * Restore browser state (multiple tabs) to a Stagehand instance.
+   */
+  private async restoreBrowserState(stagehand: V3, state: BrowserState): Promise<void> {
+    try {
+      const context = stagehand.context;
+      if (!context) return;
+
+      // Navigate first tab to first URL
+      const firstTab = state.tabs[0];
+      if (firstTab?.url) {
+        const page = context.activePage();
+        if (page) {
+          await page.goto(firstTab.url, { waitUntil: 'domcontentloaded' });
+        }
+      }
+
+      // Open additional tabs using context.newPage()
+      for (let i = 1; i < state.tabs.length; i++) {
+        const tab = state.tabs[i];
+        if (tab?.url) {
+          await context.newPage(tab.url);
+        }
+      }
+
+      // Switch to the active tab if it wasn't the last one opened
+      if (state.activeTabIndex !== state.tabs.length - 1) {
+        const pages = context.pages();
+        const targetPage = pages[state.activeTabIndex];
+        if (targetPage) {
+          context.setActivePage(targetPage);
+        }
+      }
+    } catch (error) {
+      this.logger?.warn?.(`Failed to restore browser state: ${error}`);
+    }
   }
 
   /**
@@ -237,14 +268,14 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   /**
    * Clear a specific thread's session without closing the browser.
    * Used when a thread's browser has been externally closed.
-   * Preserves the lastUrl for potential restoration.
+   * Preserves the browser state for potential restoration.
    * @param threadId - The thread ID to clear
    */
   clearSession(threadId: string): void {
-    // Save the lastUrl before clearing so it can be restored on relaunch
+    // Save the browser state before clearing so it can be restored on relaunch
     const session = this.sessions.get(threadId);
-    if (session?.lastUrl) {
-      this.savedLastUrls.set(threadId, session.lastUrl);
+    if (session?.browserState) {
+      this.savedBrowserStates.set(threadId, session.browserState);
     }
     this.threadStagehands.delete(threadId);
     this.sessions.delete(threadId);
