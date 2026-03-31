@@ -589,13 +589,14 @@ export class DatasetsPG extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      // Merge fields: use new value if provided, else keep existing
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
-      const mergedRequestContext = args.requestContext ?? existing.requestContext;
-      const mergedMetadata = args.metadata ?? existing.metadata;
-      const mergedSource = args.source ?? existing.source;
+      // Merge fields: use new value if provided (including null to clear), else keep existing
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+      const mergedSource = args.source !== undefined ? args.source : existing.source;
 
       let newVersion: number;
 

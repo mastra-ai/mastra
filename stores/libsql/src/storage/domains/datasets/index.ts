@@ -523,13 +523,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      // Merge fields
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
-      const mergedRequestContext = args.requestContext ?? existing.requestContext;
-      const mergedMetadata = args.metadata ?? existing.metadata;
-      const mergedSource = args.source ?? existing.source;
+      // Merge fields: use new value if provided (including null to clear), else keep existing
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+      const mergedSource = args.source !== undefined ? args.source : existing.source;
 
       // T3.8, T3.21 — atomic batch: bump version, close old row, insert new row, insert dataset_version
       const results = await this.#client.batch(
