@@ -322,7 +322,7 @@ export const MemorySearch = ({
                             </div>
                           )}
                         </div>
-                        <Txt variant="ui-sm" className="text-neutral5 break-words">
+                        <Txt variant="ui-sm" className="text-neutral5 wrap-break-word">
                           {truncateContent(result.content)}
                         </Txt>
                       </div>

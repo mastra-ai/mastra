@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -16,6 +17,7 @@ import type {
 } from '../evals';
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
+import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -1180,6 +1182,7 @@ export class Agent<
         saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
+        resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
         listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
         __runOutputProcessors: this.__runOutputProcessors.bind(this),
@@ -3021,10 +3024,8 @@ export class Agent<
                 }
               }
 
-              const messagesForSubAgent: MessageListInput = [
-                ...filteredContextMessages,
-                { role: 'user' as const, content: effectivePrompt },
-              ];
+              // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
+              const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
 
               const subAgentPromptCreatedAt = new Date();
 
@@ -3039,6 +3040,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3054,6 +3056,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3126,6 +3129,7 @@ export class Agent<
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  context: filteredContextMessages as unknown as CoreMessage[],
                 });
                 result = { text: generateResult.text };
               } else if (
@@ -3139,6 +3143,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3156,6 +3161,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -4240,6 +4246,9 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       metadata: {
         runId,

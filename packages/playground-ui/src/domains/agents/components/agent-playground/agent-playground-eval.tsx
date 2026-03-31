@@ -137,7 +137,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Response
           </Txt>
-          <div className="text-sm text-neutral5 bg-surface1 rounded px-3 py-2 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+          <div className="text-sm text-neutral5 bg-surface1 rounded px-3 py-2 whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {parsed.text}
           </div>
         </div>
@@ -149,7 +149,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Structured Output
           </Txt>
-          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {JSON.stringify(parsed.object, null, 2)}
           </pre>
         </div>
@@ -169,7 +169,7 @@ function ResultOutputSection({
                   <span className="font-mono font-medium">{call.toolName}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                     {JSON.stringify(call.args, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -193,7 +193,7 @@ function ResultOutputSection({
                   <span className="font-mono">Result {i + 1}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                     {JSON.stringify(result, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -245,7 +245,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Output
           </Txt>
-          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {formatResultValue(output)}
           </pre>
         </div>
@@ -481,7 +481,7 @@ export function ExperimentResultsPanel({
                       Input
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 mt-1 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                      <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                         {formatResultValue(result.input)}
                       </pre>
                     </CollapsibleContent>
@@ -494,7 +494,7 @@ export function ExperimentResultsPanel({
                         <Txt variant="ui-xs" className="text-red-400 font-medium">
                           Error
                         </Txt>
-                        <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                        <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                           {formatResultValue(result.error)}
                         </pre>
                       </div>

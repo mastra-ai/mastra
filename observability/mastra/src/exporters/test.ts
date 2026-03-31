@@ -385,7 +385,7 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const log = event.log;
-      const traceId = log.correlationContext?.traceId;
+      const traceId = log.traceId;
       const logMessage = `[TestExporter] log.${log.level}: "${log.message}"${traceId ? ` (trace: ${traceId.slice(-8)})` : ''}`;
       this.#debugLogs.push(logMessage);
     }
@@ -534,7 +534,7 @@ export class TestExporter extends BaseExporter {
   } {
     const events = this.#tracingEvents.filter(e => e.exportedSpan.traceId === traceId);
     const spans = this.#getUniqueSpansFromEvents(events);
-    const logs = this.#logEvents.filter(e => e.log.correlationContext?.traceId === traceId).map(e => e.log);
+    const logs = this.#logEvents.filter(e => e.log.traceId === traceId).map(e => e.log);
     const scores = this.#scoreEvents.filter(e => e.score.traceId === traceId).map(e => e.score);
     const feedback = this.#feedbackEvents.filter(e => e.feedback.traceId === traceId).map(e => e.feedback);
     return { events, spans, logs, scores, feedback };
@@ -619,7 +619,7 @@ export class TestExporter extends BaseExporter {
       traceIds.add(event.exportedSpan.traceId);
     }
     for (const event of this.#logEvents) {
-      if (event.log.correlationContext?.traceId) traceIds.add(event.log.correlationContext.traceId);
+      if (event.log.traceId) traceIds.add(event.log.traceId);
     }
     for (const event of this.#scoreEvents) {
       traceIds.add(event.score.traceId);
@@ -659,7 +659,7 @@ export class TestExporter extends BaseExporter {
    * Get logs for a specific trace
    */
   getLogsByTraceId(traceId: string): ExportedLog[] {
-    return this.#logEvents.filter(e => e.log.correlationContext?.traceId === traceId).map(e => e.log);
+    return this.#logEvents.filter(e => e.log.traceId === traceId).map(e => e.log);
   }
 
   // ============================================================================

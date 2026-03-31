@@ -58,6 +58,18 @@ Visit the [configuration reference](/reference/configuration#server-options) for
 - **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
 - **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
 
+## REST API
+
+You can explore all available endpoints in the OpenAPI specification at [http://localhost:4111/api/openapi.json](http://localhost:4111/api/openapi.json), which details every endpoint and its request and response schemas.
+
+To explore the API interactively, visit the Swagger UI at [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui). Here, you can discover endpoints and test them directly from your browser.
+
+:::note
+
+The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
+
+:::
+
 ## Stream data redaction
 
 When streaming agent responses, the HTTP layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
