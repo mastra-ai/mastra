@@ -1006,6 +1006,122 @@ describe('MastraMCPClient - Progress Tests', () => {
   });
 });
 
+describe('MastraMCPClient - Custom _meta', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    testServer.mcpServer.tool('echo', 'Echoes input', { msg: z.string() }, async ({ msg }) => {
+      return { content: [{ type: 'text' as const, text: msg }] };
+    });
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should forward custom _meta to callTool', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: false },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' }, { _meta: { traceId: 'trace-1', tenantId: 'org-5' } });
+
+    expect(callToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'echo',
+        _meta: { traceId: 'trace-1', tenantId: 'org-5' },
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-progress-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: true },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' }, { runId: 'run-42', _meta: { traceId: 'trace-1' } });
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta.traceId).toBe('trace-1');
+    expect(callArgs._meta.progressToken).toBe('run-42');
+  });
+
+  it('should give managed progressToken precedence over user-supplied progressToken in _meta', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-precedence-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: true },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.(
+      { msg: 'hi' },
+      { runId: 'run-42', _meta: { progressToken: 'user-token', traceId: 'trace-1' } },
+    );
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta.progressToken).toBe('run-42');
+    expect(callArgs._meta.traceId).toBe('trace-1');
+  });
+
+  it('should not include _meta when neither custom _meta nor progress tracking is provided', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'no-meta-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: false },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' });
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta).toBeUndefined();
+  });
+});
+
 describe('MastraMCPClient - AuthProvider Tests', () => {
   let testServer: {
     httpServer: HttpServer;
