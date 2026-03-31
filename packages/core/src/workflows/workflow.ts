@@ -819,7 +819,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         stepNumber,
         systemMessages,
         streamParts,
-        state,
+        state: processorState,
         processorStates,
         result: outputResult,
         finishReason,
