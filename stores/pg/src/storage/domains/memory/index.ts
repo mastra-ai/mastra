@@ -1221,7 +1221,7 @@ export class MemoryPG extends MemoryStorage {
         // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const now = new Date();
-        const threadUpdate = t.none(
+        await t.none(
           `UPDATE ${threadTableName}
             SET
               "updatedAt" = $1,
