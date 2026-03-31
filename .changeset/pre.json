@@ -122,5 +122,20 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "afraid-zebras-cheat",
+    "cyan-lemons-travel",
+    "few-cobras-lick",
+    "green-birds-knock",
+    "last-message-only-processors",
+    "logs-mvp-frontend",
+    "logs-mvp-playground-ui",
+    "logs-ui-improvements",
+    "new-buckets-dress",
+    "plain-doodles-love",
+    "playground-logs-route-and-cleanup",
+    "quiet-falcons-switch",
+    "tired-moons-kneel",
+    "witty-dragons-like"
+  ]
 }
