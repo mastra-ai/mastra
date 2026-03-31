@@ -221,4 +221,19 @@ describe('applyStoredOverrides', () => {
     const instructions = await result.getInstructions();
     expect(instructions).toBe('Specific version instructions.');
   });
+
+  it('preserves code defaults when status is "published" but no version has been published', async () => {
+    // Setup creates a stored agent but does NOT set activeVersionId
+    const { editor, codeAgent } = await setup({
+      name: 'Stored Draft',
+      instructions: 'Stored draft instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+    });
+
+    // Request published status — but no activeVersionId exists, so code defaults should be used
+    const result = await editor.agent.applyStoredOverrides(codeAgent, { status: 'published' });
+    expect(result).toBe(codeAgent);
+    const instructions = await result.getInstructions();
+    expect(instructions).toBe('You are a code-defined agent.');
+  });
 });
