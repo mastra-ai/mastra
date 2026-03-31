@@ -44,10 +44,13 @@ import type {
   WorkflowRunStatus,
   WorkflowState,
 } from '@mastra/core/workflows';
-import type { PublicSchema } from '@mastra/schema-compat';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -69,6 +72,8 @@ export interface ClientOptions {
   /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
   fetch?: typeof fetch;
 }
+
+export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
 export interface RequestOptions {
   method?: string;
@@ -1221,6 +1226,12 @@ export interface CreateAgentVersionParams {
   changeMessage?: string;
 }
 
+export interface CreateCodeAgentVersionParams {
+  instructions?: AgentVersionResponse['instructions'];
+  tools?: AgentVersionResponse['tools'];
+  changeMessage?: string;
+}
+
 export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
@@ -1347,6 +1358,8 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  storageType?: string;
+  observabilityStorageType?: string;
 }
 
 // ============================================================================
@@ -1544,13 +1557,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -2050,6 +2063,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: string | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2114,6 +2128,7 @@ export interface CreateDatasetParams {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetParams {
@@ -2127,6 +2142,7 @@ export interface UpdateDatasetParams {
   tags?: string[];
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemParams {
@@ -2372,4 +2388,12 @@ export interface ActivatePromptBlockVersionResponse {
 export interface DeletePromptBlockVersionResponse {
   success: boolean;
   message: string;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

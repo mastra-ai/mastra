@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -17,6 +17,7 @@ import type {
 } from '../evals';
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
+import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -100,9 +101,11 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
+import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -155,24 +158,24 @@ export class Agent<
   public source?: 'code' | 'stored';
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
-  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks;
-  #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks;
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
-  #memory?: DynamicArgument<MastraMemory>;
+  #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
-  #workflows?: DynamicArgument<Record<string, AnyWorkflow>>;
-  #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
-  #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
-  #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
+  #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
+  #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
+  #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
-  #scorers: DynamicArgument<MastraScorers>;
-  #agents: DynamicArgument<Record<string, Agent>>;
+  #scorers: DynamicArgument<MastraScorers, TRequestContext>;
+  #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<AnyWorkspace | undefined>;
-  #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
-  #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
+  #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
@@ -419,7 +422,7 @@ export class Agent<
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
-        ? this.#agents({ requestContext })
+        ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
         : this.#agents
       : {};
 
@@ -575,7 +578,9 @@ export class Agent<
       ? configuredProcessorOverrides
       : this.#outputProcessors
         ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+          ? await this.#outputProcessors({
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
           : this.#outputProcessors
         : [];
 
@@ -606,7 +611,9 @@ export class Agent<
       ? configuredProcessorOverrides
       : this.#inputProcessors
         ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+          ? await this.#inputProcessors({
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
           : this.#inputProcessors
         : [];
 
@@ -666,7 +673,7 @@ export class Agent<
     // Get raw input processors (before combining into workflow)
     const configuredInputProcessors = this.#inputProcessors
       ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ requestContext: ctx })
+        ? await this.#inputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
         : this.#inputProcessors
       : [];
 
@@ -684,7 +691,7 @@ export class Agent<
     // Get raw output processors (before combining into workflow)
     const configuredOutputProcessors = this.#outputProcessors
       ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: ctx })
+        ? await this.#outputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
         : this.#outputProcessors
       : [];
 
@@ -713,7 +720,9 @@ export class Agent<
 
     const configuredProcessors =
       typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        ? await this.#inputProcessors({
+            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+          })
         : this.#inputProcessors;
 
     return configuredProcessors;
@@ -731,7 +740,9 @@ export class Agent<
 
     const configuredProcessors =
       typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        ? await this.#outputProcessors({
+            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+          })
         : this.#outputProcessors;
 
     return configuredProcessors;
@@ -751,7 +762,7 @@ export class Agent<
     if (this.#inputProcessors) {
       const processors =
         typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: ctx })
+          ? await this.#inputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
           : this.#inputProcessors;
       inputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
@@ -760,7 +771,7 @@ export class Agent<
     if (this.#outputProcessors) {
       const processors =
         typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext: ctx })
+          ? await this.#outputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
           : this.#outputProcessors;
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
@@ -780,7 +791,7 @@ export class Agent<
     if (this.#inputProcessors) {
       const inputProcessors =
         typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: new RequestContext() })
+          ? await this.#inputProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
           : this.#inputProcessors;
 
       const combined = this.combineProcessorsIntoWorkflow(inputProcessors, `${this.id}-input-processor`);
@@ -795,7 +806,7 @@ export class Agent<
     if (this.#outputProcessors) {
       const outputProcessors =
         typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext: new RequestContext() })
+          ? await this.#outputProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
           : this.#outputProcessors;
 
       const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `${this.id}-output-processor`);
@@ -847,7 +858,10 @@ export class Agent<
     if (typeof this.#memory !== 'function') {
       resolvedMemory = this.#memory;
     } else {
-      const result = this.#memory({ requestContext, mastra: this.#mastra });
+      const result = this.#memory({
+        requestContext: requestContext as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
@@ -916,7 +930,10 @@ export class Agent<
         return this.#workspace;
       }
 
-      const result = this.#workspace({ requestContext, mastra: this.#mastra });
+      const result = this.#workspace({
+        requestContext: requestContext as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
       const resolvedWorkspace = await Promise.resolve(result);
 
       if (!resolvedWorkspace) {
@@ -984,7 +1001,9 @@ export class Agent<
   }: { requestContext?: RequestContext } = {}): Promise<Record<string, AnyWorkflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
-      workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
+      workflowRecord = await Promise.resolve(
+        this.#workflows({ requestContext: requestContext as RequestContext<TRequestContext>, mastra: this.#mastra }),
+      );
     } else {
       workflowRecord = this.#workflows ?? {};
     }
@@ -1005,7 +1024,10 @@ export class Agent<
       return this.#scorers;
     }
 
-    const result = this.#scorers({ requestContext, mastra: this.#mastra });
+    const result = this.#scorers({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
     return resolveMaybePromise(result, scorers => {
       if (!scorers) {
         const mastraError = new MastraError({
@@ -1160,6 +1182,7 @@ export class Agent<
         saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
+        resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
         listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
         __runOutputProcessors: this.__runOutputProcessors.bind(this),
@@ -1186,7 +1209,10 @@ export class Agent<
       return this.#defaultGenerateOptionsLegacy;
     }
 
-    const result = this.#defaultGenerateOptionsLegacy({ requestContext, mastra: this.#mastra });
+    const result = this.#defaultGenerateOptionsLegacy({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -1224,7 +1250,10 @@ export class Agent<
       return this.#defaultStreamOptionsLegacy;
     }
 
-    const result = this.#defaultStreamOptionsLegacy({ requestContext, mastra: this.#mastra });
+    const result = this.#defaultStreamOptionsLegacy({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -1262,7 +1291,10 @@ export class Agent<
       return this.#defaultOptions;
     }
 
-    const result = this.#defaultOptions({ requestContext, mastra: this.#mastra });
+    const result = this.#defaultOptions({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -1304,7 +1336,10 @@ export class Agent<
       return this.#defaultNetworkOptions;
     }
 
-    const result = this.#defaultNetworkOptions({ requestContext, mastra: this.#mastra });
+    const result = this.#defaultNetworkOptions({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -1384,10 +1419,13 @@ export class Agent<
     model,
   }: {
     requestContext?: RequestContext;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     const modelSelectionPromise = model
-      ? this.resolveModelSelection(model, requestContext)
+      ? this.resolveModelSelection(
+          model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
+          requestContext,
+        )
       : this.resolveModelSelection(this.model, requestContext);
 
     return modelSelectionPromise.then(modelSelection => {
@@ -1536,12 +1574,15 @@ export class Agent<
    * @internal
    */
   private async resolveModelSelection(
-    modelConfig: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks,
+    modelConfig: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks,
     requestContext: RequestContext,
   ): Promise<ResolvedModelSelection> {
     // If it's a dynamic function, resolve it
     if (typeof modelConfig === 'function') {
-      const resolved = await modelConfig({ requestContext, mastra: this.#mastra });
+      const resolved = await modelConfig({
+        requestContext: requestContext as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
 
       // If function returns an array, validate and normalize it to ModelFallbacks
       if (Array.isArray(resolved)) {
@@ -1602,10 +1643,10 @@ export class Agent<
   public getModel({
     requestContext = new RequestContext(),
     modelConfig = this.model,
-  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
-    | MastraLanguageModel
-    | MastraLegacyLanguageModel
-    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+  }: {
+    requestContext?: RequestContext;
+    modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
+  } = {}): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     return this.resolveModelSelection(modelConfig, requestContext).then(resolved => {
       if (!Array.isArray(resolved)) {
         return this.resolveModelConfig(resolved, requestContext);
@@ -1674,8 +1715,8 @@ export class Agent<
    * Updates the agent's model configuration.
    * @internal
    */
-  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> | ModelFallbacks }) {
-    this.model = model;
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig, TRequestContext> | ModelFallbacks }) {
+    this.model = model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
 
@@ -1863,7 +1904,7 @@ export class Agent<
   }: {
     message: string | MessageInput;
     requestContext?: RequestContext;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -1960,7 +2001,7 @@ export class Agent<
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
     observabilityContext: ObservabilityContext,
-    model?: DynamicArgument<MastraModelConfig>,
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>,
     instructions?: DynamicArgument<string>,
   ) {
     try {
@@ -1985,11 +2026,11 @@ export class Agent<
     }
   }
 
-  public __setMemory(memory: DynamicArgument<MastraMemory>) {
+  public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>) {
     this.#memory = memory;
   }
 
-  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
       workspace.__setLogger(this.logger);
@@ -2060,6 +2101,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2126,6 +2168,7 @@ export class Agent<
           logger: this.logger,
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2193,6 +2236,7 @@ export class Agent<
           logger: this.logger,
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2492,6 +2536,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2558,6 +2603,7 @@ export class Agent<
             mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
+            agentId: this.id,
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
@@ -2615,6 +2661,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -2813,7 +2860,7 @@ export class Agent<
               supportedLanguageModelSpecifications.includes(modelVersion)
             ) {
               if (!agent.hasOwnMemory() && this.#memory) {
-                agent.__setMemory(this.#memory);
+                agent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
               }
             }
 
@@ -2977,10 +3024,8 @@ export class Agent<
                 }
               }
 
-              const messagesForSubAgent: MessageListInput = [
-                ...filteredContextMessages,
-                { role: 'user' as const, content: effectivePrompt },
-              ];
+              // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
+              const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
 
               const subAgentPromptCreatedAt = new Date();
 
@@ -2995,6 +3040,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3010,6 +3056,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3082,6 +3129,7 @@ export class Agent<
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  context: filteredContextMessages as unknown as CoreMessage[],
                 });
                 result = { text: generateResult.text };
               } else if (
@@ -3095,6 +3143,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3112,6 +3161,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3125,7 +3175,6 @@ export class Agent<
                         : {}),
                     });
 
-                let fullText = '';
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
@@ -3156,10 +3205,6 @@ export class Agent<
                         resumeSchema = chunk.payload.resumeSchema;
                       }
                     }
-                  }
-
-                  if (chunk.type === 'text-delta') {
-                    fullText += chunk.payload.text;
                   }
                 }
 
@@ -3220,7 +3265,15 @@ export class Agent<
                   });
                 }
 
-                result = { text: fullText, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                // Use streamResult.text (a delayed promise) which resolves to the
+                // output-processor-modified text, rather than the raw accumulated text-deltas.
+                const processedText = await streamResult.text;
+                result = {
+                  text: processedText,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults,
+                };
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
@@ -3425,6 +3478,7 @@ export class Agent<
           mastra: this.#mastra,
           memory: await this.getMemory({ requestContext }),
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
@@ -3685,6 +3739,7 @@ export class Agent<
           mastra: this.#mastra,
           memory: await this.getMemory({ requestContext }),
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
@@ -4037,7 +4092,7 @@ export class Agent<
     const selection =
       resolvedSelection ??
       (await this.resolveModelSelection(
-        this.model as DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks,
+        this.model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks,
         requestContext,
       ));
 
@@ -4191,6 +4246,9 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       metadata: {
         runId,
@@ -4251,7 +4309,7 @@ export class Agent<
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
-      capabilities,
+      capabilities: capabilities as AgentCapabilities,
       options: { ...options, methodType } as any,
       threadFromArgs,
       resourceId,
@@ -4380,27 +4438,32 @@ export class Agent<
           shouldGenerate,
           model: titleModel,
           instructions: titleInstructions,
-        } = this.resolveTitleGenerationConfig(config.generateTitle);
+        } = this.resolveTitleGenerationConfig(
+          config.generateTitle as
+            | boolean
+            | { model: DynamicArgument<MastraModelConfig, TRequestContext>; instructions?: DynamicArgument<string> }
+            | undefined,
+        );
 
         if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
-            const title = await this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
+            void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
+              async title => {
+                if (title) {
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                }
+              },
+              error => {
+                this.logger.error('Error persisting generated title:', error);
+              },
             );
-            if (title) {
-              await memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
           }
         }
       } catch (e) {
@@ -5242,11 +5305,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
@@ -5326,11 +5389,11 @@ export class Agent<
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig, TRequestContext>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {

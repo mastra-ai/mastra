@@ -86,7 +86,7 @@ function generateTypesContent(models: Record<string, string[]>): string {
   const providerModelsEntries = Object.entries(models)
     .map(([provider, modelList]) => {
       const modelsList = modelList.map(m => `'${m}'`);
-      const needsQuotes = /[^a-zA-Z0-9_$]/.test(provider);
+      const needsQuotes = !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(provider);
       const providerKey = needsQuotes ? `'${provider}'` : provider;
       const singleLine = `  readonly ${providerKey}: readonly [${modelsList.join(', ')}];`;
 

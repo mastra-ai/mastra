@@ -12,7 +12,7 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, executeWithContextSync, SpanType } from '../../../observability';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -642,6 +642,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
 
+      // Insert a step-start boundary between loop iterations so that
+      // consecutive tool-only turns are not collapsed into a single block
+      // by convertToModelMessages. This ensures the LLM sees them as
+      // sequential steps rather than parallel tool calls.
+      if (currentIteration > 1) {
+        messageList.stepStart();
+      }
+
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
         : inputData.messageId || messageIdPassed;
@@ -745,6 +753,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
+
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
+              modelSpanTracker.updateGeneration({
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                attributes: {
+                  ...(modelChanged
+                    ? {
+                        model: currentStep.model.modelId,
+                        provider: currentStep.model.provider,
+                      }
+                    : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
+                },
+              });
+            }
+
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
+              const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
+              if (agentSpan) {
+                const toolNames = activeToolsChanged
+                  ? (processInputStepResult.activeTools as string[])
+                  : currentStep.tools
+                    ? Object.keys(currentStep.tools)
+                    : undefined;
+                if (toolNames !== undefined) {
+                  agentSpan.update({
+                    attributes: {
+                      availableTools: toolNames,
+                    },
+                  });
+                }
+              }
+            }
 
             // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
             // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.

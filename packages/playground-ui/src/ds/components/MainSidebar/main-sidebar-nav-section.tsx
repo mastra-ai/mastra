@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 export type NavSection = {
   key: string;
   title?: string;
+  href?: string;
   links: NavLink[];
   separator?: boolean;
 };

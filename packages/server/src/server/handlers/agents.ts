@@ -15,7 +15,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-com
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 
@@ -45,7 +45,7 @@ import {
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
-import { getAgentSkillResponseSchema } from '../schemas/workspace';
+import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -121,6 +121,7 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
+  path: string;
 }
 
 export interface SerializedTool {
@@ -286,6 +287,7 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
+      path: skill.path,
     }));
   } catch {
     return [];
@@ -548,6 +550,14 @@ async function formatAgentList({
   };
 }
 
+export function extractVersionOptions(requestContext?: RequestContext): { versionId: string } | undefined {
+  const agentVersionId = requestContext?.get('agentVersionId');
+  if (typeof agentVersionId === 'string' && agentVersionId) {
+    return { versionId: agentVersionId };
+  }
+  return undefined;
+}
+
 export async function getAgentFromSystem({
   mastra,
   agentId,
@@ -595,7 +605,7 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -606,7 +616,7 @@ export async function getAgentFromSystem({
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -879,7 +889,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
   description:
-    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
@@ -927,7 +937,11 @@ export const CLONE_AGENT_ROUTE = createRoute({
         return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
       }
 
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
@@ -960,7 +974,11 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1040,7 +1058,11 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1096,7 +1118,11 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1233,7 +1259,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1325,9 +1355,13 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1365,9 +1399,13 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1404,9 +1442,13 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Approves a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1443,9 +1485,13 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Declines a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1483,9 +1529,13 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, messages, agentId, ...params }) => {
+  handler: async ({ mastra, messages, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1516,9 +1566,13 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending network tool call and continues network agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1551,9 +1605,13 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1894,11 +1952,12 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   path: '/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -1911,10 +1970,13 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent does not have skills configured' });
       }
 
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
+
       // Get the skill from the workspace
-      const skill = await workspace.skills.get(skillName);
+      const skill = await workspace.skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       return {

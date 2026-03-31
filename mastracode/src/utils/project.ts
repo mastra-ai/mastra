@@ -199,6 +199,14 @@ export function getDatabasePath(): string {
   return path.join(getAppDataDir(), 'mastra.db');
 }
 
+/**
+ * Get the vector database path for mastracode.
+ * Separate from the main DB to avoid bloating it with embedding data.
+ */
+export function getVectorDatabasePath(): string {
+  return path.join(getAppDataDir(), 'mastra-vectors.db');
+}
+
 import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
 
 /**

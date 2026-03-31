@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cleanProviderId as cleanProviderIdUtil } from '../utils';
 import { providerMapToIcon } from '@/domains/agents/components/provider-map-icon';
 import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 interface ProviderLogoProps {
   providerId: string;
@@ -58,14 +59,13 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
       alt={`${providerId} logo`}
       width={size}
       height={size}
-      className={className}
+      className={cn(className, 'dark:brightness-0 dark:invert')}
       onError={() => setImageError(true)}
       loading="lazy"
       style={{
         width: `${size}px`,
         height: `${size}px`,
         objectFit: 'contain',
-        filter: 'brightness(0) invert(1)', // Make the logo white
         opacity: 0.9,
       }}
     />

@@ -75,7 +75,7 @@ export function DatasetItemVersionsPanel({
   };
 
   return (
-    <Column className="min-w-[14rem]">
+    <Column className="min-w-56">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>

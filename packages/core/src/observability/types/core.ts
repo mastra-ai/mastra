@@ -9,13 +9,15 @@
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { FeedbackEvent } from './feedback';
+import type { FeedbackEvent, FeedbackInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
-import type { ScoreEvent } from './scores';
+import type { ScoreEvent, ScoreInput } from './scores';
 import type {
   AnySpan,
+  RecordedTrace,
   CreateSpanOptions,
+  EntityType,
   ExportedSpan,
   Span,
   SpanIds,
@@ -29,6 +31,42 @@ import type {
 // ============================================================================
 // ObservabilityContext
 // ============================================================================
+
+/**
+ * Canonical observability correlation and execution context.
+ * These fields can travel alongside observability signals without being encoded in labels.
+ */
+export interface CorrelationContext {
+  /**
+   * @deprecated Use the signal's top-level `traceId` instead.
+   */
+  traceId?: string;
+  /**
+   * @deprecated Use the signal's top-level `spanId` instead.
+   */
+  spanId?: string;
+  entityType?: EntityType;
+  entityId?: string;
+  entityName?: string;
+  parentEntityType?: EntityType;
+  parentEntityId?: string;
+  parentEntityName?: string;
+  rootEntityType?: EntityType;
+  rootEntityId?: string;
+  rootEntityName?: string;
+  userId?: string;
+  organizationId?: string;
+  resourceId?: string;
+  runId?: string;
+  sessionId?: string;
+  threadId?: string;
+  requestId?: string;
+  environment?: string;
+  source?: string;
+  serviceName?: string;
+  experimentId?: string;
+  tags?: string[];
+}
 
 /**
  * Mixin interface that provides unified observability access.
@@ -206,6 +244,24 @@ export interface ObservabilityEntrypoint {
   setLogger(options: { logger: IMastraLogger }): void;
 
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined;
+
+  /**
+   * Load a persisted trace as a hydrated RecordedTrace object.
+   * Returns null when storage is unavailable or the trace does not exist.
+   */
+  getRecordedTrace?(args: { traceId: string }): Promise<RecordedTrace | null>;
+
+  /**
+   * Add a score to a persisted trace or span without hydrating a RecordedTrace.
+   * Useful for durable executions that persist only identifiers across serialization boundaries.
+   */
+  addScore?(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void>;
+
+  /**
+   * Add feedback to a persisted trace or span without hydrating a RecordedTrace.
+   * Useful for durable executions that persist only identifiers across serialization boundaries.
+   */
+  addFeedback?(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;

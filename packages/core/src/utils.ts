@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -23,6 +23,46 @@ import type { Workspace } from './workspace/workspace';
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Safely JSON-stringifies a value, replacing circular references with "[Circular]".
+ * Uses a stack-based approach so shared (non-circular) references are preserved.
+ */
+export function safeStringify(value: unknown, space?: string | number): string {
+  const stack: unknown[] = [];
+  return JSON.stringify(
+    value,
+    function (this: unknown, _key: string, val: unknown) {
+      if (typeof val === 'bigint') return val.toString();
+      if (val !== null && typeof val === 'object') {
+        // Trim the stack: pop entries that are no longer ancestors of the current path.
+        // `this` is the parent object containing the current key.
+        while (stack.length > 0 && stack[stack.length - 1] !== this) {
+          stack.pop();
+        }
+        if (stack.includes(val)) return '[Circular]';
+        stack.push(val);
+      }
+      return val;
+    },
+    space,
+  );
+}
+
+/**
+ * Returns a JSON-serializable copy of a value by stripping circular references.
+ * If the value is already serializable, returns it unchanged (no cloning overhead).
+ */
+export function ensureSerializable(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+
+  try {
+    JSON.stringify(value);
+    return value;
+  } catch {
+    return JSON.parse(safeStringify(value));
+  }
+}
 
 /**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
@@ -297,6 +337,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
+  agentId?: string;
   model?: MastraLanguageModel | MastraLegacyLanguageModel;
   /**
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
