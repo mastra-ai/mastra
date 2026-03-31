@@ -18,11 +18,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -231,6 +247,46 @@ export class Observability extends BaseResource {
     });
   }
 
+  /**
+   * Returns an aggregated score value with optional period-over-period comparison.
+   */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.request(`/observability/scores/aggregate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns score values grouped by specified dimensions.
+   */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.request(`/observability/scores/breakdown`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns score values bucketed by time interval with optional grouping.
+   */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.request(`/observability/scores/timeseries`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns percentile values for scores bucketed by time interval.
+   */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.request(`/observability/scores/percentiles`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -249,6 +305,46 @@ export class Observability extends BaseResource {
    */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.request(`/observability/feedback`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns an aggregated feedback value with optional period-over-period comparison.
+   */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.request(`/observability/feedback/aggregate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns feedback values grouped by specified dimensions.
+   */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.request(`/observability/feedback/breakdown`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns feedback values bucketed by time interval with optional grouping.
+   */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.request(`/observability/feedback/timeseries`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns percentile values for feedback bucketed by time interval.
+   */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.request(`/observability/feedback/percentiles`, {
       method: 'POST',
       body: params,
     });

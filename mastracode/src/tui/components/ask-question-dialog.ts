@@ -5,7 +5,7 @@
  */
 
 import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem } from '@mariozechner/pi-tui';
+import type { Focusable, SelectItem, Component } from '@mariozechner/pi-tui';
 import { theme, getSelectListTheme } from '../theme.js';
 
 export interface AskQuestionDialogOptions {
@@ -16,10 +16,15 @@ export interface AskQuestionDialogOptions {
 }
 
 export class AskQuestionDialogComponent extends Box implements Focusable {
+  private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
+
   private selectList?: SelectList;
   private input?: Input;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
+
+  /** Children added by buildSelectMode/buildInputMode, tracked for removal on mode switch */
+  private modeChildren: Component[] = [];
 
   private _focused = false;
   get focused(): boolean {
@@ -59,16 +64,33 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
     }));
 
+    // Append a "Custom response..." option so the user can type a free-text answer
+    items.push({
+      value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
+      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+    });
+
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
     this.selectList.onSelect = (item: SelectItem) => {
+      if (item.value === AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE) {
+        this.switchToCustomInput();
+        return;
+      }
       this.onSubmit(item.value);
     };
     this.selectList.onCancel = this.onCancel;
 
-    this.addChild(this.selectList);
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '  ↑↓ to navigate · Enter to select · Esc to skip'), 0, 0));
+    this.modeChildren = [];
+    const selectChild = this.selectList;
+    this.addChild(selectChild);
+    this.modeChildren.push(selectChild);
+    const spacer = new Spacer(1);
+    this.addChild(spacer);
+    this.modeChildren.push(spacer);
+    const hint = new Text(theme.fg('dim', '  ↑↓ to navigate · Enter to select · Esc to skip'), 0, 0);
+    this.addChild(hint);
+    this.modeChildren.push(hint);
   }
 
   private buildInputMode(): void {
@@ -80,9 +102,26 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       }
     };
 
-    this.addChild(this.input);
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '  Enter to submit · Esc to skip'), 0, 0));
+    this.modeChildren = [];
+    const inputChild = this.input;
+    this.addChild(inputChild);
+    this.modeChildren.push(inputChild);
+    const spacer = new Spacer(1);
+    this.addChild(spacer);
+    this.modeChildren.push(spacer);
+    const hint = new Text(theme.fg('dim', '  Enter to submit · Esc to skip'), 0, 0);
+    this.addChild(hint);
+    this.modeChildren.push(hint);
+  }
+
+  private switchToCustomInput(): void {
+    // Remove select mode children
+    for (const child of this.modeChildren) {
+      this.removeChild(child);
+    }
+    this.selectList = undefined;
+    this.buildInputMode();
+    if (this.input) this.input.focused = this._focused;
   }
 
   handleInput(data: string): void {

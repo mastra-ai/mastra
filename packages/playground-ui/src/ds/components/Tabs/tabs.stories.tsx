@@ -79,11 +79,11 @@ export const ManyTabs: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-[500px]">
       <TabList>
-        <Tab value="tab1">Tab 1</Tab>
-        <Tab value="tab2">Tab 2</Tab>
-        <Tab value="tab3">Tab 3</Tab>
-        <Tab value="tab4">Tab 4</Tab>
-        <Tab value="tab5">Tab 5</Tab>
+        <Tab value="tab1">Overview</Tab>
+        <Tab value="tab2">Usage Metrics</Tab>
+        <Tab value="tab3">Connected Tools</Tab>
+        <Tab value="tab4">Tracing Options</Tab>
+        <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-neutral5">Content 1</div>

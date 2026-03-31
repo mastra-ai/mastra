@@ -415,7 +415,6 @@ export async function createHonoServer(
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
-      const themeToggle = process.env.MASTRA_THEME_TOGGLE === 'true' ? 'true' : 'false';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
       const escapeForHtml = (json: string): string => {
@@ -444,7 +443,6 @@ export async function createHonoServer(
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
-        themeToggle: `'${themeToggle}'`,
         experimentalUI: `'${experimentalUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });

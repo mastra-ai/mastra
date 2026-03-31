@@ -725,8 +725,8 @@ describe('Tracing Integration Tests', () => {
     const stepLog = testExporter.getLogsByLevel('info').find(l => l.message === 'workflow-step: processing');
     expect(stepLog, 'loggerVNext.info() in workflow step should be captured by the exporter').toBeDefined();
     expect(stepLog!.data).toEqual({ value: 'tacos' });
-    expect(stepLog!.correlationContext?.traceId).toBe(result.traceId);
-    expect(stepLog!.correlationContext?.spanId).toBeDefined();
+    expect(stepLog!.traceId).toBe(result.traceId);
+    expect(stepLog!.spanId).toBeDefined();
 
     // Verify auto-extracted workflow metrics
     const workflowDuration = testExporter.getMetricsByName('mastra_workflow_duration_ms');
@@ -1255,8 +1255,8 @@ describe('Tracing Integration Tests', () => {
       const toolLog = infoLogs.find(l => l.message === 'metadata-tool: processing');
       expect(toolLog, 'loggerVNext.info() in tool should be captured by the exporter').toBeDefined();
       expect(toolLog!.data).toEqual({ inputValue: 'some data' });
-      expect(toolLog!.correlationContext?.traceId).toBe(result.traceId);
-      expect(toolLog!.correlationContext?.spanId).toBeDefined();
+      expect(toolLog!.traceId).toBe(result.traceId);
+      expect(toolLog!.spanId).toBeDefined();
 
       // Verify custom metrics delivered to the exporter
       const counterMetrics = testExporter.getMetricsByName('metadata_tool_calls');
@@ -1385,10 +1385,10 @@ describe('Tracing Integration Tests', () => {
       const finishLog = allLogs.find(l => l.message === 'child-span-tool: finished');
       expect(startLog, 'loggerVNext in tool should deliver logs to the exporter').toBeDefined();
       expect(finishLog).toBeDefined();
-      expect(startLog!.correlationContext?.traceId).toBe(result.traceId);
-      expect(finishLog!.correlationContext?.traceId).toBe(result.traceId);
+      expect(startLog!.traceId).toBe(result.traceId);
+      expect(finishLog!.traceId).toBe(result.traceId);
       // Both logs share the same span (the tool call span)
-      expect(startLog!.correlationContext?.spanId).toBe(finishLog!.correlationContext?.spanId);
+      expect(startLog!.spanId).toBe(finishLog!.spanId);
     });
   });
 

@@ -115,7 +115,8 @@ export function AgentPlaygroundEvaluate({
 
   const allDatasets = datasetsData?.datasets || [];
   // targetIds may come as a JSON string from some storage backends — normalize
-  const parseTargetIds = (ids: unknown): string[] => {
+  // Some backends may return JSON-stringified id arrays — normalize before use
+  const parseIdList = (ids: unknown): string[] => {
     if (Array.isArray(ids)) return ids;
     if (typeof ids === 'string') {
       try {
@@ -129,12 +130,12 @@ export function AgentPlaygroundEvaluate({
   };
   // Show only datasets explicitly attached to this agent
   const datasets = allDatasets.filter(ds => {
-    const ids = parseTargetIds(ds.targetIds);
+    const ids = parseIdList(ds.targetIds);
     return ids.includes(agentId);
   });
   // Datasets that are not attached to this agent (for "Attach Existing" dialog)
   const unattachedDatasets = allDatasets.filter(ds => {
-    const ids = parseTargetIds(ds.targetIds);
+    const ids = parseIdList(ds.targetIds);
     return !ids.includes(agentId);
   });
 
@@ -514,6 +515,7 @@ export function AgentPlaygroundEvaluate({
                 datasetTargetType={viewDs?.targetType}
                 datasetTargetIds={viewDs?.targetIds}
                 activeScorers={Object.keys(agentScorers)}
+                datasetScorerIds={parseIdList(viewDs?.scorerIds)}
                 onGenerate={() => setGenerateDatasetId(view.id)}
                 onViewExperiment={(experimentId: string) =>
                   setView({ type: 'experiment', id: experimentId, datasetId: view.id })
@@ -531,8 +533,9 @@ export function AgentPlaygroundEvaluate({
             const scorerLinkedDatasets = allDatasets
               .filter(
                 ds =>
-                  (ds.targetType === 'scorer' && parseTargetIds(ds.targetIds).includes(view.id)) ||
-                  (legacyDatasetId && ds.id === legacyDatasetId),
+                  (ds.targetType === 'scorer' && parseIdList(ds.targetIds).includes(view.id)) ||
+                  (legacyDatasetId && ds.id === legacyDatasetId) ||
+                  parseIdList(ds.scorerIds).includes(view.id),
               )
               .map(ds => ({ id: ds.id, name: ds.name }));
             return (
@@ -646,7 +649,7 @@ export function AgentPlaygroundEvaluate({
                       className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
                       onClick={async () => {
                         try {
-                          const existingIds = parseTargetIds(ds.targetIds);
+                          const existingIds = parseIdList(ds.targetIds);
                           await updateDataset.mutateAsync({
                             datasetId: ds.id,
                             targetType: ds.targetType || 'agent',
