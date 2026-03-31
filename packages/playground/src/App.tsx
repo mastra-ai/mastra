@@ -16,7 +16,6 @@ declare global {
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
-    MASTRA_THEME_TOGGLE?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
@@ -56,7 +55,6 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
-import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
@@ -64,15 +62,18 @@ import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import Evaluation from './pages/evaluation';
 import { Login } from './pages/login';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import Observability from './pages/observability';
+import ObservabilityOverview from './pages/observability-overview';
+import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
-import Scorers from './pages/scorers';
+import Resources from './pages/resources';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
@@ -107,7 +108,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
+  scorerLink: (scorerId: string) => `/evaluation/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
@@ -132,10 +133,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetLink: (datasetId: string) => `/evaluation/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
+    `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -203,10 +204,13 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
-      { path: '/scorers', element: <Scorers /> },
-      { path: '/scorers/:scorerId', element: <Scorer /> },
+      { path: '/primitives', element: <Primitives /> },
+      { path: '/evaluation', element: <Evaluation /> },
+      { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
+      { path: '/observability-overview', element: <ObservabilityOverview /> },
       { path: '/observability', element: <Observability /> },
+      { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
         path: '/cms/agents/create',
@@ -240,7 +244,7 @@ const routes = [
           { path: 'chat/:threadId', element: <Agent /> },
           ...(isExperimentalFeatures
             ? [
-                { path: 'playground', element: <AgentPlayground /> },
+                { path: 'editor', element: <AgentPlayground /> },
                 { path: 'evaluate', element: <AgentEvaluate /> },
                 { path: 'review', element: <AgentReview /> },
               ]
@@ -284,14 +288,16 @@ const routes = [
 
       ...(isExperimentalFeatures
         ? [
-            { path: '/datasets', element: <Datasets /> },
-            { path: '/datasets/:datasetId', element: <DatasetPage /> },
-            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
-            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
-            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
-            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+            { path: '/evaluation/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/evaluation/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            {
+              path: '/evaluation/datasets/:datasetId/items/:itemId/versions',
+              element: <DatasetItemVersionsComparePage />,
+            },
+            { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
+            { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
+            { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
           ]
         : []),
 
@@ -333,12 +339,11 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

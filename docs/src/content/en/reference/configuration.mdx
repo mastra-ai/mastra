@@ -599,6 +599,30 @@ export const mastra = new Mastra({
 })
 ```
 
+### server.mcpOptions
+
+**Type:** `object`\
+**Default:** `undefined`
+
+MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state are not available.
+
+| Property | Type | Default | Description |
+| - | - | - | - |
+| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
+| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
+  },
+})
+```
+
 ### server.build
 
 Build-time configuration for server features. These options control development tools like Swagger UI and request logging, which are enabled during local development but disabled in production by default.

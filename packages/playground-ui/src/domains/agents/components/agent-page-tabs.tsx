@@ -37,7 +37,9 @@ function TabLink({
       onClick={() => navigate(href)}
       className={cn(
         'flex items-center gap-1.5 px-3 py-2.5 text-sm transition-colors border-b-2',
-        active ? 'border-white/50 text-neutral5' : 'border-transparent text-neutral3 hover:text-neutral5',
+        active
+          ? 'border-black/50 dark:border-white/50 text-neutral5'
+          : 'border-transparent text-neutral3 hover:text-neutral5',
       )}
     >
       <Icon size="sm">{icon}</Icon>
@@ -71,7 +73,7 @@ export function AgentPageTabs({
       />
       {showPlayground && (
         <TabLink
-          href={`/agents/${agentId}/playground`}
+          href={`/agents/${agentId}/editor`}
           active={activeTab === 'versions'}
           icon={<GitBranch />}
           label="Editor"

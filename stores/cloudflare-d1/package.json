@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -30,7 +30,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "cloudflare": "^4.5.0"
+    "cloudflare": "^5.2.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260316.1",
