@@ -17,8 +17,6 @@ Three categories of metrics are emitted automatically:
 
 ## When to use metrics
 
-Use metrics to:
-
 - Monitor latency across agents, tools, workflows, and model calls
 - Track token consumption and cost trends over time
 - Identify error-heavy agents or tools by comparing success and error rates
@@ -26,7 +24,7 @@ Use metrics to:
 
 ## Get started
 
-Metrics requires DuckDB. PostgreSQL, LibSQL, and other relational databases don't support metrics collection.
+Metrics requires [DuckDB](/reference/vectors/duckdb). PostgreSQL, LibSQL, and other relational databases don't support metrics collection.
 
 Install the required packages:
 
@@ -68,15 +66,15 @@ export const mastra = new Mastra({
 
 ## Studio
 
-The Studio Metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
+The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
 
 ## What Mastra measures
 
 Mastra emits three categories of metrics automatically:
 
-- **Duration**: execution time in milliseconds for agents, workflows, tools, model calls, and processors.
-- **Token usage**: input and output token counts, broken down by type (text, cache, audio, image, reasoning).
-- **Cost estimation**: estimated cost per model call, based on an embedded pricing registry.
+- **Duration**: Execution time in milliseconds for agents, workflows, tools, model calls, and processors.
+- **Token usage**: Input and output token counts, broken down by type (text, cache, audio, image, reasoning).
+- **Cost estimation**: Estimated cost per model call, based on an embedded pricing registry.
 
 Each metric carries trace correlation context so you can drill from a dashboard spike to the exact span that caused it.
 
@@ -86,9 +84,9 @@ For the full list of metric names, labels, and cost fields, see the [Automatic m
 
 Mastra auto-instruments agent runs, workflow steps, tool calls, and model generations as spans. When a span ends, the observability layer extracts metrics from it:
 
-1. **Duration**: calculated from the span's start and end timestamps.
-1. **Token usage**: extracted from the `usage` attribute on model generation spans.
-1. **Cost estimation**: runs each token metric through an embedded pricing registry that matches by provider and model name.
+1. **Duration**: Calculated from the span's start and end timestamps.
+1. **Token usage**: Extracted from the `usage` attribute on model generation spans.
+1. **Cost estimation**: Runs each token metric through an embedded pricing registry that matches by provider and model name.
 
 Before storage, all metric labels pass through a cardinality filter that blocks known high-cardinality values (such as trace IDs and UUIDs) to keep storage efficient. Metrics are then batched by an internal event buffer and flushed to storage by the `DefaultExporter`.
 
