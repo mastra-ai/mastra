@@ -19,7 +19,7 @@ const THEME_OPTIONS = [
 ] as const;
 
 export const StudioSettingsPage = () => {
-  const { baseUrl, headers, themeToggleEnabled } = useStudioConfig();
+  const { baseUrl, headers } = useStudioConfig();
   const { theme, setTheme } = usePlaygroundStore();
   const [selectedTheme, setSelectedTheme] = useState(theme);
   const selectedThemeRef = useRef(theme);
@@ -41,31 +41,27 @@ export const StudioSettingsPage = () => {
       </Header>
       <MainContentContent>
         <div className="max-w-2xl mx-auto w-full mt-8 space-y-8">
-          {themeToggleEnabled ? (
-            <section className="rounded-lg border border-border1 bg-surface3 p-4">
-              <div className="space-y-3">
-                <h2 className="text-icon6 font-medium">Theme</h2>
-                <SelectField
-                  name="theme"
-                  label="Theme mode"
-                  value={selectedTheme}
-                  onValueChange={value => {
-                    const nextTheme = value as 'dark' | 'light' | 'system';
-                    selectedThemeRef.current = nextTheme;
-                    setSelectedTheme(nextTheme);
-                  }}
-                  options={THEME_OPTIONS.map(option => ({ ...option }))}
-                />
-              </div>
-            </section>
-          ) : null}
+          <section className="rounded-lg border border-border1 bg-surface3 p-4">
+            <div className="space-y-3">
+              <h2 className="text-icon6 font-medium">Theme</h2>
+              <SelectField
+                name="theme"
+                label="Theme mode"
+                value={selectedTheme}
+                onValueChange={value => {
+                  const nextTheme = value as 'dark' | 'light' | 'system';
+                  selectedThemeRef.current = nextTheme;
+                  setSelectedTheme(nextTheme);
+                }}
+                options={THEME_OPTIONS.map(option => ({ ...option }))}
+              />
+            </div>
+          </section>
 
           <StudioConfigForm
             initialConfig={{ baseUrl, headers }}
             onSave={() => {
-              if (themeToggleEnabled) {
-                setTheme(selectedThemeRef.current);
-              }
+              setTheme(selectedThemeRef.current);
             }}
           />
         </div>

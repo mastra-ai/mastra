@@ -176,16 +176,16 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   return (
     <li className="border-t border-border1 first:border-t-0">
       <button onClick={onClick} className="w-full px-4 py-3 text-left hover:bg-surface5 transition-colors flex gap-3">
-        <span className="text-xs text-neutral3 tabular-nums w-4 flex-shrink-0">{rank}</span>
+        <span className="text-xs text-neutral3 tabular-nums w-4 shrink-0">{rank}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <FolderOpen className="h-3.5 w-3.5 text-neutral4 flex-shrink-0" />
+            <FolderOpen className="h-3.5 w-3.5 text-neutral4 shrink-0" />
             <span className="font-mono text-sm text-neutral6 truncate">{result.id}</span>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <div className="w-12 h-1 rounded-full bg-surface2 overflow-hidden">
                 <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-[0.625rem] text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
+              <span className="text-ui-xs text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
             </div>
           </div>
           <p className="text-xs text-neutral4 line-clamp-2">{result.content}</p>
@@ -234,7 +234,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface3 border border-border1 text-sm text-neutral6 placeholder:text-neutral3 focus:outline-none focus:ring-2 focus:ring-accent1"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface3 border border-border1 text-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>

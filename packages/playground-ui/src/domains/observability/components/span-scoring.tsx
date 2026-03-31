@@ -100,7 +100,7 @@ export const SpanScoring = ({
             }))}
             onValueChange={handleScorerChange}
             value={selectedScorer || ''}
-            className="min-w-[20rem]"
+            className="min-w-80"
             disabled={isWaiting}
           />
           {selectedScorerDescription && (
