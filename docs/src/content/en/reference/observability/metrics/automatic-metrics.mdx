@@ -46,24 +46,24 @@ Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage
 
 ### Input token metrics
 
-| Metric name | Provider field | Description |
-| - | - | - |
-| `mastra_model_total_input_tokens` | | Total input tokens |
-| `mastra_model_input_text_tokens` | `inputTextTokens` | Text tokens in the input prompt |
-| `mastra_model_input_cache_read_tokens` | `cacheReadInputTokens` | Tokens read from prompt cache (e.g. Anthropic) |
-| `mastra_model_input_cache_write_tokens` | `cacheWriteInputTokens` | Tokens written to prompt cache |
-| `mastra_model_input_audio_tokens` | `audioInputTokens` | Audio tokens in the input (multimodal models) |
-| `mastra_model_input_image_tokens` | `imageInputTokens` | Image tokens in the input (vision models) |
+| Metric name | Description |
+| - | - |
+| `mastra_model_total_input_tokens` | Total input tokens |
+| `mastra_model_input_text_tokens` | Text tokens in the input prompt |
+| `mastra_model_input_cache_read_tokens` | Tokens read from prompt cache (e.g. Anthropic) |
+| `mastra_model_input_cache_write_tokens` | Tokens written to prompt cache |
+| `mastra_model_input_audio_tokens` | Audio tokens in the input (multimodal models) |
+| `mastra_model_input_image_tokens` | Image tokens in the input (vision models) |
 
 ### Output token metrics
 
-| Metric name | Provider field | Description |
-| - | - | - |
-| `mastra_model_total_output_tokens` | | Total output tokens |
-| `mastra_model_output_text_tokens` | `outputTextTokens` | Text tokens in the model's output |
-| `mastra_model_output_reasoning_tokens` | `reasoningOutputTokens` | Reasoning / chain-of-thought tokens (e.g. OpenAI o-series) |
-| `mastra_model_output_audio_tokens` | `audioOutputTokens` | Audio tokens in the model's output |
-| `mastra_model_output_image_tokens` | | Output image tokens |
+| Metric name | Description |
+| - | - |
+| `mastra_model_total_output_tokens` | Total output tokens |
+| `mastra_model_output_text_tokens` | Text tokens in the model's output |
+| `mastra_model_output_reasoning_tokens` | Reasoning / chain-of-thought tokens (e.g. OpenAI o-series) |
+| `mastra_model_output_audio_tokens` | Audio tokens in the model's output |
+| `mastra_model_output_image_tokens` | Output image tokens |
 
 ### Provider-reported detailed token categories
 
