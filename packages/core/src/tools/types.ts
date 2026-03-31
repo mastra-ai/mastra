@@ -308,15 +308,10 @@ export type InternalCoreTool = {
     }
 );
 
-// Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<
-  TSuspend = unknown,
-  TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> extends Partial<ObservabilityContext> {
+// Base context shared by all tool executions (without requestContext)
+interface ToolExecutionContextBase<TSuspend = unknown, TResume = unknown> extends Partial<ObservabilityContext> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext?: RequestContext<TRequestContext>;
   abortSignal?: AbortSignal;
 
   /**
@@ -351,6 +346,18 @@ export interface ToolExecutionContext<
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 }
+
+// Unified tool execution context that works for all scenarios.
+// When a requestContextSchema is provided (TRequestContext is concrete),
+// requestContext becomes required. Otherwise it stays optional.
+export type ToolExecutionContext<
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = ToolExecutionContextBase<TSuspend, TResume> &
+  (unknown extends TRequestContext
+    ? { requestContext?: RequestContext<TRequestContext> }
+    : { requestContext: RequestContext<TRequestContext> });
 
 export interface ToolAction<
   TSchemaIn,

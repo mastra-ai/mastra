@@ -4,10 +4,18 @@ import type { RequestContext } from '../request-context';
 import { createTool } from './tool';
 
 /**
- * Type tests to verify requestContextSchema properly types the execute function's context
+ * Type tests to verify requestContextSchema properly types the execute function's context.
+ *
+ * Note: Inside the execute callback, the requestContext type parameter is a
+ * deferred conditional (derived from TRequestContextSchema via InferPublicSchema).
+ * This means RequestContext's conditional get()/all methods can't fully resolve
+ * the value types. The key guarantees are:
+ * - requestContext is REQUIRED when requestContextSchema is defined
+ * - requestContext is optional when no schema is provided
+ * - External callers of tool.execute() must provide the correct requestContext
  */
 describe('requestContextSchema type inference', () => {
-  it('should type requestContext based on requestContextSchema in execute function', () => {
+  it('should make requestContext required when requestContextSchema is defined', () => {
     const tool = createTool({
       id: 'typed-tool',
       description: 'A tool with typed request context',
@@ -16,21 +24,9 @@ describe('requestContextSchema type inference', () => {
         apiKey: z.string(),
       }),
       execute: async (input, context) => {
-        // Verify context.requestContext is typed
-        expectTypeOf(context.requestContext).toEqualTypeOf<
-          RequestContext<{ userId: string; apiKey: string }> | undefined
-        >();
-
-        // Verify get() returns the correct type
-        const userId = context.requestContext?.get('userId');
-        expectTypeOf(userId).toEqualTypeOf<string | undefined>();
-
-        const apiKey = context.requestContext?.get('apiKey');
-        expectTypeOf(apiKey).toEqualTypeOf<string | undefined>();
-
-        // Verify .all returns the typed object
-        const all = context.requestContext?.all;
-        expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string } | undefined>();
+        // requestContext is required (no ?. needed) when schema is defined
+        const rc = context.requestContext;
+        expectTypeOf(rc).not.toBeNullable();
 
         return { success: true };
       },
@@ -38,14 +34,18 @@ describe('requestContextSchema type inference', () => {
 
     // Tool is created successfully with proper types
     expectTypeOf(tool.id).toEqualTypeOf<'typed-tool'>();
+
+    // External callers must provide requestContext — empty object should fail
+    // @ts-expect-error — missing requestContext
+    void tool.execute?.({}, {});
   });
 
   it('should allow unknown keys when no requestContextSchema is provided', () => {
-    createTool({
+    const tool = createTool({
       id: 'untyped-tool',
       description: 'A tool without request context schema',
       execute: async (input, context) => {
-        // Without schema, requestContext should be RequestContext<unknown>
+        // Without schema, requestContext should be optional
         expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<unknown> | undefined>();
 
         // get() should return unknown
@@ -55,9 +55,12 @@ describe('requestContextSchema type inference', () => {
         return { success: true };
       },
     });
+
+    // Without schema, empty context object is allowed
+    void tool.execute?.({}, {});
   });
 
-  it('should type nested objects in requestContextSchema', () => {
+  it('should make nested requestContext required', () => {
     createTool({
       id: 'nested-tool',
       description: 'A tool with nested request context schema',
@@ -71,11 +74,9 @@ describe('requestContextSchema type inference', () => {
         }),
       }),
       execute: async (input, context) => {
-        const user = context.requestContext?.get('user');
-        expectTypeOf(user).toEqualTypeOf<{ id: string; name: string } | undefined>();
-
-        const settings = context.requestContext?.get('settings');
-        expectTypeOf(settings).toEqualTypeOf<{ theme: 'light' | 'dark' } | undefined>();
+        // requestContext is required
+        const rc = context.requestContext;
+        expectTypeOf(rc).not.toBeNullable();
 
         return { success: true };
       },

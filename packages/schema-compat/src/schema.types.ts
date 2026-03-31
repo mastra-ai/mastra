@@ -25,4 +25,26 @@ export type PublicSchema<Output = unknown, Input = Output> =
   | JSONSchema7
   | StandardSchemaWithJSON<Input, Output>;
 
-export type InferPublicSchema<T extends PublicSchema> = T extends PublicSchema<infer Output> ? Output : never;
+/**
+ * Infers the output type from a PublicSchema using cascading structural checks.
+ *
+ * Inferring directly from the PublicSchema union (`T extends PublicSchema<infer O>`)
+ * is fragile — third-party module augmentations on ZodType (e.g. @hono/zod-openapi)
+ * can exceed TypeScript's inference limits, silently widening the result to `any`.
+ *
+ * Checking each union member individually via structural properties (`_output`,
+ * `_type`, `~standard`) keeps each inference site simple and isolated. The original
+ * union inference is preserved as a final fallback for non-Zod types (e.g.
+ * `StandardSchemaWithJSON<X>`) where augmentation is not a concern.
+ */
+export type InferPublicSchema<T extends PublicSchema> = T extends { _output: infer Output }
+  ? Output
+  : T extends { _type: infer Output }
+    ? Output
+    : T extends { '~standard': { types: { output: infer Output } } }
+      ? Output
+      : T extends JSONSchema7
+        ? unknown
+        : T extends PublicSchema<infer Output>
+          ? Output
+          : never;

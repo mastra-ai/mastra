@@ -1483,12 +1483,31 @@ export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
 export function createWorkflow<
   TWorkflowId extends string = string,
   TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
+  TInputSchema extends PublicSchema = PublicSchema,
+  TOutputSchema extends PublicSchema = PublicSchema,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContext extends Record<string, any> | unknown = unknown,
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
+>(
+  params: Omit<
+    WorkflowConfig<
+      TWorkflowId,
+      TState,
+      InferPublicSchema<TInputSchema>,
+      InferPublicSchema<TOutputSchema>,
+      TSteps,
+      TRequestContext
+    >,
+    'inputSchema' | 'outputSchema'
+  > & {
+    inputSchema: TInputSchema;
+    outputSchema: TOutputSchema;
+  },
+) {
+  type TInput = InferPublicSchema<TInputSchema>;
+  type TOutput = InferPublicSchema<TOutputSchema>;
+  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(
+    params as unknown as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>,
+  );
 }
 
 export function cloneWorkflow<
