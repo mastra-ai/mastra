@@ -205,7 +205,6 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
-      { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/logs', element: <Logs /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
