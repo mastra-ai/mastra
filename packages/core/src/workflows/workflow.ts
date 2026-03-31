@@ -2410,22 +2410,20 @@ export class Workflow<
 
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     if (this.engineType !== 'default') {
-      this.logger.debug(`Cannot restart active workflow runs for ${this.engineType} engine`);
+      this.logger.debug('Cannot restart active workflow runs for engine type', { engineType: this.engineType });
       return;
     }
     const activeRuns = await this.listActiveWorkflowRuns();
     if (activeRuns.runs.length > 0) {
-      this.logger.debug(
-        `Restarting ${activeRuns.runs.length} active workflow run${activeRuns.runs.length > 1 ? 's' : ''}`,
-      );
+      this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
     }
     for (const runSnapshot of activeRuns.runs) {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
-        this.logger.debug(`Restarted ${this.id} workflow run ${runSnapshot.runId}`);
+        this.logger.debug('Restarted workflow run', { workflowId: this.id, runId: runSnapshot.runId });
       } catch (error) {
-        this.logger.error(`Failed to restart ${this.id} workflow run ${runSnapshot.runId}: ${error}`);
+        this.logger.error('Failed to restart workflow run', { workflowId: this.id, runId: runSnapshot.runId, error });
       }
     }
   }
@@ -2474,7 +2472,9 @@ export class Workflow<
       try {
         snapshot = JSON.parse(snapshot);
       } catch (e) {
-        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', {
+          error: e,
+        });
         return {};
       }
     }
@@ -2581,7 +2581,7 @@ export class Workflow<
       try {
         snapshot = JSON.parse(snapshot);
       } catch (e) {
-        this.logger.debug('Cannot parse workflow run snapshot. Snapshot is not valid JSON', e);
+        this.logger.debug('Cannot parse workflow run snapshot. Snapshot is not valid JSON', { error: e });
         return null;
       }
     }

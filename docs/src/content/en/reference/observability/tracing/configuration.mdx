@@ -54,6 +54,7 @@ interface ObservabilityInstanceConfig {
   includeInternalSpans?: boolean
   requestContextKeys?: string[]
   serializationOptions?: SerializationOptions
+  logging?: { enabled?: boolean; level?: LogLevel }
 }
 ```
 
@@ -132,6 +133,33 @@ interface ObservabilityInstanceConfig {
             name: 'maxObjectKeys',
             type: 'number',
             description: 'Maximum number of keys in objects (default: 50)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'logging',
+    type: '{ enabled?: boolean; level?: LogLevel }',
+    description:
+      'Controls log forwarding to observability storage. See [Logging to observability storage](/docs/observability/logging#logging-to-observability-storage) for details.',
+    required: false,
+    properties: [
+      {
+        type: '{ enabled?: boolean; level?: LogLevel }',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            description: 'Set to false to disable log forwarding to observability storage (default: true)',
+            isOptional: true,
+          },
+          {
+            name: 'level',
+            type: 'LogLevel',
+            description:
+              "Minimum log level to forward. One of 'debug', 'info', 'warn', 'error', 'fatal' (default: 'debug')",
             isOptional: true,
           },
         ],
