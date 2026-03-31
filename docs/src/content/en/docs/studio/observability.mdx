@@ -25,7 +25,7 @@ Visit the [metrics overview](/docs/observability/metrics/overview) for more deta
 
 :::note
 
-Metrics requires DuckDB. PostgreSQL, LibSQL, and other relational databases don't support metrics collection. If you use in-memory storage, metrics reset on every server restart.
+Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
 
 :::
 

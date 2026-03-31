@@ -15,6 +15,14 @@ Three categories of metrics are emitted automatically:
 - **Token usage metrics**: Input and output token counts broken down by type (text, cache, audio, image, reasoning).
 - **Cost estimation**: Estimated cost per model call based on an embedded pricing registry.
 
+:::note
+
+Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+
+For local development, you can use [DuckDB](/reference/vectors/duckdb). We don't recommend using in-memory/DuckDB for production, ClickHouse support is coming soon for scalable metrics storage.
+
+:::
+
 ## When to use metrics
 
 - Monitor latency across agents, tools, workflows, and model calls
@@ -23,8 +31,6 @@ Three categories of metrics are emitted automatically:
 - Compare performance before and after prompt, model, or code changes
 
 ## Get started
-
-Metrics requires [DuckDB](/reference/vectors/duckdb). PostgreSQL, LibSQL, and other relational databases don't support metrics collection.
 
 Install the required packages:
 

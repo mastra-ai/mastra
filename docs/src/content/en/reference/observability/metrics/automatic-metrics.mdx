@@ -19,14 +19,18 @@ Metrics are routed through an internal event bus to the `DefaultExporter`, which
 
 ### What affects whether a metric is available
 
-- **Sampling**: the span must be sampled. If sampling is set to 0% or `never`, all spans become no-ops and no metrics are emitted.
-- **Span output processors**: if a processor filters out a span (returns `null`), metrics aren't extracted from it.
-- **Exporter**: `DefaultExporter` must be configured. Without it, metrics are emitted to the bus but never persisted.
-- **Storage**: the storage backend must support metrics. Currently only `DuckDB` and `InMemory` implement `batchCreateMetrics`.
+Four conditions must be true for a metric to reach storage:
+
+1. The span is sampled (not dropped by the sampling strategy).
+1. The span survives all span output processors (none return `null`).
+1. `DefaultExporter` is configured as an exporter.
+1. The storage backend supports metrics (`DuckDB` or `InMemory`).
+
+If metrics aren't appearing, see [Troubleshooting](#troubleshooting).
 
 ## Duration metrics
 
-Duration metrics record execution time in milliseconds, calculated from the span's start and end timestamps. Each duration metric includes a [`status`](#status) label.
+Duration metrics record execution time in milliseconds, calculated from the span's start and end timestamps. Each duration metric includes a `status` label set to `ok` or `error`, derived from the span's status.
 
 | Metric name | Span type | Description |
 | - | - | - |
@@ -42,48 +46,28 @@ Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage
 
 ### Input token metrics
 
-| Metric name | Description |
-| - | - |
-| `mastra_model_total_input_tokens` | Total input tokens |
-| `mastra_model_input_text_tokens` | Input text tokens |
-| `mastra_model_input_cache_read_tokens` | Prompt cache read tokens |
-| `mastra_model_input_cache_write_tokens` | Prompt cache write tokens |
-| `mastra_model_input_audio_tokens` | Input audio tokens |
-| `mastra_model_input_image_tokens` | Input image tokens |
-
-### Output token metrics
-
-| Metric name | Description |
-| - | - |
-| `mastra_model_total_output_tokens` | Total output tokens |
-| `mastra_model_output_text_tokens` | Output text tokens |
-| `mastra_model_output_reasoning_tokens` | Reasoning / chain-of-thought tokens |
-| `mastra_model_output_audio_tokens` | Output audio tokens |
-| `mastra_model_output_image_tokens` | Output image tokens |
-
-### Provider-reported detailed token categories
-
-The detailed breakdown metrics (everything except `total_input` and `total_output`) are only emitted when the provider reports them. If a category has zero tokens, the metric is skipped for that span. Different providers report different levels of detail. For example, not all providers report cache or audio tokens.
-
-## Token usage metric details
-
-### Input token details
-
 | Metric name | Provider field | Description |
 | - | - | - |
+| `mastra_model_total_input_tokens` | | Total input tokens |
 | `mastra_model_input_text_tokens` | `inputTextTokens` | Text tokens in the input prompt |
 | `mastra_model_input_cache_read_tokens` | `cacheReadInputTokens` | Tokens read from prompt cache (e.g. Anthropic) |
 | `mastra_model_input_cache_write_tokens` | `cacheWriteInputTokens` | Tokens written to prompt cache |
 | `mastra_model_input_audio_tokens` | `audioInputTokens` | Audio tokens in the input (multimodal models) |
 | `mastra_model_input_image_tokens` | `imageInputTokens` | Image tokens in the input (vision models) |
 
-### Output token details
+### Output token metrics
 
 | Metric name | Provider field | Description |
 | - | - | - |
+| `mastra_model_total_output_tokens` | | Total output tokens |
 | `mastra_model_output_text_tokens` | `outputTextTokens` | Text tokens in the model's output |
-| `mastra_model_output_audio_tokens` | `audioOutputTokens` | Audio tokens in the model's output |
 | `mastra_model_output_reasoning_tokens` | `reasoningOutputTokens` | Reasoning / chain-of-thought tokens (e.g. OpenAI o-series) |
+| `mastra_model_output_audio_tokens` | `audioOutputTokens` | Audio tokens in the model's output |
+| `mastra_model_output_image_tokens` | | Output image tokens |
+
+### Provider-reported detailed token categories
+
+The detailed breakdown metrics (everything except `total_input` and `total_output`) are only emitted when the provider reports them. If a category has zero tokens, the metric is skipped for that span. Different providers report different levels of detail. For example, not all providers report cache or audio tokens.
 
 ## Cost-related context
 
@@ -159,6 +143,5 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### Metrics are visible in traces but not in your backend
 
-- **Storage is available**: if `observabilityStorage` isn't initialized or the storage backend is down, metrics are silently dropped by the `DefaultExporter`.
 - **DuckDB is configured**: verify the DuckDB store is wired into the `domains.observability` slot of your composite store.
-- **In-memory isn't used in production**: `InMemory` storage loses all metrics on restart. Use DuckDB for persistence.
+- **In-memory isn't used in production**: `InMemory` storage loses all metrics on restart. Use a production database for persistent metrics storage.
