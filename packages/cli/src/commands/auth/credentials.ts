@@ -117,8 +117,10 @@ export async function login(): Promise<Credentials> {
     organizationId: string;
   }>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      server.close();
-      reject(new Error('Login timed out (60s)'));
+      server.close(() => {
+        reject(new Error('Login timed out (60s)'));
+      });
+      server.closeAllConnections();
     }, 60000);
 
     server.on('request', (req, res) => {
@@ -138,7 +140,7 @@ export async function login(): Promise<Credentials> {
 
         const user = JSON.parse(decodeURIComponent(userParam));
 
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
         res.end(
           `<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
             <div style="text-align:center">
@@ -149,8 +151,10 @@ export async function login(): Promise<Credentials> {
         );
 
         clearTimeout(timeout);
-        server.close();
-        resolve({ token, refreshToken, user, organizationId: orgId });
+        server.close(() => {
+          resolve({ token, refreshToken, user, organizationId: orgId });
+        });
+        server.closeAllConnections();
       }
     });
   });
