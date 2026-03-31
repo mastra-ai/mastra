@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 20.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599)]:
+  - @mastra/core@1.18.1-alpha.0
+  - @mastra/client-js@1.11.1-alpha.0
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.19-alpha.0
+
 ## 20.0.0
 
 ### Minor Changes
