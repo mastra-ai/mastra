@@ -1,3 +1,6 @@
+import type { CardElement } from 'chat';
+import { Card, CardText } from 'chat';
+
 import type {
   ProcessInputArgs,
   ProcessInputResult,
@@ -6,6 +9,79 @@ import type {
 } from '../processors/index';
 import type { ChannelContext } from './types';
 
+// ---------------------------------------------------------------------------
+// Constants & helpers
+// ---------------------------------------------------------------------------
+
+const TOOL_PREFIXES = ['mastra_workspace_'];
+const MAX_ARG_SUMMARY_LENGTH = 40;
+const MAX_RESULT_LENGTH = 300;
+
+export function stripToolPrefix(name: string): string {
+  for (const prefix of TOOL_PREFIXES) {
+    if (name.startsWith(prefix)) {
+      return name.slice(prefix.length);
+    }
+  }
+  return name;
+}
+
+export function formatArgsSummary(args: unknown): string {
+  try {
+    const obj = typeof args === 'string' ? JSON.parse(args) : args;
+    if (!obj || typeof obj !== 'object') return '';
+
+    const entries = Object.entries(obj as Record<string, unknown>).filter(
+      ([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '',
+    );
+    if (entries.length === 0) return '';
+
+    const [, first] = entries[0]!;
+    let display = typeof first === 'string' ? first : JSON.stringify(first);
+    if (display.length > MAX_ARG_SUMMARY_LENGTH) {
+      display = display.slice(0, MAX_ARG_SUMMARY_LENGTH) + '…';
+    }
+    return display;
+  } catch {
+    return '';
+  }
+}
+
+export function formatResult(result: unknown, isError?: boolean): string {
+  const prefix = isError ? 'Error: ' : '';
+  if (result == null) return `${prefix}(no output)`;
+  let text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  text = text.trim();
+  if (text.length > MAX_RESULT_LENGTH) {
+    text = text.slice(0, MAX_RESULT_LENGTH) + '…';
+  }
+  return `${prefix}${text}`;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+export function buildToolResultCard(
+  toolName: string,
+  argsSummary: string,
+  resultText: string,
+  isError?: boolean,
+  durationMs?: number,
+): CardElement {
+  const status = durationMs != null ? ` ${formatDuration(durationMs)} ${isError ? '✗' : '✓'}` : '';
+  const header = argsSummary ? `*${toolName}* \`${argsSummary}\`${status}` : `*${toolName}*${status}`;
+  const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
+  return Card({
+    children: [CardText(header), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Processor
+// ---------------------------------------------------------------------------
+
 /**
  * Input processor that injects channel context into agent prompts.
  *
@@ -13,20 +89,15 @@ import type { ChannelContext } from './types';
  * - `processInputStep`: At step 0, prepends a `<system-reminder>` to the user's message
  *   with per-request data (messageId, eventType).
  *
- * Reads from `requestContext.get('channel')`.
- *
- * @example
- * ```ts
- * const agent = new Agent({
- *   inputProcessors: [new ChatChannelProcessor()],
- *   channels: {
- *     discord: new DiscordAdapter({ ... }),
- *   },
- * });
- * ```
+ * All output rendering (tool cards, text messages, approval prompts) is handled by
+ * `AgentChat.consumeAgentStream` which iterates the outer `fullStream`.
  */
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
+
+  // -------------------------------------------------------------------------
+  // Input processing
+  // -------------------------------------------------------------------------
 
   processInput(args: ProcessInputArgs): ProcessInputResult {
     const ctx = args.requestContext?.get('channel') as ChannelContext | undefined;
@@ -48,9 +119,6 @@ export class ChatChannelProcessor {
     if (ctx.isDM && ctx.userName) {
       lines.push(`The user you are talking to is "${ctx.userName}".`);
     }
-
-    // channelId and threadId are internal identifiers used by tools via request
-    // context — they don't need to be exposed to the model.
 
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];
 
