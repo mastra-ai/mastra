@@ -47,6 +47,11 @@ export function getCurrentToken(): string | null {
  * Used by both createApiClient (openapi-fetch) and raw fetch calls.
  */
 async function authenticatedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  // openapi-fetch passes a single Request object (no init). If the first
+  // fetch() returns 401 we need to retry, but the original Request's body
+  // will already be consumed. Clone it up front so the retry can use the clone.
+  const clonedRequest = input instanceof Request ? input.clone() : null;
+
   const response = await fetch(input, init);
 
   if (response.status !== 401 || !_currentToken) {
@@ -81,13 +86,17 @@ async function authenticatedFetch(input: string | URL | Request, init?: RequestI
     return response;
   }
 
-  // Retry the request with the new token
-  const retryInit = { ...init };
-  const retryHeaders = new Headers(retryInit.headers);
-  retryHeaders.set('Authorization', `Bearer ${newToken}`);
-  retryInit.headers = retryHeaders;
+  // Retry with the refreshed token.
+  if (clonedRequest) {
+    // Rebuild from the clone so headers + body are intact.
+    const retryHeaders = new Headers(clonedRequest.headers);
+    retryHeaders.set('Authorization', `Bearer ${newToken}`);
+    return fetch(new Request(clonedRequest, { headers: retryHeaders }));
+  }
 
-  return fetch(input, retryInit);
+  const retryHeaders = new Headers(init?.headers);
+  retryHeaders.set('Authorization', `Bearer ${newToken}`);
+  return fetch(input, { ...init, headers: retryHeaders });
 }
 
 /**

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
@@ -135,6 +136,26 @@ export abstract class Bundler extends MastraBundler {
     deps.__setLogger(this.logger);
 
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
+  }
+
+  /**
+   * Generate a package-lock.json for the output directory so that deploy targets
+   * can use `npm ci` instead of `npm install`, skipping version resolution entirely.
+   * This is a lockfile-only operation — no packages are downloaded.
+   *
+   * Removes node_modules first because pnpm's symlink-based layout confuses
+   * npm's arborist when it tries to read the existing tree.
+   */
+  private async generateNpmLockfile(outputDir: string): Promise<void> {
+    try {
+      execSync('rm -rf node_modules && npm install --package-lock-only --force 2>/dev/null', {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 60_000,
+      });
+    } catch {
+      this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
+    }
   }
 
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
@@ -439,8 +460,11 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       this.logger.info('Installing dependencies');
       await this.installDependencies(outputDirectory, projectRoot);
-
       this.logger.info('Done installing dependencies');
+
+      this.logger.info('Generating package-lock.json for deploy');
+      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+      this.logger.info('Done generating package-lock.json');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
