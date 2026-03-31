@@ -28,6 +28,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
+import { Chip } from '@/ds/components/Chip';
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -115,6 +116,57 @@ function parseOutput(output: unknown): ParsedOutput {
     traceId: typeof obj.traceId === 'string' ? obj.traceId : undefined,
     error: typeof obj.error === 'string' ? obj.error : obj.error ? String(obj.error) : undefined,
   };
+}
+
+function TrajectoryStepsSection({ traceId }: { traceId: string }) {
+  const client = useMastraClient();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const { data: trajectory, isLoading } = useQuery({
+    queryKey: ['trajectory', traceId],
+    queryFn: () => client.getTraceTrajectory(traceId),
+    enabled: isOpen,
+  });
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-purple-400 font-medium hover:text-purple-300">
+        <ChevronRight className="h-3 w-3 shrink-0" />
+        Trajectory Steps
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {isLoading ? (
+          <div className="flex items-center gap-2 mt-1 px-3 py-2">
+            <Spinner className="h-3 w-3" />
+            <Txt variant="ui-xs" className="text-neutral3">Loading trajectory...</Txt>
+          </div>
+        ) : trajectory?.steps && trajectory.steps.length > 0 ? (
+          <div className="mt-1 space-y-1">
+            {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-surface1 rounded text-xs">
+                <Chip size="small" color="purple">
+                  {String(step.stepType || 'step')}
+                </Chip>
+                <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
+                {typeof step.durationMs === 'number' && (
+                  <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
+                )}
+              </div>
+            ))}
+            {typeof trajectory.totalDurationMs === 'number' && (
+              <Txt variant="ui-xs" className="text-neutral3 px-3 py-1">
+                Total: {trajectory.totalDurationMs}ms
+              </Txt>
+            )}
+          </div>
+        ) : (
+          <Txt variant="ui-xs" className="text-neutral2 mt-1 px-3 py-2">
+            No trajectory steps found
+          </Txt>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function ResultOutputSection({
@@ -464,15 +516,60 @@ export function ExperimentResultsPanel({
                       {result.itemId.slice(0, 8)}
                     </Txt>
                     {itemScores.length > 0 && (
-                      <div className="flex items-center gap-2 ml-auto">
-                        {itemScores.map(s => (
-                          <Badge key={s.scorerId} variant="default">
-                            {s.scorerId}: {s.score.toFixed(3)}
-                          </Badge>
-                        ))}
+                      <div className="flex items-center gap-2 ml-auto flex-wrap">
+                        {itemScores
+                          .filter(s => s.entityType !== 'TRAJECTORY')
+                          .map(s => (
+                            <Badge key={s.scorerId} variant="default">
+                              {s.scorerId}: {s.score.toFixed(3)}
+                            </Badge>
+                          ))}
+                        {itemScores
+                          .filter(s => s.entityType === 'TRAJECTORY')
+                          .map(s => (
+                            <Chip key={s.scorerId} size="small" color="purple">
+                              {s.scorerId}: {s.score.toFixed(3)}
+                            </Chip>
+                          ))}
                       </div>
                     )}
                   </div>
+
+                  {/* Trajectory Score Details */}
+                  {itemScores.some(s => s.entityType === 'TRAJECTORY') && (
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-purple-400 font-medium hover:text-purple-300">
+                        <ChevronRight className="h-3 w-3 shrink-0" />
+                        Trajectory Score Details
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-1 space-y-2">
+                          {itemScores
+                            .filter(s => s.entityType === 'TRAJECTORY')
+                            .map(s => (
+                              <div key={s.scorerId} className="bg-surface1 rounded px-3 py-2 space-y-1">
+                                <Txt variant="ui-xs" className="text-purple-400 font-medium">
+                                  {s.scorerId}
+                                </Txt>
+                                {s.reason && (
+                                  <p className="text-xs text-neutral4">{s.reason}</p>
+                                )}
+                                {s.preprocessStepResult && (
+                                  <pre className="text-xs text-neutral3 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                                    {JSON.stringify(s.preprocessStepResult, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+
+                  {/* Trajectory Steps (lazy-loaded) */}
+                  {result.traceId && itemScores.some(s => s.entityType === 'TRAJECTORY') && (
+                    <TrajectoryStepsSection traceId={result.traceId} />
+                  )}
 
                   {/* Input */}
                   <Collapsible>

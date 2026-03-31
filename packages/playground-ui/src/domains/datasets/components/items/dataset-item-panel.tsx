@@ -58,6 +58,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
+  const [trajectoryValue, setTrajectoryValue] = useState('');
 
   // Validation error state
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
@@ -71,6 +72,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setInputValue(JSON.stringify(item.input, null, 2));
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
       setValidationErrors(null); // Reset validation errors on item change
@@ -127,6 +129,17 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    // Parse expectedTrajectory if provided
+    let parsedTrajectory: unknown | undefined;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -134,6 +147,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        expectedTrajectory: parsedTrajectory,
       });
 
       toast.success('Item updated successfully');
@@ -155,6 +169,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setInputValue(JSON.stringify(item.input, null, 2));
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
   };
@@ -216,6 +231,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setGroundTruthValue={handleGroundTruthValueChange}
               metadataValue={metadataValue}
               setMetadataValue={setMetadataValue}
+              trajectoryValue={trajectoryValue}
+              setTrajectoryValue={setTrajectoryValue}
               validationErrors={validationErrors}
               onSave={handleSave}
               onCancel={handleCancel}

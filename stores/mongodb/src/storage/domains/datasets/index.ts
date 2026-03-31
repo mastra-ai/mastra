@@ -162,6 +162,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       datasetVersion: row.datasetVersion,
       input: typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input,
       groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
+      expectedTrajectory:
+        typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -409,6 +411,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         isDeleted: false,
         input: args.input,
         groundTruth: args.groundTruth ?? null,
+        expectedTrajectory: args.expectedTrajectory ?? null,
         requestContext: args.requestContext ?? null,
         metadata: args.metadata ?? null,
         source: args.source ?? null,
@@ -430,6 +433,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetVersion: newVersion,
         input: args.input,
         groundTruth: args.groundTruth,
+        expectedTrajectory: args.expectedTrajectory,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -473,6 +477,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const hasChanges =
         args.input !== undefined ||
         args.groundTruth !== undefined ||
+        args.expectedTrajectory !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -486,6 +491,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const mergedInput = args.input !== undefined ? args.input : existing.input;
       const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -525,6 +532,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         isDeleted: false,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
+        expectedTrajectory: mergedExpectedTrajectory ?? null,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -545,6 +553,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetVersion: newVersion,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
+        expectedTrajectory: mergedExpectedTrajectory,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -696,6 +705,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           isDeleted: false,
           input: itemInput.input,
           groundTruth: itemInput.groundTruth ?? null,
+          expectedTrajectory: itemInput.expectedTrajectory ?? null,
           requestContext: itemInput.requestContext ?? null,
           metadata: itemInput.metadata ?? null,
           source: itemInput.source ?? null,
@@ -719,6 +729,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetVersion: newVersion,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
+        expectedTrajectory: itemInput.expectedTrajectory,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,

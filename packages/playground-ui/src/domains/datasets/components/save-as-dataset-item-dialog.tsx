@@ -17,6 +17,8 @@ import { toast } from '@/lib/toast';
 type SaveAsDatasetItemDialogProps = {
   initialInput: string;
   initialGroundTruth: string;
+  /** JSON string of the expected trajectory */
+  initialTrajectory?: string;
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
@@ -27,6 +29,7 @@ type SaveAsDatasetItemDialogProps = {
 export function SaveAsDatasetItemDialog({
   initialInput,
   initialGroundTruth,
+  initialTrajectory,
   breadcrumb,
   isOpen,
   onClose,
@@ -36,6 +39,7 @@ export function SaveAsDatasetItemDialog({
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
+  const [expectedTrajectory, setExpectedTrajectory] = useState('');
   // source is passed through — not editable in the UI
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
@@ -47,8 +51,9 @@ export function SaveAsDatasetItemDialog({
     if (isOpen) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
+      setExpectedTrajectory(initialTrajectory ?? '');
     }
-  }, [isOpen, initialInput, initialGroundTruth]);
+  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,11 +81,22 @@ export function SaveAsDatasetItemDialog({
       }
     }
 
+    let parsedTrajectory: unknown | undefined;
+    if (expectedTrajectory.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(expectedTrajectory);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        expectedTrajectory: parsedTrajectory,
         ...(source ? { source } : {}),
       });
 
@@ -90,6 +106,7 @@ export function SaveAsDatasetItemDialog({
       setSelectedDatasetId('');
       setInput('{}');
       setGroundTruth('');
+      setExpectedTrajectory('');
       onClose();
     } catch (error) {
       toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -156,6 +173,16 @@ export function SaveAsDatasetItemDialog({
           <div className="grid gap-2">
             <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
             <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px]" />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+            <CodeEditor
+              value={expectedTrajectory}
+              onChange={setExpectedTrajectory}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

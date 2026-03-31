@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -860,6 +860,11 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
   }
 
   /**

@@ -2,6 +2,7 @@ import type { GetScorerResponse } from '@mastra/client-js';
 import { Pencil } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Chip } from '@/ds/components/Chip';
 import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
@@ -43,6 +44,7 @@ export function ScorerDetailView({
   const name = scorerData.scorer?.name || scorerId;
   const description = scorerData.scorer?.description;
   const isCode = scorerData.source === 'code';
+  const isTrajectory = scorerData.scorer?.config?.type === 'trajectory';
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -54,6 +56,7 @@ export function ScorerDetailView({
               <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
                 {name}
               </Txt>
+              {isTrajectory && <Chip size="small" color="purple">trajectory</Chip>}
               {isCode && (
                 <span title="Defined in code — cannot be edited in the UI">
                   <Badge variant="default">Code</Badge>
@@ -100,6 +103,7 @@ export function ScorerDetailView({
           </Txt>
           <div className="space-y-2">
             <DetailRow label="ID" value={scorerId} />
+            <DetailRow label="Type" value={isTrajectory ? 'Trajectory' : 'Agent'} />
             <DetailRow label="Source" value={isCode ? 'Code' : 'Stored'} />
             {scorerData.agentIds && scorerData.agentIds.length > 0 && (
               <DetailRow

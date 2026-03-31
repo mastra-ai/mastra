@@ -8,6 +8,7 @@ import type {
   DatasetRecord,
   DatasetItem,
   DatasetItemRow,
+  DatasetItemSource,
   DatasetVersion,
   TargetType,
   UpdateExperimentResultInput,
@@ -155,16 +156,20 @@ export class Dataset {
   async addItem(input: {
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     return store.addItem({
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
       requestContext: input.requestContext,
       metadata: input.metadata,
+      source: input.source,
     });
   }
 
@@ -175,8 +180,10 @@ export class Dataset {
     items: Array<{
       input: unknown;
       groundTruth?: unknown;
+      expectedTrajectory?: unknown;
       requestContext?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
+      source?: DatasetItemSource;
     }>;
   }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
@@ -224,6 +231,7 @@ export class Dataset {
     itemId: string;
     input?: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
@@ -233,6 +241,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
       requestContext: input.requestContext,
       metadata: input.metadata,
     });
