@@ -412,3 +412,69 @@ describe('addStartStepPartsForAIV5 — client/provider tool splitting', () => {
     expect(partTypes).toEqual(['tool-find_files', 'tool-execute_command']);
   });
 });
+
+/**
+ * Tests for empty text part filtering in sanitizeV5UIMessages.
+ *
+ * Empty text parts can appear in stored messages due to various edge cases.
+ * When sent to LLM providers like Anthropic, these cause API errors:
+ * "Invalid request: messages: text content blocks must be non-empty"
+ */
+describe('sanitizeV5UIMessages — empty text part filtering', () => {
+  it('should filter out user messages that contain only empty text parts', () => {
+    const userMsgWithEmptyText: AIV5Type.UIMessage = {
+      id: 'msg-empty-user',
+      role: 'user',
+      parts: [{ type: 'text', text: '' }],
+    };
+
+    const result = sanitizeV5UIMessages([userMsgWithEmptyText], true);
+
+    // User message with only empty text should be removed entirely
+    expect(result).toHaveLength(0);
+  });
+
+  it('should filter out empty text parts from user messages with other content', () => {
+    const userMsgWithMixedParts: AIV5Type.UIMessage = {
+      id: 'msg-mixed-user',
+      role: 'user',
+      parts: [
+        { type: 'text', text: '' },
+        { type: 'text', text: 'Hello' },
+      ],
+    };
+
+    const result = sanitizeV5UIMessages([userMsgWithMixedParts], true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+    expect(result[0]!.parts[0]).toEqual({ type: 'text', text: 'Hello' });
+  });
+
+  it('should filter out user messages with whitespace-only text parts', () => {
+    const userMsgWithWhitespace: AIV5Type.UIMessage = {
+      id: 'msg-whitespace-user',
+      role: 'user',
+      parts: [{ type: 'text', text: '   ' }],
+    };
+
+    const result = sanitizeV5UIMessages([userMsgWithWhitespace], true);
+
+    // User message with only whitespace text should be removed
+    expect(result).toHaveLength(0);
+  });
+
+  it('should preserve assistant messages with only empty text parts (placeholder messages)', () => {
+    const assistantMsgWithEmptyText: AIV5Type.UIMessage = {
+      id: 'msg-empty-assistant',
+      role: 'assistant',
+      parts: [{ type: 'text', text: '' }],
+    };
+
+    const result = sanitizeV5UIMessages([assistantMsgWithEmptyText], true);
+
+    // Assistant message with only empty text should be preserved as placeholder
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+  });
+});
