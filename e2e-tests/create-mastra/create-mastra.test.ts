@@ -21,11 +21,17 @@ describe('create mastra', () => {
 
       fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
       projectPath = join(fixturePath, 'project');
-      process.env.npm_config_registry = registry;
-      execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`, {
-        cwd: fixturePath,
-        stdio: ['inherit', 'inherit', 'inherit'],
-      });
+      execSync(
+        `pnpm --config.trust-policy=off --config.block-exotic-subdeps=false dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`,
+        {
+          cwd: fixturePath,
+          stdio: ['inherit', 'inherit', 'inherit'],
+          env: {
+            ...process.env,
+            npm_config_registry: registry,
+          },
+        },
+      );
     },
     10 * 60 * 1000,
   );

@@ -231,7 +231,8 @@
                             }
                           },
                           "isContinued": false,
-                          "finishReason": "stop"
+                          "finishReason": "stop",
+                          "warnings": []
                         },
                         "metadata": {
                           "runId": "<runId-2>",
@@ -640,7 +641,8 @@
                             }
                           },
                           "isContinued": false,
-                          "finishReason": "stop"
+                          "finishReason": "stop",
+                          "warnings": []
                         },
                         "metadata": {
                           "runId": "<runId-3>",

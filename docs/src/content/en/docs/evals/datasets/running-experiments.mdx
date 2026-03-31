@@ -37,6 +37,14 @@ console.log(summary.failedCount) // number of items that failed
 
 `startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
 
+## Studio
+
+You can also run experiments in [Studio](/docs/studio/overview). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
+
+After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
+
+In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
+
 ## Experiment targets
 
 You can point an experiment at a registered agent, workflow, or scorer.
@@ -278,17 +286,9 @@ Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for
 
 :::
 
-## Studio
-
-You can also run experiments in [Mastra Studio](/docs/getting-started/studio). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
-
-After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
-
-In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
-
 ## Related
 
-- [Datasets overview](/docs/observability/datasets/overview)
+- [Datasets overview](/docs/evals/datasets/overview)
 - [Scorers overview](/docs/evals/overview)
 - [`startExperiment` reference](/reference/datasets/startExperiment)
 - [`listExperimentResults` reference](/reference/datasets/listExperimentResults)

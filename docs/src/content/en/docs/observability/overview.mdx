@@ -2,9 +2,6 @@
 title: "Observability overview | Observability"
 description: Monitor and debug applications with Mastra's Observability features.
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/loggers"
   - "@mastra/observability"
 ---
 
@@ -33,10 +30,12 @@ For production environments with high traffic, we recommend using **ClickHouse**
 
 Configure Observability in your Mastra instance:
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
 import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
 import {
   Observability,
   DefaultExporter,
@@ -46,9 +45,15 @@ import {
 
 export const mastra = new Mastra({
   logger: new PinoLogger(),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db', // Storage is required for tracing
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
   }),
   observability: new Observability({
     configs: {
