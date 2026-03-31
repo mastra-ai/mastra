@@ -3,12 +3,43 @@
 '@mastra/core': patch
 ---
 
-Fixed type inference breaking when third-party packages augment Zod's `ZodType` (e.g. `@hono/zod-openapi`). Previously, importing such packages would silently widen `inputData`, workflow step compatibility checks, and other schema-derived types to `any`.
+Fixed type inference breaking when third-party packages augment Zod's `ZodType` (e.g. `@hono/zod-openapi`). Previously, importing such packages would silently widen `inputData`, workflow step compatibility, and other schema-derived types to `any`.
 
-**`InferPublicSchema`**: Now uses cascading structural checks (`_output`, `_type`, `~standard`) instead of inferring from the full `PublicSchema` union, which was fragile to module augmentation.
+**`InferPublicSchema`**: No longer widens to `any` when third-party Zod augmentations are present.
 
-**`createWorkflow`**: `inputSchema` and `outputSchema` types are now captured as schema-level generics (matching the pattern `createStep` already uses), preventing `workflow.then()` from silently accepting incompatible steps.
+**`createWorkflow`**: `inputSchema` and `outputSchema` types are now captured as generics (matching the pattern `createStep` already uses). `workflow.then()` now correctly rejects incompatible steps:
 
-**`createTool`**: `requestContextSchema` is now captured as a schema-level generic. When provided, `requestContext` becomes required in the tool's execution context — callers of `tool.execute()` must provide it.
+```ts
+import {} from "@hono/zod-openapi";
+
+const step = createStep({
+  id: "needs-extra",
+  inputSchema: z.object({ prompt: z.string(), extra: z.number() }),
+  // ...
+});
+
+const workflow = createWorkflow({
+  id: "wf",
+  inputSchema: z.object({ prompt: z.string() }),
+  // ...
+});
+
+// Before: silently accepted. After: type error
+workflow.then(step);
+```
+
+**`createTool`**: When `requestContextSchema` is provided, `requestContext` is now required in the execution context:
+
+```ts
+const tool = createTool({
+  id: "my-tool",
+  description: "Tool with required context",
+  requestContextSchema: z.object({ patientId: z.string() }),
+  execute: async () => ({ ok: true }),
+});
+
+// Before: no error. After: type error — missing requestContext
+tool.execute?.({}, {});
+```
 
 Fixes https://github.com/mastra-ai/mastra/issues/14896
