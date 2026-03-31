@@ -37,27 +37,6 @@ export const Default: Story = {
   ),
 };
 
-export const ButtonsVariant: Story = {
-  render: () => (
-    <Tabs defaultTab="code" className="w-[400px]">
-      <TabList variant="buttons">
-        <Tab value="code">Code</Tab>
-        <Tab value="preview">Preview</Tab>
-        <Tab value="output">Output</Tab>
-      </TabList>
-      <TabContent value="code">
-        <div className="p-4 text-neutral5 font-mono text-sm">const hello = world;</div>
-      </TabContent>
-      <TabContent value="preview">
-        <div className="p-4 text-neutral5">Preview content</div>
-      </TabContent>
-      <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
-      </TabContent>
-    </Tabs>
-  ),
-};
-
 export const TwoTabs: Story = {
   render: () => (
     <Tabs defaultTab="input" className="w-dropdown-max-height">
