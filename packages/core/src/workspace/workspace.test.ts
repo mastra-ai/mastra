@@ -1620,6 +1620,41 @@ Line 3 conclusion`;
 
       await workspace.destroy();
     });
+
+    it('should log warning when search engine indexing fails', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      const searchEngine = (workspace as any)._searchEngine;
+      vi.spyOn(searchEngine, 'index').mockRejectedValue(new Error('embedder failed'));
+
+      // __setLogger is normally called by Mastra; we call it directly for unit testing
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      (workspace as any).__setLogger(mockLogger);
+
+      await workspace.init();
+
+      expect(workspace.status).toBe('ready');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to index file'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+
+      vi.restoreAllMocks();
+      await workspace.destroy();
+    });
   });
 
   // ===========================================================================

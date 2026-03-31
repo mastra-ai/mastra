@@ -236,10 +236,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
+            const error =
+              payload.error instanceof Error
+                ? payload.error
+                : new MastraError(
+                    {
+                      id: 'AGENT_STREAM_ERROR',
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.SYSTEM,
+                      details: { runId },
+                    },
+                    payload.error,
+                  );
             // End the AGENT_RUN span so the trace is exported.
             // Without this, the span is orphaned and exporters that wait
             // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error: payload.error as Error, endSpan: true });
+            agentSpan?.error({ error, endSpan: true });
             return;
           }
 
@@ -276,7 +288,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 error: e,
                 runId,
               });
+
+              const spanError =
+                e instanceof Error
+                  ? e
+                  : new MastraError(
+                      {
+                        id: 'AGENT_ON_FINISH_ERROR',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: { runId },
+                      },
+                      e,
+                    );
+
+              agentSpan?.error({ error: spanError, endSpan: true });
             }
+          } else {
+            agentSpan?.end();
           }
 
           await options?.onFinish?.({
