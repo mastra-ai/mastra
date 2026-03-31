@@ -491,7 +491,30 @@ export class PosthogExporter extends TrackingExporter<
       return [{ role: defaultRole, content: [{ type: 'text', text: data }] }];
     }
 
+    if (this.isSpanOutputWithToolCalls(data)) {
+      const content: PostHogContent[] = [];
+      if (data.text) {
+        content.push({ type: 'text', text: data.text });
+      }
+      for (const tc of data.toolCalls) {
+        content.push({
+          type: 'tool-call',
+          id: tc.toolCallId,
+          function: { name: tc.toolName, arguments: tc.args },
+        });
+      }
+      return [{ role: 'assistant', content }];
+    }
+
     return [{ role: defaultRole, content: [{ type: 'text', text: this.safeStringify(data) }] }];
+  }
+
+  private isSpanOutputWithToolCalls(
+    data: unknown,
+  ): data is { text?: string; toolCalls: Array<{ toolCallId: string; toolName: string; args: unknown }> } {
+    if (typeof data !== 'object' || data === null || !('toolCalls' in data)) return false;
+    const { toolCalls } = data as Record<string, unknown>;
+    return Array.isArray(toolCalls) && toolCalls.length > 0;
   }
 
   private isMessageArray(data: unknown): data is MastraMessage[] {

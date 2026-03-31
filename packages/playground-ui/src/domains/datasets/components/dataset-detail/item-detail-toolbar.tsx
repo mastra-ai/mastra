@@ -1,12 +1,12 @@
 'use client';
 
+import { Pencil, Trash2, XIcon, History, EllipsisVerticalIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
-import { Pencil, Trash2, Copy, ChevronDownIcon, XIcon, History, EllipsisVerticalIcon } from 'lucide-react';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { useLinkComponent } from '@/lib/framework';
-import { Column } from '@/ds/components/Columns';
-import { PrevNextNav } from '@/ds/components/PrevNextNav';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Column } from '@/ds/components/Columns';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ItemDetailToolbarProps {
   datasetId: string;
@@ -41,7 +41,7 @@ export function ItemDetailToolbar({
       <ButtonsGroup>
         {!isEditing && (
           <>
-            <Button href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button href={`/evaluation/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               Versions
             </Button>

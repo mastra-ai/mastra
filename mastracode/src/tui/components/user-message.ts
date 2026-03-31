@@ -4,7 +4,8 @@
 
 import { Container, Markdown, Spacer, visibleWidth } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
-import { BOX_INDENT_STR, getMarkdownTheme, theme } from '../theme.js';
+import chalk from 'chalk';
+import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
 
 /**
  * Strip ANSI escape sequences from a string.
@@ -28,7 +29,7 @@ class BorderedBox {
   }
 
   render(width: number): string[] {
-    const borderColor = (s: string) => theme.fg('border', s);
+    const borderColor = (s: string) => chalk.hex(tintHex(mastra.green, 1))(s);
 
     // Border uses 4 chars: "│ " (2) on left + " │" (2) on right
     // Plus 2 for the "› " prompt prefix on the first line
@@ -59,9 +60,8 @@ class BorderedBox {
 
     const lines: string[] = [];
 
-    // Account for "> " prefix taking 2 chars of inner width
-    const promptPrefix = theme.bold(theme.fg('success', '›')) + ' ';
-    const promptWidth = 2; // "> "
+    const promptPrefix = chalk.hex(tintHex(mastra.green, 1))('»') + ' ';
+    const promptWidth = 2;
 
     // Top border: ╭──...──╮
     lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
@@ -91,8 +91,8 @@ export class UserMessageComponent extends Container {
     super();
 
     const md = new Markdown(text, 0, 0, markdownTheme, {
-      color: (text: string) => theme.bold(theme.fg('text', text)),
-      italic: true,
+      color: (text: string) => theme.fg('text', text),
+      italic: false,
     });
 
     this.addChild(new BorderedBox(md));

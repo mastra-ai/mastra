@@ -238,6 +238,13 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+    isOptional: true,
+  },
+  {
     name: 'heartbeatHandlers',
     type: 'HeartbeatHandler[]',
     description:
@@ -758,7 +765,7 @@ Destroy the workspace and release resources. Only applies to static workspaces â
 await harness.destroyWorkspace()
 ```
 
-### Observational memory
+### Observational Memory
 
 #### `loadOMProgress()`
 
@@ -908,7 +915,7 @@ The harness emits events through registered listeners. The following table lists
 | `workspace_status_changed` | The workspace status changed. |
 | `workspace_ready` | The workspace finished initializing. |
 | `workspace_error` | The workspace encountered an error. |
-| `om_status` | Observational memory status update. |
+| `om_status` | Observational Memory status update. |
 | `om_observation_start` | An observation started. |
 | `om_observation_end` | An observation completed. |
 | `om_reflection_start` | A reflection started. |

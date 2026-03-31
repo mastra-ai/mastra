@@ -1,8 +1,9 @@
+import type { ParsedField } from '@autoform/core';
+import { getLabel } from '@autoform/core';
+import { useAutoForm } from '@autoform/react';
 import React from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 import { CustomAutoFormField } from './custom-auto-form-field';
-import { useAutoForm } from '@autoform/react';
-import { getLabel, ParsedField } from '@autoform/core';
 
 export const CustomArrayField: React.FC<{
   field: ParsedField;

@@ -1,19 +1,19 @@
-import { DynamicForm } from '@/lib/form';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { ZodType } from 'zod';
-import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import type { MCPToolType } from '@mastra/core/mcp';
 import CodeMirror from '@uiw/react-codemirror';
-import { MCPToolType } from '@mastra/core/mcp';
-import { MainContentContent } from '@/ds/components/MainContent';
+import { useState } from 'react';
+import type { ZodType } from 'zod';
 import {
   RequestContextSchemaForm,
   SchemaRequestContextProvider,
   useSchemaRequestContext,
 } from '@/domains/request-context';
+import { ToolInformation } from '@/domains/tools/components/ToolInformation';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { MainContentContent } from '@/ds/components/MainContent';
 import { Tabs, Tab, TabList } from '@/ds/components/Tabs';
-import { useState } from 'react';
+import { DynamicForm } from '@/lib/form';
 import { cn } from '@/lib/utils';
 
 interface ToolExecutorProps {
@@ -47,7 +47,7 @@ const ToolExecutorContent = ({
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r border-border1 w-[20rem] flex flex-col">
+      <div className="bg-surface2 border-r border-border1 w-80 flex flex-col">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
         <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
           <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>

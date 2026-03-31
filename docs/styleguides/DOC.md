@@ -19,14 +19,14 @@ An overview page orients the reader. It answers "what is this category about?" a
 
 ```mdx
 ---
-title: '$TOPIC overview | $CATEGORY'
+title: '$CATEGORY overview'
 description: 'One to two sentences describing what this topic covers.'
 packages:
   - '@mastra/core'
   - '@mastra/<module>'
 ---
 
-# $TOPIC
+# $CATEGORY overview
 
 One to two sentence introduction explaining the core concept. State what it enables and why it matters.
 
@@ -37,7 +37,7 @@ Bulleted list of the key sub-topics in this category. Each item links to the cor
 - [**Sub-topic A**](/docs/$CATEGORY/sub-topic-a): What sub-topic A does.
 - [**Sub-topic B**](/docs/$CATEGORY/sub-topic-b): What sub-topic B does.
 
-## When to use $TOPIC
+## When to use $CATEGORY
 
 Short paragraph or bulleted list of use cases. Help the reader decide if this category is relevant to them and what problems it can solve.
 
@@ -58,7 +58,7 @@ Add H2 sections for cross-cutting concerns that apply to the whole category (e.g
 
 ### Rules
 
-1. **Title format**: Use `"$TOPIC overview | $CATEGORY"` (e.g. `"Memory overview | Memory"`). The part after the pipe is the sidebar category label.
+1. **Title format**: Use `"$CATEGORY overview"` (e.g. `"Memory overview"`).
 2. **Opening paragraph**: One to two sentences only. Explain what the category is and what it enables.
 3. **Sub-topic list**: Use bold linked names followed by a dash and a one-sentence description. Every standard page in the category should be reachable from this list.
 4. **No deep dives**: Keep individual sections short. If you're writing more than two paragraphs about a single sub-topic, move that content to a standard page and link to it instead.
@@ -68,14 +68,14 @@ Add H2 sections for cross-cutting concerns that apply to the whole category (e.g
 
 ```mdx
 ---
-title: 'Memory overview | Memory'
+title: 'Memory overview'
 description: "Learn how Mastra's memory system works with working memory, message history, semantic recall, and observational memory."
 packages:
   - '@mastra/core'
   - '@mastra/memory'
 ---
 
-# Memory
+# Memory overview
 
 Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent and produce better answers over time.
 
@@ -138,7 +138,7 @@ One to two sentence introduction explaining what this feature is and why you wou
 
 Short paragraph or bulleted list of use cases. Help the reader decide whether this page is relevant to them.
 
-## Quick start
+## Quickstart
 
 Minimal working code example showing the feature in action. Include only the essentials — imports, setup, and basic usage.
 
@@ -194,7 +194,7 @@ Use Tabs when the reader can choose between multiple approaches.
 1. **Title format**: Use `"$FEATURE | $CATEGORY"` (e.g. `"Working memory | Memory"`).
 2. **Opening paragraph**: One to two sentences. State what the feature **is** and what it **does**.
 3. **"When to use" section**: Include this when the feature has clear alternatives or when the reader may be unsure if it's the right choice.
-4. **Quick start**: Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
+4. **Quickstart**: Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
 5. **Code examples**: Always include TypeScript code in a fenced block with syntax highlighting. Add a `title` attribute for file paths. Use the `npm2yarn` flag on `bash` blocks for install commands.
 6. **Tabs**: Use `<Tabs>` when the reader must choose between mutually exclusive approaches (e.g. Zod vs JSON Schema, generate vs stream, different providers).
 7. **Steps**: Use `<Steps>` and `<StepItem>` for setup/installation sequences where order matters.

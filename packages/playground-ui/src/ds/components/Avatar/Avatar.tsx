@@ -1,6 +1,6 @@
 import { Txt } from '../Txt';
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
 

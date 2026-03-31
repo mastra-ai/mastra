@@ -1,15 +1,15 @@
-import { MainContentContent } from '@/ds/components/MainContent';
-import { CopyButton } from '@/ds/components/CopyButton';
+import type { McpToolInfo } from '@mastra/client-js';
+import type { ServerInfo } from '@mastra/core/mcp';
+import { useEffect, useRef, useState } from 'react';
+import { useMCPServerTools } from '../hooks/useMCPServerTools';
+import { ToolIconMap } from '@/domains/tools';
 import { Badge } from '@/ds/components/Badge';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { MainContentContent } from '@/ds/components/MainContent';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
-import { ServerInfo } from '@mastra/core/mcp';
 import { useLinkComponent } from '@/lib/framework';
-import { useMCPServerTools } from '../hooks/useMCPServerTools';
-import { useEffect, useRef, useState } from 'react';
-import { ToolIconMap } from '@/domains/tools';
-import { McpToolInfo } from '@mastra/client-js';
-import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 
 export interface MCPDetailProps {
   isLoading: boolean;
@@ -68,10 +68,10 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </Txt>
 
         <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm !text-neutral4">
+          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm text-neutral4!">
             Version
           </Badge>
-          <Badge className="rounded-l-sm !text-neutral4">{server.version_detail.version}</Badge>
+          <Badge className="rounded-l-sm text-neutral4!">{server.version_detail.version}</Badge>
         </div>
 
         <Txt className="text-neutral3 pb-4">

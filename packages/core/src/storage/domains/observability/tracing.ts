@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
 import {
-  contextFields,
+  spanContextFields,
   dateRangeSchema,
   dbTimestamps,
   metadataField,
@@ -70,11 +70,11 @@ const hasChildErrorField = z
 
 /**
  * All optional fields shared between span records and trace filters.
- * Built from contextFields (shared across all signals) plus span-specific metadata/tags.
+ * Built from spanContextFields plus span-specific metadata/tags.
  * Note: When filtering traces, these fields are matched against the root span.
  */
 const sharedFields = {
-  ...contextFields,
+  ...spanContextFields,
   metadata: metadataField.nullish(),
   tags: tagsField.nullish(),
 } as const;

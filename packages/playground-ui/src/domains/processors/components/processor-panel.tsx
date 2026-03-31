@@ -1,15 +1,6 @@
-import { useState, useId, useEffect } from 'react';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { Button } from '@/ds/components/Button';
-import { Badge } from '@/ds/components/Badge';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
-import { MainContentContent } from '@/ds/components/MainContent';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { toast } from '@/lib/toast';
+import { useState, useId, useEffect } from 'react';
 import type {
   ProcessorDetail,
   ProcessorPhase,
@@ -17,6 +8,15 @@ import type {
   ExecuteProcessorResponse,
 } from '../hooks/use-processors';
 import { useProcessor, useExecuteProcessor } from '../hooks/use-processors';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { MainContentContent } from '@/ds/components/MainContent';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { toast } from '@/lib/toast';
 
 export interface ProcessorPanelProps {
   processorId: string;
@@ -176,7 +176,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
               placeholder="Enter a test message..."
               rows={4}
-              className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-none focus:ring-2 focus:ring-accent1"
+              className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
             />
           </div>
 

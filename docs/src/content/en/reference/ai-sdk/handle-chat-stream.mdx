@@ -32,6 +32,7 @@ export async function POST(req: Request) {
     mastra,
     agentId: 'weatherAgent',
     params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
   })
   return createUIMessageStreamResponse({ stream })
 }
@@ -132,6 +133,20 @@ export async function POST(req: Request) {
     description: 'Whether to include source citations in the stream.',
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      'Called when the stream encounters an error. Return the string that will be sent to the client as the error message. Use this to sanitize errors before they reach the client — for example, to prevent internal infrastructure details from leaking to end users.',
+    isOptional: true,
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    description:
+      'A function that receives the current stream part and returns metadata to attach to start and finish chunks. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.',
+    isOptional: true,
   },
 ]}
 />

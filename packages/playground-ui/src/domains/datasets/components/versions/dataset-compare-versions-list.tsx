@@ -1,8 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
+import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { ItemList } from '@/ds/components/ItemList';
-import { Chip, cn } from '@/index';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { ArrowRightIcon, BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
+import { Chip, cn } from '@/index';
 
 export interface DatasetCompareVersionsListProps {
   datasetId: string;
@@ -110,7 +110,7 @@ export function DatasetCompareVersionsList({
                 {status !== 'same' ? (
                   <>
                     {itemA?.datasetVersion ? (
-                      <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="gap-2">
+                      <ItemList.LinkCell href={`/evaluation/datasets/${datasetId}/items/${id}`} className="gap-2">
                         {!itemB && isANewer ? (
                           <VersionInfo variant="added" version={itemA.datasetVersion} />
                         ) : status === 'changed' && isANewer ? (
@@ -128,7 +128,7 @@ export function DatasetCompareVersionsList({
                       </ItemList.Cell>
                     )}
                     {itemB?.datasetVersion ? (
-                      <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="gap-2">
+                      <ItemList.LinkCell href={`/evaluation/datasets/${datasetId}/items/${id}`} className="gap-2">
                         {!itemA && !isANewer ? (
                           <VersionInfo variant="added" version={itemB.datasetVersion} />
                         ) : status === 'changed' && !isANewer ? (
@@ -147,14 +147,17 @@ export function DatasetCompareVersionsList({
                     )}
                   </>
                 ) : (
-                  <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="col-span-2 gap-2">
+                  <ItemList.LinkCell
+                    href={`/evaluation/datasets/${datasetId}/items/${id}`}
+                    className="col-span-2 gap-2"
+                  >
                     <VersionInfo variant="same" version={itemB?.datasetVersion} />
                   </ItemList.LinkCell>
                 )}
 
                 {status === 'changed' ? (
                   <ItemList.LinkCell
-                    href={`/datasets/${datasetId}/items/${id}/versions?ids=${itemA?.datasetVersion},${itemB?.datasetVersion}`}
+                    href={`/evaluation/datasets/${datasetId}/items/${id}/versions?ids=${itemA?.datasetVersion},${itemB?.datasetVersion}`}
                   >
                     Compare
                   </ItemList.LinkCell>

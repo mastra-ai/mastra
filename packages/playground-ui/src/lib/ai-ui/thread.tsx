@@ -1,28 +1,20 @@
-import {
-  ComposerPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-  ToolCallMessagePartComponent,
-  useComposerRuntime,
-} from '@assistant-ui/react';
+import type { MessagePrimitive } from '@assistant-ui/react';
+import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-
-import { IconButton } from '@/ds/components/IconButton';
-import { Avatar } from '@/ds/components/Avatar';
-
-import { AssistantMessage } from './messages/assistant-message';
-import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef, useState } from 'react';
-import { useAutoscroll } from '@/hooks/use-autoscroll';
-
-import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
-import { useThreadInput } from '@/domains/conversation';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
+import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
+import { UserMessage } from './messages/user-messages';
+import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useThreadInput } from '@/domains/conversation';
+import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { Avatar } from '@/ds/components/Avatar';
+import { IconButton } from '@/ds/components/IconButton';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 export interface ThreadProps {
   agentName?: string;
@@ -90,7 +82,7 @@ export interface ThreadWelcomeProps {
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   return (
     <ThreadPrimitive.Empty>
-      <div className="flex w-full flex-grow flex-col items-center pt-[15vh]">
+      <div className="flex w-full grow flex-col items-center pt-[15vh]">
         <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
@@ -105,7 +97,7 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();
@@ -118,12 +110,12 @@ const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: Compo
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
               autoFocus={false}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
               placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
               id=""

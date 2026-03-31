@@ -1184,7 +1184,8 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        const messageInserts = messages.map(message => {
+        // Insert messages sequentially to avoid concurrent queries on the same pg client
+        for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -1195,7 +1196,7 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          return t.none(
+          await t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (id) DO UPDATE SET
@@ -1215,21 +1216,19 @@ export class MemoryPG extends MemoryStorage {
               message.resourceId,
             ],
           );
-        });
+        }
 
+        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const nowStr = new Date().toISOString();
-        const threadUpdate = t.none(
+        await t.none(
           `UPDATE ${threadTableName}
-                        SET
-                            "updatedAt" = $1,
-                            "updatedAtZ" = $2
-                        WHERE id = $3
-                    `,
+            SET
+              "updatedAt" = $1,
+              "updatedAtZ" = $2
+            WHERE id = $3`,
           [nowStr, nowStr, threadId],
         );
-
-        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const messagesWithParsedContent = messages.map(message => {
@@ -1406,10 +1405,10 @@ export class MemoryPG extends MemoryStorage {
         await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
 
         if (threadIds.length > 0) {
-          const updatePromises = threadIds.map(threadId =>
-            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          await t.none(
+            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
           );
-          await Promise.all(updatePromises);
         }
       });
     } catch (error) {
@@ -2550,12 +2549,15 @@ export class MemoryPG extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
-      // Atomic update — include message boundary delimiter for cache stability
+      // Atomic conditional update — the WHERE clause ensures chunks haven't already
+      // been swapped by a concurrent run. If another run cleared the chunks first,
+      // this UPDATE matches 0 rows and we return early with chunksActivated: 0.
+      // Include message boundary delimiter for cache stability.
       const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
-      await this.#db.client.query(
+      const updateResult = await this.#db.client.query(
         `UPDATE ${tableName} SET
-          "activeObservations" = CASE 
-            WHEN "activeObservations" IS NOT NULL AND "activeObservations" != '' 
+          "activeObservations" = CASE
+            WHEN "activeObservations" IS NOT NULL AND "activeObservations" != ''
             THEN "activeObservations" || $10 || $1
             ELSE $1
           END,
@@ -2566,7 +2568,9 @@ export class MemoryPG extends MemoryStorage {
           "lastObservedAtZ" = $6,
           "updatedAt" = $7,
           "updatedAtZ" = $8
-        WHERE id = $9`,
+        WHERE id = $9
+          AND "bufferedObservationChunks" IS NOT NULL
+          AND "bufferedObservationChunks"::text != '[]'`,
         [
           activatedContent,
           activatedTokens,
@@ -2580,6 +2584,17 @@ export class MemoryPG extends MemoryStorage {
           boundary,
         ],
       );
+
+      if (updateResult.rowCount === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

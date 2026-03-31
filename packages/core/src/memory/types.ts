@@ -54,6 +54,8 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Observer-generated thread title */
+  threadTitle?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -547,6 +549,14 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   instruction?: string;
+
+  /**
+   * When enabled, the Observer suggests a short thread title based on the conversation.
+   * The title is updated on the thread whenever the Observer runs.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -727,6 +737,25 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * to raw message history. When enabled, observation groups keep `_range`
+   * metadata visible in context and a `recall` tool is registered so the actor
+   * can inspect raw messages behind a stored observation summary.
+   *
+   * - `true` — recall tool with cross-thread browsing by default
+   * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
+   * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
+   * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   *
+   * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
+   * Set to `'thread'` to restrict to the current thread only.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 }
 
 /**
@@ -1134,6 +1163,12 @@ export type SerializedObservationalMemoryConfig = {
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
 
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
+   * @experimental
+   */
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;
 
@@ -1161,6 +1196,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   blockAfter?: number;
   /** Optional token budget for observer context (0 = full truncation, false = disabled) */
   previousObserverTokens?: number | false;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */
