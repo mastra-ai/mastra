@@ -93,9 +93,14 @@ export function sanitizeV5UIMessages(
           return false;
         }
 
-        // Filter out empty text parts to handle legacy data from before this filtering was implemented
-        // But preserve them if they are the only parts (legitimate placeholder messages)
+        // Filter out empty text parts to handle legacy data from before this filtering was implemented.
+        // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
+        // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
         if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+          // Always filter empty text parts from user messages
+          if (m.role === 'user') return false;
+
+          // For non-user messages, only filter if there are other non-empty parts
           const hasNonEmptyParts = m.parts.some(
             part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
           );
