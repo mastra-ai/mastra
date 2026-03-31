@@ -10,6 +10,62 @@ import type { AIV5Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
+ * Merges text parts that share the same OpenAI itemId.
+ *
+ * When OpenAI streams a response with web search, it interleaves `source` chunks
+ * with text-deltas. If the streaming pipeline flushes text on these source chunks,
+ * it creates multiple text parts all sharing the same `providerMetadata.openai.itemId`.
+ *
+ * When these parts are later converted to model messages, each part with an itemId
+ * becomes an `item_reference` pointing to the same ID, causing OpenAI to reject
+ * the request with: "Duplicate item found with id msg_*"
+ *
+ * This function merges consecutive text parts with the same itemId into a single part,
+ * concatenating their text content and keeping the metadata from the first part.
+ */
+function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
+  const result: T[] = [];
+
+  for (const part of parts) {
+    // Only process text parts with OpenAI itemId
+    if (part.type !== 'text') {
+      result.push(part);
+      continue;
+    }
+
+    const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
+    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
+      | string
+      | undefined;
+    if (!itemId) {
+      result.push(part);
+      continue;
+    }
+
+    // Find an existing text part in result with the same itemId
+    const existingIndex = result.findIndex(p => {
+      if (p.type !== 'text') return false;
+      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
+      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
+      return existingItemId === itemId;
+    });
+
+    if (existingIndex !== -1) {
+      // Merge: concatenate text into the existing part
+      const existing = result[existingIndex] as T & { text: string };
+      result[existingIndex] = {
+        ...existing,
+        text: existing.text + textPart.text,
+      };
+    } else {
+      result.push(part);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
  * Removes messages with empty parts arrays after sanitization.
  */
@@ -129,9 +185,14 @@ export function sanitizeV5UIMessages(
 
       if (!safeParts.length) return false;
 
+      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // This can happen when streaming flushes text multiple times for the same response
+      // (e.g., when source citations are interleaved with text-deltas).
+      const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
+
       const sanitized = {
         ...m,
-        parts: safeParts.map(part => {
+        parts: mergedParts.map(part => {
           // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
           // parts so the SDK sends inline content instead of item_reference. This covers:
           //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
