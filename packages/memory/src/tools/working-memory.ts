@@ -80,7 +80,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
     delete jsonSchema.$schema;
 
-    inputSchema = toStandardSchema({
+    const wrappedSchema = toStandardSchema<{ memory: any }>({
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       description: 'The JSON formatted working memory content to store.',
@@ -89,6 +89,46 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
       },
       required: ['memory'],
     });
+
+    inputSchema = {
+      '~standard': {
+        version: 1,
+        vendor: 'mastra',
+        validate: (value: unknown) => {
+          const wrappedResult = wrappedSchema['~standard'].validate(value);
+
+          if (wrappedResult instanceof Promise) {
+            return wrappedResult.then(result => {
+              if (!('issues' in result) || !result.issues) {
+                return result;
+              }
+
+              if (!value || typeof value !== 'object' || Array.isArray(value) || 'memory' in value) {
+                return result;
+              }
+
+              return wrappedSchema['~standard'].validate({ memory: value });
+            });
+          }
+
+          if (!('issues' in wrappedResult) || !wrappedResult.issues) {
+            return wrappedResult;
+          }
+
+          // Older models, especially AI SDK v4 / LanguageModel v1, sometimes return the
+          // inner memory object without the required top-level `memory` wrapper.
+          if (!value || typeof value !== 'object' || Array.isArray(value) || 'memory' in value) {
+            return wrappedResult;
+          }
+
+          return wrappedSchema['~standard'].validate({ memory: value });
+        },
+        jsonSchema: {
+          input: props => wrappedSchema['~standard'].jsonSchema.input(props),
+          output: props => wrappedSchema['~standard'].jsonSchema.output(props),
+        },
+      },
+    } as StandardSchemaWithJSON<{ memory: any }>;
   }
 
   // For schema-based working memory, we use merge semantics
