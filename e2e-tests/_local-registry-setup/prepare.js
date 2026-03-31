@@ -98,11 +98,7 @@ function cleanup(monorepoDir, resetChanges = false) {
 
 function stripWorkspaceTrustPolicy(monorepoDir) {
   const workspacePath = join(monorepoDir, 'pnpm-workspace.yaml');
-  const trustPolicySettings = [
-    'blockExoticSubdeps',
-    'trustPolicy',
-    'trustPolicyIgnoreAfter',
-  ];
+  const trustPolicySettings = ['blockExoticSubdeps', 'trustPolicy', 'trustPolicyIgnoreAfter'];
 
   try {
     const content = readFileSync(workspacePath, 'utf8');
