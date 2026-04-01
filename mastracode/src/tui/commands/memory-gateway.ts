@@ -58,7 +58,8 @@ function askSelect(
         onSubmit: answer => {
           ctx.state.activeInlineQuestion = undefined;
           const selected = options.find(option => option.label === answer);
-          resolve(selected?.value ?? null);
+          const trimmed = answer.trim();
+          resolve(selected?.value ?? (trimmed.length > 0 ? trimmed : null));
         },
         onCancel: () => {
           ctx.state.activeInlineQuestion = undefined;

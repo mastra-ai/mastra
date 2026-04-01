@@ -166,7 +166,16 @@ export function buildOpenAICodexOAuthFetch(
       (parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions'));
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
-    return fetch(finalUrl, { ...init, headers });
+    try {
+      return await fetch(finalUrl, { ...init, headers });
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        Object.assign(error as Record<string, unknown>, {
+          requestUrl: finalUrl.toString(),
+        });
+      }
+      throw error;
+    }
   }) as typeof fetch;
 }
 

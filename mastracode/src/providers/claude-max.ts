@@ -176,7 +176,16 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
     );
     headers.set('anthropic-version', '2023-06-01');
 
-    return fetch(url, { ...init, headers });
+    try {
+      return await fetch(url, { ...init, headers });
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        Object.assign(error as Record<string, unknown>, {
+          requestUrl: url instanceof URL ? url.toString() : typeof url === 'string' ? url : url.url,
+        });
+      }
+      throw error;
+    }
   }) as typeof fetch;
 }
 

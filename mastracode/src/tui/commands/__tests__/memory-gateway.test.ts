@@ -123,6 +123,25 @@ describe('handleMemoryGatewayCommand', () => {
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
   });
 
+  it('stores a custom gateway URL entered through the selector custom response flow', async () => {
+    const { ctx, authStorage, components } = createCtx();
+    authStorage.getStoredApiKey.mockReturnValue('mg_existing_key');
+
+    const promise = handleMemoryGatewayCommand(ctx);
+
+    expect(components).toHaveLength(1);
+    components[0]!.config.onCancel();
+    await Promise.resolve();
+
+    expect(components).toHaveLength(2);
+    components[1]!.config.onSubmit('https://gateway.example.com');
+    await promise;
+
+    expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'https://gateway.example.com' } });
+    expect(process.env.MASTRA_GATEWAY_URL).toBe('https://gateway.example.com');
+    expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+  });
+
   it('clears stored gateway auth and settings', async () => {
     const { ctx, authStorage, components } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue('mg_existing_key');
