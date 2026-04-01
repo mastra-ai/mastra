@@ -394,21 +394,42 @@ export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
     timestamp: toDate(row.timestamp),
     traceId: row.traceId,
     spanId: nullableString(row.spanId),
+    experimentId: nullableString(row.experimentId),
+    scoreTraceId: nullableString(row.scoreTraceId),
+    entityType: nullableEntityType(row.entityType),
+    entityId: nullableString(row.entityId),
+    entityName: nullableString(row.entityName),
+    parentEntityType: nullableEntityType(row.parentEntityType),
+    parentEntityId: nullableString(row.parentEntityId),
+    parentEntityName: nullableString(row.parentEntityName),
+    rootEntityType: nullableEntityType(row.rootEntityType),
+    rootEntityId: nullableString(row.rootEntityId),
+    rootEntityName: nullableString(row.rootEntityName),
+    userId: nullableString(row.userId),
+    organizationId: nullableString(row.organizationId),
+    resourceId: nullableString(row.resourceId),
+    runId: nullableString(row.runId),
+    sessionId: nullableString(row.sessionId),
+    threadId: nullableString(row.threadId),
+    requestId: nullableString(row.requestId),
+    environment: nullableString(row.environment),
+    executionSource: nullableString(row.executionSource),
+    serviceName: nullableString(row.serviceName),
     scorerId: row.scorerId,
     scorerVersion: nullableString(row.scorerVersion),
-    source: nullableString(row.source),
-    scoreSource: nullableString(row.source),
+    source: nullableString(row.scoreSource) ?? nullableString(row.source),
+    scoreSource: nullableString(row.scoreSource) ?? nullableString(row.source),
     score: Number(row.score),
     reason: nullableString(row.reason),
-    experimentId: nullableString(row.experimentId),
-    organizationId: nullableString(row.organizationId),
-    scoreTraceId: nullableString(row.scoreTraceId),
+    tags: normalizeTags(row.tags),
     metadata: (parseJson(row.metadata) as Record<string, unknown> | null) ?? undefined,
+    scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
   };
 }
 
 export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unknown> {
   const metadata = score.metadata ?? null;
+  const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
     timestamp: toISOString(score.timestamp),
@@ -416,65 +437,130 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
     spanId: score.spanId ?? null,
     experimentId: score.experimentId ?? null,
     scoreTraceId: score.scoreTraceId ?? null,
+    entityType: score.entityType ?? null,
+    entityId: score.entityId ?? null,
+    entityName: score.entityName ?? null,
+    parentEntityType: score.parentEntityType ?? null,
+    parentEntityId: score.parentEntityId ?? null,
+    parentEntityName: score.parentEntityName ?? null,
+    rootEntityType: score.rootEntityType ?? null,
+    rootEntityId: score.rootEntityId ?? null,
+    rootEntityName: score.rootEntityName ?? null,
+    userId: score.userId ?? null,
     organizationId:
       score.organizationId ??
       (typeof (score.metadata as Record<string, unknown> | undefined)?.organizationId === 'string'
         ? ((score.metadata as Record<string, unknown>).organizationId as string)
         : null),
+    resourceId: score.resourceId ?? null,
+    runId: score.runId ?? null,
+    sessionId: score.sessionId ?? null,
+    threadId: score.threadId ?? null,
+    requestId: score.requestId ?? null,
+    environment: score.environment ?? null,
+    executionSource: score.executionSource ?? null,
+    serviceName: score.serviceName ?? null,
     scorerId: score.scorerId,
     scorerVersion: score.scorerVersion ?? null,
-    source: score.scoreSource ?? score.source ?? null,
+    source: scoreSource,
+    scoreSource,
     score: score.score,
     reason: score.reason ?? null,
+    tags: normalizeTags(score.tags),
     metadata: jsonEncode(metadata),
+    scope: jsonEncode(score.scope),
   };
 }
 
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
+  const feedbackSource = nullableString(row.feedbackSource) ?? row.source;
+  const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
     timestamp: toDate(row.timestamp),
     traceId: row.traceId,
     spanId: nullableString(row.spanId),
-    source: row.source,
-    feedbackSource: row.source,
+    experimentId: nullableString(row.experimentId),
+    entityType: nullableEntityType(row.entityType),
+    entityId: nullableString(row.entityId),
+    entityName: nullableString(row.entityName),
+    parentEntityType: nullableEntityType(row.parentEntityType),
+    parentEntityId: nullableString(row.parentEntityId),
+    parentEntityName: nullableString(row.parentEntityName),
+    rootEntityType: nullableEntityType(row.rootEntityType),
+    rootEntityId: nullableString(row.rootEntityId),
+    rootEntityName: nullableString(row.rootEntityName),
+    userId: nullableString(row.userId),
+    organizationId: nullableString(row.organizationId),
+    resourceId: nullableString(row.resourceId),
+    runId: nullableString(row.runId),
+    sessionId: nullableString(row.sessionId),
+    threadId: nullableString(row.threadId),
+    requestId: nullableString(row.requestId),
+    environment: nullableString(row.environment),
+    executionSource: nullableString(row.executionSource),
+    serviceName: nullableString(row.serviceName),
+    feedbackUserId,
+    sourceId: nullableString(row.sourceId),
+    source: feedbackSource,
+    feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),
     comment: nullableString(row.comment),
-    organizationId: nullableString(row.organizationId),
-    experimentId: nullableString(row.experimentId),
-    userId: nullableString(row.userId),
-    feedbackUserId: nullableString(row.userId),
-    sourceId: nullableString(row.sourceId),
+    tags: normalizeTags(row.tags),
     metadata: (parseJson(row.metadata) as Record<string, unknown> | null) ?? undefined,
+    scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
   };
 }
 
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
+  const feedbackSource = feedback.feedbackSource ?? feedback.source;
+  const feedbackUserId =
+    feedback.feedbackUserId ??
+    feedback.userId ??
+    (typeof (feedback.metadata as Record<string, unknown> | undefined)?.userId === 'string'
+      ? ((feedback.metadata as Record<string, unknown>).userId as string)
+      : null);
 
   return {
     timestamp: toISOString(feedback.timestamp),
     traceId: feedback.traceId,
     spanId: feedback.spanId ?? null,
     experimentId: feedback.experimentId ?? null,
-    userId:
-      feedback.feedbackUserId ??
-      feedback.userId ??
-      (typeof (feedback.metadata as Record<string, unknown> | undefined)?.userId === 'string'
-        ? ((feedback.metadata as Record<string, unknown>).userId as string)
-        : null),
-    sourceId: feedback.sourceId ?? null,
+    entityType: feedback.entityType ?? null,
+    entityId: feedback.entityId ?? null,
+    entityName: feedback.entityName ?? null,
+    parentEntityType: feedback.parentEntityType ?? null,
+    parentEntityId: feedback.parentEntityId ?? null,
+    parentEntityName: feedback.parentEntityName ?? null,
+    rootEntityType: feedback.rootEntityType ?? null,
+    rootEntityId: feedback.rootEntityId ?? null,
+    rootEntityName: feedback.rootEntityName ?? null,
+    userId: feedbackUserId,
     organizationId:
       feedback.organizationId ??
       (typeof (feedback.metadata as Record<string, unknown> | undefined)?.organizationId === 'string'
         ? ((feedback.metadata as Record<string, unknown>).organizationId as string)
         : null),
-    source: feedback.feedbackSource ?? feedback.source,
+    resourceId: feedback.resourceId ?? null,
+    runId: feedback.runId ?? null,
+    sessionId: feedback.sessionId ?? null,
+    threadId: feedback.threadId ?? null,
+    requestId: feedback.requestId ?? null,
+    environment: feedback.environment ?? null,
+    executionSource: feedback.executionSource ?? null,
+    serviceName: feedback.serviceName ?? null,
+    feedbackUserId,
+    sourceId: feedback.sourceId ?? null,
+    source: feedbackSource,
+    feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,
     valueNumber: typeof feedback.value === 'number' ? feedback.value : null,
     comment: feedback.comment ?? null,
+    tags: normalizeTags(feedback.tags),
     metadata: jsonEncode(metadata),
+    scope: jsonEncode(feedback.scope),
   };
 }

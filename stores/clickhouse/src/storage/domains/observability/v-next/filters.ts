@@ -114,12 +114,42 @@ function addStringMapFilters(
   }
 }
 
-function addSignalCommonFilters(
-  filters: LogsFilter | MetricsFilter | undefined,
+/**
+ * Adds shared context filter conditions (commonFilterFields) to the output.
+ * Used by logs, metrics, scores, and feedback filter builders.
+ *
+ * The `sourceColumn` parameter controls which CH column the execution source maps to:
+ * - 'source' for logs/metrics (where executionSource → source column)
+ * - 'executionSource' for scores/feedback (which have a dedicated executionSource column)
+ */
+function addCommonFilterFields(
+  filters: {
+    timestamp?: unknown;
+    traceId?: string;
+    spanId?: string;
+    entityType?: string;
+    entityName?: string;
+    parentEntityType?: string;
+    parentEntityName?: string;
+    rootEntityType?: string;
+    rootEntityName?: string;
+    userId?: string;
+    organizationId?: string;
+    experimentId?: string;
+    resourceId?: string;
+    runId?: string;
+    sessionId?: string;
+    threadId?: string;
+    requestId?: string;
+    serviceName?: string;
+    environment?: string;
+    executionSource?: string;
+    tags?: string[];
+  },
   tableAlias: string | undefined,
+  sourceColumn: 'source' | 'executionSource',
   out: FilterResult,
 ): void {
-  if (!filters) return;
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
 
   addDateRange(col('timestamp'), filters.timestamp as DateRange | undefined, 'timestamp', out);
@@ -141,8 +171,23 @@ function addSignalCommonFilters(
   addEq(col('requestId'), filters.requestId, 'requestId', 'String', out);
   addEq(col('serviceName'), filters.serviceName, 'serviceName', 'String', out);
   addEq(col('environment'), filters.environment, 'environment', 'String', out);
-  addEq(col('source'), filters.executionSource ?? filters.source, 'source', 'String', out);
+  addEq(col(sourceColumn), filters.executionSource, 'executionSource', 'String', out);
   addTags(col('tags'), filters.tags, out);
+}
+
+function addSignalCommonFilters(
+  filters: LogsFilter | MetricsFilter | undefined,
+  tableAlias: string | undefined,
+  out: FilterResult,
+): void {
+  if (!filters) return;
+  const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
+
+  addCommonFilterFields(filters, tableAlias, 'source', out);
+  // Legacy: logs/metrics map deprecated `source` filter to the `source` CH column
+  if (!filters.executionSource && filters.source) {
+    addEq(col('source'), filters.source, 'source', 'String', out);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -229,13 +274,13 @@ export function buildScoresFilterConditions(filters: ScoresFilter | undefined, t
   if (!filters) return out;
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
-  addDateRange(col('timestamp'), filters.timestamp as DateRange | undefined, 'timestamp', out);
-  addEq(col('traceId'), filters.traceId, 'traceId', 'String', out);
-  addEq(col('spanId'), filters.spanId, 'spanId', 'String', out);
-  addEq(col('organizationId'), filters.organizationId, 'organizationId', 'String', out);
-  addEq(col('experimentId'), filters.experimentId, 'experimentId', 'String', out);
 
-  addEq(col('source'), filters.scoreSource ?? filters.source, 'scoreSource', 'String', out);
+  // Shared context filters (scores have dedicated executionSource column)
+  addCommonFilterFields(filters, tableAlias, 'executionSource', out);
+
+  // Score-specific filters
+  const scoreSrc = filters.scoreSource ?? filters.source;
+  addEq(col('scoreSource'), scoreSrc, 'scoreSource', 'String', out);
 
   if (typeof filters.scorerId === 'string') {
     addEq(col('scorerId'), filters.scorerId, 'scorerId', 'String', out);
@@ -251,13 +296,17 @@ export function buildFeedbackFilterConditions(filters: FeedbackFilter | undefine
   if (!filters) return out;
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
-  addDateRange(col('timestamp'), filters.timestamp as DateRange | undefined, 'timestamp', out);
-  addEq(col('traceId'), filters.traceId, 'traceId', 'String', out);
-  addEq(col('spanId'), filters.spanId, 'spanId', 'String', out);
-  addEq(col('userId'), filters.feedbackUserId ?? filters.userId, 'userId', 'String', out);
-  addEq(col('organizationId'), filters.organizationId, 'organizationId', 'String', out);
-  addEq(col('experimentId'), filters.experimentId, 'experimentId', 'String', out);
-  addEq(col('source'), filters.feedbackSource ?? filters.source, 'source', 'String', out);
+
+  // Shared context filters (feedback has dedicated executionSource column)
+  addCommonFilterFields(filters, tableAlias, 'executionSource', out);
+
+  // Feedback-specific filters
+  const fbActor = filters.feedbackUserId ?? filters.userId;
+  // feedbackUserId filter targets the dedicated feedbackUserId column
+  addEq(col('feedbackUserId'), fbActor, 'feedbackUserId', 'String', out);
+
+  const fbSource = filters.feedbackSource ?? filters.source;
+  addEq(col('feedbackSource'), fbSource, 'feedbackSource', 'String', out);
 
   if (typeof filters.feedbackType === 'string') {
     addEq(col('feedbackType'), filters.feedbackType, 'feedbackType', 'String', out);

@@ -313,24 +313,53 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   -- Timestamp
   timestamp          DateTime64(3, 'UTC'),
 
-  -- Trace correlation
+  -- IDs
   traceId            String,
   spanId             Nullable(String),
   experimentId       Nullable(String),
   scoreTraceId       Nullable(String),
+
+  -- Entity hierarchy
+  entityType         LowCardinality(Nullable(String)),
+  entityId           Nullable(String),
+  entityName         Nullable(String),
+  parentEntityType   LowCardinality(Nullable(String)),
+  parentEntityId     Nullable(String),
+  parentEntityName   Nullable(String),
+  rootEntityType     LowCardinality(Nullable(String)),
+  rootEntityId       Nullable(String),
+  rootEntityName     Nullable(String),
+
+  -- Context
+  userId             Nullable(String),
   organizationId     Nullable(String),
+  resourceId         Nullable(String),
+  runId              Nullable(String),
+  sessionId          Nullable(String),
+  threadId           Nullable(String),
+  requestId          Nullable(String),
+  environment        LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
+  serviceName        LowCardinality(Nullable(String)),
 
   -- Scorer identity
   scorerId           LowCardinality(String),
   scorerVersion      LowCardinality(Nullable(String)),
   source             LowCardinality(Nullable(String)),
+  scoreSource        LowCardinality(Nullable(String)),
 
   -- Score value
   score              Float64,
 
   -- Information-only
   reason             Nullable(String),
-  metadata           Nullable(String)
+
+  -- Query-relevant flexible fields
+  tags               Array(LowCardinality(String)) DEFAULT [],
+
+  -- Information-only JSON payloads
+  metadata           Nullable(String),
+  scope              Nullable(String)
 )
 ENGINE = MergeTree
 PARTITION BY toDate(timestamp)
@@ -346,18 +375,41 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   -- Timestamp
   timestamp          DateTime64(3, 'UTC'),
 
-  -- Trace correlation
+  -- IDs
   traceId            String,
   spanId             Nullable(String),
   experimentId       Nullable(String),
 
-  -- Feedback context
+  -- Entity hierarchy
+  entityType         LowCardinality(Nullable(String)),
+  entityId           Nullable(String),
+  entityName         Nullable(String),
+  parentEntityType   LowCardinality(Nullable(String)),
+  parentEntityId     Nullable(String),
+  parentEntityName   Nullable(String),
+  rootEntityType     LowCardinality(Nullable(String)),
+  rootEntityId       Nullable(String),
+  rootEntityName     Nullable(String),
+
+  -- Context
   userId             Nullable(String),
-  sourceId           Nullable(String),
   organizationId     Nullable(String),
+  resourceId         Nullable(String),
+  runId              Nullable(String),
+  sessionId          Nullable(String),
+  threadId           Nullable(String),
+  requestId          Nullable(String),
+  environment        LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
+  serviceName        LowCardinality(Nullable(String)),
+
+  -- Feedback actor / linkage
+  feedbackUserId     Nullable(String),
+  sourceId           Nullable(String),
 
   -- Feedback identity
   source             LowCardinality(String),
+  feedbackSource     LowCardinality(Nullable(String)),
   feedbackType       LowCardinality(String),
 
   -- Feedback value (exactly one non-null per valid row)
@@ -366,7 +418,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- Information-only
   comment            Nullable(String),
-  metadata           Nullable(String)
+
+  -- Query-relevant flexible fields
+  tags               Array(LowCardinality(String)) DEFAULT [],
+
+  -- Information-only JSON payloads
+  metadata           Nullable(String),
+  scope              Nullable(String)
 )
 ENGINE = MergeTree
 PARTITION BY toDate(timestamp)

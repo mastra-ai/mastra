@@ -1491,13 +1491,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           experimentId: null,
           scoreSource: 'automated',
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listScores({});
       const match = result.scores.find(s => s.traceId === 'trace-score-src');
       expect(match).toBeDefined();
-      expect((match as any).scoreSource).toBe('automated');
+      expect(match!.scoreSource).toBe('automated');
     });
 
     it('filters scores by scoreSource', async () => {
@@ -1512,7 +1512,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           experimentId: null,
           scoreSource: 'automated',
           metadata: null,
-        } as any,
+        },
       });
       await storage.createScore({
         score: {
@@ -1525,11 +1525,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           experimentId: null,
           scoreSource: 'manual',
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listScores({
-        filters: { scoreSource: 'automated' } as any,
+        filters: { scoreSource: 'automated' },
       });
       expect(result.scores).toHaveLength(1);
       expect(result.scores[0]!.traceId).toBe('trace-ss-1');
@@ -1600,13 +1600,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           feedbackUserId: 'reviewer-1',
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listFeedback({});
-      const match = result.feedback.find((f: any) => f.traceId === 'trace-fbu');
+      const match = result.feedback.find(f => f.traceId === 'trace-fbu');
       expect(match).toBeDefined();
-      expect((match as any).feedbackUserId).toBe('reviewer-1');
+      expect(match!.feedbackUserId).toBe('reviewer-1');
     });
 
     it('filters feedback by feedbackUserId', async () => {
@@ -1623,7 +1623,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           feedbackUserId: 'reviewer-1',
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
       await storage.createFeedback({
         feedback: {
@@ -1638,11 +1638,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           feedbackUserId: 'reviewer-2',
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listFeedback({
-        filters: { feedbackUserId: 'reviewer-1' } as any,
+        filters: { feedbackUserId: 'reviewer-1' },
       });
       expect(result.feedback).toHaveLength(1);
       expect(result.feedback[0]!.traceId).toBe('trace-fbu-f1');
@@ -1662,13 +1662,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           userId: null,
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listFeedback({});
-      const match = result.feedback.find((f: any) => f.traceId === 'trace-fbs');
+      const match = result.feedback.find(f => f.traceId === 'trace-fbs');
       expect(match).toBeDefined();
-      expect((match as any).feedbackSource).toBe('manual');
+      expect(match!.feedbackSource).toBe('manual');
     });
 
     it('filters feedback by feedbackSource', async () => {
@@ -1685,7 +1685,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           userId: null,
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
       await storage.createFeedback({
         feedback: {
@@ -1700,11 +1700,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           userId: null,
           sourceId: null,
           metadata: null,
-        } as any,
+        },
       });
 
       const result = await storage.listFeedback({
-        filters: { feedbackSource: 'manual' } as any,
+        filters: { feedbackSource: 'manual' },
       });
       expect(result.feedback).toHaveLength(1);
       expect(result.feedback[0]!.traceId).toBe('trace-fbs-f1');
@@ -2665,13 +2665,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             data: null,
             executionSource: 'cloud',
             metadata: null,
-          } as any,
+          },
         ],
       });
 
       const result = await storage.listLogs({});
       expect(result.logs).toHaveLength(1);
-      expect((result.logs[0] as any).executionSource).toBe('cloud');
+      expect(result.logs[0]!.executionSource).toBe('cloud');
     });
 
     it('metric executionSource round-trips through CH source column', async () => {
@@ -2683,13 +2683,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             value: 1,
             labels: {},
             executionSource: 'ci',
-          } as any,
+          },
         ],
       });
 
       const result = await storage.listMetrics({ filters: { name: ['exec_source_metric'] } });
       expect(result.metrics).toHaveLength(1);
-      expect((result.metrics[0] as any).executionSource).toBe('ci');
+      expect(result.metrics[0]!.executionSource).toBe('ci');
     });
 
     it('score promotes organizationId from metadata', async () => {
@@ -2818,6 +2818,506 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result).not.toBeNull();
       expect(result!.span.createdAt.getTime()).toBe(startedAt.getTime());
       expect(result!.span.updatedAt).toBeNull();
+    });
+  });
+
+  // ==========================================================================
+  // Scores — OLAP
+  // ==========================================================================
+
+  describe('scores OLAP', () => {
+    beforeEach(async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'olap-s-1',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:05Z'),
+            traceId: 'olap-s-2',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.6,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:10Z'),
+            traceId: 'olap-s-3',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            entityType: EntityType.AGENT,
+            entityName: 'codeAgent',
+            environment: 'staging',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T01:00:00Z'),
+            traceId: 'olap-s-4',
+            spanId: null,
+            scorerId: 'factuality',
+            score: 0.5,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'manual',
+            metadata: null,
+          },
+        ],
+      });
+    });
+
+    it('getScoreAggregate returns avg', async () => {
+      const result = await storage.getScoreAggregate({
+        scorerId: 'quality',
+        aggregation: 'avg',
+      });
+      expect(result.value).toBeCloseTo(0.7667, 2); // (0.8 + 0.6 + 0.9) / 3
+    });
+
+    it('getScoreAggregate returns sum', async () => {
+      const result = await storage.getScoreAggregate({
+        scorerId: 'quality',
+        aggregation: 'sum',
+      });
+      expect(result.value).toBeCloseTo(2.3); // 0.8 + 0.6 + 0.9
+    });
+
+    it('getScoreAggregate returns count', async () => {
+      const result = await storage.getScoreAggregate({
+        scorerId: 'quality',
+        aggregation: 'count',
+      });
+      expect(result.value).toBe(3);
+    });
+
+    it('getScoreAggregate filters by scoreSource', async () => {
+      const result = await storage.getScoreAggregate({
+        scorerId: 'quality',
+        scoreSource: 'automated',
+        aggregation: 'count',
+      });
+      expect(result.value).toBe(3);
+
+      const manualResult = await storage.getScoreAggregate({
+        scorerId: 'factuality',
+        scoreSource: 'manual',
+        aggregation: 'count',
+      });
+      expect(manualResult.value).toBe(1);
+    });
+
+    it('getScoreAggregate supports signal filters', async () => {
+      const result = await storage.getScoreAggregate({
+        scorerId: 'quality',
+        aggregation: 'count',
+        filters: { environment: 'production' },
+      });
+      expect(result.value).toBe(2);
+    });
+
+    it('getScoreBreakdown groups by entityName', async () => {
+      const result = await storage.getScoreBreakdown({
+        scorerId: 'quality',
+        groupBy: ['entityName'],
+        aggregation: 'avg',
+      });
+      expect(result.groups).toHaveLength(2);
+      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+      expect(weather).toBeDefined();
+      expect(weather!.value).toBeCloseTo(0.7); // (0.8 + 0.6) / 2
+      expect(code).toBeDefined();
+      expect(code!.value).toBeCloseTo(0.9);
+    });
+
+    it('getScoreTimeSeries returns bucketed data', async () => {
+      const result = await storage.getScoreTimeSeries({
+        scorerId: 'quality',
+        interval: '1h',
+        aggregation: 'avg',
+      });
+      expect(result.series.length).toBeGreaterThanOrEqual(1);
+      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('getScoreTimeSeries with groupBy returns multi-series', async () => {
+      const result = await storage.getScoreTimeSeries({
+        scorerId: 'quality',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+      expect(result.series.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('getScorePercentiles returns percentile series', async () => {
+      const result = await storage.getScorePercentiles({
+        scorerId: 'quality',
+        percentiles: [0.5, 0.99],
+        interval: '1h',
+      });
+      expect(result.series).toHaveLength(2);
+      const p50 = result.series.find(s => s.percentile === 0.5);
+      expect(p50).toBeDefined();
+      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('getScorePercentiles rejects out-of-range values', async () => {
+      await expect(
+        storage.getScorePercentiles({
+          scorerId: 'quality',
+          percentiles: [1.5],
+          interval: '1h',
+        }),
+      ).rejects.toThrow('Percentile value must be a finite number between 0 and 1');
+    });
+  });
+
+  // ==========================================================================
+  // Feedback — OLAP
+  // ==========================================================================
+
+  describe('feedback OLAP', () => {
+    beforeEach(async () => {
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'olap-f-1',
+            spanId: null,
+            feedbackType: 'thumbs',
+            feedbackSource: 'user',
+            value: 1,
+            comment: null,
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:05Z'),
+            traceId: 'olap-f-2',
+            spanId: null,
+            feedbackType: 'thumbs',
+            feedbackSource: 'user',
+            value: 0,
+            comment: null,
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:10Z'),
+            traceId: 'olap-f-3',
+            spanId: null,
+            feedbackType: 'thumbs',
+            feedbackSource: 'user',
+            value: 1,
+            comment: null,
+            entityType: EntityType.AGENT,
+            entityName: 'codeAgent',
+            environment: 'staging',
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T01:00:00Z'),
+            traceId: 'olap-f-4',
+            spanId: null,
+            feedbackType: 'rating',
+            feedbackSource: 'reviewer',
+            value: 4,
+            comment: null,
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T01:00:05Z'),
+            traceId: 'olap-f-5',
+            spanId: null,
+            feedbackType: 'flag',
+            feedbackSource: 'system',
+            value: 'needs-review',
+            comment: null,
+            metadata: null,
+          },
+        ],
+      });
+    });
+
+    it('getFeedbackAggregate returns sum of numeric values', async () => {
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        aggregation: 'sum',
+      });
+      expect(result.value).toBe(2); // 1 + 0 + 1
+    });
+
+    it('getFeedbackAggregate returns count', async () => {
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        aggregation: 'count',
+      });
+      expect(result.value).toBe(3);
+    });
+
+    it('getFeedbackAggregate returns avg', async () => {
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        aggregation: 'avg',
+      });
+      expect(result.value).toBeCloseTo(0.6667, 2); // (1 + 0 + 1) / 3
+    });
+
+    it('getFeedbackAggregate filters by feedbackSource', async () => {
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'rating',
+        feedbackSource: 'reviewer',
+        aggregation: 'count',
+      });
+      expect(result.value).toBe(1);
+    });
+
+    it('getFeedbackAggregate supports signal filters', async () => {
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        aggregation: 'count',
+        filters: { environment: 'production' },
+      });
+      expect(result.value).toBe(2);
+    });
+
+    it('getFeedbackAggregate excludes string-valued feedback from aggregation', async () => {
+      // The 'flag' feedback with value 'needs-review' should not appear in numeric aggregation
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'flag',
+        aggregation: 'count',
+      });
+      // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
+      expect(result.value).toBe(0);
+    });
+
+    it('getFeedbackBreakdown groups by entityName', async () => {
+      const result = await storage.getFeedbackBreakdown({
+        feedbackType: 'thumbs',
+        groupBy: ['entityName'],
+        aggregation: 'avg',
+      });
+      expect(result.groups.length).toBeGreaterThanOrEqual(2);
+      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+      expect(weather).toBeDefined();
+      expect(weather!.value).toBeCloseTo(0.5); // (1 + 0) / 2
+      expect(code).toBeDefined();
+      expect(code!.value).toBeCloseTo(1.0);
+    });
+
+    it('getFeedbackTimeSeries returns bucketed data', async () => {
+      const result = await storage.getFeedbackTimeSeries({
+        feedbackType: 'thumbs',
+        interval: '1h',
+        aggregation: 'sum',
+      });
+      expect(result.series.length).toBeGreaterThanOrEqual(1);
+      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('getFeedbackTimeSeries with groupBy returns multi-series', async () => {
+      const result = await storage.getFeedbackTimeSeries({
+        feedbackType: 'thumbs',
+        interval: '1h',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+      expect(result.series.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('getFeedbackPercentiles returns percentile series', async () => {
+      const result = await storage.getFeedbackPercentiles({
+        feedbackType: 'thumbs',
+        percentiles: [0.5, 0.99],
+        interval: '1h',
+      });
+      expect(result.series).toHaveLength(2);
+      const p50 = result.series.find(s => s.percentile === 0.5);
+      expect(p50).toBeDefined();
+      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('getFeedbackPercentiles rejects out-of-range values', async () => {
+      await expect(
+        storage.getFeedbackPercentiles({
+          feedbackType: 'thumbs',
+          percentiles: [-0.1],
+          interval: '1h',
+        }),
+      ).rejects.toThrow('Percentile value must be a finite number between 0 and 1');
+    });
+  });
+
+  // ==========================================================================
+  // Broadened Context Fields — Round-trip
+  // ==========================================================================
+
+  describe('broadened context fields round-trip', () => {
+    it('score with full context fields round-trips', async () => {
+      await storage.createScore({
+        score: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'ctx-score-1',
+          spanId: 'ctx-span-1',
+          scorerId: 'quality',
+          score: 0.95,
+          reason: 'excellent',
+          experimentId: 'exp-1',
+          scoreSource: 'automated',
+          entityType: EntityType.AGENT,
+          entityId: 'a-1',
+          entityName: 'myAgent',
+          parentEntityType: EntityType.WORKFLOW_RUN,
+          parentEntityId: 'wf-1',
+          parentEntityName: 'myWorkflow',
+          rootEntityType: EntityType.WORKFLOW_RUN,
+          rootEntityId: 'root-1',
+          rootEntityName: 'rootWorkflow',
+          userId: 'user-1',
+          organizationId: 'org-1',
+          resourceId: 'res-1',
+          runId: 'run-1',
+          sessionId: 'sess-1',
+          threadId: 'thread-1',
+          requestId: 'req-1',
+          environment: 'production',
+          executionSource: 'cloud',
+          serviceName: 'my-service',
+          tags: ['tag1', 'tag2'],
+          metadata: { custom: 'data' },
+          scope: { tenant: 'acme' },
+        },
+      });
+
+      const result = await storage.listScores({});
+      expect(result.scores).toHaveLength(1);
+      const s = result.scores[0]!;
+      expect(s.traceId).toBe('ctx-score-1');
+      expect(s.spanId).toBe('ctx-span-1');
+      expect(s.scorerId).toBe('quality');
+      expect(s.score).toBe(0.95);
+      expect(s.reason).toBe('excellent');
+      expect(s.scoreSource).toBe('automated');
+      expect(s.entityType).toBe('agent');
+      expect(s.entityId).toBe('a-1');
+      expect(s.entityName).toBe('myAgent');
+      expect(s.parentEntityType).toBe('workflow_run');
+      expect(s.parentEntityId).toBe('wf-1');
+      expect(s.parentEntityName).toBe('myWorkflow');
+      expect(s.rootEntityType).toBe('workflow_run');
+      expect(s.rootEntityId).toBe('root-1');
+      expect(s.rootEntityName).toBe('rootWorkflow');
+      expect(s.userId).toBe('user-1');
+      expect(s.organizationId).toBe('org-1');
+      expect(s.resourceId).toBe('res-1');
+      expect(s.runId).toBe('run-1');
+      expect(s.sessionId).toBe('sess-1');
+      expect(s.threadId).toBe('thread-1');
+      expect(s.requestId).toBe('req-1');
+      expect(s.environment).toBe('production');
+      expect(s.executionSource).toBe('cloud');
+      expect(s.serviceName).toBe('my-service');
+      expect(s.tags).toEqual(expect.arrayContaining(['tag1', 'tag2']));
+      expect(s.metadata).toEqual({ custom: 'data' });
+      expect(s.scope).toEqual({ tenant: 'acme' });
+    });
+
+    it('feedback with full context fields round-trips', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'ctx-fb-1',
+          spanId: 'ctx-fb-span-1',
+          feedbackType: 'rating',
+          feedbackSource: 'manual',
+          feedbackUserId: 'reviewer-1',
+          value: 5,
+          comment: 'great job',
+          experimentId: 'exp-1',
+          entityType: EntityType.AGENT,
+          entityId: 'a-1',
+          entityName: 'myAgent',
+          parentEntityType: EntityType.WORKFLOW_RUN,
+          parentEntityId: 'wf-1',
+          parentEntityName: 'myWorkflow',
+          rootEntityType: EntityType.WORKFLOW_RUN,
+          rootEntityId: 'root-1',
+          rootEntityName: 'rootWorkflow',
+          userId: 'reviewer-1',
+          organizationId: 'org-1',
+          resourceId: 'res-1',
+          runId: 'run-1',
+          sessionId: 'sess-1',
+          threadId: 'thread-1',
+          requestId: 'req-1',
+          environment: 'production',
+          executionSource: 'cloud',
+          serviceName: 'my-service',
+          sourceId: 'src-1',
+          tags: ['feedback-tag'],
+          metadata: { category: 'quality' },
+          scope: { org: 'acme' },
+        },
+      });
+
+      const result = await storage.listFeedback({});
+      expect(result.feedback).toHaveLength(1);
+      const f = result.feedback[0]!;
+      expect(f.traceId).toBe('ctx-fb-1');
+      expect(f.spanId).toBe('ctx-fb-span-1');
+      expect(f.feedbackType).toBe('rating');
+      expect(f.feedbackSource).toBe('manual');
+      expect(f.feedbackUserId).toBe('reviewer-1');
+      expect(f.value).toBe(5);
+      expect(f.comment).toBe('great job');
+      expect(f.entityType).toBe('agent');
+      expect(f.entityId).toBe('a-1');
+      expect(f.entityName).toBe('myAgent');
+      expect(f.parentEntityType).toBe('workflow_run');
+      expect(f.parentEntityId).toBe('wf-1');
+      expect(f.parentEntityName).toBe('myWorkflow');
+      expect(f.rootEntityType).toBe('workflow_run');
+      expect(f.rootEntityId).toBe('root-1');
+      expect(f.rootEntityName).toBe('rootWorkflow');
+      expect(f.organizationId).toBe('org-1');
+      expect(f.resourceId).toBe('res-1');
+      expect(f.runId).toBe('run-1');
+      expect(f.sessionId).toBe('sess-1');
+      expect(f.threadId).toBe('thread-1');
+      expect(f.requestId).toBe('req-1');
+      expect(f.environment).toBe('production');
+      expect(f.executionSource).toBe('cloud');
+      expect(f.serviceName).toBe('my-service');
+      expect(f.sourceId).toBe('src-1');
+      expect(f.tags).toEqual(expect.arrayContaining(['feedback-tag']));
+      expect(f.metadata).toEqual({ category: 'quality' });
+      expect(f.scope).toEqual({ org: 'acme' });
     });
   });
 

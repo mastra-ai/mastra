@@ -6,7 +6,7 @@ import {
   aggregatedValueField,
   bucketTimestampField,
   comparePeriodSchema,
-  commonFilterFields,
+  dateRangeSchema,
   experimentIdField,
   contextFields,
   dimensionsField,
