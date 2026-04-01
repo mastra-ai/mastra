@@ -233,6 +233,19 @@ describe('resolveModel', () => {
       });
     });
 
+    it('normalizes Anthropic OAuth model ids to dash-separated names', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('anthropic/claude-opus-4.6');
+
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', { headers: undefined });
+    });
+
     it('reloads auth storage before resolving', () => {
       mockAuthStorageInstance.isLoggedIn.mockImplementation((p: string) => p === 'anthropic');
       resolveModel('anthropic/claude-sonnet-4-20250514');
@@ -383,6 +396,23 @@ describe('resolveModel', () => {
       expect(MastraGateway).not.toHaveBeenCalled();
       expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+    });
+
+    it('normalizes mastra-prefixed anthropic OAuth model ids to dash-separated names', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      const result = resolveModel('mastra/anthropic/claude-opus-4.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(result.modelId).toBe('claude-opus-4-6');
+      expect(MastraGateway).not.toHaveBeenCalled();
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
     it('routes explicit mastra-prefixed openai OAuth model directly with Codex middleware (bypasses ModelRouterLanguageModel)', () => {

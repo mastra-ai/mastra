@@ -140,20 +140,13 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
       value: 'http://localhost:4111',
       description: effectiveUrl === 'http://localhost:4111' ? 'current' : 'local development',
     },
-    {
-      label: 'custom',
-      value: 'custom',
-      description:
-        effectiveUrl !== MEMORY_GATEWAY_DEFAULT_URL && effectiveUrl !== 'http://localhost:4111' ? effectiveUrl : 'enter a URL',
-    },
   ]);
 
   if (urlChoice === null) {
     return;
   }
 
-  const urlAnswer =
-    urlChoice === 'custom' ? await askText(ctx, 'Custom gateway URL', effectiveUrl) : urlChoice;
+  const urlAnswer = urlChoice;
 
   if (urlAnswer && urlAnswer !== MEMORY_GATEWAY_DEFAULT_URL) {
     settings.memoryGateway = { baseUrl: urlAnswer };

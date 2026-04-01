@@ -82,7 +82,7 @@ describe('handleMemoryGatewayCommand', () => {
     mockLoadSettings.mockReturnValue({ memoryGateway: {} });
   });
 
-  it('stores the API key and updates the gateway URL from the custom option', async () => {
+  it('stores the API key and updates the gateway URL from the selected option', async () => {
     const { ctx, authStorage, components } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue(undefined);
 
@@ -93,15 +93,11 @@ describe('handleMemoryGatewayCommand', () => {
     await Promise.resolve();
 
     expect(components).toHaveLength(2);
-    components[1]!.config.onSubmit('custom');
-    await Promise.resolve();
-
-    expect(components).toHaveLength(3);
-    components[2]!.config.onSubmit('https://gateway.example.com');
+    components[1]!.config.onSubmit('http://localhost:4111');
     await promise;
 
     expect(authStorage.setStoredApiKey).toHaveBeenCalledWith('mastra-gateway', 'mg_test_key', 'MASTRA_GATEWAY_API_KEY');
-    expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'https://gateway.example.com' } });
+    expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'http://localhost:4111' } });
     expect(mockGatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
     expect(ctx.showInfo).toHaveBeenLastCalledWith('Memory gateway configured. Memory mode changes take effect on next restart.');
