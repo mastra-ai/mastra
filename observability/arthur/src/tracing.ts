@@ -1,3 +1,4 @@
+import type { InitExporterOptions } from '@mastra/core/observability';
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
@@ -52,6 +53,7 @@ export type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider' | 'export
  */
 export class ArthurExporter extends OtelExporter {
   name = 'arthur';
+  private taskId?: string;
 
   /**
    * @param config - Arthur exporter configuration. All fields are optional when
@@ -119,10 +121,27 @@ export class ArthurExporter extends OtelExporter {
       } satisfies OtelExporterConfig['provider'],
     } satisfies OtelExporterConfig);
 
-    if (!taskId) {
+    this.taskId = taskId;
+  }
+
+  /**
+   * Called after construction with the observability config.
+   * Validates that traces can be routed to a task via either taskId or serviceName.
+   */
+  init(options: InitExporterOptions) {
+    super.init(options);
+
+    const serviceName = options.config?.serviceName;
+
+    if (this.taskId && serviceName) {
       this.logger.warn(
-        `${LOG_PREFIX} No taskId provided. Set ARTHUR_TASK_ID environment variable, pass taskId in config, ` +
-          `or ensure serviceName is set in the observability config to identify traces in Arthur.`,
+        `${LOG_PREFIX} Both taskId and serviceName are set. Arthur Engine will use serviceName to route traces, ` +
+          `ignoring the provided taskId.`,
+      );
+    } else if (!this.taskId && !serviceName) {
+      this.logger.warn(
+        `${LOG_PREFIX} Neither taskId nor serviceName is set. Set ARTHUR_TASK_ID environment variable, ` +
+          `pass taskId in config, or set serviceName in the observability config so Arthur Engine can route traces to a task.`,
       );
     }
   }

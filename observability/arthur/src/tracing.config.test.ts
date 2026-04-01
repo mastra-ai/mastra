@@ -2,21 +2,22 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ArthurExporter } from './tracing';
 
 // Mock OtelExporter to spy on its constructor
-vi.mock('@mastra/otel-exporter', () => ({
-  OtelExporter: vi.fn().mockImplementation(function () {
-    return {
-      exportTracingEvent: vi.fn(),
-      shutdown: vi.fn(),
-      setDisabled: vi.fn(),
-      logger: {
-        warn: vi.fn(),
-        error: vi.fn(),
-        info: vi.fn(),
-        debug: vi.fn(),
-      },
+vi.mock('@mastra/otel-exporter', () => {
+  const OtelExporter = vi.fn().mockImplementation(function (this: any) {
+    this.exportTracingEvent = vi.fn();
+    this.shutdown = vi.fn();
+    this.setDisabled = vi.fn();
+    this.logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
     };
-  }),
-}));
+  });
+  // Add init to prototype so super.init() works
+  OtelExporter.prototype.init = vi.fn();
+  return { OtelExporter };
+});
 
 describe('ArthurExporterConfig', () => {
   beforeEach(() => {
@@ -196,23 +197,52 @@ describe('ArthurExporterConfig', () => {
     );
   });
 
-  it('warns when taskId is not provided', () => {
+  it('warns when neither taskId nor serviceName is provided', () => {
     const exporter = new ArthurExporter({
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
     });
 
+    exporter.init({ config: {} } as any);
+
     expect((exporter as any).logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('No taskId provided'),
+      expect.stringContaining('Neither taskId nor serviceName is set'),
     );
   });
 
-  it('does not warn when taskId is provided via config', () => {
+  it('warns when both taskId and serviceName are provided', () => {
     const exporter = new ArthurExporter({
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
       taskId: 'test-task-id',
     });
+
+    exporter.init({ config: { serviceName: 'my-service' } } as any);
+
+    expect((exporter as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both taskId and serviceName are set'),
+    );
+  });
+
+  it('does not warn when only taskId is provided', () => {
+    const exporter = new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+      taskId: 'test-task-id',
+    });
+
+    exporter.init({ config: {} } as any);
+
+    expect((exporter as any).logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when only serviceName is provided', () => {
+    const exporter = new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+    });
+
+    exporter.init({ config: { serviceName: 'my-service' } } as any);
 
     expect((exporter as any).logger.warn).not.toHaveBeenCalled();
   });
@@ -224,6 +254,8 @@ describe('ArthurExporterConfig', () => {
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
     });
+
+    exporter.init({ config: {} } as any);
 
     expect((exporter as any).logger.warn).not.toHaveBeenCalled();
   });
