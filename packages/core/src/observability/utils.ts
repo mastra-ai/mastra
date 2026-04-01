@@ -173,6 +173,9 @@ export function getEntityTypeForSpan(span: {
   switch (span.spanType) {
     case SpanType.AGENT_RUN:
       return EntityType.AGENT;
+    case SpanType.SCORER_RUN:
+    case SpanType.SCORER_STEP:
+      return EntityType.SCORER;
     case SpanType.WORKFLOW_RUN:
       return EntityType.WORKFLOW_RUN;
     case SpanType.WORKFLOW_STEP:

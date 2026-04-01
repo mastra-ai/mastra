@@ -534,8 +534,15 @@ class MastraScorer<
     };
     const scorerObservabilityContext = createObservabilityContext({ currentSpan: evalSpan });
 
-    const workflow = this.toMastraWorkflow();
-    const workflowRun = await workflow.createRun();
+    let workflow;
+    let workflowRun;
+    try {
+      workflow = this.toMastraWorkflow();
+      workflowRun = await workflow.createRun();
+    } catch (error) {
+      evalSpan?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
     let workflowResult;
     try {
       workflowResult = await executeWithContext({
