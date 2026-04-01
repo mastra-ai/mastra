@@ -1,0 +1,221 @@
+---
+title: "Channels | Agents"
+description: "Learn how to connect your Mastra agents to messaging platforms like Slack, Discord, and Telegram using the Chat SDK."
+packages:
+  - "@mastra/core"
+  - "chat"
+  - "@chat-adapter/slack"
+  - "@chat-adapter/discord"
+  - "@chat-adapter/telegram"
+---
+
+# Channels
+
+Channels connect your agents to messaging platforms like Slack, Discord, and Telegram. When a user sends a message on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation.
+
+## When to use channels
+
+Use channels when you want your agent to:
+
+- Respond to messages in Slack workspaces, Discord servers, or Telegram chats
+- Handle both direct messages and mentions in group conversations
+- Use interactive buttons for tool approval flows
+- Maintain conversation history across platform threads
+
+## Quickstart
+
+Configure channels directly on your agent using adapters from the [Chat SDK](https://github.com/vercel/chat):
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    slack: createSlackAdapter({
+      botToken: process.env.SLACK_BOT_TOKEN,
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+    }),
+  },
+})
+```
+
+Register the agent in your Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { supportAgent } from './agents/support-agent'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+})
+```
+
+Mastra automatically generates webhook routes for each channel at `/api/agents/{agentId}/channels/{platform}/webhook`. Point your platform's webhook configuration to this URL.
+
+## Multiple platforms
+
+An agent can connect to multiple platforms simultaneously:
+
+```typescript title="src/mastra/agents/multi-platform-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { createTelegramAdapter } from '@chat-adapter/telegram'
+
+export const multiPlatformAgent = new Agent({
+  id: 'multi-platform-agent',
+  name: 'Multi-Platform Agent',
+  instructions: 'You are a helpful assistant available on multiple platforms.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    slack: createSlackAdapter({
+      botToken: process.env.SLACK_BOT_TOKEN,
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+    }),
+    discord: createDiscordAdapter({
+      botToken: process.env.DISCORD_BOT_TOKEN,
+      publicKey: process.env.DISCORD_PUBLIC_KEY,
+    }),
+    telegram: createTelegramAdapter({
+      botToken: process.env.TELEGRAM_BOT_TOKEN,
+    }),
+  },
+  channelOptions: {
+    gateway: true, // Enable persistent connections (e.g., Discord Gateway)
+  },
+})
+```
+
+## Channel options
+
+Configure channel behavior with `channelOptions`:
+
+```typescript
+const agent = new Agent({
+  // ...
+  channelOptions: {
+    gateway: true, // Enable WebSocket connections for platforms that support it
+    cards: true, // Use rich cards for tool calls (default: true)
+  },
+})
+```
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `gateway` | `boolean` | `false` | Enable persistent WebSocket connections (e.g., Discord Gateway) |
+| `cards` | `boolean` | `true` | Render tool calls as interactive cards with buttons |
+
+### Disabling cards
+
+Set `cards: false` to render tool calls as plain text instead of rich cards. This is useful for platforms with limited card support or when you want simpler output:
+
+```typescript
+const agent = new Agent({
+  // ...
+  channelOptions: {
+    cards: false,
+  },
+})
+```
+
+When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide whether to proceed based on the conversation context.
+
+## Tool approval
+
+Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+
+const deleteFile = createTool({
+  id: 'delete-file',
+  description: 'Delete a file from the system',
+  inputSchema: z.object({
+    path: z.string().describe('Path to the file to delete'),
+  }),
+  requireApproval: true,
+  execute: async ({ context }) => {
+    await fs.unlink(context.path)
+    return { deleted: context.path }
+  },
+})
+```
+
+When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
+
+## Thread subscriptions
+
+By default, agents respond to direct messages and mentions. To have an agent follow an entire thread (responding to all messages, not just mentions), use thread subscriptions.
+
+The agent can subscribe to threads programmatically, and subscriptions persist across restarts when storage is configured.
+
+## Multi-user awareness
+
+In group conversations, the agent automatically prefixes each message with the sender's name and platform mention ID. This helps the agent distinguish between different speakers and address them appropriately.
+
+For example, in a Slack thread with multiple users, the agent sees messages like:
+
+```
+[Alice (@U123ABC)]: Can you help me with this?
+[Bob (@U456DEF)]: I have a question too.
+```
+
+## Platform setup
+
+Each platform requires specific configuration. See the Chat SDK documentation for detailed setup instructions:
+
+- [Slack adapter](https://github.com/vercel/chat/tree/main/packages/adapter-slack)
+- [Discord adapter](https://github.com/vercel/chat/tree/main/packages/adapter-discord)
+- [Telegram adapter](https://github.com/vercel/chat/tree/main/packages/adapter-telegram)
+
+### Slack
+
+1. Create a Slack app at [api.slack.com](https://api.slack.com/apps)
+1. Enable Event Subscriptions and subscribe to `message.channels`, `message.groups`, `message.im`, and `app_mention`
+1. Add OAuth scopes: `chat:write`, `channels:history`, `groups:history`, `im:history`, `users:read`
+1. Install the app to your workspace
+1. Set your webhook URL to `/api/agents/{agentId}/channels/slack/webhook`
+
+### Discord
+
+1. Create a Discord application at [discord.com/developers](https://discord.com/developers/applications)
+1. Enable the bot and get the bot token
+1. Enable "Message Content Intent" in the Bot settings
+1. For webhooks, set the Interactions Endpoint URL to `/api/agents/{agentId}/channels/discord/webhook`
+1. For Gateway mode, set `gateway: true` in `channelOptions`
+
+### Telegram
+
+1. Create a bot with [@BotFather](https://t.me/botfather)
+1. Get the bot token
+1. Set your webhook URL using the Telegram Bot API:
+   ```
+   https://api.telegram.org/bot<token>/setWebhook?url=<your-url>/api/agents/{agentId}/channels/telegram/webhook
+   ```
+
+## Storage
+
+When Mastra storage is configured, thread subscriptions and mappings persist across restarts. Without storage, the agent uses in-memory state and subscriptions are lost on restart.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL,
+  }),
+})
+```
+
+## Related
+
+- [Agent overview](/docs/agents/overview)
+- [Tool approval](/docs/agents/agent-approval)
+- [Chat SDK documentation](https://github.com/vercel/chat)
