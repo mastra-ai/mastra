@@ -7,12 +7,13 @@ description: "Use Cloudflare Workers AI models with Mastra. 42 models available.
 
 # <img src="https://models.dev/logos/cloudflare-workers-ai.svg" alt="Cloudflare Workers AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cloudflare Workers AI
 
-Access 42 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_ACCOUNT_ID` environment variable.
+Access 42 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_KEY` environment variable. Configure `CLOUDFLARE_ACCOUNT_ID` as well.
 
 Learn more in the [Cloudflare Workers AI documentation](https://developers.cloudflare.com/workers-ai/models/).
 
 ```bash title=".env"
-CLOUDFLARE_ACCOUNT_ID=your-api-key
+CLOUDFLARE_ACCOUNT_ID=your-account-id
+CLOUDFLARE_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
@@ -563,7 +564,7 @@ const agent = new Agent({
   model: {
     url: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
     id: "cloudflare-workers-ai/@cf/ai4bharat/indictrans2-en-indic-1B",
-    apiKey: process.env.CLOUDFLARE_ACCOUNT_ID,
+    apiKey: process.env.CLOUDFLARE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
     }

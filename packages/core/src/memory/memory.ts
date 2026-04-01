@@ -191,6 +191,22 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
       if (config.embedderOptions) {
         this.embedderOptions = config.embedderOptions;
       }
+    } else {
+      // Even without semanticRecall, store vector/embedder if provided
+      // (used by retrieval search in observational memory)
+      if (config.vector) {
+        this.vector = config.vector;
+      }
+      if (config.embedder) {
+        if (typeof config.embedder === 'string') {
+          this.embedder = new ModelRouterEmbeddingModel(config.embedder);
+        } else {
+          this.embedder = config.embedder;
+        }
+      }
+      if (config.embedderOptions) {
+        this.embedderOptions = config.embedderOptions;
+      }
     }
   }
 

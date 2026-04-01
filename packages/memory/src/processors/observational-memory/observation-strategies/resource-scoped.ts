@@ -52,6 +52,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   get needsReflection() {
     return true;
   }
+  get rethrowOnFailure() {
+    return true;
+  }
 
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;
@@ -240,6 +243,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.abortSignal,
           this.opts.requestContext,
           this.priorMetadataByThread,
+          this.opts.observabilityContext,
         );
       }),
     );
@@ -337,7 +341,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   }
 
   async persist(processed: ProcessedObservation) {
-    const { record } = this.opts;
+    const { record, resourceId } = this.opts;
     const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
 
     if (processed.threadMetadataUpdates) {
@@ -385,6 +389,19 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       lastObservedAt: processed.lastObservedAt,
       observedMessageIds: processed.observedMessageIds,
     });
+
+    if (resourceId) {
+      await Promise.all(
+        this.observationResults.map(({ threadId, threadMessages, result }) =>
+          this.indexObservationGroups(
+            result.observations,
+            threadId,
+            resourceId,
+            this.getMaxMessageTimestamp(threadMessages),
+          ),
+        ),
+      );
+    }
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

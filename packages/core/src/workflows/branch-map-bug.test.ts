@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
+import { Mastra } from '../mastra';
+import { MockStore } from '../storage/mock';
 import { createStep, createWorkflow } from './workflow';
 
 vi.mock('crypto', () => {
@@ -80,5 +82,69 @@ describe('Branch with Map Bug - Issue #10407', () => {
     if (workflowAResult.status === 'success') {
       expect(workflowAResult.output.result).toBe('Processed value: 15');
     }
+  });
+
+  it('should include nested workflow steps in getWorkflowRunById for branch sub-workflows', async () => {
+    const schema = z.object({ route: z.string(), value: z.string() });
+
+    const stepA = createStep({
+      id: 'step-a',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const stepB = createStep({
+      id: 'step-b',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const branchAlpha = createWorkflow({
+      id: 'branch-alpha',
+      inputSchema: schema,
+      outputSchema: schema,
+    })
+      .then(stepA)
+      .then(stepB)
+      .commit();
+
+    const preStep = createStep({
+      id: 'pre-step',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const mainWorkflow = createWorkflow({
+      id: 'branched-workflow',
+      inputSchema: schema,
+      outputSchema: schema,
+    })
+      .then(preStep)
+      .branch([[async ({ inputData }) => inputData.route === 'alpha', branchAlpha]])
+      .commit();
+
+    const storage = new MockStore();
+    new Mastra({
+      workflows: { branchedWorkflow: mainWorkflow },
+      storage,
+      logger: false,
+    });
+
+    const run = await mainWorkflow.createRun();
+    await run.start({ inputData: { route: 'alpha', value: 'hello' } });
+
+    const polled = await mainWorkflow.getWorkflowRunById(run.runId, {
+      withNestedWorkflows: true,
+      fields: ['steps'],
+    });
+
+    const stepKeys = Object.keys(polled?.steps ?? {});
+    expect(stepKeys).toContain('pre-step');
+    expect(stepKeys).toContain('branch-alpha');
+    expect(stepKeys).toContain('branch-alpha.step-a');
+    expect(stepKeys).toContain('branch-alpha.step-b');
   });
 });

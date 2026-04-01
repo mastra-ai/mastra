@@ -1,19 +1,23 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
-import { afterAll, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless, type PackContext } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
+
+const REMINDER_TEXT =
+  'When using guidance from a discovered instruction file, mention the instruction file you used and how it affected your response.';
 
 /**
  * Creates a mock stream that produces a text response.
@@ -62,6 +66,22 @@ function createToolCallStream(toolName: string, args: string) {
         providerExecuted: false,
       });
       controller.enqueue({
+        type: 'step-finish',
+        id: 'step-1',
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        providerMetadata: undefined,
+        warnings: [],
+        isContinued: false,
+        request: {},
+        response: {
+          id: 'resp-1',
+          modelId: 'mock',
+          timestamp: new Date(0),
+        },
+        logprobs: undefined,
+      });
+      controller.enqueue({
         type: 'finish',
         finishReason: 'tool-calls',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
@@ -71,28 +91,44 @@ function createToolCallStream(toolName: string, args: string) {
   });
 }
 
+const tempStorePaths: string[] = [];
+
+afterEach(() => {
+  for (const storePath of tempStorePaths.splice(0)) {
+    rmSync(storePath, { force: true, recursive: true });
+  }
+});
+
 function createHarnessWithAgent(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   tools?: Record<string, any>;
+  inputProcessors?: any[];
+  outputProcessors?: any[];
 }) {
   const agent = new Agent({
     id: 'test-agent',
     name: 'Test Agent',
     instructions: 'You are a test agent.',
-    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }),
+    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
     tools: opts.tools ?? {},
+    inputProcessors: opts.inputProcessors ?? [],
+    outputProcessors: opts.outputProcessors ?? [],
   });
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-'));
+  const storePath = join(tempDir, 'test.db');
+  tempStorePaths.push(storePath, tempDir);
 
   const storage = new LibSQLStore({
     id: 'test-store',
-    url: 'file::memory:?cache=shared',
+    url: `file:${storePath}`,
   });
 
   const harness = new Harness({
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
-    initialState: { yolo: true },
+    initialState: { yolo: true } as any,
   });
 
   return harness;
@@ -108,7 +144,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'Say hello' });
 
@@ -147,7 +185,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'Read test.txt' });
 
@@ -166,7 +206,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'Do something' });
 
@@ -206,7 +248,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     // Fire-and-forget (same pattern as headless mode)
     const sendPromise = harness.sendMessage({ content: 'Do something slow' });
@@ -232,15 +276,86 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(agentEnd).toBeDefined();
     expect(agentEnd.reason).toBe('aborted');
   });
-});
 
-const tempStorePaths: string[] = [];
-afterAll(() => {
-  for (const p of tempStorePaths) {
-    try {
-      rmSync(p, { recursive: true, force: true });
-    } catch {}
-  }
+  it('AgentsMDInjector persists a system reminder after instruction-file tool usage', async () => {
+    const tempProjectDir = mkdtempSync(join(tmpdir(), 'mastracode-reminder-project-'));
+    tempStorePaths.push(tempProjectDir);
+    const instructionDir = join(tempProjectDir, 'src', 'agents', 'nested');
+    const instructionPath = join(instructionDir, 'AGENTS.md');
+    const instructionContents = '# nested instructions';
+
+    mkdirSync(instructionDir, { recursive: true });
+    writeFileSync(instructionPath, instructionContents, 'utf-8');
+
+    const reminderProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+    });
+
+    const mockExecute = vi.fn().mockResolvedValue({ content: instructionContents });
+    const readFileTool = createTool({
+      id: 'readFile',
+      description: 'Read a file',
+      inputSchema: z.object({ path: z.string() }),
+      execute: async input => mockExecute(input),
+    });
+
+    let callCount = 0;
+    const harness = createHarnessWithAgent({
+      doStream: async () => {
+        callCount++;
+        return {
+          stream:
+            callCount === 1
+              ? createToolCallStream('readFile', JSON.stringify({ path: instructionPath }))
+              : createTextStream('I used the nested AGENTS.md instructions.'),
+        };
+      },
+      tools: { readFile: readFileTool },
+      inputProcessors: [reminderProcessor],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.sendMessage({ content: 'Check the nested instructions' });
+
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+
+    const reminderUpdates = events.filter(
+      (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    const persistedReminderMessages = reminderUpdates.filter(event =>
+      event.message.content.some(
+        part =>
+          part.type === 'system_reminder' &&
+          part.reminderType === 'dynamic-agents-md' &&
+          part.path === instructionPath &&
+          part.message === instructionContents,
+      ),
+    );
+
+    expect(persistedReminderMessages.length).toBeGreaterThan(0);
+
+    const finalMessageEnd = [...events]
+      .reverse()
+      .find((event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end');
+
+    expect(finalMessageEnd).toBeDefined();
+    expect(
+      finalMessageEnd?.message.content.some(
+        part =>
+          part.type === 'system_reminder' &&
+          part.reminderType === 'dynamic-agents-md' &&
+          part.path === instructionPath &&
+          part.message === instructionContents,
+      ),
+    ).toBe(true);
+  });
 });
 
 function createHarnessWithModels(opts: {

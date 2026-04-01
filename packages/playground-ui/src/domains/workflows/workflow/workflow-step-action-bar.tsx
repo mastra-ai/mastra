@@ -110,7 +110,7 @@ export const WorkflowStepActionBar = ({
     return undefined;
   }, [stepKey, stepsFlow, inDebugMode, result]);
 
-  const showDebugMode = inDebugMode && stepPayload && !result?.steps[stepKey];
+  const showDebugMode = inDebugMode && stepPayload && !result?.steps?.[stepKey];
 
   // Check if this step's detail is currently open
   const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
