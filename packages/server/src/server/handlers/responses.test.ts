@@ -320,6 +320,7 @@ describe('Responses Handlers', () => {
             type: 'object',
             additionalProperties: true,
           },
+          jsonPromptInjection: true,
         },
       }),
     );
@@ -401,6 +402,7 @@ describe('Responses Handlers', () => {
             type: 'object',
             additionalProperties: true,
           },
+          jsonPromptInjection: true,
         },
       }),
     );

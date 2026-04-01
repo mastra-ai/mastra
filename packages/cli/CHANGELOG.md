@@ -1,5 +1,13 @@
 # mastra
 
+## 1.3.19-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+  - @mastra/deployer@1.21.0-alpha.1
+
 ## 1.3.19-alpha.0
 
 ### Patch Changes
