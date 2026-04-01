@@ -1,5 +1,141 @@
 # mastra
 
+## 1.3.18
+
+### Patch Changes
+
+- Added Logs page to Studio. Browse server logs with date range filtering, text search, and column-based filters. Click any log to see its full message, metadata, and navigate to related traces and spans. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Added missing `/logs` route to the playground and wired up logs filtering with date presets and the new `SelectDataFilter` component. Removed experimental UI variant gating from sidebar. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0
+  - @mastra/deployer@1.20.0
+
+## 1.3.18-alpha.0
+
+### Patch Changes
+
+- Added Logs page to Studio. Browse server logs with date range filtering, text search, and column-based filters. Click any log to see its full message, metadata, and navigate to related traces and spans. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Added missing `/logs` route to the playground and wired up logs filtering with date presets and the new `SelectDataFilter` component. Removed experimental UI variant gating from sidebar. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+  - @mastra/deployer@1.20.0-alpha.0
+
+## 1.3.17
+
+### Patch Changes
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599), [`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.19.0
+  - @mastra/deployer@1.19.0
+
+## 1.3.17-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57)]:
+  - @mastra/core@1.19.0-alpha.2
+  - @mastra/deployer@1.19.0-alpha.2
+
+## 1.3.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.18.1-alpha.1
+  - @mastra/deployer@1.18.1-alpha.1
+
+## 1.3.17-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599)]:
+  - @mastra/core@1.18.1-alpha.0
+  - @mastra/deployer@1.18.1-alpha.0
+
+## 1.3.16
+
+### Patch Changes
+
+- Fixed `--no-example` flag being ignored when `--default` is also passed to `create-mastra`. Previously, running `create-mastra --default --no-example` would always scaffold the weather agent example. Now `--no-example` correctly suppresses example files even when using `--default`. ([#14839](https://github.com/mastra-ai/mastra/pull/14839))
+
+- During `create-mastra`, skip the git initialization question if the current directory is already a git repository. ([#14763](https://github.com/mastra-ai/mastra/pull/14763))
+
+- Fixed overflow scrolling on Primitives, Observability Overview, and Resources pages so content is scrollable when it exceeds the viewport. ([#14858](https://github.com/mastra-ai/mastra/pull/14858))
+
+- Removed experimental UI variant gating from entity list pages. Agents, Workflows, Tools, MCP Servers, Processors, and Prompts pages now always render the new EntityListPageLayout, replacing the legacy MainContentLayout. ([#14833](https://github.com/mastra-ai/mastra/pull/14833))
+
+- Finished light mode support for Mastra Studio. Theme selector is now always visible in settings — no environment variable needed. CodeMirror editors (instructions, trace view, code diff) render with proper syntax highlighting and cursor visibility in both light and dark modes. Dropdown menus now have correct hover/focus states in light mode. ([#14796](https://github.com/mastra-ai/mastra/pull/14796))
+
+- Restructured Studio sidebar navigation into section-based layout with overview pages. ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+  - **Section headers**: Sidebar now groups links under "Primitives", "Evaluation", and "Observability" section headers. Headers are clickable and link to overview pages.
+  - **Sub-link indentation**: Links within each section are visually indented when the sidebar is expanded.
+  - **Overview pages**: New overview pages for Primitives (`/primitives`), Observability (`/observability-overview`), and Resources (`/resources`) showing clickable cards for each sub-section.
+  - **Evaluation tab bar removed**: Scorers, Datasets, and Experiments are now navigated via sidebar sub-links instead of in-page tabs.
+  - **Layout cleanup**: Removed grey `bg-surface2` panel styling from the main content area, applying the dark background universally. Cleaned up experimental UI gating code.
+  - **Sidebar bottom**: Removed "Share" button (moved to Resources page) and "Templates" link. Sidebar bottom now only shows the version footer.
+
+- - Add DuckDB to `create-mastra` example code. Observability storage will use it instead of LibSQL so that "metrics" work ([#14725](https://github.com/mastra-ai/mastra/pull/14725))
+  - Improved API key security in create-mastra example by masking input with `*` characters
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`4e7f4e6`](https://github.com/mastra-ai/mastra/commit/4e7f4e6fe6239e0aa5f15416fb1e8ad8e9c52bcf), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`a917d2b`](https://github.com/mastra-ai/mastra/commit/a917d2bdd3493434a0fe6c06b8c073388e9b1281), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`c40d0dd`](https://github.com/mastra-ai/mastra/commit/c40d0dd55890425e0a108db227711a0fffa80722), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`b879d6d`](https://github.com/mastra-ai/mastra/commit/b879d6db5bcf5a69cdf0ed6c4ccb42e4d0149215), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0
+  - @mastra/deployer@1.18.0
+  - @mastra/loggers@1.1.0
+
+## 1.3.16-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a)]:
+  - @mastra/core@1.18.0-alpha.5
+  - @mastra/deployer@1.18.0-alpha.5
+
+## 1.3.16-alpha.7
+
+### Patch Changes
+
+- Fixed `--no-example` flag being ignored when `--default` is also passed to `create-mastra`. Previously, running `create-mastra --default --no-example` would always scaffold the weather agent example. Now `--no-example` correctly suppresses example files even when using `--default`. ([#14839](https://github.com/mastra-ai/mastra/pull/14839))
+
+- Fixed overflow scrolling on Primitives, Observability Overview, and Resources pages so content is scrollable when it exceeds the viewport. ([#14858](https://github.com/mastra-ai/mastra/pull/14858))
+
+- Removed experimental UI variant gating from entity list pages. Agents, Workflows, Tools, MCP Servers, Processors, and Prompts pages now always render the new EntityListPageLayout, replacing the legacy MainContentLayout. ([#14833](https://github.com/mastra-ai/mastra/pull/14833))
+
+- Finished light mode support for Mastra Studio. Theme selector is now always visible in settings — no environment variable needed. CodeMirror editors (instructions, trace view, code diff) render with proper syntax highlighting and cursor visibility in both light and dark modes. Dropdown menus now have correct hover/focus states in light mode. ([#14796](https://github.com/mastra-ai/mastra/pull/14796))
+
+- Updated dependencies [[`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`b879d6d`](https://github.com/mastra-ai/mastra/commit/b879d6db5bcf5a69cdf0ed6c4ccb42e4d0149215), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85)]:
+  - @mastra/core@1.18.0-alpha.4
+  - @mastra/deployer@1.18.0-alpha.4
+
+## 1.3.16-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0-alpha.3
+  - @mastra/deployer@1.18.0-alpha.3
+
+## 1.3.16-alpha.5
+
+### Patch Changes
+
+- During `create-mastra`, skip the git initialization question if the current directory is already a git repository. ([#14763](https://github.com/mastra-ai/mastra/pull/14763))
+
+- Updated dependencies [[`4e7f4e6`](https://github.com/mastra-ai/mastra/commit/4e7f4e6fe6239e0aa5f15416fb1e8ad8e9c52bcf), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`c40d0dd`](https://github.com/mastra-ai/mastra/commit/c40d0dd55890425e0a108db227711a0fffa80722)]:
+  - @mastra/deployer@1.18.0-alpha.2
+  - @mastra/core@1.18.0-alpha.2
+  - @mastra/loggers@1.1.0-alpha.0
+
 ## 1.3.16-alpha.4
 
 ### Patch Changes

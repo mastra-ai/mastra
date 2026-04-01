@@ -36,6 +36,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -77,7 +78,7 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 };
 
 function normalizeObservationalMemoryConfig(
@@ -129,6 +130,21 @@ export class Memory extends MastraMemory {
       observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
     this.threadConfig = mergedConfig;
+
+    // Validate retrieval vector config at construction time
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    if (omConfig?.retrieval && typeof omConfig.retrieval === 'object' && omConfig.retrieval.vector) {
+      if (!this.vector) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires a vector store. Pass a `vector` option to your Memory instance.',
+        );
+      }
+      if (!this.embedder) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires an embedder. Pass an `embedder` option to your Memory instance.',
+        );
+      }
+    }
   }
 
   /**
@@ -231,7 +247,7 @@ export class Memory extends MastraMemory {
     }[] = [];
 
     // Log memory recall parameters, excluding potentially large schema objects
-    this.logger.debug(`Memory recall() with:`, {
+    this.logger.debug('Memory recall', {
       threadId,
       perPage,
       page,
@@ -476,12 +492,12 @@ export class Memory extends MastraMemory {
               filter: { thread_id: threadId },
             });
           } catch {
-            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
+            this.logger.debug('Failed to delete vectors for thread, skipping', { threadId, indexName });
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
+      this.logger.debug('Failed to clean up vectors for thread', { threadId });
     }
   }
 
@@ -746,7 +762,10 @@ ${workingMemory}`;
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
     const cached = this.embeddingCache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
+      return cached;
+    }
     const chunks = this.chunkText(content);
 
     if (typeof this.embedder === `undefined`) {
@@ -1279,12 +1298,26 @@ ${workingMemory}`;
 
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
+    const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
+      ? async (observation: {
+          text: string;
+          groupId: string;
+          range: string;
+          threadId: string;
+          resourceId: string;
+          observedAt?: Date;
+        }) => {
+          await this.indexObservation(observation);
+        }
+      : undefined;
+
     return new OMClass({
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      onIndexObservations,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -1456,6 +1489,258 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  private getObservationEmbeddingIndexName(dimensions?: number): string {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}observations${separator}${usedDimensions}`;
+  }
+
+  private async createObservationEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const indexName = this.getObservationEmbeddingIndexName(dimensions);
+
+    if (typeof this.vector === `undefined`) {
+      throw new Error(
+        `Tried to create observation embedding index but no vector db is attached to this Memory instance.`,
+      );
+    }
+
+    await this.vector.createIndex({
+      indexName,
+      dimension: usedDimensions,
+    } as any);
+
+    return { indexName };
+  }
+
+  /**
+   * Search observation groups across threads by semantic similarity.
+   * Requires a vector store and embedder to be configured.
+   */
+  public async searchMessages({
+    query,
+    resourceId,
+    topK = 10,
+    filter,
+  }: {
+    query: string;
+    resourceId: string;
+    topK?: number;
+    filter?: {
+      threadId?: string;
+      observedAfter?: Date;
+      observedBefore?: Date;
+    };
+  }): Promise<{
+    results: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+      observedAt?: Date;
+    }>;
+  }> {
+    if (!this.vector) {
+      throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
+    }
+
+    const { embeddings, dimension } = await this.embedMessageContent(query);
+    const { indexName } = await this.createObservationEmbeddingIndex(dimension);
+
+    const vectorFilter: VectorFilter = { resource_id: resourceId };
+    if (filter?.threadId) {
+      vectorFilter.thread_id = filter.threadId;
+    }
+    if (filter?.observedAfter || filter?.observedBefore) {
+      vectorFilter.observed_at = {
+        ...(filter.observedAfter ? { $gt: filter.observedAfter.toISOString() } : {}),
+        ...(filter.observedBefore ? { $lt: filter.observedBefore.toISOString() } : {}),
+      };
+    }
+
+    const queryResults: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+      observedAt?: Date;
+    }> = [];
+
+    await Promise.all(
+      embeddings.map(async embedding => {
+        const results = await this.vector!.query({
+          indexName,
+          queryVector: embedding,
+          topK,
+          filter: vectorFilter,
+        });
+        for (const r of results) {
+          if (!r.metadata?.thread_id) {
+            continue;
+          }
+
+          const groupId = typeof r.metadata.group_id === 'string' ? r.metadata.group_id : undefined;
+          if (!groupId) {
+            continue;
+          }
+
+          queryResults.push({
+            threadId: r.metadata.thread_id,
+            score: r.score,
+            groupId,
+            range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
+            text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
+            observedAt:
+              typeof r.metadata.observed_at === 'string' || r.metadata.observed_at instanceof Date
+                ? new Date(r.metadata.observed_at)
+                : undefined,
+          });
+        }
+      }),
+    );
+
+    const bestByGroup = new Map<string, (typeof queryResults)[0]>();
+    for (const result of queryResults) {
+      if (!result.groupId) {
+        continue;
+      }
+
+      const existing = bestByGroup.get(result.groupId);
+      if (!existing || result.score > existing.score) {
+        bestByGroup.set(result.groupId, result);
+      }
+    }
+
+    const results = [...bestByGroup.values()].sort((a, b) => b.score - a.score);
+
+    return { results };
+  }
+
+  /**
+   * Index a single observation group into the observation vector store.
+   */
+  public async indexObservation({
+    text,
+    groupId,
+    range,
+    threadId,
+    resourceId,
+    observedAt,
+  }: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embedResult = await this.embedMessageContent(text);
+    if (embedResult.embeddings.length === 0 || embedResult.dimension === undefined) {
+      return;
+    }
+
+    const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
+
+    await this.vector.upsert({
+      indexName,
+      vectors: embedResult.embeddings,
+      metadata: embedResult.chunks.map(chunk => ({
+        group_id: groupId,
+        range,
+        thread_id: threadId,
+        resource_id: resourceId,
+        observed_at: observedAt?.toISOString(),
+        text: chunk,
+      })),
+    });
+  }
+
+  /**
+   * Index a list of messages directly (without querying storage).
+   * Used by observe-time indexing to vectorize newly-observed messages.
+   */
+  private async indexMessagesList(messages: MastraDBMessage[]): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embeddingData: Array<{
+      embeddings: number[][];
+      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+    }> = [];
+    let dimension: number | undefined;
+
+    await Promise.all(
+      messages.map(async message => {
+        let textForEmbedding: string | null = null;
+
+        if (
+          message.content.content &&
+          typeof message.content.content === 'string' &&
+          message.content.content.trim() !== ''
+        ) {
+          textForEmbedding = message.content.content;
+        } else if (message.content.parts && message.content.parts.length > 0) {
+          const joined = message.content.parts
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join(' ')
+            .trim();
+          if (joined) textForEmbedding = joined;
+        }
+
+        if (!textForEmbedding) return;
+
+        const embedResult = await this.embedMessageContent(textForEmbedding);
+        dimension = embedResult.dimension;
+
+        embeddingData.push({
+          embeddings: embedResult.embeddings,
+          metadata: embedResult.chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
+
+    if (embeddingData.length > 0 && dimension !== undefined) {
+      const { indexName } = await this.createEmbeddingIndex(dimension);
+
+      const allVectors: number[][] = [];
+      const allMetadata: Array<{
+        message_id: string;
+        thread_id: string | undefined;
+        resource_id: string | undefined;
+      }> = [];
+
+      for (const data of embeddingData) {
+        allVectors.push(...data.embeddings);
+        allMetadata.push(...data.metadata);
+      }
+
+      await this.vector.upsert({
+        indexName,
+        vectors: allVectors,
+        metadata: allMetadata,
+      });
+    }
+  }
+
+  /**
+   * Check whether retrieval search (vector-based) is enabled.
+   * Returns true when `retrieval: { vector: true }` and Memory has vector + embedder configured.
+   */
+  hasRetrievalSearch(retrieval: ObservationalMemoryOptions['retrieval']): boolean {
+    if (!retrieval || retrieval === true) return false;
+    return !!retrieval.vector && !!this.vector && !!this.embedder;
+  }
+
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     const tools: Record<string, ToolAction<any, any, any>> = {};
@@ -1467,8 +1752,10 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
-      tools.recall = recallTool(mergedConfig);
+    if (omConfig?.retrieval) {
+      const retrievalScope =
+        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+      tools.recall = recallTool(mergedConfig, { retrievalScope });
     }
 
     return tools;
@@ -1592,13 +1879,13 @@ Notes:
                       filter: { message_id: { $in: batch } },
                     });
                   } catch {
-                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                    this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
                   }
                 }
               }),
             );
           } catch {
-            this.logger.debug(`Failed to clean up old vectors during message update`);
+            this.logger.debug('Failed to clean up old vectors during message update');
           }
         }
 
@@ -1695,13 +1982,13 @@ Notes:
                 filter: { message_id: { $in: batch } },
               });
             } catch {
-              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+              this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
             }
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for deleted messages`);
+      this.logger.debug('Failed to clean up vectors for deleted messages');
     }
   }
 

@@ -25,7 +25,7 @@ function readPackageJson(dir: string): PackageJson {
     return JSON.parse(packageJsonContent);
   } catch (error) {
     if (error instanceof Error) {
-      logger.error(`Failed to read package.json: ${error.message}`);
+      logger.error('Failed to read package.json', { error: error.message });
     }
     throw error;
   }
@@ -96,7 +96,7 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
     return allRulesPassed;
   } catch (error) {
     if (error instanceof Error) {
-      logger.error(`Lint check failed: ${error.message}`);
+      logger.error('Lint check failed', { error: error.message });
     }
     return false;
   }
