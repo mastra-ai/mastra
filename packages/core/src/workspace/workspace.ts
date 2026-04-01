@@ -1251,6 +1251,18 @@ export class Workspace<
     this._status = 'destroying';
 
     try {
+      // Close browser first to kill any browser processes
+      if (this._browserViewer) {
+        try {
+          await this._browserViewer.close();
+        } catch {
+          // Browser close errors are non-blocking
+        }
+        this._browserViewer = undefined;
+        this._browserReady = false;
+        this._browserReadyPromise = undefined;
+      }
+
       // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
       if (this._lsp) {
         try {

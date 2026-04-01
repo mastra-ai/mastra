@@ -61,4 +61,16 @@ export type {
   BuiltInCLIProvider,
   CustomCLIProvider,
   CLIProvider,
+  PageTarget,
 } from './viewer';
+
+// ============================================================================
+// BrowserViewerThreadManager (for thread isolation in BrowserViewer)
+// ============================================================================
+
+export { BrowserViewerThreadManager } from './viewer-thread-manager';
+export type {
+  BrowserViewerThreadManagerConfig,
+  BrowserViewerSession,
+  ThreadCdpConnection,
+} from './viewer-thread-manager';

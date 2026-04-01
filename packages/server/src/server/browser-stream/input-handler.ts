@@ -154,7 +154,13 @@ function isDisconnectionError(err: unknown): boolean {
 function isExpectedInjectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
-  return msg.includes('no cdp session') || msg.includes('browser not launched');
+  return (
+    msg.includes('no cdp session') ||
+    msg.includes('browser not launched') ||
+    msg.includes('not connected to browser') ||
+    msg.includes('no active target') ||
+    (msg.includes('target') && msg.includes('not attached'))
+  );
 }
 
 /**

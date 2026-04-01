@@ -1192,7 +1192,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       const allProviders: Record<string, ProviderConfig> = {};
 
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider;
+        allProviders[id] = provider as ProviderConfig;
       }
 
       if (mastra) {
