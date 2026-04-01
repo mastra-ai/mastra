@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # ArthurExporter
 
-Sends Tracing data to Arthur AI using OpenTelemetry and OpenInference semantic conventions.
+Sends Tracing data to [Arthur Engine](https://github.com/arthur-ai/arthur-engine) using OpenTelemetry and OpenInference semantic conventions.
 
 ## Constructor
 
@@ -50,7 +50,7 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
   {
     name: 'endpoint',
     type: 'string',
-    description: 'Arthur platform endpoint (e.g. https://app.arthur.ai). Falls back to ARTHUR_BASE_URL env var.',
+    description: 'Arthur Engine endpoint (e.g. http://localhost:3030). Falls back to ARTHUR_BASE_URL env var.',
     required: false,
   },
   {
@@ -134,7 +134,7 @@ Flushes pending data and shuts down the client.
 ```typescript
 import { ArthurExporter } from '@mastra/arthur'
 
-// Set ARTHUR_API_KEY, ARTHUR_BASE_URL, and ARTHUR_TASK_ID
+// Set ARTHUR_API_KEY and ARTHUR_BASE_URL (optionally ARTHUR_TASK_ID)
 const exporter = new ArthurExporter()
 ```
 
@@ -145,8 +145,8 @@ import { ArthurExporter } from '@mastra/arthur'
 
 const exporter = new ArthurExporter({
   apiKey: process.env.ARTHUR_API_KEY!,
-  endpoint: process.env.ARTHUR_BASE_URL!,
-  taskId: process.env.ARTHUR_TASK_ID,
+  endpoint: 'http://localhost:3030',
+  taskId: process.env.ARTHUR_TASK_ID, // Optional
 })
 ```
 
@@ -181,4 +181,5 @@ Tags are stored using the OpenInference `tag.tags` attribute:
 ## Related
 
 - [ArthurExporter Documentation](/docs/observability/tracing/exporters/arthur)
-- [Arthur AI Documentation](https://docs.arthur.ai/)
+- [Arthur Engine documentation](https://docs.arthur.ai/)
+- [Arthur Engine repository](https://github.com/arthur-ai/arthur-engine)

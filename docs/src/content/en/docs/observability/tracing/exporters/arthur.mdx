@@ -9,7 +9,7 @@ packages:
 
 # Arthur exporter
 
-[Arthur AI](https://arthur.ai/) provides an observability and evaluation platform for AI applications. The Arthur exporter sends traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions.
+[Arthur](https://arthur.ai/) provides an observability and evaluation platform for AI applications through [Arthur Engine](https://github.com/arthur-ai/arthur-engine) (open-source). The Arthur exporter sends traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions.
 
 ## Installation
 
@@ -21,18 +21,18 @@ npm install @mastra/arthur@latest
 
 ### Prerequisites
 
-1. **Arthur Account**: Sign up at [arthur.ai](https://arthur.ai/)
-1. **API Key**: Generate an API key in your Arthur settings
-1. **Base URL**: Your Arthur platform endpoint (e.g. `https://app.arthur.ai`)
-1. **Task ID**: The Arthur task ID to associate traces with
-1. **Environment Variables**: Set your configuration
+1. **Arthur Engine instance**: Follow the [Docker Compose deployment guide](https://docs.arthur.ai/docs/arthur-genai-engine-docker-compose-deployment-guide) to start an Arthur Engine
+1. **API key**: [Generate an API key](https://docs.arthur.ai/docs/api-keys-management) from the Arthur Engine UI at `http://localhost:3030`
+1. **Task ID** (optional): [Create a task](https://docs.arthur.ai/docs/create-a-task) to group and filter traces
+
+### Environment variables
 
 ```bash title=".env"
 # Required
 ARTHUR_API_KEY=your-api-key
-ARTHUR_BASE_URL=https://app.arthur.ai
+ARTHUR_BASE_URL=http://localhost:3030
 
-# Recommended
+# Optional - associates traces with a specific task
 ARTHUR_TASK_ID=your-task-id
 ```
 
@@ -92,8 +92,8 @@ export const mastra = new Mastra({
 new ArthurExporter({
   // Arthur Configuration
   apiKey: 'your-api-key', // Required
-  endpoint: 'https://app.arthur.ai', // Required
-  taskId: 'your-task-id', // Recommended
+  endpoint: 'http://localhost:3030', // Required
+  taskId: 'your-task-id', // Optional
 
   // Optional OTLP settings
   headers: {
@@ -138,5 +138,6 @@ This exporter implements the [OpenInference Semantic Conventions](https://github
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [ArthurExporter reference](/reference/observability/tracing/exporters/arthur)
-- [Arthur AI Documentation](https://docs.arthur.ai/)
+- [Arthur Engine documentation](https://docs.arthur.ai/)
+- [Arthur Engine repository](https://github.com/arthur-ai/arthur-engine)
 - [OpenInference Specification](https://github.com/Arize-ai/openinference/tree/main/spec)
