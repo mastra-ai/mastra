@@ -3,7 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-import type { AgentChat } from '../channels/agent-chat';
+import type { AgentChannels } from '../channels/agent-channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -827,15 +827,15 @@ export class Mastra<
   }
 
   /**
-   * Returns the `AgentChat` instances for all registered agents.
+   * Returns the `AgentChannels` instances for all registered agents.
    * Keys are agent IDs.
    */
-  public getChannels(): Record<string, AgentChat> {
-    const result: Record<string, AgentChat> = {};
+  public getChannels(): Record<string, AgentChannels> {
+    const result: Record<string, AgentChannels> = {};
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
-      const agentChat = agent.getAgentChat();
-      if (agentChat) {
-        result[agentKey] = agentChat;
+      const agentChannels = agent.getChannels();
+      if (agentChannels) {
+        result[agentKey] = agentChannels;
       }
     }
     return result;
@@ -1068,17 +1068,17 @@ export class Mastra<
       });
 
     // Register webhook routes and initialize channels
-    const agentChat = mastraAgent.getAgentChat();
-    if (agentChat) {
-      agentChat.__setLogger(this.#logger);
-      const channelRoutes = agentChat.getWebhookRoutes();
+    const agentChannels = mastraAgent.getChannels();
+    if (agentChannels) {
+      agentChannels.__setLogger(this.#logger);
+      const channelRoutes = agentChannels.getWebhookRoutes();
       if (channelRoutes.length > 0) {
         this.#server = {
           ...this.#server,
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChat.initialize(this);
+      void agentChannels.initialize(this);
     }
   }
 

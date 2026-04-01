@@ -3,7 +3,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
-import type { AgentChat, ChannelConfig } from '../channels/agent-chat';
+import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -318,9 +318,9 @@ export interface AgentConfig<
    * }
    * ```
    *
-   * For full control, pass an `AgentChat` instance directly.
+   * For full control, pass an `AgentChannels` instance directly.
    */
-  channels?: ChannelConfig | AgentChat;
+  channels?: ChannelConfig | AgentChannels;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

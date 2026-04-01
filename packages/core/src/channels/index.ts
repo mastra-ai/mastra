@@ -1,4 +1,4 @@
-export { AgentChat } from './agent-chat';
+export { AgentChannels } from './agent-channels';
 export type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -7,7 +7,7 @@ export type {
   ChannelHandlers,
   ChannelOptions,
   PostableMessage,
-} from './agent-chat';
+} from './agent-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export type { ChannelContext } from './types';

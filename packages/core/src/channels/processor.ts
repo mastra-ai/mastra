@@ -193,7 +193,7 @@ export function buildToolResultCard(
  *   with per-request data (messageId, eventType).
  *
  * All output rendering (tool cards, text messages, approval prompts) is handled by
- * `AgentChat.consumeAgentStream` which iterates the outer `fullStream`.
+ * `AgentChannels.consumeAgentStream` which iterates the outer `fullStream`.
  */
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';

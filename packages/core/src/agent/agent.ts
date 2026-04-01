@@ -7,7 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
-import { AgentChat } from '../channels/agent-chat';
+import { AgentChannels } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -175,7 +175,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
   #voice: MastraVoice;
-  #agentChat: AgentChat | null = null;
+  #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
@@ -302,15 +302,15 @@ export class Agent<
     }
 
     if (config.channels) {
-      if (config.channels instanceof AgentChat) {
-        this.#agentChat = config.channels;
+      if (config.channels instanceof AgentChannels) {
+        this.#agentChannels = config.channels;
       } else if (config.channels.adapters && Object.keys(config.channels.adapters).length > 0) {
-        this.#agentChat = new AgentChat({
+        this.#agentChannels = new AgentChannels({
           ...config.channels,
           userName: config.channels.userName ?? config.name,
         });
       }
-      this.#agentChat?.__setAgent(this);
+      this.#agentChannels?.__setAgent(this);
     }
 
     if (config.workspace) {
@@ -342,11 +342,11 @@ export class Agent<
   }
 
   /**
-   * Returns the AgentChat instance that manages all channel adapters.
+   * Returns the AgentChannels instance that manages all channel adapters.
    * Returns null if no channels are configured.
    */
-  getAgentChat(): AgentChat | null {
-    return this.#agentChat;
+  getChannels(): AgentChannels | null {
+    return this.#agentChannels;
   }
 
   /**
@@ -611,7 +611,7 @@ export class Agent<
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Get channel output processors (with deduplication)
-    const channelProcessors = this.#agentChat ? this.#agentChat.getOutputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
 
     // Combine all processors into a single workflow
     // Channel processors run after configured but before memory (to annotate metadata before persistence)
@@ -654,7 +654,7 @@ export class Agent<
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Get channel input processors (with deduplication)
-    const channelProcessors = this.#agentChat ? this.#agentChat.getInputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -2211,11 +2211,11 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedChannelTools: Record<string, CoreTool> = {};
 
-    if (!this.#agentChat) {
+    if (!this.#agentChannels) {
       return convertedChannelTools;
     }
 
-    const channelTools = this.#agentChat.getTools();
+    const channelTools = this.#agentChannels.getTools();
 
     if (Object.keys(channelTools).length > 0) {
       this.logger.debug(`[Agent:${this.name}] - Adding channel tools: ${Object.keys(channelTools).join(', ')}`, {

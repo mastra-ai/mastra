@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
-import type { ChannelConfig } from '../agent-chat';
+import type { ChannelConfig } from '../agent-channels';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -60,19 +60,19 @@ function createTestAgent(id: string, options?: { channels?: ChannelConfig }) {
 
 describe('Mastra Channel Integration', () => {
   describe('agent-level channel registration', () => {
-    it('creates AgentChat when channels are provided', () => {
+    it('creates AgentChannels when channels are provided', () => {
       const agent = createTestAgent('bot-1', {
         channels: { adapters: { discord: createMockAdapter('discord') } },
       });
-      expect(agent.getAgentChat()).not.toBeNull();
+      expect(agent.getChannels()).not.toBeNull();
     });
 
-    it('returns null AgentChat when no channels', () => {
+    it('returns null AgentChannels when no channels', () => {
       const agent = createTestAgent('no-channels');
-      expect(agent.getAgentChat()).toBeNull();
+      expect(agent.getChannels()).toBeNull();
     });
 
-    it('exposes adapters through AgentChat', () => {
+    it('exposes adapters through AgentChannels', () => {
       const agent = createTestAgent('bot-1', {
         channels: {
           adapters: {
@@ -81,13 +81,13 @@ describe('Mastra Channel Integration', () => {
           },
         },
       });
-      const chat = agent.getAgentChat()!;
-      expect(Object.keys(chat.adapters)).toEqual(['discord', 'slack']);
+      const channels = agent.getChannels()!;
+      expect(Object.keys(channels.adapters)).toEqual(['discord', 'slack']);
     });
   });
 
   describe('mastra-level channel aggregation', () => {
-    it('aggregates AgentChat instances from agents', () => {
+    it('aggregates AgentChannels instances from agents', () => {
       const agent1 = createTestAgent('agent1', {
         channels: { adapters: { discord: createMockAdapter('discord') } },
       });

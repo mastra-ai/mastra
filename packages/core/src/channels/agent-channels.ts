@@ -181,11 +181,11 @@ export interface ChannelOptions {
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
  *
- * One AgentChat = one bot identity across multiple platforms.
+ * One AgentChannels = one bot identity across multiple platforms.
  *
  * @internal Created automatically by the Agent when `channels` config is provided.
  */
-export class AgentChat {
+export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
   private agent!: Agent<any, any, any, any>;

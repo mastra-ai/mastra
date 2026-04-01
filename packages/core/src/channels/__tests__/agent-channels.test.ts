@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { AgentChat } from '../agent-chat';
+import { AgentChannels } from '../agent-channels';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -44,40 +44,40 @@ function createMockAgent(name = 'test-agent') {
   } as any;
 }
 
-describe('AgentChat', () => {
-  let agentChat: AgentChat;
+describe('AgentChannels', () => {
+  let agentChannels: AgentChannels;
   let mockAgent: ReturnType<typeof createMockAgent>;
 
   beforeEach(() => {
     mockAgent = createMockAgent();
-    agentChat = new AgentChat({
+    agentChannels = new AgentChannels({
       adapters: {
         discord: createMockAdapter('discord'),
         slack: createMockAdapter('slack'),
       },
     });
-    agentChat.__setAgent(mockAgent);
+    agentChannels.__setAgent(mockAgent);
   });
 
   describe('adapters', () => {
     it('returns all adapters', () => {
-      expect(Object.keys(agentChat.adapters)).toEqual(['discord', 'slack']);
+      expect(Object.keys(agentChannels.adapters)).toEqual(['discord', 'slack']);
     });
 
     it('returns a specific adapter by key', () => {
-      const adapter = agentChat.adapters['discord'];
+      const adapter = agentChannels.adapters['discord'];
       expect(adapter).toBeDefined();
       expect(adapter!.name).toBe('discord');
     });
 
     it('returns undefined for unknown adapter key', () => {
-      expect(agentChat.adapters['teams']).toBeUndefined();
+      expect(agentChannels.adapters['teams']).toBeUndefined();
     });
   });
 
   describe('getTools', () => {
     it('generates generic channel tools', () => {
-      const tools = agentChat.getTools();
+      const tools = agentChannels.getTools();
       const toolNames = Object.keys(tools);
 
       expect(toolNames).toContain('send_message');
@@ -88,19 +88,19 @@ describe('AgentChat', () => {
     });
 
     it('generates exactly 5 tools regardless of adapter count', () => {
-      const tools = agentChat.getTools();
+      const tools = agentChannels.getTools();
       expect(Object.keys(tools)).toHaveLength(5);
     });
   });
 
   describe('getWebhookRoutes', () => {
     it('generates one route per adapter', () => {
-      const routes = agentChat.getWebhookRoutes();
+      const routes = agentChannels.getWebhookRoutes();
       expect(routes).toHaveLength(2);
     });
 
     it('generates routes with correct paths', () => {
-      const routes = agentChat.getWebhookRoutes();
+      const routes = agentChannels.getWebhookRoutes();
       const paths = routes.map(r => r.path);
 
       expect(paths).toContain('/api/agents/test-agent/channels/discord/webhook');
@@ -108,7 +108,7 @@ describe('AgentChat', () => {
     });
 
     it('generates POST routes without auth', () => {
-      const routes = agentChat.getWebhookRoutes();
+      const routes = agentChannels.getWebhookRoutes();
 
       for (const route of routes) {
         expect(route.method).toBe('POST');
@@ -119,7 +119,7 @@ describe('AgentChat', () => {
 
   describe('sdk getter', () => {
     it('returns null before initialization', () => {
-      expect(agentChat.sdk).toBeNull();
+      expect(agentChannels.sdk).toBeNull();
     });
 
     it('returns Chat instance after initialization', async () => {
@@ -130,12 +130,12 @@ describe('AgentChat', () => {
         getServer: () => null,
       } as any;
 
-      await agentChat.initialize(mockMastra);
+      await agentChannels.initialize(mockMastra);
 
-      expect(agentChat.sdk).not.toBeNull();
-      expect(agentChat.sdk).toHaveProperty('onDirectMessage');
-      expect(agentChat.sdk).toHaveProperty('onNewMention');
-      expect(agentChat.sdk).toHaveProperty('onReaction');
+      expect(agentChannels.sdk).not.toBeNull();
+      expect(agentChannels.sdk).toHaveProperty('onDirectMessage');
+      expect(agentChannels.sdk).toHaveProperty('onNewMention');
+      expect(agentChannels.sdk).toHaveProperty('onReaction');
     });
 
     it('allows registering additional event handlers', async () => {
@@ -146,14 +146,14 @@ describe('AgentChat', () => {
         getServer: () => null,
       } as any;
 
-      await agentChat.initialize(mockMastra);
+      await agentChannels.initialize(mockMastra);
 
       const handler = vi.fn();
       // Should not throw - handler is added alongside our internal handlers
-      agentChat.sdk!.onReaction(handler);
+      agentChannels.sdk!.onReaction(handler);
 
       // Verify handler was registered (Chat SDK uses array, so multiple handlers work)
-      expect(agentChat.sdk).not.toBeNull();
+      expect(agentChannels.sdk).not.toBeNull();
     });
 
     it('exposes Chat SDK methods for custom event handling', async () => {
@@ -164,13 +164,13 @@ describe('AgentChat', () => {
         getServer: () => null,
       } as any;
 
-      await agentChat.initialize(mockMastra);
+      await agentChannels.initialize(mockMastra);
 
       // Verify common Chat SDK methods are available
-      expect(typeof agentChat.sdk!.onDirectMessage).toBe('function');
-      expect(typeof agentChat.sdk!.onNewMention).toBe('function');
-      expect(typeof agentChat.sdk!.onReaction).toBe('function');
-      expect(typeof agentChat.sdk!.onNewMessage).toBe('function');
+      expect(typeof agentChannels.sdk!.onDirectMessage).toBe('function');
+      expect(typeof agentChannels.sdk!.onNewMention).toBe('function');
+      expect(typeof agentChannels.sdk!.onReaction).toBe('function');
+      expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
     });
   });
 });
