@@ -94,6 +94,7 @@
       "apiKeyEnvVar": "OPENAI_API_KEY",
       "name": "OpenAI",
       "models": [
+        "chatgpt-image-latest",
         "codex-mini-latest",
         "gpt-3.5-turbo",
         "gpt-4",
@@ -128,6 +129,9 @@
         "gpt-5.4-mini",
         "gpt-5.4-nano",
         "gpt-5.4-pro",
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
         "o1",
         "o1-mini",
         "o1-preview",
@@ -382,7 +386,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
@@ -567,7 +572,8 @@
         "glm-4.7-flash",
         "glm-4.7-flashx",
         "glm-5",
-        "glm-5-turbo"
+        "glm-5-turbo",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -826,7 +832,8 @@
         "glm-4.7",
         "glm-4.7-flash",
         "glm-4.7-flashx",
-        "glm-5"
+        "glm-5",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -3109,6 +3116,15 @@
       "docUrl": "https://llmgateway.io/docs",
       "gateway": "models.dev"
     },
+    "the-grid-ai": {
+      "url": "https://api.thegrid.ai/v1",
+      "apiKeyEnvVar": "THEGRIDAI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "The Grid AI",
+      "models": ["text-max", "text-prime", "text-standard"],
+      "docUrl": "https://thegrid.ai/docs",
+      "gateway": "models.dev"
+    },
     "groq": {
       "url": "https://api.groq.com/openai/v1",
       "apiKeyEnvVar": "GROQ_API_KEY",
@@ -4214,7 +4230,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
@@ -4468,6 +4485,7 @@
     ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "openai": [
+      "chatgpt-image-latest",
       "codex-mini-latest",
       "gpt-3.5-turbo",
       "gpt-4",
@@ -4502,6 +4520,9 @@
       "gpt-5.4-mini",
       "gpt-5.4-nano",
       "gpt-5.4-pro",
+      "gpt-image-1",
+      "gpt-image-1-mini",
+      "gpt-image-1.5",
       "o1",
       "o1-mini",
       "o1-preview",
@@ -4690,7 +4711,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
@@ -4813,7 +4835,8 @@
       "glm-4.7-flash",
       "glm-4.7-flashx",
       "glm-5",
-      "glm-5-turbo"
+      "glm-5-turbo",
+      "glm-5v-turbo"
     ],
     "xai": [
       "grok-2",
@@ -5025,7 +5048,8 @@
       "glm-4.7",
       "glm-4.7-flash",
       "glm-4.7-flashx",
-      "glm-5"
+      "glm-5",
+      "glm-5v-turbo"
     ],
     "nvidia": [
       "black-forest-labs/flux.1-dev",
@@ -7003,6 +7027,7 @@
       "veo-3.1-fast-generate-preview",
       "veo-3.1-generate-preview"
     ],
+    "the-grid-ai": ["text-max", "text-prime", "text-standard"],
     "groq": [
       "allam-2-7b",
       "canopylabs/orpheus-arabic-saudi",
@@ -7933,7 +7958,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "moonshotai-cn": [
       "kimi-k2-0711-preview",

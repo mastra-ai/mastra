@@ -59,6 +59,7 @@ export type ProviderModelsMap = {
   ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly openai: readonly [
+    'chatgpt-image-latest',
     'codex-mini-latest',
     'gpt-3.5-turbo',
     'gpt-4',
@@ -93,6 +94,9 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+    'gpt-image-1.5',
     'o1',
     'o1-mini',
     'o1-preview',
@@ -282,6 +286,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -405,6 +410,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5v-turbo',
   ];
   readonly xai: readonly [
     'grok-2',
@@ -617,6 +623,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
     'glm-4.7-flashx',
     'glm-5',
+    'glm-5v-turbo',
   ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
@@ -2600,6 +2607,7 @@ export type ProviderModelsMap = {
     'veo-3.1-fast-generate-preview',
     'veo-3.1-generate-preview',
   ];
+  readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly groq: readonly [
     'allam-2-7b',
     'canopylabs/orpheus-arabic-saudi',
@@ -3531,6 +3539,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
