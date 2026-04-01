@@ -194,7 +194,6 @@ async function executeCommand(input: Record<string, any>, context: any) {
 }
 
 const baseDescription = `Execute a shell command in the workspace sandbox.
-Omit args when using their default value.
 
 Examples:
   "npm install && npm run build"
