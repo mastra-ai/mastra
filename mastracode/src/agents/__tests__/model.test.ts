@@ -38,6 +38,15 @@ const mockCodexOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/openai-codex.js', () => ({
   openaiCodexProvider: vi.fn(() => ({ __provider: 'openai-codex' })),
   buildOpenAICodexOAuthFetch: vi.fn(() => mockCodexOAuthFetch),
+  createCodexMiddleware: vi.fn((effort?: string) => ({ __middleware: 'codex', effort })),
+  getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
+  THINKING_LEVEL_TO_REASONING_EFFORT: {
+    off: undefined,
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'xhigh',
+  },
 }));
 
 // Mock @ai-sdk/anthropic
@@ -115,6 +124,7 @@ vi.mock('../../onboarding/settings.js', () => ({
 }));
 
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
@@ -373,7 +383,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
-    it('routes openai OAuth model through gateway with customFetch and rewriteUrl: false', () => {
+    it('routes openai OAuth model directly with Codex middleware (bypasses ModelRouterLanguageModel)', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -383,17 +393,30 @@ describe('resolveModel', () => {
 
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('mastra/openai/gpt-4o');
+      // Should use createOpenAI directly, NOT go through ModelRouterLanguageModel
+      expect(createOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'oauth-gateway-placeholder',
+          baseURL: 'https://server.mastra.ai/v1',
+          fetch: mockCodexOAuthFetch,
+        }),
+      );
+      const opts = vi.mocked(createOpenAI).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect((opts?.headers as Record<string, string>)?.['X-Mastra-Authorization']).toBe(
+        'Bearer msk_gateway_key_123',
+      );
       expect(buildOpenAICodexOAuthFetch).toHaveBeenCalledWith({
         authStorage: expect.anything(),
         rewriteUrl: false,
       });
-      expect(MastraGateway).toHaveBeenCalledWith({
-        apiKey: 'msk_gateway_key_123',
-        customFetch: mockCodexOAuthFetch,
-      });
-      // Should NOT call the direct provider
+      // Should wrap with middleware
+      expect(wrapLanguageModel).toHaveBeenCalled();
+      expect(result.__wrapped).toBe(true);
+      expect(result.__provider).toBe('openai-direct');
+      expect(result.modelId).toBe('gpt-4o');
+      // Should NOT use ModelRouterLanguageModel or MastraGateway
+      expect(MastraGateway).not.toHaveBeenCalled();
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
       expect(openaiCodexProvider).not.toHaveBeenCalled();
     });
 
@@ -475,15 +498,29 @@ describe('resolveModel', () => {
       );
     });
 
-    it('skips gateway when no API key is stored', () => {
+    it('skips gateway when no API key is stored and no env var', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
       mockAuthStorageInstance.get.mockReturnValue(undefined);
+      delete process.env['MASTRA_GATEWAY_API_KEY'];
 
       resolveModel('anthropic/claude-sonnet-4');
 
       expect(MastraGateway).not.toHaveBeenCalled();
       // Falls through to normal flow
       expect(opencodeClaudeMaxProvider).toHaveBeenCalled();
+    });
+
+    it('activates gateway via MASTRA_GATEWAY_API_KEY env var when AuthStorage is empty', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+      const result = resolveModel('anthropic/claude-sonnet-4') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_env_key' });
+      delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
   });
 });

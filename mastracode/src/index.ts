@@ -139,7 +139,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   const memory = mgApiKey ? undefined : getDynamicMemory(storage);
 
   // MCP
@@ -220,6 +220,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
+  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  if (mgApiKey) {
+    if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
+    if (!startupAccess.openai) startupAccess.openai = 'apikey';
+  }
   // Check all providers in the registry for API keys
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
@@ -313,6 +318,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
+      // Gateway covers all providers
+      if (mgApiKey) return true;
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;

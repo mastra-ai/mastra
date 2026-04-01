@@ -70,7 +70,9 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   if (keyAnswer.toLowerCase() === 'clear') {
     authStorage.remove(`apikey:${MEMORY_GATEWAY_PROVIDER}`);
     delete process.env['MASTRA_GATEWAY_API_KEY'];
-    ctx.showInfo('Memory gateway API key cleared');
+    settings.memoryGateway = {};
+    saveSettings(settings);
+    ctx.showInfo('Memory gateway cleared. Note: memory mode changes take effect on next restart.');
     return;
   }
 
@@ -86,5 +88,5 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   }
   saveSettings(settings);
 
-  ctx.showInfo('Memory gateway configured');
+  ctx.showInfo('Memory gateway configured. Note: memory mode changes take effect on next restart.');
 }

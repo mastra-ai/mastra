@@ -13,7 +13,13 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
-import { buildOpenAICodexOAuthFetch, openaiCodexProvider } from '../providers/openai-codex.js';
+import {
+  buildOpenAICodexOAuthFetch,
+  createCodexMiddleware,
+  getEffectiveThinkingLevel,
+  openaiCodexProvider,
+  THINKING_LEVEL_TO_REASONING_EFFORT,
+} from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 
 const authStorage = new AuthStorage();
@@ -149,7 +155,7 @@ export function resolveModel(
   }
 
   // --- Memory Gateway path ---
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   if (mgApiKey) {
     const baseUrl = settings.memoryGateway?.baseUrl;
     const gatewayBaseURL = `${baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai'}/v1`;
@@ -175,16 +181,35 @@ export function resolveModel(
       });
     }
 
-    // All other models: route through MastraGateway + ModelRouterLanguageModel
-    let customFetch: typeof globalThis.fetch | undefined;
+    // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
+    // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
     if (modelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      customFetch = buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false });
+      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
+      const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
+      const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+      const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+      const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
+      const middleware = createCodexMiddleware(reasoningEffort);
+
+      const openai = createOpenAI({
+        apiKey: 'oauth-gateway-placeholder',
+        baseURL: gatewayBaseURL,
+        headers: {
+          'X-Mastra-Authorization': `Bearer ${mgApiKey}`,
+          ...headers,
+        },
+        fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
+      });
+      return wrapLanguageModel({
+        model: openai.responses(resolvedBareModelId),
+        middleware: [middleware],
+      });
     }
 
+    // All other models: route through MastraGateway + ModelRouterLanguageModel
     const gateway = new MastraGateway({
       apiKey: mgApiKey,
       ...(baseUrl ? { baseUrl } : {}),
-      ...(customFetch ? { customFetch } : {}),
     });
 
     return new ModelRouterLanguageModel(

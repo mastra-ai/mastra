@@ -58,7 +58,7 @@ export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel)
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
-const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
+export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
   medium: 'medium',
@@ -69,7 +69,7 @@ const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefin
 /**
  * Create Codex middleware with the given reasoning effort level.
  */
-function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
+export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
   return {
     specificationVersion: 'v3',
     transformParams: async ({ params }) => {

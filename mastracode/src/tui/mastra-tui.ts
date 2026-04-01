@@ -489,6 +489,12 @@ export class MastraTUI {
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     };
+    // Gateway covers all providers
+    const mgKey = this.state.authStorage?.getStoredApiKey('mastra-gateway') ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    if (mgKey) {
+      if (!access.anthropic) access.anthropic = 'apikey';
+      if (!access.openai) access.openai = 'apikey';
+    }
     // Include all other providers that have API keys configured
     const seen = new Set(Object.keys(access));
     for (const m of models) {
