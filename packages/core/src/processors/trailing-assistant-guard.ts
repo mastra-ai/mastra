@@ -38,30 +38,36 @@ export function isMaybeClaude46(
 }
 
 /**
- * Guards against trailing assistant messages when using native structured output
- * with Anthropic Claude 4.6.
+ * Guards against trailing assistant messages with Anthropic Claude 4.6.
  *
- * Claude 4.6 rejects requests where the last message is an assistant message when
- * using output format (structured output), interpreting it as pre-filling the response.
- * This processor appends a user message to prevent that error.
+ * Claude 4.6 rejects requests where the last message is an assistant message,
+ * interpreting it as pre-filling the response. This happens during thread
+ * resumption, between tool-call rounds, agent handoffs, and when async
+ * observational memory buffering trims the message history.
+ *
+ * This processor appends a synthetic user message to prevent that error.
+ * When structured output is in use, the prompt asks for the structured response;
+ * otherwise it uses a neutral continuation prompt.
  *
  * This processor should only be added when the agent uses a Claude 4.6 model.
  * Use {@link isMaybeClaude46} to check before adding.
  *
  * @see https://github.com/mastra-ai/mastra/issues/12800
+ * @see https://github.com/mastra-ai/mastra/issues/13969
+ * @see https://github.com/mastra-ai/mastra/issues/14505
  */
 export class TrailingAssistantGuard implements Processor<'trailing-assistant-guard'> {
   readonly id = 'trailing-assistant-guard' as const;
   readonly name = 'Trailing Assistant Guard';
 
   processInputStep({ messages, structuredOutput }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') return;
+
     const willUseResponseFormat =
       structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection;
 
-    if (!willUseResponseFormat) return;
-
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== 'assistant') return;
+    const text = willUseResponseFormat ? 'Generate the structured response.' : 'Continue.';
 
     return {
       messages: [
@@ -71,7 +77,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
           role: 'user' as const,
           content: {
             format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Generate the structured response.' }],
+            parts: [{ type: 'text' as const, text }],
           },
           createdAt: new Date(),
         },
