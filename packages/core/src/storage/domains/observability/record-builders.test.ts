@@ -210,6 +210,177 @@ describe('record-builders', () => {
     });
   });
 
+  describe('buildScoreRecord', () => {
+    it('builds a complete score record with all context fields', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          timestamp,
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          scorerId: 'judge-1',
+          scorerVersion: 'v1',
+          scoreSource: 'eval',
+          score: 0.91,
+          reason: 'good answer',
+          experimentId: 'exp-1',
+          scoreTraceId: 'score-trace-1',
+          correlationContext: {
+            organizationId: 'org-1',
+          },
+          metadata: {
+            kept: true,
+          },
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual({
+        timestamp,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        scorerId: 'judge-1',
+        scorerVersion: 'v1',
+        scoreSource: 'eval',
+        source: 'eval',
+        score: 0.91,
+        reason: 'good answer',
+        experimentId: 'exp-1',
+        scoreTraceId: 'score-trace-1',
+        tags: null,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        userId: null,
+        organizationId: 'org-1',
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        executionSource: null,
+        serviceName: null,
+        scope: null,
+        metadata: {
+          kept: true,
+        },
+      });
+    });
+
+    it('keeps deprecated score source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          timestamp,
+          traceId: 'trace-legacy-score-source',
+          scorerId: 'judge-legacy',
+          source: 'legacy-eval',
+          score: 0.42,
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual(
+        expect.objectContaining({
+          scoreSource: 'legacy-eval',
+          source: 'legacy-eval',
+        }),
+      );
+    });
+  });
+
+  describe('buildFeedbackRecord', () => {
+    it('builds a complete feedback record with explicit feedback context fields', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          timestamp,
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          feedbackSource: 'playground',
+          feedbackType: 'thumbs-up',
+          value: 'positive',
+          comment: 'helpful',
+          experimentId: 'exp-1',
+          feedbackUserId: 'user-1',
+          correlationContext: {
+            organizationId: 'org-1',
+          },
+          metadata: {
+            kept: true,
+          },
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual({
+        timestamp,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        feedbackSource: 'playground',
+        source: 'playground',
+        feedbackType: 'thumbs-up',
+        value: 'positive',
+        comment: 'helpful',
+        experimentId: 'exp-1',
+        feedbackUserId: 'user-1',
+        sourceId: null,
+        tags: null,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        userId: null,
+        organizationId: 'org-1',
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        executionSource: null,
+        serviceName: null,
+        scope: null,
+        metadata: {
+          kept: true,
+        },
+      });
+    });
+
+    it('keeps deprecated feedback source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          timestamp,
+          traceId: 'trace-legacy-feedback-source',
+          source: 'legacy-api',
+          feedbackType: 'rating',
+          value: 3,
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual(
+        expect.objectContaining({
+          feedbackSource: 'legacy-api',
+          source: 'legacy-api',
+        }),
+      );
+    });
+  });
+
   describe('buildLogRecord', () => {
     it('maps top-level trace ids and contextual fields from correlationContext', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');
@@ -448,6 +619,7 @@ describe('record-builders', () => {
           traceId: 'trace-1',
           spanId: 'span-1',
           scorerId: 'relevance',
+          scorerName: 'Relevance Scorer',
           score: 0.92,
           experimentId: 'deprecated-exp',
           correlationContext: {
@@ -510,7 +682,7 @@ describe('record-builders', () => {
         experimentId: 'context-exp',
         scope: null,
         scoreTraceId: null,
-        metadata: { kept: true },
+        metadata: { kept: true, scorerName: 'Relevance Scorer' },
       });
     });
   });
