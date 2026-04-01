@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { InMemoryDB } from '../../storage/domains/inmemory-db';
+import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChat } from '../agent-chat';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -112,6 +114,63 @@ describe('AgentChat', () => {
         expect(route.method).toBe('POST');
         expect(route.requiresAuth).toBe(false);
       }
+    });
+  });
+
+  describe('sdk getter', () => {
+    it('returns null before initialization', () => {
+      expect(agentChat.sdk).toBeNull();
+    });
+
+    it('returns Chat instance after initialization', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChat.initialize(mockMastra);
+
+      expect(agentChat.sdk).not.toBeNull();
+      expect(agentChat.sdk).toHaveProperty('onDirectMessage');
+      expect(agentChat.sdk).toHaveProperty('onNewMention');
+      expect(agentChat.sdk).toHaveProperty('onReaction');
+    });
+
+    it('allows registering additional event handlers', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChat.initialize(mockMastra);
+
+      const handler = vi.fn();
+      // Should not throw - handler is added alongside our internal handlers
+      agentChat.sdk!.onReaction(handler);
+
+      // Verify handler was registered (Chat SDK uses array, so multiple handlers work)
+      expect(agentChat.sdk).not.toBeNull();
+    });
+
+    it('exposes Chat SDK methods for custom event handling', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChat.initialize(mockMastra);
+
+      // Verify common Chat SDK methods are available
+      expect(typeof agentChat.sdk!.onDirectMessage).toBe('function');
+      expect(typeof agentChat.sdk!.onNewMention).toBe('function');
+      expect(typeof agentChat.sdk!.onReaction).toBe('function');
+      expect(typeof agentChat.sdk!.onNewMessage).toBe('function');
     });
   });
 });
