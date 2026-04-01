@@ -6,7 +6,7 @@ import {
   aggregatedValueField,
   bucketTimestampField,
   comparePeriodSchema,
-  dateRangeSchema,
+  commonFilterFields,
   experimentIdField,
   contextFields,
   dimensionsField,
@@ -17,7 +17,6 @@ import {
   percentileBucketValueField,
   percentilesSchema,
   sortDirectionSchema,
-  organizationIdField,
   spanIdField,
   traceIdField,
 } from '../shared';
@@ -154,11 +153,7 @@ export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
 /** Schema for filtering scores in list queries */
 export const scoresFilterSchema = z
   .object({
-    timestamp: dateRangeSchema.optional().describe('Filter by timestamp range'),
-    traceId: z.string().optional().describe('Filter by trace ID'),
-    spanId: z.string().optional().describe('Filter by span ID'),
-    organizationId: organizationIdField.optional(),
-    experimentId: experimentIdField.optional(),
+    ...commonFilterFields,
 
     // Score-specific filters
     scorerId: z

@@ -286,7 +286,6 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
 export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const s = event.score;
   const correlationFields = buildCorrelationRecordFields(s.correlationContext);
-  const organizationId = correlationFields.organizationId ?? getStringOrNull(s.metadata?.organizationId);
   return {
     timestamp: s.timestamp,
     traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
@@ -300,7 +299,6 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     ...correlationFields,
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
-    organizationId,
     scoreTraceId: s.scoreTraceId ?? null,
     metadata: s.metadata ?? null,
   };
@@ -310,8 +308,6 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
 export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord {
   const fb = event.feedback;
   const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
-  const organizationId = correlationFields.organizationId ?? getStringOrNull(fb.metadata?.organizationId);
-  const feedbackUserId = fb.feedbackUserId ?? fb.userId ?? getStringOrNull(fb.metadata?.userId);
   return {
     timestamp: fb.timestamp,
     traceId: fb.traceId ?? fb.correlationContext?.traceId ?? null,
@@ -323,8 +319,8 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
     comment: fb.comment ?? null,
     ...correlationFields,
     experimentId: correlationFields.experimentId ?? fb.experimentId ?? null,
-    organizationId,
-    feedbackUserId,
+    feedbackUserId:
+      fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
     scope: null,
     sourceId: fb.sourceId ?? null,
     metadata: fb.metadata ?? null,

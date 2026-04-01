@@ -226,8 +226,10 @@ describe('record-builders', () => {
           reason: 'good answer',
           experimentId: 'exp-1',
           scoreTraceId: 'score-trace-1',
-          metadata: {
+          correlationContext: {
             organizationId: 'org-1',
+          },
+          metadata: {
             kept: true,
           },
         },
@@ -267,7 +269,6 @@ describe('record-builders', () => {
         serviceName: null,
         scope: null,
         metadata: {
-          organizationId: 'org-1',
           kept: true,
         },
       });
@@ -293,64 +294,10 @@ describe('record-builders', () => {
         }),
       );
     });
-
-    it('leaves organizationId null when metadata does not contain a string', () => {
-      const timestamp = new Date('2026-01-01T00:00:00.000Z');
-      const event: ScoreEvent = {
-        type: 'score',
-        score: {
-          timestamp,
-          traceId: 'trace-2',
-          scorerId: 'judge-2',
-          score: 0.5,
-          metadata: {
-            organizationId: 123,
-          },
-        },
-      };
-
-      expect(buildScoreRecord(event)).toEqual({
-        timestamp,
-        traceId: 'trace-2',
-        spanId: null,
-        scorerId: 'judge-2',
-        scorerVersion: null,
-        scoreSource: null,
-        source: null,
-        score: 0.5,
-        reason: null,
-        experimentId: null,
-        scoreTraceId: null,
-        tags: null,
-        entityType: null,
-        entityId: null,
-        entityName: null,
-        parentEntityType: null,
-        parentEntityId: null,
-        parentEntityName: null,
-        rootEntityType: null,
-        rootEntityId: null,
-        rootEntityName: null,
-        userId: null,
-        organizationId: null,
-        resourceId: null,
-        runId: null,
-        sessionId: null,
-        threadId: null,
-        requestId: null,
-        environment: null,
-        executionSource: null,
-        serviceName: null,
-        scope: null,
-        metadata: {
-          organizationId: 123,
-        },
-      });
-    });
   });
 
   describe('buildFeedbackRecord', () => {
-    it('builds a complete feedback record with feedbackUserId from metadata', () => {
+    it('builds a complete feedback record with explicit feedback context fields', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');
       const event: FeedbackEvent = {
         type: 'feedback',
@@ -363,9 +310,11 @@ describe('record-builders', () => {
           value: 'positive',
           comment: 'helpful',
           experimentId: 'exp-1',
-          metadata: {
+          feedbackUserId: 'user-1',
+          correlationContext: {
             organizationId: 'org-1',
-            userId: 'user-1',
+          },
+          metadata: {
             kept: true,
           },
         },
@@ -405,8 +354,6 @@ describe('record-builders', () => {
         serviceName: null,
         scope: null,
         metadata: {
-          organizationId: 'org-1',
-          userId: 'user-1',
           kept: true,
         },
       });
@@ -431,63 +378,6 @@ describe('record-builders', () => {
           source: 'legacy-api',
         }),
       );
-    });
-
-    it('leaves organizationId and userId null when metadata values are not strings', () => {
-      const timestamp = new Date('2026-01-01T00:00:00.000Z');
-      const event: FeedbackEvent = {
-        type: 'feedback',
-        feedback: {
-          timestamp,
-          traceId: 'trace-2',
-          feedbackSource: 'api',
-          feedbackType: 'rating',
-          value: 4,
-          metadata: {
-            organizationId: 123,
-            userId: false,
-          },
-        },
-      };
-
-      expect(buildFeedbackRecord(event)).toEqual({
-        timestamp,
-        traceId: 'trace-2',
-        spanId: null,
-        feedbackSource: 'api',
-        source: 'api',
-        feedbackType: 'rating',
-        value: 4,
-        comment: null,
-        experimentId: null,
-        feedbackUserId: null,
-        sourceId: null,
-        tags: null,
-        entityType: null,
-        entityId: null,
-        entityName: null,
-        parentEntityType: null,
-        parentEntityId: null,
-        parentEntityName: null,
-        rootEntityType: null,
-        rootEntityId: null,
-        rootEntityName: null,
-        userId: null,
-        organizationId: null,
-        resourceId: null,
-        runId: null,
-        sessionId: null,
-        threadId: null,
-        requestId: null,
-        environment: null,
-        executionSource: null,
-        serviceName: null,
-        scope: null,
-        metadata: {
-          organizationId: 123,
-          userId: false,
-        },
-      });
     });
   });
 
