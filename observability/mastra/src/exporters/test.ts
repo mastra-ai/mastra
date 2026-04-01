@@ -436,7 +436,8 @@ export class TestExporter extends BaseExporter {
     if (this.#config.storeLogs) {
       const fb = event.feedback;
       const traceLabel = fb.traceId ? fb.traceId.slice(-8) : 'unanchored';
-      const logMessage = `[TestExporter] feedback: ${fb.feedbackType} from ${fb.source}=${fb.value} (trace: ${traceLabel}${fb.spanId ? `, span: ${fb.spanId.slice(-8)}` : ''})`;
+      const feedbackSource = fb.feedbackSource ?? fb.source;
+      const logMessage = `[TestExporter] feedback: ${fb.feedbackType} from ${feedbackSource}=${fb.value} (trace: ${traceLabel}${fb.spanId ? `, span: ${fb.spanId.slice(-8)}` : ''})`;
       this.#debugLogs.push(logMessage);
     }
 
