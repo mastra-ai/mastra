@@ -1,5 +1,20 @@
 # @mastra/clickhouse
 
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added a new ClickHouse `v-next` observability adapter with support for traces, logs, metrics, scores, and feedback. ([#14696](https://github.com/mastra-ai/mastra/pull/14696))
+
+  This release includes trace listing and reconstruction, list and lookup operations across supported observability signals, retention helpers, and OLAP-style analytics queries for metrics, scores, and feedback, including aggregates, breakdowns, time series, and percentiles.
+
+  It also adds support for broader observability context fields such as entity hierarchy, correlation IDs, deployment metadata, and execution source.
+
+### Patch Changes
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
 ## 1.3.0
 
 ### Minor Changes

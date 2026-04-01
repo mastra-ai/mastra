@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.21.0-alpha.1
+
+### Patch Changes
+
+- Fixed OpenAI Responses API json_object mode so agent-backed responses return JSON output correctly. ([#14935](https://github.com/mastra-ai/mastra/pull/14935))
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
 ## 1.21.0-alpha.0
 
 ### Minor Changes
