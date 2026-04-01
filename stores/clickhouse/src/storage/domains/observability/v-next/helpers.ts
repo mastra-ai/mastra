@@ -445,11 +445,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
     rootEntityId: score.rootEntityId ?? null,
     rootEntityName: score.rootEntityName ?? null,
     userId: score.userId ?? null,
-    organizationId:
-      score.organizationId ??
-      (typeof (score.metadata as Record<string, unknown> | undefined)?.organizationId === 'string'
-        ? ((score.metadata as Record<string, unknown>).organizationId as string)
-        : null),
+    organizationId: score.organizationId ?? null,
     resourceId: score.resourceId ?? null,
     runId: score.runId ?? null,
     sessionId: score.sessionId ?? null,
@@ -513,12 +509,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
-  const feedbackUserId =
-    feedback.feedbackUserId ??
-    feedback.userId ??
-    (typeof (feedback.metadata as Record<string, unknown> | undefined)?.userId === 'string'
-      ? ((feedback.metadata as Record<string, unknown>).userId as string)
-      : null);
+  const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
 
   return {
     timestamp: toISOString(feedback.timestamp),
@@ -535,11 +526,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     rootEntityId: feedback.rootEntityId ?? null,
     rootEntityName: feedback.rootEntityName ?? null,
     userId: feedbackUserId,
-    organizationId:
-      feedback.organizationId ??
-      (typeof (feedback.metadata as Record<string, unknown> | undefined)?.organizationId === 'string'
-        ? ((feedback.metadata as Record<string, unknown>).organizationId as string)
-        : null),
+    organizationId: feedback.organizationId ?? null,
     resourceId: feedback.resourceId ?? null,
     runId: feedback.runId ?? null,
     sessionId: feedback.sessionId ?? null,

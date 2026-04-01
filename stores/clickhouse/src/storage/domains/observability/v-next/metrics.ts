@@ -147,6 +147,7 @@ function toWhereClause(filter: FilterResult): string {
 interface ResolvedGroupBy {
   kind: 'column' | 'label';
   key: string;
+  valueSql: string;
   selectSql: string;
   groupSql: string;
   resultKey: string;
@@ -162,6 +163,7 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
       return {
         kind: 'column' as const,
         key,
+        valueSql: parsed,
         selectSql: `${parsed} AS ${parsed}`,
         groupSql: parsed,
         resultKey: parsed,
@@ -170,10 +172,12 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
     // Treat as label key — access from ClickHouse Map column
     const alias = `group_by_${index}`;
+    const valueSql = `labels[{label_key_${index}:String}]`;
     return {
       kind: 'label' as const,
       key,
-      selectSql: `labels[{label_key_${index}:String}] AS ${alias}`,
+      valueSql,
+      selectSql: `${valueSql} AS ${alias}`,
       groupSql: alias,
       resultKey: alias,
     };
@@ -192,7 +196,7 @@ function addGroupByLabelParams(resolved: ResolvedGroupBy[]): Record<string, unkn
 
 /** Builds WHERE conditions that exclude rows missing a requested label key. */
 function buildLabelExclusionConditions(resolved: ResolvedGroupBy[]): string[] {
-  return resolved.filter(e => e.kind === 'label').map(e => `${e.selectSql.split(' AS ')[0]} != ''`);
+  return resolved.filter(e => e.kind === 'label').map(e => `${e.valueSql} != ''`);
 }
 
 function toSeriesDisplayValue(value: unknown): string {
