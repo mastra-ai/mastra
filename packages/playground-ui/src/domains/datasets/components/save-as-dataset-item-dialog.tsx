@@ -1,7 +1,7 @@
 'use client';
 
 import { DatabaseIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -47,12 +47,14 @@ export function SaveAsDatasetItemDialog({
 
   const datasets = data?.datasets ?? [];
 
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
