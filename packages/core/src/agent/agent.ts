@@ -7,6 +7,8 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import type { MastraBrowser } from '../browser/browser';
+import type { BrowserContext } from '../browser/processor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -177,6 +179,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
+  #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
@@ -298,6 +301,10 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.browser) {
+      this.#browser = config.browser;
+    }
+
     if (config.workspace) {
       this.#workspace = config.workspace;
     }
@@ -324,6 +331,14 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the browser toolset for this agent, if configured.
+   * Used by server-side code to access browser features like screencast streaming.
+   */
+  get browser(): MastraBrowser | undefined {
+    return this.#browser;
   }
 
   /**
@@ -1353,18 +1368,29 @@ export class Agent<
   /**
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+   * If a browser toolset is configured, its tools are automatically merged.
    *
    * @example
    * ```typescript
    * const tools = await agent.listTools();
-   * console.log(Object.keys(tools)); // ['calculator', 'weather']
+   * console.log(Object.keys(tools)); // ['calculator', 'weather', 'browser_navigate', ...]
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
+    const mergeBrowserTools = (baseTools: TTools): TTools => {
+      if (!this.#browser) {
+        return baseTools;
+      }
+      // Get browser tools from the provider
+      const browserTools = this.#browser.getTools();
+      return { ...browserTools, ...baseTools } as TTools;
+    };
+
     if (typeof this.#tools !== 'function') {
-      return ensureToolProperties(this.#tools) as TTools;
+      const tools = ensureToolProperties(this.#tools) as TTools;
+      return mergeBrowserTools(tools);
     }
 
     const result = this.#tools({
@@ -1387,7 +1413,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return ensureToolProperties(tools) as TTools;
+      return mergeBrowserTools(ensureToolProperties(tools) as TTools);
     });
   }
 
@@ -2215,6 +2241,69 @@ export class Agent<
     }
 
     return convertedSkillTools;
+  }
+
+  /**
+   * Lists browser tools if a browser is configured.
+   * @internal
+   */
+  private async listBrowserTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    autoResumeSuspendedTools,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    autoResumeSuspendedTools?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    let convertedBrowserTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      return convertedBrowserTools;
+    }
+
+    // Check if browser is configured
+    if (!this.#browser) {
+      return convertedBrowserTools;
+    }
+
+    // Get browser tools from the provider
+    const browserTools = this.#browser.getTools();
+
+    if (Object.keys(browserTools).length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding browser tools: ${Object.keys(browserTools).join(', ')}`, {
+        runId,
+      });
+
+      for (const [toolName, tool] of Object.entries(browserTools)) {
+        const toolObj = tool;
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: undefined,
+          agentName: this.name,
+          agentId: this.id,
+          requestContext,
+          ...observabilityContext,
+          model: await this.getModel({ requestContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        convertedBrowserTools[toolName] = convertedToCoreTool;
+      }
+    }
+
+    return convertedBrowserTools;
   }
 
   /**
@@ -3883,6 +3972,15 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
+    const browserTools = await this.listBrowserTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      autoResumeSuspendedTools,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -3892,6 +3990,7 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
+      ...browserTools,
     };
     return this.formatTools(allTools);
   }
@@ -4174,6 +4273,24 @@ export class Agent<
       }
     }
     const requestContext = options.requestContext || new RequestContext();
+
+    // Inject browser context for BrowserContextProcessor
+    if (this.#browser && !requestContext.has('browser')) {
+      // Get threadId early for browser context - can come from requestContext, options, or snapshot
+      const browserThreadId =
+        (requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+        options.memory?.thread ||
+        snapshotMemoryInfo?.threadId;
+
+      const browserCtx: BrowserContext = {
+        provider: this.#browser.provider,
+        sessionId: this.#browser.id,
+        headless: (this.#browser as any).config?.headless,
+        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
+        isRunning: this.#browser.isBrowserRunning(),
+      };
+      requestContext.set('browser', browserCtx);
+    }
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
