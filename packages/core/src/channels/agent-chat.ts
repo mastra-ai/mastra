@@ -1,5 +1,5 @@
 import { createMemoryState } from '@chat-adapter/state-memory';
-import type { Adapter, CardElement, Message, StateAdapter, Thread } from 'chat';
+import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { Chat } from 'chat';
 import { z } from 'zod';
 
@@ -150,6 +150,21 @@ export interface ChannelConfig {
 
   /** The bot's display name (default: agent's name, or `'Mastra'`). */
   userName?: string;
+
+  /**
+   * Additional options passed directly to the Chat SDK.
+   * Use this for advanced configuration not exposed by Mastra.
+   *
+   * @see https://github.com/vercel/chat
+   * @example
+   * ```ts
+   * chatOptions: {
+   *   dedupeTtlMs: 600000, // 10 minute deduplication window
+   *   fallbackStreamingPlaceholderText: '⏳',
+   * }
+   * ```
+   */
+  chatOptions?: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
 }
 
 /**
@@ -182,6 +197,8 @@ export class AgentChat {
   private adapterConfigs: Record<string, ChannelAdapterConfig>;
   /** Handler overrides from config. */
   private handlerOverrides: ChannelHandlers;
+  /** Additional Chat SDK options. */
+  private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
 
@@ -206,6 +223,7 @@ export class AgentChat {
     this.handlerOverrides = config.handlers ?? {};
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
+    this.chatOptions = config.chatOptions ?? {};
 
     this.channelToolNames = new Set([
       'send_message',
@@ -274,6 +292,7 @@ export class AgentChat {
       state: this.stateAdapter,
       userName: this.userName,
       concurrency: { strategy: 'queue' },
+      ...this.chatOptions,
     });
 
     // Default handler that routes messages to the agent

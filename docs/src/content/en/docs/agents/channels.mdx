@@ -146,6 +146,37 @@ const agent = new Agent({
 
 When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide whether to proceed based on the conversation context.
 
+## Channel config options
+
+The top-level `channels` object supports these options:
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `adapters` | `Record<string, Adapter>` | required | Platform adapters keyed by name |
+| `handlers` | `ChannelHandlers` | — | Override default message handlers |
+| `state` | `StateAdapter` | in-memory | State adapter for subscriptions and deduplication |
+| `userName` | `string` | agent's `name` | Bot display name shown in messages |
+| `chatOptions` | `ChatConfig` | — | Additional Chat SDK options (see below) |
+
+```typescript
+const agent = new Agent({
+  name: 'Support Bot',
+  channels: {
+    adapters: {
+      /* ... */
+    },
+    userName: 'Support Bot', // Defaults to agent's name if omitted
+    state: createRedisState(), // Use Redis for persistent state
+    chatOptions: {
+      dedupeTtlMs: 600000, // 10 minute deduplication window
+      fallbackStreamingPlaceholderText: '⏳',
+    },
+  },
+})
+```
+
+The `chatOptions` object accepts any [Chat SDK configuration](https://github.com/vercel/chat) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
+
 ## Custom handlers
 
 Override or disable default message handlers using the `handlers` option:
