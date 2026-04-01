@@ -1,5 +1,5 @@
 {
-  "name": "examples-channel-slack",
+  "name": "examples-channels",
   "type": "module",
   "private": true,
   "description": "Mastra channel integration example",
