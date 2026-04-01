@@ -204,4 +204,30 @@ describe('ConsoleLogger', () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe('filter error handling', () => {
+    it('logs message when filter throws, to avoid breaking logging', () => {
+      const throwingFilter = () => {
+        throw new Error('filter crashed');
+      };
+
+      const logger = new ConsoleLogger({
+        level: LogLevel.INFO,
+        filter: throwingFilter,
+      });
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      logger.info('test message');
+
+      // Message should still be logged (filter error = allow through)
+      expect(infoSpy).toHaveBeenCalledWith('test message');
+      // Error should be reported
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('[Logger] Filter error'), expect.any(Error));
+
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+  });
 });

@@ -52,7 +52,13 @@ export class ConsoleLogger extends MastraLogger {
 
   private shouldLog(level: LogLevel, message: string, args: unknown[]): boolean {
     if (!this.filter) return true;
-    return this.filter({ component: this.component, level, message, args });
+    try {
+      return this.filter({ component: this.component, level, message, args });
+    } catch (e) {
+      // Filter threw - log the error and allow the message through to avoid breaking logging
+      console.error(`[Logger] Filter error for component=${this.component} level=${level}:`, e);
+      return true;
+    }
   }
 
   private prefix(): string {
