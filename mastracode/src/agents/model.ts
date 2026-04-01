@@ -58,6 +58,10 @@ function stripMastraGatewayPrefix(modelId: string): string {
   return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
 }
 
+function normalizeAnthropicModelId(modelId: string): string {
+  return modelId.replace(/\.(?=\d)/g, '-');
+}
+
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
 
@@ -177,7 +181,7 @@ export function resolveModel(
     // Anthropic OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because claudeCodeMiddleware must inject the Claude Code identity system message
     if (normalizedModelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
-      const bareModelId = normalizedModelId.substring('anthropic/'.length);
+      const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
       const anthropic = createAnthropic({
         apiKey: 'oauth-gateway-placeholder',
         baseURL: gatewayBaseURL,
@@ -244,7 +248,7 @@ export function resolveModel(
       headers,
     })(normalizedModelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
-    const bareModelId = normalizedModelId.substring('anthropic/'.length);
+    const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
     const storedCred = authStorage.get('anthropic');
 
     // Primary path: explicit OAuth credential
