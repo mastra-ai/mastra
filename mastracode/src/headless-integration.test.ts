@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -462,5 +462,188 @@ describe('headless mode — --model flag', () => {
 
     // No model_changed event should have been emitted
     expect(events.find(e => e.type === 'model_changed')).toBeUndefined();
+  });
+});
+
+describe('headless mode — config file', () => {
+  function createHarnessWithModels(opts: {
+    doStream: () => Promise<{ stream: ReadableStream }>;
+    customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
+  }) {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
+      tools: {},
+    });
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-config-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+
+    const storage = new LibSQLStore({
+      id: 'test-store',
+      url: `file:${storePath}`,
+    });
+
+    const harness = new Harness({
+      id: 'test-harness',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: true } as any,
+      customModelCatalogProvider: () =>
+        (opts.customModels ?? []).map(m => ({
+          ...m,
+          useCount: 0,
+        })),
+    });
+
+    return harness;
+  }
+
+  it('loads config file via --config and switches model', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+      customModels: [
+        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
+    tempStorePaths.push(configDir);
+    const configPath = join(configDir, 'headless.json');
+    writeFileSync(configPath, JSON.stringify({
+      models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
+    }));
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      config: configPath,
+    });
+
+    expect(exitCode).toBe(0);
+    const modelChanged = events.find(e => e.type === 'model_changed') as any;
+    expect(modelChanged).toBeDefined();
+    expect(modelChanged.modelId).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  it('--model flag overrides config file model', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+      customModels: [
+        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
+        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
+    tempStorePaths.push(configDir);
+    const configPath = join(configDir, 'headless.json');
+    writeFileSync(configPath, JSON.stringify({
+      models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
+    }));
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      model: 'anthropic/claude-haiku-4-5',
+      config: configPath,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('--mode selects model from config modeDefaults', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+      customModels: [
+        { id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
+    tempStorePaths.push(configDir);
+    const configPath = join(configDir, 'headless.json');
+    writeFileSync(configPath, JSON.stringify({
+      models: { modeDefaults: { fast: 'cerebras/zai-glm-4.7' } },
+    }));
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      mode: 'fast',
+      config: configPath,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
+  });
+
+  it('returns exit code 1 for missing --config path', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      config: '/nonexistent/headless.json',
+    });
+
+    expect(exitCode).toBe(1);
+  });
+
+  it('returns exit code 1 when config references unknown model', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Response') }),
+      customModels: [],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
+    tempStorePaths.push(configDir);
+    const configPath = join(configDir, 'headless.json');
+    writeFileSync(configPath, JSON.stringify({
+      models: { modeDefaults: { build: 'nonexistent/model' } },
+    }));
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      config: configPath,
+    });
+
+    expect(exitCode).toBe(1);
   });
 });
