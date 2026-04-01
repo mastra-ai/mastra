@@ -815,6 +815,86 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
       expect(s3fsMountCall[0]).toContain('public_bucket=1');
     }
   });
+
+  it('S3 mount uses path-specific credentials file to avoid concurrent mount races', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-creds',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-creds');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    // Mount command should reference a path-specific credentials file (not the shared /tmp/.passwd-s3fs)
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-creds') && !call[0].includes('which'),
+    );
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      // Must use a hash-suffixed path, not the generic shared path
+      expect(s3fsMountCall[0]).toMatch(/passwd_file=\/tmp\/\.passwd-s3fs-[a-f0-9]+/);
+      expect(s3fsMountCall[0]).not.toContain('passwd_file=/tmp/.passwd-s3fs\n');
+      expect(s3fsMountCall[0]).not.toMatch(/passwd_file=\/tmp\/\.passwd-s3fs\b(?!-)/);
+    }
+  });
+
+  it('S3 mount errors when only accessKeyId is provided without secretAccessKey', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        // secretAccessKey missing
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
+  });
+
+  it('S3 mount errors when only secretAccessKey is provided without accessKeyId', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds2',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        // accessKeyId missing
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial2');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
+  });
 });
 
 /**

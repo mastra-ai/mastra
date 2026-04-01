@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
@@ -72,9 +74,18 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   const idResult = await sandbox.commands.run('id -u && id -g');
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
-  // Determine if we have credentials or using public bucket mode
-  const hasCredentials = config.accessKeyId && config.secretAccessKey;
-  const credentialsPath = '/tmp/.passwd-s3fs';
+  // Validate credentials before any network calls — this gives the user a clear,
+  // immediate error instead of a confusing connectivity failure.
+  const hasAccessKey = !!config.accessKeyId;
+  const hasSecretKey = !!config.secretAccessKey;
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
+  }
+  const hasCredentials = hasAccessKey && hasSecretKey;
+
+  // Use a mount-specific credentials path to avoid races with concurrent mounts
+  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   // S3-compatible services (R2, MinIO, etc.) require credentials
   // public_bucket=1 only works for truly public AWS S3 buckets

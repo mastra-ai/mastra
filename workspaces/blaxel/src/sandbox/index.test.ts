@@ -789,6 +789,52 @@ describe('BlaxelSandbox S3 Public Bucket Mount', () => {
       expect(s3fsMountCall[0].command).toContain('public_bucket=1');
     }
   });
+
+  it('S3 mount errors when only accessKeyId is provided without secretAccessKey', async () => {
+    const sandbox = new BlaxelSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        // secretAccessKey missing
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
+  });
+
+  it('S3 mount errors when only secretAccessKey is provided without accessKeyId', async () => {
+    const sandbox = new BlaxelSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds2',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        // accessKeyId missing
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial2');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
+  });
 });
 
 /**
