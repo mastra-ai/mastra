@@ -9,7 +9,13 @@ import type { Processor, ProcessOutputResultArgs } from '../../processors/index'
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import type { MessageFilterContext, DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
+import type {
+  MessageFilterContext,
+  DelegationStartContext,
+  DelegationCompleteContext,
+  IterationCompleteContext,
+  ParentToolCall,
+} from '../agent.types';
 import type { MastraDBMessage } from '../message-list/state/types';
 
 // Helper: create a sub-agent with a fixed text response
@@ -3859,5 +3865,405 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
         }
       }
     }
+  });
+
+  describe('parentToolCalls in delegation hooks', () => {
+    it('should provide parent tool call history in onDelegationStart', async () => {
+      let capturedContext: DelegationStartContext | undefined;
+
+      const regularTool = createTool({
+        id: 'search-db',
+        description: 'Search the database',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ query }) => ({ results: [`result for ${query}`] }),
+      });
+
+      const subAgent = makeSubAgent('analyst', 'Analysis complete.');
+
+      let callCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You search then delegate.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-search-1',
+                    toolName: 'search-db',
+                    input: JSON.stringify({ query: 'sales data' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-delegate-1',
+                    toolName: 'agent-analyst',
+                    input: JSON.stringify({ prompt: 'analyze sales data' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Done',
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          },
+        }),
+        tools: { searchDb: regularTool },
+        agents: { analyst: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Search and analyze', {
+        maxSteps: 5,
+        delegation: {
+          onDelegationStart: (ctx: DelegationStartContext) => {
+            capturedContext = ctx;
+            return { proceed: true };
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.parentToolCalls).toBeDefined();
+      expect(capturedContext!.parentToolCalls.length).toBeGreaterThanOrEqual(1);
+
+      const searchCall = capturedContext!.parentToolCalls.find((tc: ParentToolCall) => tc.name === 'search-db');
+      expect(searchCall).toBeDefined();
+      expect(searchCall!.id).toBe('tc-search-1');
+      expect(searchCall!.result).toEqual({ results: ['result for sales data'] });
+    });
+
+    it('should provide parent tool call history in onDelegationComplete', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+
+      const regularTool = createTool({
+        id: 'fetch-data',
+        description: 'Fetch data',
+        inputSchema: z.object({ source: z.string() }),
+        execute: async ({ source }) => ({ data: `data from ${source}` }),
+      });
+
+      const subAgent = makeSubAgent('reporter', 'Report ready.');
+
+      let callCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You fetch then delegate.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-fetch-1',
+                    toolName: 'fetch-data',
+                    input: JSON.stringify({ source: 'api' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-delegate-1',
+                    toolName: 'agent-reporter',
+                    input: JSON.stringify({ prompt: 'write report' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Done',
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          },
+        }),
+        tools: { fetchData: regularTool },
+        agents: { reporter: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Fetch and report', {
+        maxSteps: 5,
+        delegation: {
+          onDelegationComplete: (ctx: DelegationCompleteContext) => {
+            capturedContext = ctx;
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.parentToolCalls).toBeDefined();
+
+      const fetchCall = capturedContext!.parentToolCalls.find((tc: ParentToolCall) => tc.name === 'fetch-data');
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall!.id).toBe('tc-fetch-1');
+      expect(fetchCall!.result).toEqual({ data: 'data from api' });
+    });
+
+    it('should provide parent tool call history in messageFilter', async () => {
+      let capturedToolCalls: ParentToolCall[] | undefined;
+
+      const regularTool = createTool({
+        id: 'lookup',
+        description: 'Lookup info',
+        inputSchema: z.object({ key: z.string() }),
+        execute: async ({ key }) => ({ value: `info-${key}` }),
+      });
+
+      const subAgent = makeSubAgent('worker', 'Work done.');
+
+      let callCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You lookup then delegate.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-lookup-1',
+                    toolName: 'lookup',
+                    input: JSON.stringify({ key: 'abc' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-delegate-1',
+                    toolName: 'agent-worker',
+                    input: JSON.stringify({ prompt: 'do work' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Done',
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          },
+        }),
+        tools: { lookup: regularTool },
+        agents: { worker: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Lookup and work', {
+        maxSteps: 5,
+        delegation: {
+          messageFilter: (ctx: MessageFilterContext) => {
+            capturedToolCalls = ctx.parentToolCalls;
+            return ctx.messages;
+          },
+        },
+      });
+
+      expect(capturedToolCalls).toBeDefined();
+      const lookupCall = capturedToolCalls!.find((tc: ParentToolCall) => tc.name === 'lookup');
+      expect(lookupCall).toBeDefined();
+      expect(lookupCall!.id).toBe('tc-lookup-1');
+      expect(lookupCall!.result).toBeDefined();
+    });
+
+    it('should only contain the current delegation call when no prior regular tools were called', async () => {
+      let capturedToolCalls: ParentToolCall[] | undefined;
+
+      const subAgent = makeSubAgent('direct-agent', 'Direct response.');
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You delegate directly.',
+        model: makeSupervisorModel('directAgent', 'go directly'),
+        agents: { directAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Do it directly', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationStart: (ctx: DelegationStartContext) => {
+            capturedToolCalls = ctx.parentToolCalls;
+            return { proceed: true };
+          },
+        },
+      });
+
+      expect(capturedToolCalls).toBeDefined();
+      const nonDelegationCalls = capturedToolCalls!.filter(
+        (tc: ParentToolCall) => !tc.name.startsWith('agent-') && !tc.name.startsWith('workflow-'),
+      );
+      expect(nonDelegationCalls).toEqual([]);
+    });
+
+    it('should include multiple parent tool calls with their respective results', async () => {
+      let capturedToolCalls: ParentToolCall[] | undefined;
+
+      const toolA = createTool({
+        id: 'tool-a',
+        description: 'Tool A',
+        inputSchema: z.object({ x: z.string() }),
+        execute: async ({ x }) => ({ a: x }),
+      });
+
+      const toolB = createTool({
+        id: 'tool-b',
+        description: 'Tool B',
+        inputSchema: z.object({ y: z.number() }),
+        execute: async ({ y }) => ({ b: y * 2 }),
+      });
+
+      const subAgent = makeSubAgent('final-agent', 'Final.');
+
+      let callCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You use multiple tools then delegate.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-a-1',
+                    toolName: 'tool-a',
+                    input: JSON.stringify({ x: 'hello' }),
+                  },
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-b-1',
+                    toolName: 'tool-b',
+                    input: JSON.stringify({ y: 5 }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'tc-delegate-1',
+                    toolName: 'agent-finalAgent',
+                    input: JSON.stringify({ prompt: 'finalize' }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'All done',
+              content: [{ type: 'text' as const, text: 'All done' }],
+              warnings: [],
+            };
+          },
+        }),
+        tools: { toolA, toolB },
+        agents: { finalAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Use tools then delegate', {
+        maxSteps: 5,
+        delegation: {
+          onDelegationStart: (ctx: DelegationStartContext) => {
+            capturedToolCalls = ctx.parentToolCalls;
+            return { proceed: true };
+          },
+        },
+      });
+
+      expect(capturedToolCalls).toBeDefined();
+      expect(capturedToolCalls!.length).toBeGreaterThanOrEqual(2);
+
+      const callA = capturedToolCalls!.find((tc: ParentToolCall) => tc.name === 'tool-a');
+      const callB = capturedToolCalls!.find((tc: ParentToolCall) => tc.name === 'tool-b');
+
+      expect(callA).toBeDefined();
+      expect(callA!.result).toEqual({ a: 'hello' });
+
+      expect(callB).toBeDefined();
+      expect(callB!.result).toEqual({ b: 10 });
+    });
   });
 });

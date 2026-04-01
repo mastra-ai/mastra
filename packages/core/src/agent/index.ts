@@ -11,6 +11,7 @@ export type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   // Delegation hook types
+  ParentToolCall,
   DelegationStartContext,
   DelegationStartResult,
   OnDelegationStartHandler,

@@ -82,6 +82,7 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
+  ParentToolCall,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -2694,6 +2695,53 @@ export class Agent<
   }
 
   /**
+   * Extracts tool calls and their results from raw conversation messages.
+   *
+   * Tool calls appear as parts with type 'tool-call' inside assistant messages.
+   * Their corresponding results appear as parts with type 'tool-result' inside
+   * tool-role messages. This method pairs them by toolCallId into a single list.
+   * @internal
+   */
+  private extractParentToolCalls(messages: MastraDBMessage[]): ParentToolCall[] {
+    const toolCalls = new Map<string, ParentToolCall>();
+
+    for (const message of messages) {
+      if (message.role === 'assistant') {
+        const parts = Array.isArray(message.content) ? message.content : (message.content as any)?.parts;
+        if (!Array.isArray(parts)) continue;
+        for (const part of parts) {
+          if (part?.type === 'tool-call' && part.toolCallId) {
+            toolCalls.set(part.toolCallId, {
+              id: part.toolCallId,
+              name: part.toolName || '',
+              args: (part.args || part.input || {}) as Record<string, unknown>,
+            });
+          }
+        }
+      }
+
+      if ((message as any).role === 'tool') {
+        const parts = Array.isArray(message.content) ? message.content : (message.content as any)?.parts;
+        if (!Array.isArray(parts)) continue;
+        for (const part of parts) {
+          if (part?.type === 'tool-result' && part.toolCallId) {
+            const existing = toolCalls.get(part.toolCallId);
+            if (existing) {
+              const raw = part.result ?? part.output;
+              existing.result = raw != null && typeof raw === 'object' && 'value' in raw ? raw.value : raw;
+              if (part.isError != null) {
+                existing.isError = part.isError;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return Array.from(toolCalls.values());
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -2772,6 +2820,9 @@ export class Agent<
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
+            // Extract parent tool calls before stripping — hooks need this visibility
+            const parentToolCalls = this.extractParentToolCalls(contextMessages);
+
             // Strip tool call/result parts from the context.
             const sanitizedMessages = this.stripParentToolParts(contextMessages);
 
@@ -2800,6 +2851,7 @@ export class Agent<
               parentAgentName: this.name,
               toolCallId,
               messages: sanitizedMessages,
+              parentToolCalls,
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
@@ -3009,6 +3061,7 @@ export class Agent<
                     parentAgentId: this.id,
                     parentAgentName: this.name,
                     toolCallId,
+                    parentToolCalls,
                   });
                 } catch (filterError) {
                   this.logger.error('messageFilter error', { agent: this.name, error: filterError });
@@ -3311,6 +3364,7 @@ export class Agent<
                     parentAgentId: this.id,
                     parentAgentName: this.name,
                     messages: fullSubAgentMessages,
+                    parentToolCalls,
                     bail: () => {
                       bailed = true;
                     },
@@ -3386,6 +3440,7 @@ export class Agent<
                     parentAgentId: this.id,
                     parentAgentName: this.name,
                     messages: fullSubAgentMessages,
+                    parentToolCalls,
                     bail: () => {
                       bailed = true;
                     },

@@ -38,6 +38,22 @@ export type StreamIsTaskCompleteConfig = IsTaskCompleteConfig;
 // ============================================================================
 
 /**
+ * A tool call made by the parent agent, paired with its result when available.
+ */
+export interface ParentToolCall {
+  /** Tool call ID from the LLM */
+  id: string;
+  /** Name of the tool that was called */
+  name: string;
+  /** Arguments passed to the tool */
+  args: Record<string, unknown>;
+  /** Result returned by the tool (undefined if not yet resolved) */
+  result?: unknown;
+  /** Whether the tool call resulted in an error */
+  isError?: boolean;
+}
+
+/**
  * Context passed to the messageFilter callback.
  * Contains everything needed to decide which parent messages to share with the sub-agent.
  */
@@ -64,6 +80,8 @@ export interface MessageFilterContext {
   parentAgentName: string;
   /** Tool call ID from the LLM */
   toolCallId: string;
+  /** Tool calls made by the parent agent prior to this delegation, with their results */
+  parentToolCalls: ParentToolCall[];
 }
 
 /**
@@ -100,6 +118,8 @@ export interface DelegationStartContext {
   toolCallId: string;
   /** Messages accumulated so far */
   messages: MastraDBMessage[];
+  /** Tool calls made by the parent agent prior to this delegation, with their results */
+  parentToolCalls: ParentToolCall[];
 }
 
 /**
@@ -160,6 +180,8 @@ export interface DelegationCompleteContext {
   parentAgentName: string;
   /** Messages accumulated so far (including the delegation result) */
   messages: MastraDBMessage[];
+  /** Tool calls made by the parent agent prior to this delegation, with their results */
+  parentToolCalls: ParentToolCall[];
   /**
    * Call this function to stop all other concurrent delegations.
    * Only relevant when multiple tool calls are executed concurrently.
