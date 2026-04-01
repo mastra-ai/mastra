@@ -338,9 +338,9 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_gateway_key_123');
     });
 
-    it('routes anthropic model through gateway with mastra/ prefix', () => {
+    it('routes explicit mastra-prefixed anthropic model through gateway', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
-      const result = resolveModel('anthropic/claude-sonnet-4') as Record<string, unknown>;
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
@@ -351,7 +351,7 @@ describe('resolveModel', () => {
       );
     });
 
-    it('routes anthropic OAuth model directly with middleware (bypasses ModelRouterLanguageModel)', () => {
+    it('routes explicit mastra-prefixed anthropic OAuth model directly with middleware (bypasses ModelRouterLanguageModel)', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -359,7 +359,7 @@ describe('resolveModel', () => {
         expires: Date.now() + 60_000,
       });
 
-      const result = resolveModel('anthropic/claude-sonnet-4') as Record<string, unknown>;
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
       // Should use createAnthropic directly, NOT go through ModelRouterLanguageModel
       expect(createAnthropic).toHaveBeenCalledWith(
@@ -384,7 +384,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
-    it('routes openai OAuth model directly with Codex middleware (bypasses ModelRouterLanguageModel)', () => {
+    it('routes explicit mastra-prefixed openai OAuth model directly with Codex middleware (bypasses ModelRouterLanguageModel)', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -392,7 +392,7 @@ describe('resolveModel', () => {
         expires: Date.now() + 60_000,
       });
 
-      const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
+      const result = resolveModel('mastra/openai/gpt-4o') as Record<string, unknown>;
 
       // Should use createOpenAI directly, NOT go through ModelRouterLanguageModel
       expect(createOpenAI).toHaveBeenCalledWith(
@@ -421,10 +421,10 @@ describe('resolveModel', () => {
       expect(openaiCodexProvider).not.toHaveBeenCalled();
     });
 
-    it('routes anthropic API key model through gateway without customFetch', () => {
+    it('routes explicit mastra-prefixed anthropic API key model through gateway without customFetch', () => {
       mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key' });
 
-      const result = resolveModel('anthropic/claude-sonnet-4') as Record<string, unknown>;
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
@@ -432,8 +432,8 @@ describe('resolveModel', () => {
       expect(buildAnthropicOAuthFetch).not.toHaveBeenCalled();
     });
 
-    it('routes unknown provider through gateway', () => {
-      const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
+    it('routes explicit mastra-prefixed unknown provider through gateway', () => {
+      const result = resolveModel('mastra/google/gemini-2.0-flash') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/google/gemini-2.0-flash');
@@ -456,14 +456,14 @@ describe('resolveModel', () => {
       expect(MastraGateway).not.toHaveBeenCalled();
     });
 
-    it('passes baseUrl when explicitly set in settings', () => {
+    it('passes baseUrl when explicitly set in settings for explicit mastra-prefixed models', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         memoryGateway: { baseUrl: 'https://custom-gateway.example.com' },
       });
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
-      resolveModel('anthropic/claude-sonnet-4');
+      resolveModel('mastra/anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({
         apiKey: 'msk_gateway_key_123',
@@ -471,22 +471,22 @@ describe('resolveModel', () => {
       });
     });
 
-    it('uses default baseUrl when not set in settings', () => {
+    it('uses default baseUrl when not set in settings for explicit mastra-prefixed models', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
         memoryGateway: {},
       });
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
-      resolveModel('anthropic/claude-sonnet-4');
+      resolveModel('mastra/anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://server.mastra.ai' });
     });
 
-    it('passes harness headers to ModelRouterLanguageModel', () => {
+    it('passes harness headers to ModelRouterLanguageModel for explicit mastra-prefixed models', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
-      resolveModel('anthropic/claude-sonnet-4', {
+      resolveModel('mastra/anthropic/claude-sonnet-4', {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       });
 
@@ -511,12 +511,24 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalled();
     });
 
-    it('activates gateway via MASTRA_GATEWAY_API_KEY env var when AuthStorage is empty', () => {
+    it('does not route plain provider/model ids through the gateway just because MASTRA_GATEWAY_API_KEY is set', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
 
-      const result = resolveModel('anthropic/claude-sonnet-4') as Record<string, unknown>;
+      resolveModel('anthropic/claude-sonnet-4');
+
+      expect(MastraGateway).not.toHaveBeenCalled();
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', { headers: undefined });
+      delete process.env['MASTRA_GATEWAY_API_KEY'];
+    });
+
+    it('routes explicit mastra-prefixed ids through the gateway when MASTRA_GATEWAY_API_KEY is set', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');

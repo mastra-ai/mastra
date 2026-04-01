@@ -25,6 +25,7 @@ import type { ThinkingLevel } from '../providers/openai-codex.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
+const MASTRA_GATEWAY_PREFIX = 'mastra/';
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
   'gpt-5.3': 'gpt-5.3-codex',
@@ -53,12 +54,18 @@ function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
+function stripMastraGatewayPrefix(modelId: string): string {
+  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
+}
+
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
-  if (!modelId.startsWith(OPENAI_PREFIX)) {
+  const normalizedModelId = stripMastraGatewayPrefix(modelId);
+
+  if (!normalizedModelId.startsWith(OPENAI_PREFIX)) {
     return modelId;
   }
 
-  const openaiModelId = modelId.substring(OPENAI_PREFIX.length);
+  const openaiModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
 
   if (openaiModelId.includes('-codex')) {
     return modelId;
@@ -69,7 +76,8 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
     return modelId;
   }
 
-  return `${OPENAI_PREFIX}${codexModelId}`;
+  const remappedModelId = `${OPENAI_PREFIX}${codexModelId}`;
+  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? `${MASTRA_GATEWAY_PREFIX}${remappedModelId}` : remappedModelId;
 }
 
 /**
@@ -136,7 +144,8 @@ export function resolveModel(
 ): ResolvedModel {
   authStorage.reload();
   const headers = getHarnessHeaders(options?.requestContext);
-  const [providerId, modelName] = modelId.split('/', 2);
+  const normalizedModelId = stripMastraGatewayPrefix(modelId);
+  const [providerId, modelName] = normalizedModelId.split('/', 2);
   const settings = loadSettings();
   const customProvider =
     providerId && modelName
@@ -147,7 +156,7 @@ export function resolveModel(
 
   if (customProvider) {
     return new ModelRouterLanguageModel({
-      id: modelId as `${string}/${string}`,
+      id: normalizedModelId as `${string}/${string}`,
       url: customProvider.url,
       apiKey: customProvider.apiKey,
       headers,
@@ -156,7 +165,8 @@ export function resolveModel(
 
   // --- Memory Gateway path ---
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  if (mgApiKey) {
+  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
+  if (mgApiKey && isMastraGatewayModel) {
     // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
     const rawBase = settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
     const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
@@ -166,8 +176,8 @@ export function resolveModel(
 
     // Anthropic OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because claudeCodeMiddleware must inject the Claude Code identity system message
-    if (modelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
-      const bareModelId = modelId.substring('anthropic/'.length);
+    if (normalizedModelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
+      const bareModelId = normalizedModelId.substring('anthropic/'.length);
       const anthropic = createAnthropic({
         apiKey: 'oauth-gateway-placeholder',
         baseURL: gatewayBaseURL,
@@ -185,8 +195,10 @@ export function resolveModel(
 
     // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
-    if (modelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
+    if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
+      const resolvedModelId = options?.remapForCodexOAuth
+        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
+        : normalizedModelId;
       const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
       const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
       const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
@@ -214,15 +226,12 @@ export function resolveModel(
       baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
     });
 
-    return new ModelRouterLanguageModel(
-      { id: `mastra/${modelId}` as `${string}/${string}`, headers },
-      [gateway],
-    );
+    return new ModelRouterLanguageModel({ id: `mastra/${normalizedModelId}` as `${string}/${string}`, headers }, [gateway]);
   }
 
-  const isAnthropicModel = modelId.startsWith('anthropic/');
-  const isOpenAIModel = modelId.startsWith(OPENAI_PREFIX);
-  const isMoonshotModel = modelId.startsWith('moonshotai/');
+  const isAnthropicModel = normalizedModelId.startsWith('anthropic/');
+  const isOpenAIModel = normalizedModelId.startsWith(OPENAI_PREFIX);
+  const isMoonshotModel = normalizedModelId.startsWith('moonshotai/');
 
   if (isMoonshotModel) {
     if (!process.env.MOONSHOT_AI_API_KEY) {
@@ -233,9 +242,9 @@ export function resolveModel(
       baseURL: 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
       headers,
-    })(modelId.substring('moonshotai/'.length));
+    })(normalizedModelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
-    const bareModelId = modelId.substring('anthropic/'.length);
+    const bareModelId = normalizedModelId.substring('anthropic/'.length);
     const storedCred = authStorage.get('anthropic');
 
     // Primary path: explicit OAuth credential
@@ -256,11 +265,13 @@ export function resolveModel(
     // No auth configured — attempt OAuth provider which will prompt login
     return opencodeClaudeMaxProvider(bareModelId, { headers });
   } else if (isOpenAIModel) {
-    const bareModelId = modelId.substring(OPENAI_PREFIX.length);
+    const bareModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
 
     if (storedCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
+      const resolvedModelId = options?.remapForCodexOAuth
+        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
+        : normalizedModelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
         headers,
@@ -272,9 +283,9 @@ export function resolveModel(
       return openaiApiKeyProvider(bareModelId, apiKey, headers);
     }
 
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
+    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
   } else {
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
+    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
   }
 }
 
