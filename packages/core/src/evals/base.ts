@@ -510,7 +510,7 @@ class MastraScorer<
         output: input.output,
         groundTruth: input.groundTruth,
         expectedTrajectory: input.expectedTrajectory,
-        requestContext: input.requestContext,
+        requestContext: normalizedRequestContext,
       },
       attributes: {
         scorerId: this.id,
@@ -520,7 +520,6 @@ class MastraScorer<
         ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
         ...(this.source ? { scorerDefinition: this.source } : {}),
       },
-      requestContext: normalizedRequestContext,
       metadata: {
         ...(input.targetTraceId ? { targetTraceId: input.targetTraceId } : {}),
         ...(input.targetSpanId ? { targetSpanId: input.targetSpanId } : {}),
@@ -647,11 +646,17 @@ class MastraScorer<
   }
 
   getSteps(): Array<{ name: string; type: ScorerStepType; description?: string }> {
-    return this.steps.map(step => ({
-      name: step.name,
-      type: step.isPromptObject ? 'prompt' : 'function',
-      description: step.definition.description,
-    }));
+    return this.steps.map(step => {
+      const description = step.isPromptObject
+        ? this.originalPromptObjects.get(step.name)?.description
+        : step.definition?.description;
+
+      return {
+        name: step.name,
+        type: step.isPromptObject ? 'prompt' : 'function',
+        description,
+      };
+    });
   }
 
   private toMastraWorkflow() {
