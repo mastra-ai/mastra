@@ -154,8 +154,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  const memory = getDynamicMemory(storage);
+  // Vector store for recall search (separate DB file to avoid bloating main storage)
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  const memory = getDynamicMemory(storage, vectorStore);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
