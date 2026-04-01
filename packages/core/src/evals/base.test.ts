@@ -327,7 +327,7 @@ describe('createScorer', () => {
       });
     });
 
-    it('should not emit addScore without a target trace id yet', async () => {
+    it('should emit addScore without a target trace id when unanchored scoring is allowed', async () => {
       const mockMastra = createMockMastra();
 
       const scorer = createScorer({
@@ -342,7 +342,17 @@ describe('createScorer', () => {
         scoreSource: 'experiment',
       });
 
-      expect(mockMastra.observability.addScore).not.toHaveBeenCalled();
+      expect(mockMastra.observability.addScore).toHaveBeenCalledWith({
+        score: {
+          scorerId: 'unanchored-scorer',
+          scorerName: 'unanchored-scorer',
+          scoreSource: 'experiment',
+          score: 0.75,
+          metadata: {
+            hasGroundTruth: false,
+          },
+        },
+      });
     });
 
     it('should include scoreTraceId when scorer tracing is enabled', async () => {
@@ -407,6 +417,104 @@ describe('createScorer', () => {
             hasGroundTruth: true,
           },
         }),
+      });
+    });
+
+    it('should forward live target correlation context and metadata to addScore', async () => {
+      const mockMastra = createMockMastra();
+
+      const scorer = createScorer({
+        id: 'contextual-scorer',
+        description: 'Contextual scorer',
+      }).generateScore(() => 0.91);
+
+      scorer.__registerMastra(mockMastra as any);
+
+      await scorer.run({
+        ...testData.scoringInput,
+        scoreSource: 'live',
+        targetTraceId: 'trace-live',
+        targetSpanId: 'span-live',
+        targetCorrelationContext: {
+          traceId: 'trace-live',
+          spanId: 'span-live',
+          entityName: 'tool-call',
+          parentEntityName: 'agent-run',
+          rootEntityName: 'workflow-root',
+          source: 'cloud',
+          serviceName: 'test-service',
+        },
+        targetMetadata: {
+          sessionId: 'session-1',
+          inherited: true,
+        },
+      });
+
+      expect(mockMastra.observability.addScore).toHaveBeenCalledWith({
+        traceId: 'trace-live',
+        spanId: 'span-live',
+        correlationContext: {
+          traceId: 'trace-live',
+          spanId: 'span-live',
+          entityName: 'tool-call',
+          parentEntityName: 'agent-run',
+          rootEntityName: 'workflow-root',
+          source: 'cloud',
+          serviceName: 'test-service',
+        },
+        score: {
+          scorerId: 'contextual-scorer',
+          scorerName: 'contextual-scorer',
+          scoreSource: 'live',
+          score: 0.91,
+          metadata: {
+            sessionId: 'session-1',
+            inherited: true,
+            hasGroundTruth: false,
+          },
+        },
+      });
+    });
+
+    it('should emit addScore with correlation context even when targetTraceId is absent', async () => {
+      const mockMastra = createMockMastra();
+
+      const scorer = createScorer({
+        id: 'unanchored-contextual-scorer',
+        description: 'Unanchored contextual scorer',
+      }).generateScore(() => 0.67);
+
+      scorer.__registerMastra(mockMastra as any);
+
+      await scorer.run({
+        ...testData.scoringInput,
+        scoreSource: 'live',
+        targetCorrelationContext: {
+          entityName: 'tool-call',
+          parentEntityName: 'agent-run',
+          rootEntityName: 'workflow-root',
+          source: 'cloud',
+          serviceName: 'test-service',
+        },
+      });
+
+      expect(mockMastra.observability.addScore).toHaveBeenCalledWith({
+        correlationContext: {
+          entityName: 'tool-call',
+          parentEntityName: 'agent-run',
+          rootEntityName: 'workflow-root',
+          source: 'cloud',
+          serviceName: 'test-service',
+        },
+        score: {
+          scorerId: 'unanchored-contextual-scorer',
+          scorerName: 'unanchored-contextual-scorer',
+          scoreSource: 'live',
+          score: 0.67,
+          metadata: {
+            hasGroundTruth: false,
+          },
+        },
       });
     });
 
