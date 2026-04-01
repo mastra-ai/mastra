@@ -191,11 +191,17 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
  * Creates an Anthropic model using Claude Max OAuth authentication
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
-export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
+export function opencodeClaudeMaxProvider(
+  modelId: string = 'claude-sonnet-4-20250514',
+  options?: { headers?: Record<string, string> },
+): MastraModelConfig {
+  const headers = options?.headers;
+
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
       apiKey: 'test-api-key',
+      headers,
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
@@ -205,6 +211,7 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
 
   const anthropic = createAnthropic({
     apiKey: 'oauth-placeholder',
+    headers,
     fetch: buildAnthropicOAuthFetch() as any,
   });
 

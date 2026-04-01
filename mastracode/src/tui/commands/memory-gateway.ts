@@ -106,7 +106,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   const keyAnswer = await askText(
     ctx,
     currentKey
-      ? `API key (ENTER to keep current, 'clear' to remove, ESC to cancel):`
+      ? `API key (ENTER to keep current, 'clear' to remove, ESC to skip):`
       : `API key (or 'clear' to remove, ESC to cancel):`,
     currentKey,
   );

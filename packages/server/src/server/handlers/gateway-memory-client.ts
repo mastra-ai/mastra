@@ -60,21 +60,28 @@ export class GatewayMemoryClient {
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-        ...((options.headers as Record<string, string>) || {}),
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: options.signal ?? controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+          ...((options.headers as Record<string, string>) || {}),
+        },
+      });
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Gateway API error ${res.status}: ${body}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Gateway API error ${res.status}: ${body}`);
+      }
+
+      return res.json() as Promise<T>;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return res.json() as Promise<T>;
   }
 
   // ── Threads ──────────────────────────────────────────────────

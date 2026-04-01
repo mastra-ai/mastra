@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gatewayRegistrySyncGateways = vi.fn();
+const gatewayRegistryGetProviders = vi.fn(() => ({}));
 const gatewayRegistryGetInstance = vi.fn(() => ({
   syncGateways: gatewayRegistrySyncGateways,
+  getProviders: gatewayRegistryGetProviders,
 }));
 
 vi.mock('@mastra/core/llm', () => ({
@@ -146,6 +148,8 @@ describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
     gatewayRegistrySyncGateways.mockReset();
+    gatewayRegistryGetProviders.mockReset();
+    gatewayRegistryGetProviders.mockReturnValue({});
     gatewayRegistryGetInstance.mockClear();
     createStorageMock.mockReset();
     createStorageMock.mockReturnValue({ storage: {} });
@@ -153,6 +157,7 @@ describe('createMastraCode', () => {
     harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
+      getProviders: gatewayRegistryGetProviders,
     }));
   });
 

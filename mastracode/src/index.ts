@@ -113,11 +113,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
-    process.env['MASTRA_GATEWAY_API_KEY'] = storedGatewayKey;
+    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
   }
 
   if (storedGatewayUrl) {
-    process.env['MASTRA_GATEWAY_URL'] = storedGatewayUrl;
+    process.env['MASTRA_GATEWAY_URL'] ??= storedGatewayUrl;
   }
 
   // Load user-entered API keys from auth.json into process.env
@@ -129,13 +129,25 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
-    providerEnvVars.mastra ??= 'MASTRA_GATEWAY_API_KEY';
+    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
-    authStorage.loadStoredApiKeysIntoEnv({ mastra: 'MASTRA_GATEWAY_API_KEY' });
+    // Registry unavailable — load well-known provider keys so non-gateway flows still work
+    authStorage.loadStoredApiKeysIntoEnv({
+      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      anthropic: 'ANTHROPIC_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+      cerebras: 'CEREBRAS_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY',
+    });
   }
 
-  await gatewayRegistry.syncGateways(true);
+  try {
+    await gatewayRegistry.syncGateways(true);
+  } catch (error) {
+    console.warn('Failed to sync gateways at startup', error);
+  }
 
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
@@ -355,9 +367,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
-      // Gateway covers all providers
+      // Gateway key only authorizes providers that the Mastra gateway actually serves
       const gatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-      if (gatewayKey) return true;
+      if (gatewayKey) {
+        const providerConfig = gatewayRegistry.getProviders()[provider];
+        if (providerConfig?.gateway === 'mastra') return true;
+      }
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;

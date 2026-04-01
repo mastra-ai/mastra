@@ -188,17 +188,19 @@ export function buildOpenAICodexOAuthFetch(
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel },
+  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string> },
 ): MastraModelConfig {
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
   const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const middleware = createCodexMiddleware(reasoningEffort);
+  const headers = options?.headers;
 
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
       apiKey: 'test-api-key',
+      headers,
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
@@ -208,6 +210,7 @@ export function openaiCodexProvider(
 
   const openai = createOpenAI({
     apiKey: 'oauth-dummy-key',
+    headers,
     fetch: buildOpenAICodexOAuthFetch() as any,
   });
 

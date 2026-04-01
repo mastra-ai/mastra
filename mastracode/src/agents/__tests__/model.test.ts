@@ -146,6 +146,8 @@ describe('resolveModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadSettings.mockReturnValue({ customProviders: [], memoryGateway: {} });
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
     mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;

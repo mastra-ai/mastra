@@ -148,11 +148,12 @@ export function resolveModel(
 ): ResolvedModel {
   authStorage.reload();
   const headers = getHarnessHeaders(options?.requestContext);
+  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
   const [providerId, modelName] = normalizedModelId.split('/', 2);
   const settings = loadSettings();
   const customProvider =
-    providerId && modelName
+    !isMastraGatewayModel && providerId && modelName
       ? settings.customProviders.find(provider => {
           return providerId === getCustomProviderId(provider.name);
         })
@@ -169,7 +170,6 @@ export function resolveModel(
 
   // --- Memory Gateway path ---
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   if (mgApiKey && isMastraGatewayModel) {
     // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
     const rawBase =

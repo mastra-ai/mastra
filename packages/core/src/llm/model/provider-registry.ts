@@ -225,8 +225,13 @@ function getPackageRoot(): string {
   }
 }
 
-function loadRegistry(useDynamicLoading: boolean): RegistryData {
-  const enabledGatewayIds = getEnabledGatewayIds([new ModelsDevGateway({}), new NetlifyGateway(), new MastraGateway()]);
+function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGateway[] = []): RegistryData {
+  const enabledGatewayIds = getEnabledGatewayIds([
+    new ModelsDevGateway({}),
+    new NetlifyGateway(),
+    new MastraGateway(),
+    ...customGateways,
+  ]);
 
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
@@ -642,7 +647,7 @@ export class GatewayRegistry {
    * Get provider configuration by ID
    */
   getProviderConfig(providerId: string): ProviderConfig | undefined {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers[providerId];
   }
 
@@ -650,7 +655,7 @@ export class GatewayRegistry {
    * Check if a provider is registered
    */
   isProviderRegistered(providerId: string): boolean {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return providerId in data.providers;
   }
 
@@ -658,7 +663,7 @@ export class GatewayRegistry {
    * Get all registered providers
    */
   getProviders(): Record<string, ProviderConfig> {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers;
   }
 
@@ -666,7 +671,7 @@ export class GatewayRegistry {
    * Get all models
    */
   getModels(): Record<string, string[]> {
-    return loadRegistry(this.useDynamicLoading).models;
+    return loadRegistry(this.useDynamicLoading, this.customGateways).models;
   }
 }
 

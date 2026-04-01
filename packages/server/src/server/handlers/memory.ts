@@ -803,7 +803,9 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
               updatedAt: new Date(),
             };
           }
-          return toLocalThread(result.thread);
+          const thread = toLocalThread(result.thread);
+          await validateThreadOwnership(thread, effectiveResourceId);
+          return thread;
         }
       }
 
@@ -877,6 +879,12 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          // Validate thread ownership before returning messages
+          const threadResult = await gwClient.getThread(effectiveThreadId);
+          if (threadResult) {
+            await validateThreadOwnership(toLocalThread(threadResult.thread), effectiveResourceId);
+          }
+
           const effectivePage = page ?? 0;
           const effectivePerPage = perPage ?? 100;
           const offset = effectivePage * effectivePerPage;
@@ -1149,6 +1157,11 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          // Validate ownership before mutating
+          const existing = await gwClient.getThread(effectiveThreadId!);
+          if (existing) {
+            await validateThreadOwnership(toLocalThread(existing.thread), effectiveResourceId);
+          }
           const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
@@ -1214,7 +1227,15 @@ export const DELETE_THREAD_ROUTE = createRoute({
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
-          await gwClient.deleteThread(effectiveThreadId!);
+          // Validate ownership before deleting
+          const existing = await gwClient.getThread(effectiveThreadId!);
+          if (existing) {
+            await validateThreadOwnership(toLocalThread(existing.thread), effectiveResourceId);
+          }
+          const deleteResult = await gwClient.deleteThread(effectiveThreadId!);
+          if (!deleteResult.ok) {
+            throw new HTTPException(404, { message: 'Thread not found on gateway' });
+          }
           return { result: 'Thread deleted' };
         }
       }

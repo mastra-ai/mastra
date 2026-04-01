@@ -9,8 +9,9 @@ function createGateway(id: string, providers: Record<string, ProviderConfig>, sh
     name: id,
     shouldEnable: vi.fn().mockReturnValue(shouldEnable),
     fetchProviders: vi.fn().mockResolvedValue(providers),
-    supportsModel: vi.fn(),
-    createModel: vi.fn(),
+    buildUrl: vi.fn().mockReturnValue(undefined),
+    getApiKey: vi.fn().mockResolvedValue('test-key'),
+    resolveLanguageModel: vi.fn(),
   } as unknown as MastraModelGateway;
 }
 
@@ -81,12 +82,27 @@ describe('gateway-sync', () => {
       },
     });
 
-    const mastra = createGateway('mastra', {}, false);
+    // Simulate MastraGateway when no API key is set: shouldEnable returns false,
+    // but providers are still defined (they just won't be fetched)
+    const mastra = createGateway(
+      'mastra',
+      {
+        google: {
+          name: 'Google',
+          gateway: 'mastra',
+          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+          models: ['gemini-2.5-flash'],
+        },
+      },
+      false,
+    );
 
     const { providers } = await fetchProvidersFromGateways([modelsDev, netlify, mastra]);
 
     expect(providers.openai).toBeDefined();
     expect(providers['netlify/xai']).toBeDefined();
+    // Mastra providers are skipped because shouldEnable() returned false
+    expect(providers['mastra/google']).toBeUndefined();
     expect(providers['mastra']).toBeUndefined();
   });
 

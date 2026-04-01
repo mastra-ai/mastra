@@ -21,11 +21,12 @@ export class MastraGateway extends MastraModelGateway {
   }
 
   private getBaseUrl(): string {
-    return this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+    const raw = this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+    return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
   }
 
   override shouldEnable(): boolean {
-    return !!process.env['MASTRA_GATEWAY_API_KEY'];
+    return !!(this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY']);
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {

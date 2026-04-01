@@ -523,7 +523,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
   it('should hide disabled gateway providers at runtime when shouldEnable returns false', async () => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
-    GatewayRegistry['instance'] = null;
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
 
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: false });
 
@@ -534,7 +535,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 
   it('should allow a later caller to enable dynamic loading on the singleton', async () => {
-    GatewayRegistry['instance'] = null;
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
 
     const syncSpy = vi.spyOn(GatewayRegistry.prototype, 'syncGateways').mockResolvedValue();
 
