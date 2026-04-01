@@ -83,17 +83,6 @@ function extractInputPreview(input: unknown): string {
   return JSON.stringify(input).slice(0, 200);
 }
 
-/** Unwrap agent message wrapper to get raw input for dataset items */
-function extractRawInput(input: unknown): unknown {
-  if (!input || typeof input !== 'object') return input;
-  const obj = input as Record<string, unknown>;
-  if (obj.messages && Array.isArray(obj.messages)) {
-    const userMsgs = (obj.messages as Array<Record<string, unknown>>).filter(m => m.role === 'user');
-    const last = userMsgs[userMsgs.length - 1];
-    if (last?.content) return last.content;
-  }
-  return input;
-}
 
 /** Extract output text preview from root span output */
 function extractOutputPreview(output: unknown): string {
@@ -556,45 +545,63 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
       if (!selected.length) return;
 
       setIsPreparing(true);
-
-      // Fetch trajectories for all selected traces in parallel
-      const trajectories = await Promise.all(
-        selected.map(t => client.getTraceTrajectory(t.traceId).catch(() => undefined)),
-      );
-
-      const items: BulkTraceItem[] = selected.map((t, i) => {
-        const trajectory = trajectories[i];
-        let trajectoryExpectation: Record<string, unknown> | undefined;
-        if (trajectory?.steps && trajectory.steps.length > 0) {
-          trajectoryExpectation = {
-            steps: trajectory.steps.map(step => {
-              const { name, stepType, ...rest } = step as Record<string, unknown>;
-              const expected: Record<string, unknown> = { name, stepType };
-              for (const [k, v] of Object.entries(rest)) {
-                if (v != null && k !== 'durationMs' && k !== 'metadata' && k !== 'children') {
-                  expected[k] = v;
-                }
-              }
-              return expected;
-            }),
-            ordering: 'relaxed' as const,
-          };
+      try {
+        // Fetch trajectories in batches to avoid unbounded fan-out
+        const BATCH_SIZE = 5;
+        const trajectories: Array<Record<string, unknown> | undefined> = [];
+        for (let i = 0; i < selected.length; i += BATCH_SIZE) {
+          const batch = selected.slice(i, i + BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map(t => client.getTraceTrajectory(t.traceId).catch(() => undefined)),
+          );
+          trajectories.push(...results);
         }
 
-        const formatJson = (val: unknown) => (val != null ? JSON.stringify(val, null, 2) : '');
+        const items: BulkTraceItem[] = selected.map((t, i) => {
+          const trajectory = trajectories[i] as { steps?: Array<Record<string, unknown>> } | undefined;
+          let trajectoryExpectation: Record<string, unknown> | undefined;
+          if (trajectory?.steps && trajectory.steps.length > 0) {
+            trajectoryExpectation = {
+              steps: trajectory.steps.map(step => {
+                const { name, stepType, ...rest } = step as Record<string, unknown>;
+                const expected: Record<string, unknown> = { name, stepType };
+                for (const [k, v] of Object.entries(rest)) {
+                  if (v != null && k !== 'durationMs' && k !== 'metadata' && k !== 'children') {
+                    expected[k] = v;
+                  }
+                }
+                return expected;
+              }),
+              ordering: 'relaxed' as const,
+            };
+          }
 
-        return {
-          input: formatJson(extractRawInput(t.input)),
-          groundTruth: formatJson(t.output),
-          expectedTrajectory: formatJson(trajectoryExpectation),
-          source: { type: 'trace' as const, referenceId: t.traceId },
-        };
-      });
+          const formatJson = (val: unknown) => (val != null ? JSON.stringify(val, null, 2) : '');
 
-      const datasetName = allDatasets?.datasets?.find(d => d.id === datasetId)?.name ?? 'dataset';
+          // Unwrap agent_run { messages } wrapper to preserve full conversation input
+          const rawInput =
+            t.spanType === 'agent_run' &&
+            t.input &&
+            typeof t.input === 'object' &&
+            !Array.isArray(t.input) &&
+            Array.isArray((t.input as Record<string, unknown>).messages)
+              ? (t.input as Record<string, unknown>).messages
+              : t.input;
 
-      setIsPreparing(false);
-      setBulkReview({ isOpen: true, datasetId, datasetName, items });
+          return {
+            input: formatJson(rawInput),
+            groundTruth: formatJson(t.output),
+            expectedTrajectory: formatJson(trajectoryExpectation),
+            source: { type: 'trace' as const, referenceId: t.traceId },
+          };
+        });
+
+        const datasetName = allDatasets?.datasets?.find(d => d.id === datasetId)?.name ?? 'dataset';
+
+        setBulkReview({ isOpen: true, datasetId, datasetName, items });
+      } finally {
+        setIsPreparing(false);
+      }
     },
     [displayTraces, checkedTraceIds, client, allDatasets],
   );
