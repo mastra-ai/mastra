@@ -682,6 +682,33 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
             },
             createdAt: new Date(),
           },
+          {
+            id: 'test-response',
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            role: 'assistant',
+            type: 'text',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test stored response' }],
+              metadata: {
+                mastra: {
+                  response: {
+                    agentId: 'test-agent',
+                    model: 'openai/gpt-4o',
+                    createdAt: Math.floor(Date.now() / 1000),
+                    completedAt: Math.floor(Date.now() / 1000),
+                    status: 'completed',
+                    usage: null,
+                    tools: [],
+                    store: true,
+                    messageIds: ['test-message-1', 'test-response'],
+                  },
+                },
+              },
+            },
+            createdAt: new Date(),
+          },
         ],
       });
     }
