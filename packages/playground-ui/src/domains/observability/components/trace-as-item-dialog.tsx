@@ -1,7 +1,7 @@
 'use client';
 
-import { useMastraClient } from '@mastra/react';
 import type { SpanRecord } from '@mastra/core/storage';
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';

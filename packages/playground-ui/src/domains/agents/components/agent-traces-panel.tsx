@@ -656,11 +656,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
       </EntityListPageLayout.Top>
 
       {someSelected && (
-        <BulkAddToDatasetBar
-          selectedCount={checkedTraceIds.size}
-          onAdd={handleBulkAdd}
-          isPending={isPreparing}
-        />
+        <BulkAddToDatasetBar selectedCount={checkedTraceIds.size} onAdd={handleBulkAdd} isPending={isPreparing} />
       )}
 
       {isTracesLoading ? (

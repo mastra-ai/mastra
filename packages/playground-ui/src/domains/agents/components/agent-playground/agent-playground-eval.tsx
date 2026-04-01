@@ -21,6 +21,7 @@ import { TraceDialog } from '@/domains/observability/components/trace-dialog';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Chip } from '@/ds/components/Chip';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible/collapsible';
 import { CopyButton } from '@/ds/components/CopyButton/copy-button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -28,7 +29,6 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
-import { Chip } from '@/ds/components/Chip';
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -138,7 +138,9 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
         {isLoading ? (
           <div className="flex items-center gap-2 mt-1 px-3 py-2">
             <Spinner className="h-3 w-3" />
-            <Txt variant="ui-xs" className="text-neutral3">Loading trajectory...</Txt>
+            <Txt variant="ui-xs" className="text-neutral3">
+              Loading trajectory...
+            </Txt>
           </div>
         ) : trajectory?.steps && trajectory.steps.length > 0 ? (
           <div className="mt-1 space-y-1">
@@ -551,9 +553,7 @@ export function ExperimentResultsPanel({
                                 <Txt variant="ui-xs" className="text-purple-400 font-medium">
                                   {s.scorerId}
                                 </Txt>
-                                {s.reason && (
-                                  <p className="text-xs text-neutral4">{s.reason}</p>
-                                )}
+                                {s.reason && <p className="text-xs text-neutral4">{s.reason}</p>}
                                 {s.preprocessStepResult && (
                                   <pre className="text-xs text-neutral3 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
                                     {JSON.stringify(s.preprocessStepResult, null, 2)}

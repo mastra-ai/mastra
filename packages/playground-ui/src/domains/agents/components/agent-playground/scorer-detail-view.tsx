@@ -56,7 +56,11 @@ export function ScorerDetailView({
               <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
                 {name}
               </Txt>
-              {isTrajectory && <Chip size="small" color="purple">trajectory</Chip>}
+              {isTrajectory && (
+                <Chip size="small" color="purple">
+                  trajectory
+                </Chip>
+              )}
               {isCode && (
                 <span title="Defined in code — cannot be edited in the UI">
                   <Badge variant="default">Code</Badge>
