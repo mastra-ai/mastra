@@ -46,6 +46,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
+    { key: '/memory-gateway', description: 'Configure Mastra memory gateway' },
   ];
 
   if (modes > 1) {

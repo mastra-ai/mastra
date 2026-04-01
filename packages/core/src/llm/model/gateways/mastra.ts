@@ -1,16 +1,27 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { MastraError } from '../../../error/index.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig, GatewayLanguageModel } from './base.js';
-import { MASTRA_USER_AGENT } from './constants.js';
+import { GATEWAY_AUTH_HEADER, MASTRA_USER_AGENT } from './constants.js';
+
+export interface MastraGatewayConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  customFetch?: typeof globalThis.fetch;
+}
 
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
   readonly name = 'Mastra Gateway';
 
+  constructor(private config?: MastraGatewayConfig) {
+    super();
+  }
+
   private getBaseUrl(): string {
-    return process.env['MASTRA_GATEWAY_URL'] || 'https://server.mastra.ai';
+    return this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
   }
 
   override shouldEnable(): boolean {
@@ -44,7 +55,7 @@ export class MastraGateway extends MastraModelGateway {
   }
 
   async getApiKey(): Promise<string> {
-    const apiKey = process.env['MASTRA_GATEWAY_API_KEY'];
+    const apiKey = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
     if (!apiKey) {
       throw new MastraError({
         id: 'MASTRA_GATEWAY_NO_API_KEY',
@@ -70,6 +81,35 @@ export class MastraGateway extends MastraModelGateway {
     const baseURL = `${this.getBaseUrl()}/v1`;
     const fullModelId = `${providerId}/${modelId}`;
 
+    if (this.config?.customFetch && providerId === 'anthropic') {
+      // Anthropic OAuth path: use native Anthropic SDK (sends /messages, not /chat/completions)
+      return createAnthropic({
+        apiKey: 'oauth-gateway-placeholder',
+        baseURL,
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
+          ...headers,
+        },
+        fetch: this.config.customFetch as any,
+      })(modelId) as unknown as GatewayLanguageModel;
+    }
+
+    if (this.config?.customFetch) {
+      // Non-Anthropic OAuth path: gateway key in GATEWAY_AUTH_HEADER, customFetch owns Authorization
+      return createOpenRouter({
+        apiKey: 'oauth-gateway-placeholder',
+        baseURL,
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
+          ...headers,
+        },
+        fetch: this.config.customFetch,
+      }).chat(fullModelId) as unknown as GatewayLanguageModel;
+    }
+
+    // API key path: gateway key goes via Authorization (standard flow)
     return createOpenRouter({
       apiKey,
       baseURL,
