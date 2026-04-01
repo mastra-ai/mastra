@@ -938,6 +938,8 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
+        // Set browser from workspace if not already set (CLI browser approach)
+        await this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -963,11 +965,36 @@ export class Agent<
         });
       }
 
+      // Set browser from workspace if not already set (CLI browser approach)
+      await this.#setBrowserFromWorkspace(resolvedWorkspace);
+
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    return this.#mastra?.getWorkspace();
+    const globalWorkspace = this.#mastra?.getWorkspace();
+    if (globalWorkspace) {
+      await this.#setBrowserFromWorkspace(globalWorkspace);
+    }
+    return globalWorkspace;
+  }
+
+  /**
+   * Sets the agent's browser from workspace's BrowserViewer if:
+   * 1. Agent doesn't already have a browser configured (SDK approach)
+   * 2. Workspace has browser capabilities (CLI approach)
+   */
+  async #setBrowserFromWorkspace(workspace: AnyWorkspace): Promise<void> {
+    // Skip if agent already has a browser (SDK approach takes precedence)
+    if (this.#browser) {
+      return;
+    }
+
+    // Check if workspace has browser capabilities
+    const browserViewer = await workspace.getBrowserViewer?.();
+    if (browserViewer) {
+      this.#browser = browserViewer;
+    }
   }
 
   get voice() {
