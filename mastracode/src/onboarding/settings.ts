@@ -56,6 +56,12 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
+/** Memory gateway provider key used in AuthStorage. */
+export const MEMORY_GATEWAY_PROVIDER = 'mastra-gateway';
+
+/** Default gateway URL. */
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://server.mastra.ai';
+
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -115,6 +121,8 @@ export interface GlobalSettings {
   modelUseCounts: Record<string, number>;
   // Version the user dismissed the update prompt for (skip until they manually update past this)
   updateDismissedVersion: string | null;
+  // Memory gateway configuration
+  memoryGateway: { baseUrl?: string };
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
 }
@@ -153,6 +161,7 @@ const DEFAULTS: GlobalSettings = {
   customProviders: [],
   modelUseCounts: {},
   updateDismissedVersion: null,
+  memoryGateway: {},
   lsp: {},
 };
 
@@ -280,6 +289,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+        memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
@@ -396,6 +406,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+      memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 

@@ -31,6 +31,7 @@ import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.j
 import {
   getCustomProviderId,
   loadSettings,
+  MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
   resolveOmModel,
   saveSettings,
@@ -115,6 +116,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
+    // Include the memory gateway key so it's loaded from AuthStorage into process.env
+    providerEnvVars[MEMORY_GATEWAY_PROVIDER] = 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
     // Non-fatal — provider registry may not be available
@@ -138,10 +141,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  // Vector store for recall search (separate DB file to avoid bloating main storage)
-  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
-
-  const memory = getDynamicMemory(storage, vectorStore);
+  // When a gateway API key is present (mgApiKey), local observational memory is disabled because
+  // the gateway server manages memory remotely. This means getDynamicMemory returns undefined and
+  // Harness.resolveMemory() will throw "Memory is not configured" if called. This decision is made
+  // once at startup — changing the gateway key mid-session (via /memory-gateway) requires a restart
+  // for memory mode to switch.
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const memory = mgApiKey ? undefined : getDynamicMemory(storage);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
@@ -233,6 +239,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
+  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  if (mgApiKey) {
+    if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
+    if (!startupAccess.openai) startupAccess.openai = 'apikey';
+  }
   // Check all providers in the registry for API keys
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
@@ -334,6 +345,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
+      // Gateway covers all providers
+      const gatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (gatewayKey) return true;
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;
