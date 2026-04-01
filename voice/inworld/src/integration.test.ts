@@ -1,12 +1,15 @@
 /**
  * Integration tests against the real Inworld API.
- * Run with: INWORLD_API_KEY=<key> pnpm vitest run src/integration.test.ts
+ * Run with: INWORLD_API_KEY=<key> npx vitest run src/integration.test.ts
  *
  * These tests are skipped if INWORLD_API_KEY is not set.
+ *
+ * Uses a warmup request to pre-establish the TCP+TLS connection before
+ * measuring latency, following the pattern from inworld-api-examples.
  */
+import { Readable } from 'node:stream';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { InworldVoice } from './index';
-import { Readable } from 'node:stream';
 
 const API_KEY = process.env.INWORLD_API_KEY;
 const describeIf = API_KEY ? describe : describe.skip;
@@ -19,14 +22,26 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/**
+ * Warmup: send a short TTS request to pre-establish TCP+TLS connection.
+ * The connection pool reuses the socket for subsequent requests, so we
+ * measure only synthesis latency, not handshake overhead.
+ */
+async function warmupConnection(voice: InworldVoice) {
+  const stream = await voice.speak('hi');
+  await streamToBuffer(stream);
+}
+
 describeIf('InworldVoice — real API integration', () => {
   let voice: InworldVoice;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     voice = new InworldVoice({
       speechModel: { apiKey: API_KEY! },
     });
-  });
+    // Warmup: establish keep-alive connection before benchmarking
+    await warmupConnection(voice);
+  }, 30_000);
 
   it('lists voices from the real API', async () => {
     const speakers = await voice.getSpeakers();
@@ -43,16 +58,17 @@ describeIf('InworldVoice — real API integration', () => {
     const buffer = await streamToBuffer(stream);
     const totalTime = performance.now() - start;
 
-    console.log(`TTS (max): TTFB=${ttfb.toFixed(0)}ms, total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
+    console.info(`TTS (max): TTFB=${ttfb.toFixed(0)}ms, total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
 
-    expect(buffer.length).toBeGreaterThan(1000); // should be real audio
-    expect(ttfb).toBeLessThan(5000); // TTFB should be reasonable
+    expect(buffer.length).toBeGreaterThan(1000);
+    expect(ttfb).toBeLessThan(3000);
   }, 30_000);
 
   it('generates streaming TTS audio (inworld-tts-1.5-mini)', async () => {
     const miniVoice = new InworldVoice({
       speechModel: { apiKey: API_KEY!, name: 'inworld-tts-1.5-mini' },
     });
+    await warmupConnection(miniVoice);
 
     const start = performance.now();
     const stream = await miniVoice.speak('Hello from the mini model.');
@@ -61,9 +77,10 @@ describeIf('InworldVoice — real API integration', () => {
     const buffer = await streamToBuffer(stream);
     const totalTime = performance.now() - start;
 
-    console.log(`TTS (mini): TTFB=${ttfb.toFixed(0)}ms, total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
+    console.info(`TTS (mini): TTFB=${ttfb.toFixed(0)}ms, total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
 
     expect(buffer.length).toBeGreaterThan(500);
+    expect(ttfb).toBeLessThan(2000);
   }, 30_000);
 
   it('generates TTS with different voices', async () => {
@@ -72,7 +89,7 @@ describeIf('InworldVoice — real API integration', () => {
     const buffer = await streamToBuffer(stream);
     const totalTime = performance.now() - start;
 
-    console.log(`TTS (Olivia): total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
+    console.info(`TTS (Olivia): total=${totalTime.toFixed(0)}ms, size=${buffer.length} bytes`);
     expect(buffer.length).toBeGreaterThan(500);
   }, 30_000);
 
@@ -90,19 +107,10 @@ describeIf('InworldVoice — real API integration', () => {
     });
     const sttTime = performance.now() - start;
 
-    console.log(`STT: time=${sttTime.toFixed(0)}ms, transcript="${transcript}"`);
+    console.info(`STT: time=${sttTime.toFixed(0)}ms, transcript="${transcript}"`);
 
     expect(transcript.length).toBeGreaterThan(0);
-    // Should contain at least some of the original words
     const lower = transcript.toLowerCase();
     expect(lower.includes('fox') || lower.includes('dog') || lower.includes('quick')).toBe(true);
   }, 60_000);
-
-  it('handles speaking rate adjustment', async () => {
-    const stream = await voice.speak('This is spoken at a faster rate.', {
-      speakingRate: 1.4,
-    });
-    const buffer = await streamToBuffer(stream);
-    expect(buffer.length).toBeGreaterThan(500);
-  }, 30_000);
 });

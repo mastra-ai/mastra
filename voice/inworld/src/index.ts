@@ -1,11 +1,14 @@
-import { MastraVoice } from '@mastra/core/voice';
 import { PassThrough } from 'node:stream';
+import { MastraVoice } from '@mastra/core/voice';
 
 const INWORLD_API_BASE = 'https://api.inworld.ai';
 
 type InworldTtsModel = 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini';
 
-type InworldSttModel = 'inworld/inworld-stt-1' | 'groq/whisper-large-v3' | 'assemblyai/universal-streaming-multilingual';
+type InworldSttModel =
+  | 'inworld/inworld-stt-1'
+  | 'groq/whisper-large-v3'
+  | 'assemblyai/universal-streaming-multilingual';
 
 type AudioEncoding = 'LINEAR16' | 'MP3' | 'OGG_OPUS' | 'ALAW' | 'MULAW' | 'FLAC' | 'PCM' | 'WAV';
 
@@ -176,6 +179,7 @@ export class InworldVoice extends MastraVoice {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${this.apiKey}`,
+        Connection: 'keep-alive',
       },
       body: JSON.stringify(body),
     });
@@ -263,6 +267,7 @@ export class InworldVoice extends MastraVoice {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${this.apiKey}`,
+        Connection: 'keep-alive',
       },
       body: JSON.stringify(body),
     });
