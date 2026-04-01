@@ -1,5 +1,3 @@
-import { RequestContext } from '@mastra/core/request-context';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Clear the module registry so vi.mock factories take effect even when
 // a previous test file (running under isolate:false) already cached the real modules.
@@ -126,7 +124,9 @@ vi.mock('../../onboarding/settings.js', () => ({
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
