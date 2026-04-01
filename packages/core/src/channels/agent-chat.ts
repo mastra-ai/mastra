@@ -1,6 +1,6 @@
 import { createMemoryState } from '@chat-adapter/state-memory';
 import type { Adapter, CardElement, Message, StateAdapter, Thread } from 'chat';
-import { Actions, Button, Card, CardText, Chat } from 'chat';
+import { Chat } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -20,10 +20,14 @@ import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools/tool';
 
 import {
-  buildToolResultCard,
   ChatChannelProcessor,
   formatArgsSummary,
   formatResult,
+  formatToolApproval,
+  formatToolApproved,
+  formatToolDenied,
+  formatToolResult,
+  formatToolRunning,
   stripToolPrefix,
 } from './processor';
 import { MastraStateAdapter } from './state-adapter';
@@ -205,6 +209,7 @@ export class AgentChat {
         const platform = event.adapter.name;
         const messageId = event.messageId;
         const adapter = this.adapters[platform];
+        const adapterConfig = this.adapterConfigs[platform];
         if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
         // Look up the Mastra thread to find the runId and tool metadata from pending approvals
@@ -261,16 +266,15 @@ export class AgentChat {
         // Build the card header with tool name and args
         const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
         const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-        const header = argsSummary ? `*${displayName}* \`${argsSummary}\`` : `*${displayName}*`;
+        const useCards = adapterConfig?.cards !== false;
 
         if (!approved) {
-          const isDM = sdkThread.isDM;
-          const suffix = isDM ? '' : ` by ${event.user.fullName || event.user.userName || 'User'}`;
+          const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
           try {
             await adapter.editMessage(
               sdkThread.id,
               messageId,
-              Card({ children: [CardText(`${header} ✗`), CardText(`✗ Denied${suffix}`)] }),
+              formatToolDenied(displayName, argsSummary, byUser, useCards),
             );
           } catch {
             // best-effort
@@ -280,11 +284,7 @@ export class AgentChat {
 
         // Immediately edit the card to show "Approved" and remove the buttons
         try {
-          await adapter.editMessage(
-            sdkThread.id,
-            messageId,
-            Card({ children: [CardText(`${header} ⋯`), CardText(`✓ Approved`)] }),
-          );
+          await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
         } catch {
           // best-effort — continue with the stream even if edit fails
         }
@@ -549,12 +549,16 @@ export class AgentChat {
     }
 
     // Stream the agent response
+    const adapterConfig = this.adapterConfigs[platform];
+    const useCards = adapterConfig?.cards !== false;
     const stream = await agent.stream(streamInput, {
       requestContext,
       memory: {
         thread: mastraThread,
         resource: threadResourceId,
       },
+      // Without cards, we can't show approval buttons — auto-approve tools instead
+      autoResumeSuspendedTools: useCards ? undefined : true,
     });
 
     await this.consumeAgentStream(stream, sdkThread, platform);
@@ -581,6 +585,7 @@ export class AgentChat {
   ): Promise<void> {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
+    const useCards = adapterConfig?.cards !== false;
 
     // Per-stream rendering state
     let textBuffer = '';
@@ -611,8 +616,10 @@ export class AgentChat {
     };
 
     const flushText = async () => {
-      if (textBuffer.trim()) {
-        await sdkThread.post(textBuffer);
+      // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
+      const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+      if (cleanedText) {
+        await sdkThread.post(textBuffer.trim());
         textBuffer = '';
       }
     };
@@ -650,11 +657,7 @@ export class AgentChat {
 
         let messageId: string | undefined;
         if (!adapterConfig?.formatToolCall) {
-          const sentMessage = await sdkThread.post(
-            Card({
-              children: [CardText(argsSummary ? `*${displayName}* \`${argsSummary}\` ⋯` : `*${displayName}* ⋯`)],
-            }),
-          );
+          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
           messageId = sentMessage?.id;
         }
 
@@ -697,21 +700,22 @@ export class AgentChat {
             }
           }
         } else {
-          const resultCard = buildToolResultCard(
+          const resultMessage = formatToolResult(
             displayName,
             argsSummary,
             resultText,
-            chunk.payload.isError,
+            !!chunk.payload.isError,
             durationMs,
+            useCards,
           );
           if (channelMsgId) {
             try {
-              await adapter.editMessage(sdkThread.id, channelMsgId, resultCard);
+              await adapter.editMessage(sdkThread.id, channelMsgId, resultMessage);
             } catch {
-              await sdkThread.post(resultCard);
+              await sdkThread.post(resultMessage);
             }
           } else {
-            await sdkThread.post(resultCard);
+            await sdkThread.post(resultMessage);
           }
         }
         continue;
@@ -725,26 +729,16 @@ export class AgentChat {
         const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
         const channelMsgId = tracked?.messageId;
 
-        const header = argsSummary ? `*${displayName}* \`${argsSummary}\`` : `*${displayName}*`;
-        const approvalCard = Card({
-          children: [
-            CardText(header),
-            CardText('Requires approval to run.'),
-            Actions([
-              Button({ id: `tool_approve:${toolCallId}`, label: 'Approve', style: 'primary' }),
-              Button({ id: `tool_deny:${toolCallId}`, label: 'Deny', style: 'danger' }),
-            ]),
-          ],
-        });
+        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
 
         if (channelMsgId) {
           try {
-            await adapter.editMessage(sdkThread.id, channelMsgId, approvalCard);
+            await adapter.editMessage(sdkThread.id, channelMsgId, approvalMessage);
           } catch {
-            await sdkThread.post(approvalCard);
+            await sdkThread.post(approvalMessage);
           }
         } else {
-          await sdkThread.post(approvalCard);
+          await sdkThread.post(approvalMessage);
         }
         continue;
       }
