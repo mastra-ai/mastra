@@ -18,6 +18,7 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type {
+  DefinitionSource,
   ObservabilityEntrypoint,
   ObservabilityExporter,
   ObservabilityInstance,
@@ -965,7 +966,7 @@ export class Mastra<
   public addAgent<A extends Agent | ToolLoopAgentLike>(
     agent: A,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
@@ -1650,7 +1651,7 @@ export class Mastra<
   public addScorer<S extends MastraScorer<any, any, any, any>>(
     scorer: S,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);
