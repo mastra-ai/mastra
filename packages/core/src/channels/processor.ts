@@ -232,8 +232,4 @@ export class ChatChannelProcessor {
 
     return { messages: args.messages, systemMessages };
   }
-
-  // Note: Per-message metadata (event type, message ID) is injected directly
-  // into the user message text in AgentChannels.processChatMessage, so we
-  // don't need processInputStep here.
 }

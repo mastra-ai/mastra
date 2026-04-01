@@ -156,7 +156,7 @@ The top-level `channels` object supports these options:
 | `handlers` | `ChannelHandlers` | — | Override default message handlers |
 | `state` | `StateAdapter` | in-memory | State adapter for subscriptions and deduplication |
 | `userName` | `string` | agent's `name` | Bot display name shown in messages |
-| `threadContext` | `{ maxMessages?: number }` | — | Fetch prior messages when mentioned mid-conversation |
+| `threadContext` | `{ maxMessages?: number }` | `{ maxMessages: 10 }` | Fetch prior messages on first mention in a thread |
 | `chatOptions` | `ChatConfig` | — | Additional Chat SDK options (see below) |
 
 ```typescript
@@ -168,10 +168,8 @@ const agent = new Agent({
     },
     userName: 'Support Bot', // Defaults to agent's name if omitted
     state: createRedisState(), // Use Redis for persistent state
-    threadContext: { maxMessages: 10 }, // Fetch last 10 messages when mentioned
     chatOptions: {
       dedupeTtlMs: 600000, // 10 minute deduplication window
-      fallbackStreamingPlaceholderText: '⏳',
     },
   },
 })
@@ -181,7 +179,7 @@ The `chatOptions` object accepts any [Chat SDK configuration](https://github.com
 
 ## Thread context
 
-When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. The `threadContext.maxMessages` option fetches recent messages from the platform to provide context:
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform to provide context on the first mention.
 
 ```typescript
 const agent = new Agent({
@@ -191,18 +189,19 @@ const agent = new Agent({
         /* ... */
       }),
     },
-    threadContext: { maxMessages: 15 },
+    threadContext: { maxMessages: 20 }, // Fetch more context
   },
 })
 ```
 
-When enabled:
+How it works:
 
-1. The agent fetches the most recent messages from the platform thread (excluding the triggering message)
+1. On the **first mention** in a thread, the agent fetches recent messages from the platform
 1. These messages are included in the system prompt as context
-1. The agent can reference what users were discussing before being mentioned
+1. After responding, the agent subscribes to the thread and has full history via Mastra's memory
+1. Subsequent messages in that thread do **not** re-fetch from the platform
 
-This only applies to non-DM threads where the agent is mentioned. In DMs, the agent already has full conversation history through Mastra's memory system.
+Set `maxMessages: 0` to disable this behavior. This only applies to non-DM threads — in DMs, the agent already has full conversation history.
 
 ## Custom handlers
 

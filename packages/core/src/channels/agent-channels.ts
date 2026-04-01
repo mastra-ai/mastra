@@ -153,18 +153,20 @@ export interface ChannelConfig {
 
   /**
    * Fetch recent thread messages from the platform to provide context when the agent
-   * is mentioned mid-conversation. Messages are converted to user/assistant pairs
-   * and prepended to the agent's memory.
+   * is mentioned mid-conversation. Only fetches on the first mention in a thread —
+   * once subscribed, the agent has full history via Mastra's memory system.
    *
    * @example
    * ```ts
-   * threadContext: { maxMessages: 10 }
+   * threadContext: { maxMessages: 15 } // Fetch more context
+   * threadContext: { maxMessages: 0 }  // Disable (opt-out)
    * ```
    */
   threadContext?: {
     /**
-     * Maximum number of recent platform messages to fetch (default: 0, disabled).
-     * Only applies to non-DM threads where the agent doesn't have full history.
+     * Maximum number of recent platform messages to fetch (default: 10).
+     * Only applies to non-DM threads where the agent isn't already subscribed.
+     * Set to 0 to disable.
      */
     maxMessages?: number;
   };
@@ -641,12 +643,16 @@ export class AgentChannels {
     // started it. Other participants' messages are still part of that thread's history.
     const threadResourceId = mastraThread.resourceId;
 
-    // Fetch recent thread history when configured and this is a non-DM mention.
-    // This provides context when the agent is mentioned mid-conversation.
+    // Fetch recent thread history when configured, this is a non-DM mention,
+    // AND the agent isn't already subscribed to this thread. If subscribed,
+    // the agent already has history via Mastra's memory system.
     let threadHistory: ThreadHistoryMessage[] | undefined;
-    const maxMessages = this.threadContext.maxMessages ?? 0;
+    const maxMessages = this.threadContext.maxMessages ?? 10;
     if (maxMessages > 0 && !sdkThread.isDM) {
-      threadHistory = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+      const alreadySubscribed = await sdkThread.isSubscribed();
+      if (!alreadySubscribed) {
+        threadHistory = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+      }
     }
 
     // Build request context with channel info
