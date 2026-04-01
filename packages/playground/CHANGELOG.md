@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.3.19-alpha.1
+
+### Patch Changes
+
+- Fixed custom API prefix not displaying in Studio settings page. The prefix configured via MASTRA_API_PREFIX is now correctly passed to StudioConfigForm and preserved when saving settings. (https://github.com/mastra-ai/mastra/issues/14634) ([#14893](https://github.com/mastra-ai/mastra/pull/14893))
+
+- Updated dependencies [[`739b145`](https://github.com/mastra-ai/mastra/commit/739b1452fb4d4be6d94e2f6945bc86019aa8ae90), [`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767), [`f359668`](https://github.com/mastra-ai/mastra/commit/f3596682b51895fa8c4a9474cd5d84e801f4a65e)]:
+  - @mastra/playground-ui@21.0.0-alpha.1
+  - @mastra/core@1.21.0-alpha.1
+  - @mastra/client-js@1.12.0-alpha.1
+  - @mastra/react@0.2.21-alpha.1
+
 ## 1.3.19-alpha.0
 
 ### Patch Changes
