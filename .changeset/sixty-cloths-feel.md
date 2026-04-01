@@ -2,4 +2,4 @@
 'mastracode': minor
 ---
 
-Added --model (-m) CLI option to headless mode, allowing users to specify which model to use for a headless run (e.g., `mastracode --prompt "Fix bug" --model anthropic/claude-sonnet-4-20250514`). The flag validates that the model exists and has an API key configured before starting.
+Added headless config file support (`.mastracode/headless.json`) and new CLI flags (`--mode`, `--thinking-level`, `--config`) to headless mode. Users can configure model selection per execution mode (build/plan/fast), thinking level, and yolo preference via a checked-in config file or CLI flags. Flags override config file values. See `mastracode --help` for details.
