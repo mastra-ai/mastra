@@ -568,10 +568,10 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
         if (trajectory?.steps && trajectory.steps.length > 0) {
           trajectoryExpectation = {
             steps: trajectory.steps.map(step => {
-              const { name, stepType, children, ...rest } = step as Record<string, unknown>;
+              const { name, stepType, ...rest } = step as Record<string, unknown>;
               const expected: Record<string, unknown> = { name, stepType };
               for (const [k, v] of Object.entries(rest)) {
-                if (v != null && k !== 'durationMs' && k !== 'metadata') {
+                if (v != null && k !== 'durationMs' && k !== 'metadata' && k !== 'children') {
                   expected[k] = v;
                 }
               }
