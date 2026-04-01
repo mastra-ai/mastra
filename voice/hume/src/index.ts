@@ -65,8 +65,8 @@ export class HumeVoice extends MastraVoice {
    * Retrieves a list of available voices from the Hume TTS API.
    * Includes both Hume Voice Library voices (HUME_AI) and custom voices (CUSTOM_VOICE).
    */
-  async getSpeakers(): Promise<Array<{ voiceId: string; name?: string }>> {
-    const voices: Array<{ voiceId: string; name?: string }> = [];
+  async getSpeakers(): Promise<Array<{ voiceId: string; name?: string; provider?: string }>> {
+    const voices: Array<{ voiceId: string; name?: string; provider?: string }> = [];
     const PAGE_SIZE = 100;
 
     for (const provider of ['HUME_AI', 'CUSTOM_VOICE'] as const) {
@@ -90,6 +90,7 @@ export class HumeVoice extends MastraVoice {
               voices.push({
                 voiceId: id,
                 name: voice.name,
+                provider,
               });
             }
           }
@@ -123,6 +124,7 @@ export class HumeVoice extends MastraVoice {
     input: string | NodeJS.ReadableStream,
     options?: {
       speaker?: string;
+      provider?: string;
       format?: { type: 'mp3' | 'wav' | 'pcm' };
       description?: string;
       [key: string]: unknown;
@@ -135,11 +137,13 @@ export class HumeVoice extends MastraVoice {
     }
 
     const speaker = options?.speaker ?? this.storedSpeaker;
-    const voice = speaker ? { name: speaker } : undefined;
+    const provider = options?.provider as 'HUME_AI' | 'CUSTOM_VOICE' | undefined;
+    const voice = speaker ? { name: speaker, ...(provider && { provider }) } : undefined;
 
     const binaryBody = await this.client.tts.synthesizeFileStreaming({
       utterances: [{ text, voice, description: options?.description }],
       format: options?.format ?? { type: 'mp3' },
+      ...(!voice && { instantMode: false }),
     });
 
     const webStream = binaryBody.stream();

@@ -59,8 +59,8 @@ describe('HumeVoice', () => {
 
       expect(speakers).toEqual(
         expect.arrayContaining([
-          { voiceId: 'v1', name: 'Voice 1' },
-          { voiceId: 'v2', name: 'Voice 2' },
+          { voiceId: 'v1', name: 'Voice 1', provider: 'HUME_AI' },
+          { voiceId: 'v2', name: 'Voice 2', provider: 'HUME_AI' },
         ]),
       );
       expect(speakers).toHaveLength(2);
