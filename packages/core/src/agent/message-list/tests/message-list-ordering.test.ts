@@ -476,4 +476,151 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(texts).toEqual(['First', 'Second', 'Third', 'Fourth']);
     });
   });
+
+  describe('Mixed input/memory timestamp ordering', () => {
+    it('should not reorder messages when memory messages have older timestamps than input messages', () => {
+      const messageList = new MessageList();
+
+      messageList.add(
+        [
+          { role: 'user' as const, content: [{ type: 'text' as const, text: 'Hello' }] },
+          {
+            role: 'assistant' as const,
+            content: [{ type: 'text' as const, text: 'Hi there!' }],
+          },
+          { role: 'user' as const, content: [{ type: 'text' as const, text: 'What can you do?' }] },
+        ],
+        'input',
+      );
+
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const memoryAssistant: MastraDBMessage = {
+        id: 'memory-assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'I am a helpful assistant (observation added)' }],
+        },
+        createdAt: fiveMinutesAgo,
+      };
+      messageList.add(memoryAssistant, 'memory');
+
+      const result = messageList.get.all.db();
+
+      // No consecutive user messages should appear
+      for (let i = 1; i < result.length; i++) {
+        if (result[i].role === result[i - 1]?.role && result[i].role !== 'assistant') {
+          throw new Error(
+            `Consecutive ${result[i].role} messages at index ${i - 1} and ${i}: ` +
+              `"${result[i - 1]?.content?.parts?.[0]?.text}" and "${result[i].content?.parts?.[0]?.text}"`,
+          );
+        }
+      }
+    });
+
+    it('should preserve user/assistant alternation when shouldReplace fires with old DB timestamps', () => {
+      const messageList = new MessageList();
+      const now = Date.now();
+
+      const inputUser: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        createdAt: new Date(now),
+      };
+      const inputAssistant: MastraDBMessage = {
+        id: 'msg-assistant-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hi!' }] },
+        createdAt: new Date(now + 1),
+      };
+      const inputUser2: MastraDBMessage = {
+        id: 'msg-user-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'What can you do?' }] },
+        createdAt: new Date(now + 2),
+      };
+
+      messageList.add([inputUser, inputAssistant, inputUser2], 'input');
+
+      // Memory loads same assistant with old timestamp + different content (triggers shouldReplace)
+      const memoryAssistant: MastraDBMessage = {
+        id: 'msg-assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Hi!' },
+            { type: 'text', text: '[observation: user greeted]' },
+          ],
+        },
+        createdAt: new Date(now - 300000), // 5 minutes ago
+      };
+      messageList.add(memoryAssistant, 'memory');
+
+      const result = messageList.get.all.db();
+      const roles = result.map(m => m.role);
+      expect(roles).toEqual(['user', 'assistant', 'user']);
+
+      // Content should be updated via shouldReplace
+      const assistantMsg = result.find(m => m.role === 'assistant');
+      expect(assistantMsg?.content.parts).toHaveLength(2);
+
+      // createdAt should be the newer timestamp from the input message
+      expect(assistantMsg?.createdAt.getTime()).toBeGreaterThanOrEqual(now);
+    });
+
+    it('should handle useChat without createdAt combined with observational memory', () => {
+      const messageList = new MessageList();
+
+      // V5 UI messages without createdAt
+      messageList.add(
+        [
+          {
+            id: 'ui-1',
+            role: 'user' as const,
+            parts: [{ type: 'text' as const, text: 'Hello, how are you?' }],
+          },
+        ],
+        'input',
+      );
+
+      const oldTime = new Date('2026-03-31T10:00:00.000Z');
+      messageList.add(
+        {
+          id: 'db-assistant-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hi! How can I help?' }],
+          },
+          createdAt: oldTime,
+        } as MastraDBMessage,
+        'memory',
+      );
+
+      messageList.add(
+        {
+          id: 'db-user-prev',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Previous question' }],
+          },
+          createdAt: new Date(oldTime.getTime() - 1000),
+        } as MastraDBMessage,
+        'memory',
+      );
+
+      const result = messageList.get.all.db();
+      const roles = result.map(m => m.role);
+
+      for (let i = 1; i < roles.length; i++) {
+        if (roles[i] === 'user' && roles[i - 1] === 'user') {
+          const texts = result.map(m => m.content?.parts?.[0]?.text);
+          throw new Error(`Consecutive user messages at index ${i - 1},${i}: ${JSON.stringify(texts)}`);
+        }
+      }
+    });
+  });
 });

@@ -1018,21 +1018,34 @@ export class MessageList {
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
             this.pushMessageToSource(existingMessage, messageSource);
-            // Sort messages and return early — existingMessage stays in messages[] and its Sets
-            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
             return this;
+          }
+          // Preserve the newer createdAt so that replacing a message with one
+          // that has an older DB timestamp does not shift it before other messages.
+          if (existingMessage.createdAt > messageV2.createdAt) {
+            messageV2.createdAt = existingMessage.createdAt;
           }
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {
-        this.messages.push(messageV2);
+        if (messageSource === `memory`) {
+          // Insert memory messages at their chronological position instead of
+          // appending and sorting. A full-array sort breaks ordering when memory
+          // messages carry old DB timestamps while input messages use Date.now().
+          const insertTime = messageV2.createdAt.getTime();
+          const insertIndex = this.messages.findIndex(m => m.createdAt.getTime() > insertTime);
+          if (insertIndex === -1) {
+            this.messages.push(messageV2);
+          } else {
+            this.messages.splice(insertIndex, 0, messageV2);
+          }
+        } else {
+          this.messages.push(messageV2);
+        }
       }
 
       this.pushMessageToSource(messageV2, messageSource);
     }
-
-    // make sure messages are always stored in order of when they were created!
-    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return this;
   }
