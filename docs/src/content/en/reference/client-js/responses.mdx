@@ -144,7 +144,7 @@ Use `text.format` when you want JSON output.
 - `json_object` enables JSON mode.
 - `json_schema` enables schema-constrained structured output.
 
-Mastra routes both through the agent's structured output path and still returns the JSON in the normal assistant message text output.
+Mastra returns the JSON in the normal assistant message text output. Use `json_schema` when you need strict schema enforcement. Use `json_object` when you only need valid JSON output.
 
 ```typescript
 const response = await client.responses.create({
