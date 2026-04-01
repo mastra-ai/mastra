@@ -114,8 +114,8 @@ export function ItemDetailDialog({
       }
     }
 
-    // Parse expectedTrajectory if provided
-    let parsedTrajectory: unknown | undefined;
+    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
+    let parsedTrajectory: unknown | null = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
