@@ -25,7 +25,7 @@ import {
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
-import { isVercelTool } from '../../tools/toolchecks';
+import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
@@ -79,6 +79,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (
       !isVercelTool(this.originalTool) &&
+      !isProviderDefinedTool(this.originalTool) &&
       (input.autoResumeSuspendedTools ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
