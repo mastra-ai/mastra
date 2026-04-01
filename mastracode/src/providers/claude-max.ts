@@ -132,7 +132,7 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
 
 /**
  * Build a fetch function that handles Anthropic OAuth.
- * Preserves non-auth headers from init (critical for X-Mastra-Authorization to survive
+ * Preserves non-auth headers from init (critical for gateway auth header to survive
  * when used with the gateway). Strips `authorization` and `x-api-key`.
  */
 export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {}): typeof fetch {

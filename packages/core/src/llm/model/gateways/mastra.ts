@@ -4,7 +4,7 @@ import { MastraError } from '../../../error/index.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig, GatewayLanguageModel } from './base.js';
-import { MASTRA_USER_AGENT } from './constants.js';
+import { GATEWAY_AUTH_HEADER, MASTRA_USER_AGENT } from './constants.js';
 
 export interface MastraGatewayConfig {
   apiKey?: string;
@@ -78,7 +78,7 @@ export class MastraGateway extends MastraModelGateway {
         baseURL,
         headers: {
           'User-Agent': MASTRA_USER_AGENT,
-          'X-Mastra-Authorization': `Bearer ${apiKey}`,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
           ...headers,
         },
         fetch: this.config.customFetch as any,
@@ -86,13 +86,13 @@ export class MastraGateway extends MastraModelGateway {
     }
 
     if (this.config?.customFetch) {
-      // Non-Anthropic OAuth path: gateway key in X-Mastra-Authorization, customFetch owns Authorization
+      // Non-Anthropic OAuth path: gateway key in GATEWAY_AUTH_HEADER, customFetch owns Authorization
       return createOpenRouter({
         apiKey: 'oauth-gateway-placeholder',
         baseURL,
         headers: {
           'User-Agent': MASTRA_USER_AGENT,
-          'X-Mastra-Authorization': `Bearer ${apiKey}`,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
           ...headers,
         },
         fetch: this.config.customFetch,

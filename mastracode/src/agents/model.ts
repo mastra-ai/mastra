@@ -2,7 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
@@ -170,7 +170,7 @@ export function resolveModel(
         apiKey: 'oauth-gateway-placeholder',
         baseURL: gatewayBaseURL,
         headers: {
-          'X-Mastra-Authorization': `Bearer ${mgApiKey}`,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
           ...headers,
         },
         fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
@@ -195,7 +195,7 @@ export function resolveModel(
         apiKey: 'oauth-gateway-placeholder',
         baseURL: gatewayBaseURL,
         headers: {
-          'X-Mastra-Authorization': `Bearer ${mgApiKey}`,
+          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
           ...headers,
         },
         fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,

@@ -104,11 +104,11 @@ describe('MastraGateway', () => {
           baseURL: 'https://server.mastra.ai/v1',
         }),
       );
-      // No X-Mastra-Authorization header
+      // No gateway auth header
       const call = createOpenRouterMock.mock.calls[0]?.[0];
       expect(call).toBeDefined();
       const callHeaders = call!.headers as Record<string, string>;
-      expect(callHeaders['X-Mastra-Authorization']).toBeUndefined();
+      expect(callHeaders['X-Memory-Gateway-Authorization']).toBeUndefined();
       // No fetch option
       expect(call).not.toHaveProperty('fetch');
     });
@@ -128,7 +128,7 @@ describe('MastraGateway', () => {
       const call = createAnthropicMock.mock.calls[0]?.[0];
       expect(call).toBeDefined();
       const callHeaders = (call as any)!.headers as Record<string, string>;
-      expect(callHeaders['X-Mastra-Authorization']).toBe('Bearer gw-key');
+      expect(callHeaders['X-Memory-Gateway-Authorization']).toBe('Bearer gw-key');
       // Should call with bare modelId, not providerId/modelId
       expect(anthropicModelMock).toHaveBeenCalledWith('claude-sonnet-4');
       // Should NOT use createOpenRouter
@@ -149,7 +149,7 @@ describe('MastraGateway', () => {
       const call = createOpenRouterMock.mock.calls[0]?.[0];
       expect(call).toBeDefined();
       const callHeaders = call!.headers as Record<string, string>;
-      expect(callHeaders['X-Mastra-Authorization']).toBe('Bearer gw-key');
+      expect(callHeaders['X-Memory-Gateway-Authorization']).toBe('Bearer gw-key');
       expect(chatMock).toHaveBeenCalledWith('openai/gpt-4o');
       // Should NOT use createAnthropic
       expect(createAnthropicMock).not.toHaveBeenCalled();

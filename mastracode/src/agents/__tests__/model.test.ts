@@ -96,6 +96,7 @@ vi.mock('@mastra/core/llm', () => ({
     this.baseUrl = config?.baseUrl;
     this.customFetch = config?.customFetch;
   }),
+  GATEWAY_AUTH_HEADER: 'X-Memory-Gateway-Authorization',
 }));
 
 const mockLoadSettings = vi.hoisted(() =>
@@ -369,7 +370,7 @@ describe('resolveModel', () => {
         }),
       );
       const opts = vi.mocked(createAnthropic).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect((opts?.headers as Record<string, string>)?.['X-Mastra-Authorization']).toBe(
+      expect((opts?.headers as Record<string, string>)?.['X-Memory-Gateway-Authorization']).toBe(
         'Bearer msk_gateway_key_123',
       );
       // Should wrap with middleware
@@ -402,7 +403,7 @@ describe('resolveModel', () => {
         }),
       );
       const opts = vi.mocked(createOpenAI).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect((opts?.headers as Record<string, string>)?.['X-Mastra-Authorization']).toBe(
+      expect((opts?.headers as Record<string, string>)?.['X-Memory-Gateway-Authorization']).toBe(
         'Bearer msk_gateway_key_123',
       );
       expect(buildOpenAICodexOAuthFetch).toHaveBeenCalledWith({
