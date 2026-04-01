@@ -53,6 +53,49 @@ for await (const event of stream) {
 }
 ```
 
+Request JSON object output:
+
+```typescript
+const response = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a JSON object with a short summary and priority.',
+  text: {
+    format: {
+      type: 'json_object',
+    },
+  },
+})
+
+console.log(response.output_text)
+```
+
+Request schema-constrained structured output:
+
+```typescript
+const response = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a structured support ticket summary.',
+  text: {
+    format: {
+      type: 'json_schema',
+      name: 'ticket_summary',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          priority: { type: 'string' },
+        },
+        required: ['summary', 'priority'],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -80,6 +123,13 @@ for await (const event of stream) {
     name: 'instructions',
     type: 'string',
     description: 'Optional instruction override for the target agent.',
+    isOptional: true,
+  },
+  {
+    name: 'text',
+    type: "{ format: { type: 'json_object' } | { type: 'json_schema'; name: string; schema: Record<string, unknown>; description?: string; strict?: boolean } }",
+    description:
+      'Optional text output format. Use `json_object` for JSON mode or `json_schema` for schema-constrained structured output.',
     isOptional: true,
   },
   {
@@ -191,6 +241,47 @@ const response = await client.responses.create({
   providerOptions: {
     openai: {
       previousResponseId: 'resp_123',
+    },
+  },
+})
+```
+
+To request JSON object output, pass `text.format.type = 'json_object'`:
+
+```typescript
+const response = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a JSON object with issue, owner, and severity.',
+  text: {
+    format: {
+      type: 'json_object',
+    },
+  },
+})
+```
+
+For true structured output, pass `text.format.type = 'json_schema'` with the schema you want the agent to follow:
+
+```typescript
+const response = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a structured support ticket summary.',
+  text: {
+    format: {
+      type: 'json_schema',
+      name: 'ticket_summary',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          priority: { type: 'string' },
+        },
+        required: ['summary', 'priority'],
+        additionalProperties: false,
+      },
     },
   },
 })

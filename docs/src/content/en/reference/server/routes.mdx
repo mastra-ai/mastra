@@ -96,6 +96,17 @@ GET /api/agents/my-agent?versionId=abc123
     }>;
   }>;
   instructions?: string;            // Optional request-scoped instructions for this response
+  text?: {
+    format: {
+      type: 'json_object';          // Optional. Request JSON object output
+    } | {
+      type: 'json_schema';          // Optional. Request schema-constrained structured output
+      name: string;
+      schema: Record<string, unknown>;
+      description?: string;
+      strict?: boolean;
+    };
+  };
   stream?: boolean;                 // Return SSE events instead of JSON
   store?: boolean;                  // Persist the response through the selected agent's memory
   previous_response_id?: string;    // Continue a previously stored response chain

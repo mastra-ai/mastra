@@ -103,6 +103,11 @@ type PreparedCreateResponseRequest = {
   threadContext: ThreadExecutionContext | null;
 };
 
+const JSON_OBJECT_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: true,
+} as const;
+
 function jsonResponse(data: ResponseObject, status: number = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -110,6 +115,25 @@ function jsonResponse(data: ResponseObject, status: number = 200): Response {
       'Content-Type': 'application/json',
     },
   });
+}
+
+function createStructuredOutput(text: CreateResponseBody['text']) {
+  if (!text) {
+    return undefined;
+  }
+
+  switch (text.format.type) {
+    case 'json_object':
+      return {
+        schema: JSON_OBJECT_RESPONSE_SCHEMA,
+      };
+    case 'json_schema':
+      return {
+        schema: text.format.schema,
+      };
+    default:
+      return undefined;
+  }
 }
 
 function getStreamedMessageOutputItem(response: ResponseObject, responseId: string) {
@@ -280,6 +304,7 @@ async function executeGenerate({
   agent,
   model,
   instructions,
+  text,
   providerOptions,
   input,
   requestContext,
@@ -289,6 +314,7 @@ async function executeGenerate({
   agent: Agent;
   model: string;
   instructions: string | undefined;
+  text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
   input: AgentExecutionInput;
   requestContext: RequestContext;
@@ -296,11 +322,13 @@ async function executeGenerate({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  const structuredOutput = createStructuredOutput(text);
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
     model,
+    structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
@@ -313,6 +341,7 @@ async function executeGenerate({
         requestContext,
         abortSignal,
         model,
+        output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
         threadId: threadContext.threadId,
@@ -324,6 +353,7 @@ async function executeGenerate({
       requestContext,
       abortSignal,
       model,
+      output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseExecutionResult;
   }
@@ -338,6 +368,7 @@ async function executeStream({
   agent,
   model,
   instructions,
+  text,
   providerOptions,
   input,
   requestContext,
@@ -347,6 +378,7 @@ async function executeStream({
   agent: Agent;
   model: string;
   instructions: string | undefined;
+  text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
   input: AgentExecutionInput;
   requestContext: RequestContext;
@@ -354,11 +386,13 @@ async function executeStream({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  const structuredOutput = createStructuredOutput(text);
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
     model,
+    structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
@@ -371,6 +405,7 @@ async function executeStream({
         requestContext,
         abortSignal,
         model,
+        output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
         threadId: threadContext.threadId,
@@ -382,6 +417,7 @@ async function executeStream({
       requestContext,
       abortSignal,
       model,
+      output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseStreamResult;
   }
@@ -520,6 +556,7 @@ async function finalizeResponse({
     text: completedState.text,
     usage: completedState.usage,
     instructions,
+    textConfig: responseMetadata.text,
     previousResponseId,
     conversationId,
     providerOptions: completedState.providerOptions,
@@ -605,6 +642,7 @@ async function prepareCreateResponseRequest({
       model: body.model,
       createdAt,
       instructions: body.instructions,
+      text: body.text,
       previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
       tools: configuredTools,
       store: didStore,
@@ -648,6 +686,7 @@ function createResponseEventStream({
     model: body.model,
     createdAt,
     instructions: body.instructions,
+    textConfig: body.text,
     previousResponseId: body.previous_response_id,
     conversationId: threadContext?.threadId ?? body.conversation_id,
     tools: configuredTools,
@@ -804,6 +843,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           agent,
           model: body.model,
           instructions: body.instructions,
+          text: body.text,
           providerOptions: body.providerOptions,
           input: executionInput,
           requestContext,
@@ -834,6 +874,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         agent,
         model: body.model,
         instructions: body.instructions,
+        text: body.text,
         providerOptions: body.providerOptions,
         input: executionInput,
         requestContext,

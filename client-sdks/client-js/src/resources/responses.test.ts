@@ -170,6 +170,121 @@ describe('Responses Resource', () => {
     );
   });
 
+  it('passes text.format through in create requests', async () => {
+    mockJsonResponse({
+      id: 'resp_123',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'openai/gpt-5',
+      status: 'completed',
+      output: [],
+      usage: null,
+      instructions: null,
+      previous_response_id: null,
+      store: false,
+    });
+
+    await client.responses.create({
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
+      input: 'Return JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/responses',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'openai/gpt-5',
+          agent_id: 'support-agent',
+          input: 'Return JSON',
+          text: {
+            format: {
+              type: 'json_object',
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('passes json_schema text.format through in create requests', async () => {
+    mockJsonResponse({
+      id: 'resp_123',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'openai/gpt-5',
+      status: 'completed',
+      output: [],
+      usage: null,
+      instructions: null,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'ticket_summary',
+          schema: {
+            type: 'object',
+            properties: {
+              summary: { type: 'string' },
+            },
+            required: ['summary'],
+          },
+        },
+      },
+      previous_response_id: null,
+      store: false,
+    });
+
+    await client.responses.create({
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
+      input: 'Return typed JSON',
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'ticket_summary',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              summary: { type: 'string' },
+            },
+            required: ['summary'],
+          },
+        },
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/responses',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'openai/gpt-5',
+          agent_id: 'support-agent',
+          input: 'Return typed JSON',
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'ticket_summary',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  summary: { type: 'string' },
+                },
+                required: ['summary'],
+              },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it('streams response events as an async iterable', async () => {
     mockSseResponse([
       {

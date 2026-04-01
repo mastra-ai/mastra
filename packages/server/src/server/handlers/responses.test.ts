@@ -157,6 +157,28 @@ async function readJson(response: Response) {
   return response.json();
 }
 
+type SseEventPayload = {
+  type: string;
+  response?: Record<string, unknown>;
+};
+
+async function readSseEvents(response: Response): Promise<SseEventPayload[]> {
+  const body = await response.text();
+
+  return body
+    .split('\n\n')
+    .map(block => block.trim())
+    .filter(Boolean)
+    .flatMap(block => {
+      const dataLine = block.split('\n').find(line => line.startsWith('data: '));
+      if (!dataLine) {
+        return [];
+      }
+
+      return [JSON.parse(dataLine.slice('data: '.length)) as SseEventPayload];
+    });
+}
+
 function mockAgentSpecVersion(agent: Agent, specificationVersion: 'v1' | 'v2' = 'v2') {
   vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion } as never);
 }
@@ -267,6 +289,410 @@ describe('Responses Handlers', () => {
     });
 
     expect(retrieved).toEqual(created);
+  });
+
+  it('maps text.format json_object to structuredOutput for v2 generate requests', async () => {
+    const generateSpy = vi
+      .spyOn(agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: '{"summary":"Hello from Mastra"}' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Return JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      stream: false,
+      store: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Return JSON' }],
+      expect.objectContaining({
+        structuredOutput: {
+          schema: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+      }),
+    );
+    expect(created.text).toEqual({
+      format: {
+        type: 'json_object',
+      },
+    });
+    expect(created.output).toMatchObject([
+      {
+        type: 'message',
+        content: [{ text: '{"summary":"Hello from Mastra"}' }],
+      },
+    ]);
+  });
+
+  it('returns text.format json_object on stored retrieval', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: '{"summary":"Stored hello"}' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Store JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      stream: false,
+      store: true,
+    })) as Response;
+
+    const created = await readJson(response);
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      output: [
+        {
+          type: 'message',
+          content: [{ text: '{"summary":"Stored hello"}' }],
+        },
+      ],
+    });
+  });
+
+  it('maps text.format json_object to structuredOutput for v2 stream requests', async () => {
+    const streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('{"summary":"Hello world"}'));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Stream JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      stream: true,
+      store: false,
+    })) as Response;
+
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream');
+    expect(streamSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Stream JSON' }],
+      expect.objectContaining({
+        structuredOutput: {
+          schema: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+      }),
+    );
+  });
+
+  it('maps text.format json_schema to structuredOutput for v2 generate requests and returns it on the response', async () => {
+    const generateSpy = vi
+      .spyOn(agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: '{"summary":"Schema hello","priority":"high"}' }));
+
+    const schema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+        priority: { type: 'string' },
+      },
+      required: ['summary', 'priority'],
+      additionalProperties: false,
+    };
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Return typed JSON',
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'ticket_summary',
+          description: 'Structured summary output',
+          strict: true,
+          schema,
+        },
+      },
+      stream: false,
+      store: true,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Return typed JSON' }],
+      expect.objectContaining({
+        structuredOutput: {
+          schema,
+        },
+      }),
+    );
+    expect(created.text).toEqual({
+      format: {
+        type: 'json_schema',
+        name: 'ticket_summary',
+        description: 'Structured summary output',
+        strict: true,
+        schema,
+      },
+    });
+
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'ticket_summary',
+          description: 'Structured summary output',
+          strict: true,
+          schema,
+        },
+      },
+      output: [
+        {
+          type: 'message',
+          content: [{ text: '{"summary":"Schema hello","priority":"high"}' }],
+        },
+      ],
+    });
+  });
+
+  it('maps text.format json_schema to structuredOutput for v2 stream requests', async () => {
+    const streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('{"summary":"Stream schema"}'));
+    const schema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    };
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Stream typed JSON',
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'stream_summary',
+          schema,
+        },
+      },
+      stream: true,
+      store: false,
+    })) as Response;
+
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream');
+    expect(streamSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Stream typed JSON' }],
+      expect.objectContaining({
+        structuredOutput: {
+          schema,
+        },
+      }),
+    );
+  });
+
+  it('emits json_object text.format on streamed response payloads', async () => {
+    vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('{"summary":"Hello world"}'));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Stream JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      stream: true,
+      store: false,
+    })) as Response;
+
+    const events = await readSseEvents(response);
+    const createdEvent = events.find(event => event.type === 'response.created');
+    const completedEvent = events.find(event => event.type === 'response.completed');
+
+    expect(createdEvent?.response?.text).toEqual({
+      format: {
+        type: 'json_object',
+      },
+    });
+    expect(completedEvent?.response?.text).toEqual({
+      format: {
+        type: 'json_object',
+      },
+    });
+  });
+
+  it('emits json_schema text.format on streamed response payloads', async () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    };
+
+    vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('{"summary":"Hello world"}'));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Stream typed JSON',
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'stream_summary',
+          strict: true,
+          schema,
+        },
+      },
+      stream: true,
+      store: false,
+    })) as Response;
+
+    const events = await readSseEvents(response);
+    const createdEvent = events.find(event => event.type === 'response.created');
+    const completedEvent = events.find(event => event.type === 'response.completed');
+
+    expect(createdEvent?.response?.text).toEqual({
+      format: {
+        type: 'json_schema',
+        name: 'stream_summary',
+        strict: true,
+        schema,
+      },
+    });
+    expect(completedEvent?.response?.text).toEqual({
+      format: {
+        type: 'json_schema',
+        name: 'stream_summary',
+        strict: true,
+        schema,
+      },
+    });
+  });
+
+  it('maps text.format json_object to output for legacy generate requests', async () => {
+    mockAgentSpecVersion(agent, 'v1');
+    const legacyGenerateSpy = vi
+      .spyOn(agent, 'generateLegacy')
+      .mockResolvedValue(createLegacyGenerateResult('{"summary":"Legacy hello"}'));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-4.1',
+      agent_id: 'test-agent',
+      input: 'Return JSON',
+      text: {
+        format: {
+          type: 'json_object',
+        },
+      },
+      stream: false,
+      store: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(legacyGenerateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Return JSON' }],
+      expect.objectContaining({
+        output: {
+          type: 'object',
+          additionalProperties: true,
+        },
+      }),
+    );
+    expect(created.output).toMatchObject([
+      {
+        type: 'message',
+        content: [{ text: '{"summary":"Legacy hello"}' }],
+      },
+    ]);
+  });
+
+  it('maps text.format json_schema to output for legacy generate requests', async () => {
+    mockAgentSpecVersion(agent, 'v1');
+    const legacyGenerateSpy = vi
+      .spyOn(agent, 'generateLegacy')
+      .mockResolvedValue(createLegacyGenerateResult('{"summary":"Legacy schema hello"}'));
+
+    const schema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    };
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-4.1',
+      agent_id: 'test-agent',
+      input: 'Return typed JSON',
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'legacy_summary',
+          strict: true,
+          schema,
+        },
+      },
+      stream: false,
+      store: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(legacyGenerateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Return typed JSON' }],
+      expect.objectContaining({
+        output: schema,
+      }),
+    );
+    expect(created.text).toEqual({
+      format: {
+        type: 'json_schema',
+        name: 'legacy_summary',
+        strict: true,
+        schema,
+      },
+    });
   });
 
   it('returns 400 when store is requested for an agent without memory', async () => {

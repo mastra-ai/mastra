@@ -94,6 +94,22 @@ export type ResponseInputMessage = {
   content: string | ResponseInputTextPart[];
 };
 
+export type ResponseTextFormat =
+  | {
+      type: 'json_object';
+    }
+  | {
+      type: 'json_schema';
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+
+export type ResponseTextConfig = {
+  format: ResponseTextFormat;
+};
+
 export type ResponseOutputText = {
   type: 'output_text';
   text: string;
@@ -186,6 +202,7 @@ export type ResponsesResponse = {
     reason?: string;
   } | null;
   instructions?: string | null;
+  text?: ResponseTextConfig | null;
   previous_response_id?: string | null;
   conversation_id?: string | null;
   /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
@@ -210,6 +227,8 @@ export type CreateResponseParams = {
   input: string | ResponseInputMessage[];
   /** Request-scoped instructions for the current response. */
   instructions?: string;
+  /** Optional text output format. Supports `json_object` and `json_schema`. */
+  text?: ResponseTextConfig;
   /** Optional conversation ID. In Mastra this is the raw threadId. */
   conversation_id?: string;
   /** Optional provider-specific options passed through to the underlying model call. */

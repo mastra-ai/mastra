@@ -93,6 +93,8 @@ const response = await fetch('http://localhost:4111/api/v1/responses', {
 
 Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it doesn't require extra model calls. Tool-using turns can emit non-message `response.output_item.*` items such as `function_call` alongside assistant message items. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn.
 
+If you need JSON output, pass `text.format`. Use `text.format.type = 'json_object'` for JSON mode, or `text.format.type = 'json_schema'` with a schema for schema-constrained structured output. Mastra routes both through the agent's structured output path and still returns the JSON as normal assistant message text.
+
 Stored responses also return `conversation_id`. In Mastra, this is the raw memory `threadId`. You can create a conversation explicitly with `POST /api/v1/conversations`, or let the first stored Responses request create it implicitly:
 
 ```typescript title="client.ts"

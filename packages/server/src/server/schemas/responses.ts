@@ -26,6 +26,31 @@ const providerOptionsSchema = z
   })
   .passthrough();
 
+const responseTextFormatJsonObjectSchema = z.object({
+  type: z.literal('json_object').describe('Requests JSON object output compatibility for the response'),
+});
+
+const responseTextFormatJsonSchemaSchema = z.object({
+  type: z.literal('json_schema'),
+  name: z.string(),
+  description: z.string().optional(),
+  schema: z.record(z.string(), z.unknown()),
+  strict: z.boolean().optional(),
+});
+
+export const responseTextFormatSchema = z.union([
+  responseTextFormatJsonObjectSchema,
+  responseTextFormatJsonSchemaSchema,
+]);
+
+export type ResponseTextFormat = z.infer<typeof responseTextFormatSchema>;
+
+const responseTextSchema = z.object({
+  format: responseTextFormatSchema,
+});
+
+export type ResponseTextConfig = z.infer<typeof responseTextSchema>;
+
 export const createResponseBodySchema = z
   .object({
     model: z.string().describe('Model identifier used to generate the response, such as openai/gpt-5'),
@@ -37,6 +62,11 @@ export const createResponseBodySchema = z
       ),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),
+    text: responseTextSchema
+      .optional()
+      .describe(
+        'Optional text output format. Supports `json_object` for JSON mode and `json_schema` for schema-constrained structured output.',
+      ),
     conversation_id: z.string().optional().describe('Optional conversation ID. In Mastra this is the raw threadId.'),
     providerOptions: providerOptionsSchema
       .optional()
@@ -160,6 +190,7 @@ export const responseObjectSchema = z.object({
   error: z.null().optional(),
   incomplete_details: z.null().optional(),
   instructions: z.string().nullable().optional(),
+  text: responseTextSchema.nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
   conversation_id: z.string().nullable().optional(),
   providerOptions: providerOptionsSchema.optional(),

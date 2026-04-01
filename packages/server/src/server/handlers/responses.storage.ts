@@ -4,7 +4,7 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
-import type { ResponseObject, ResponseTool, ResponseUsage } from '../schemas/responses';
+import type { ResponseObject, ResponseTextConfig, ResponseTool, ResponseUsage } from '../schemas/responses';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {
@@ -30,6 +30,7 @@ export type ResponseTurnRecordMetadata = {
   status: ResponseObject['status'];
   usage: ResponseUsage | null;
   instructions?: string;
+  text?: ResponseTextConfig;
   previousResponseId?: string;
   providerOptions?: ProviderMetadataLike;
   tools: ResponseTool[];
@@ -90,6 +91,8 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
     typeof responseMetadata.createdAt !== 'number' ||
     (responseMetadata.completedAt !== null && typeof responseMetadata.completedAt !== 'number') ||
     (responseMetadata.instructions !== undefined && typeof responseMetadata.instructions !== 'string') ||
+    (responseMetadata.text !== undefined &&
+      (!isPlainObject(responseMetadata.text) || !isPlainObject(responseMetadata.text.format))) ||
     (responseMetadata.previousResponseId !== undefined && typeof responseMetadata.previousResponseId !== 'string') ||
     !Array.isArray(responseMetadata.tools) ||
     typeof responseMetadata.store !== 'boolean' ||
@@ -106,6 +109,7 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
     status: responseMetadata.status === 'completed' ? 'completed' : 'incomplete',
     usage: responseMetadata.usage as ResponseUsage | null,
     instructions: responseMetadata.instructions,
+    text: responseMetadata.text as ResponseTextConfig | undefined,
     previousResponseId: responseMetadata.previousResponseId,
     providerOptions: responseMetadata.providerOptions as ProviderMetadataLike,
     tools: responseMetadata.tools as ResponseTool[],

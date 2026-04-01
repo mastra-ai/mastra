@@ -7,6 +7,7 @@ import type {
   ResponseInputMessage,
   ResponseObject,
   ResponseOutputItem,
+  ResponseTextConfig,
   ResponseTool,
 } from '../schemas/responses';
 import type { ProviderMetadataLike, ResponseTurnRecord, UsageLike } from './responses.storage';
@@ -485,6 +486,7 @@ export function buildCompletedResponse({
   text,
   usage,
   instructions,
+  textConfig,
   previousResponseId,
   conversationId,
   providerOptions,
@@ -501,6 +503,7 @@ export function buildCompletedResponse({
   text: string;
   usage: UsageLike;
   instructions?: string;
+  textConfig?: ResponseTextConfig;
   previousResponseId?: string;
   conversationId?: string;
   providerOptions?: ProviderMetadataLike;
@@ -525,6 +528,7 @@ export function buildCompletedResponse({
     error: null,
     incomplete_details: null,
     instructions: instructions ?? null,
+    text: textConfig ?? null,
     previous_response_id: previousResponseId ?? null,
     conversation_id: conversationId ?? null,
     providerOptions,
@@ -541,6 +545,7 @@ export function buildInProgressResponse({
   model,
   createdAt,
   instructions,
+  textConfig,
   previousResponseId,
   conversationId,
   tools,
@@ -550,6 +555,7 @@ export function buildInProgressResponse({
   model: string;
   createdAt: number;
   instructions?: string;
+  textConfig?: ResponseTextConfig;
   previousResponseId?: string;
   conversationId?: string;
   store: boolean;
@@ -567,6 +573,7 @@ export function buildInProgressResponse({
     error: null,
     incomplete_details: null,
     instructions: instructions ?? null,
+    text: textConfig ?? null,
     previous_response_id: previousResponseId ?? null,
     conversation_id: conversationId ?? null,
     tools: tools ?? [],
@@ -595,6 +602,7 @@ export function mapResponseTurnRecordToResponse(match: ResponseTurnRecord): Resp
     error: null,
     incomplete_details: null,
     instructions: match.metadata.instructions ?? null,
+    text: match.metadata.text ?? null,
     previous_response_id: match.metadata.previousResponseId ?? null,
     conversation_id: match.thread.id,
     providerOptions: match.metadata.providerOptions,

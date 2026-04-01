@@ -14,7 +14,7 @@ It is intentionally narrow:
 - The app also includes an `OpenAI` SDK compatibility mode that points `baseURL` at the Mastra server.
 - The Mastra agents live in `src/mastra/` inside the example.
 - The example focuses on plain text Responses API calls, stored follow-up turns, and conversations.
-- The UI includes dedicated modes for agent responses, agent + tool responses, conversations, OpenAI SDK compatibility, and provider-backed continuation.
+- The UI includes dedicated modes for agent responses, agent + tool responses, agent + structured output, conversations, OpenAI SDK compatibility, and provider-backed continuation.
 - The UI stays intentionally small: a sidebar, one prompt field, one response surface, and a raw JSON toggle.
 
 ## What this demonstrates
@@ -23,6 +23,7 @@ It is intentionally narrow:
 - Streaming Responses API calls against Mastra
 - A `Mastra Agent` path with `store: true` and `previous_response_id`
 - A `Mastra Agent + Tool` path that calls a real Mastra tool during the response turn
+- A `Mastra Agent + Structured Output` path that uses `text.format.type = 'json_schema'`
 - A `Provider-backed Agent` path that uses `providerOptions.openai.previousResponseId`
 - A `Mastra via OpenAI SDK` path that uses `openai.responses.create(...)` against the Mastra server
 - A `Conversations` path that can create, load, and delete stored conversations

@@ -3,16 +3,23 @@
 import type { ComponentType } from 'react';
 import { useState } from 'react';
 import { AgentResponsesExample } from './agent-responses-example';
+import { AgentStructuredResponsesExample } from './agent-structured-responses-example';
 import { AgentToolResponsesExample } from './agent-tool-responses-example';
 import { ConversationsExample } from './conversations-example';
 import { OpenAISDKResponsesExample } from './openai-sdk-responses-example';
 import { ProviderBackedResponsesExample } from './provider-backed-responses-example';
 
-type ExampleId = 'agent-memory' | 'agent-tools' | 'conversations' | 'openai-sdk' | 'provider-backed';
+type ExampleId = 'agent-memory' | 'agent-tools' | 'agent-structured' | 'conversations' | 'openai-sdk' | 'provider-backed';
 
 const EXAMPLES = [
   { id: 'agent-memory', label: 'Mastra Agent Responses', withConversations: false, Component: AgentResponsesExample },
   { id: 'agent-tools', label: 'Mastra Agent + Tool Responses', withConversations: false, Component: AgentToolResponsesExample },
+  {
+    id: 'agent-structured',
+    label: 'Mastra Agent + Structured Output',
+    withConversations: false,
+    Component: AgentStructuredResponsesExample,
+  },
   { id: 'conversations', label: 'Conversations', withConversations: true, Component: ConversationsExample },
   { id: 'openai-sdk', label: 'Mastra via OpenAI SDK', withConversations: false, Component: OpenAISDKResponsesExample },
   { id: 'provider-backed', label: 'Provider-backed Agent Responses', withConversations: false, Component: ProviderBackedResponsesExample },
@@ -36,6 +43,9 @@ export function ResponsesApiDemo() {
       break;
     case 'agent-tools':
       ActiveComponent = AgentToolResponsesExample;
+      break;
+    case 'agent-structured':
+      ActiveComponent = AgentStructuredResponsesExample;
       break;
     case 'conversations':
       ActiveComponent = ConversationsExample;

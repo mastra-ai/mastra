@@ -19,7 +19,9 @@ maps directly to the underlying Mastra memory thread ID. You can create a conver
 explicitly with `client.conversations.create()` or let the first stored response create
 it implicitly, inspect the stored item history with `client.conversations.items.list()`,
 retrieve the conversation with `client.conversations.retrieve()`, or remove it with
-`client.conversations.delete()`.
+`client.conversations.delete()`. Responses requests also support
+`text.format`, including `json_object` for JSON mode and `json_schema` for
+schema-constrained structured output, through the same agent-backed route.
 
 ```ts
 import { MastraClient } from '@mastra/client-js';
@@ -44,4 +46,37 @@ const second = await client.responses.create({
 });
 
 const items = await client.conversations.items.list(first.conversation_id!);
+
+const jsonResponse = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a JSON object with a title and summary.',
+  text: {
+    format: {
+      type: 'json_object',
+    },
+  },
+});
+
+const structuredResponse = await client.responses.create({
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
+  input: 'Return a structured support ticket summary.',
+  text: {
+    format: {
+      type: 'json_schema',
+      name: 'ticket_summary',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          priority: { type: 'string' },
+        },
+        required: ['summary', 'priority'],
+        additionalProperties: false,
+      },
+    },
+  },
+});
 ```
