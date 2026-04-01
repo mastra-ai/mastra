@@ -3,8 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { isV5PlusModel, agentGenerate as baseAgentGenerate, setupDummyApiKeys } from '@internal/test-utils';
+import { isV5PlusModel, agentGenerate as baseAgentGenerate } from '@internal/test-utils';
 import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -16,12 +15,6 @@ import { Memory } from '@mastra/memory';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod/v3';
-
-const MODE = getLLMTestMode();
-// Set dummy API keys for replay/auto modes. These keys contain '-dummy-' so
-// hasRealApiKey() will correctly identify them as dummy keys. The dummy keys
-// satisfy provider validation while MSW intercepts the actual HTTP calls.
-setupDummyApiKeys(MODE, ['openai']);
 
 // Local wrapper to handle Agent type compatibility
 // (Agent has complex generic types that don't play well with the shared helper)
