@@ -18,9 +18,11 @@ export const exampleAgent = new Agent({
     },
   }),
   channels: {
-    discord: createDiscordAdapter(),
-    slack: createSlackAdapter(),
-    telegram: createTelegramAdapter(),
+    adapters: {
+      discord: createDiscordAdapter(),
+      slack: createSlackAdapter(),
+      telegram: createTelegramAdapter(),
+    },
   },
   inputProcessors: [new ChatChannelProcessor()],
   workspace: new Workspace({

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import type { ChannelConfig } from '../agent-chat';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -27,7 +28,7 @@ function createMockAdapter(name: string) {
   } as any;
 }
 
-function createTestAgent(id: string, options?: { channels?: Record<string, any> }) {
+function createTestAgent(id: string, options?: { channels?: ChannelConfig }) {
   return new Agent({
     id,
     name: `Test Agent ${id}`,
@@ -61,7 +62,7 @@ describe('Mastra Channel Integration', () => {
   describe('agent-level channel registration', () => {
     it('creates AgentChat when channels are provided', () => {
       const agent = createTestAgent('bot-1', {
-        channels: { discord: createMockAdapter('discord') },
+        channels: { adapters: { discord: createMockAdapter('discord') } },
       });
       expect(agent.getAgentChat()).not.toBeNull();
     });
@@ -74,8 +75,10 @@ describe('Mastra Channel Integration', () => {
     it('exposes adapters through AgentChat', () => {
       const agent = createTestAgent('bot-1', {
         channels: {
-          discord: createMockAdapter('discord'),
-          slack: createMockAdapter('slack'),
+          adapters: {
+            discord: createMockAdapter('discord'),
+            slack: createMockAdapter('slack'),
+          },
         },
       });
       const chat = agent.getAgentChat()!;
@@ -86,10 +89,10 @@ describe('Mastra Channel Integration', () => {
   describe('mastra-level channel aggregation', () => {
     it('aggregates AgentChat instances from agents', () => {
       const agent1 = createTestAgent('agent1', {
-        channels: { discord: createMockAdapter('discord') },
+        channels: { adapters: { discord: createMockAdapter('discord') } },
       });
       const agent2 = createTestAgent('agent2', {
-        channels: { slack: createMockAdapter('slack') },
+        channels: { adapters: { slack: createMockAdapter('slack') } },
       });
 
       const mastra = new Mastra({
@@ -114,7 +117,7 @@ describe('Mastra Channel Integration', () => {
   describe('webhook route auto-wiring', () => {
     it('adds channel webhook routes to server config', () => {
       const agent = createTestAgent('bot-1', {
-        channels: { discord: createMockAdapter('discord') },
+        channels: { adapters: { discord: createMockAdapter('discord') } },
       });
 
       const mastra = new Mastra({
@@ -129,7 +132,7 @@ describe('Mastra Channel Integration', () => {
 
     it('merges channel routes with existing server routes', () => {
       const agent = createTestAgent('bot-1', {
-        channels: { discord: createMockAdapter('discord') },
+        channels: { adapters: { discord: createMockAdapter('discord') } },
       });
 
       const mastra = new Mastra({

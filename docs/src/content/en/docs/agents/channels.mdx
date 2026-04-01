@@ -36,10 +36,12 @@ export const supportAgent = new Agent({
   instructions: 'You are a helpful support assistant.',
   model: 'openai/gpt-5.4',
   channels: {
-    slack: createSlackAdapter({
-      botToken: process.env.SLACK_BOT_TOKEN,
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-    }),
+    adapters: {
+      slack: createSlackAdapter({
+        botToken: process.env.SLACK_BOT_TOKEN,
+        signingSecret: process.env.SLACK_SIGNING_SECRET,
+      }),
+    },
   },
 })
 ```
@@ -73,57 +75,114 @@ export const multiPlatformAgent = new Agent({
   instructions: 'You are a helpful assistant available on multiple platforms.',
   model: 'openai/gpt-5.4',
   channels: {
-    slack: createSlackAdapter({
-      botToken: process.env.SLACK_BOT_TOKEN,
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-    }),
-    discord: createDiscordAdapter({
-      botToken: process.env.DISCORD_BOT_TOKEN,
-      publicKey: process.env.DISCORD_PUBLIC_KEY,
-    }),
-    telegram: createTelegramAdapter({
-      botToken: process.env.TELEGRAM_BOT_TOKEN,
-    }),
-  },
-  channelOptions: {
-    gateway: true, // Enable persistent connections (e.g., Discord Gateway)
+    adapters: {
+      slack: createSlackAdapter({
+        botToken: process.env.SLACK_BOT_TOKEN,
+        signingSecret: process.env.SLACK_SIGNING_SECRET,
+      }),
+      discord: {
+        adapter: createDiscordAdapter({
+          botToken: process.env.DISCORD_BOT_TOKEN,
+          publicKey: process.env.DISCORD_PUBLIC_KEY,
+        }),
+        gateway: true, // Enable Discord Gateway for DMs and mentions
+      },
+      telegram: createTelegramAdapter({
+        botToken: process.env.TELEGRAM_BOT_TOKEN,
+      }),
+    },
   },
 })
 ```
 
-## Channel options
+## Per-adapter options
 
-Configure channel behavior with `channelOptions`:
+Configure per-adapter behavior by wrapping the adapter in an object:
 
 ```typescript
 const agent = new Agent({
   // ...
-  channelOptions: {
-    gateway: true, // Enable WebSocket connections for platforms that support it
-    cards: true, // Use rich cards for tool calls (default: true)
+  channels: {
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter({
+          /* ... */
+        }),
+        gateway: true, // Enable Discord Gateway WebSocket
+        cards: false, // Use plain text instead of rich cards
+      },
+      slack: createSlackAdapter({
+        /* ... */
+      }), // Plain adapter uses defaults
+    },
   },
 })
 ```
 
 | Option | Type | Default | Description |
 | - | - | - | - |
-| `gateway` | `boolean` | `false` | Enable persistent WebSocket connections (e.g., Discord Gateway) |
+| `gateway` | `boolean` | `true` | Enable persistent WebSocket connections (Discord Gateway, Slack Socket Mode) |
 | `cards` | `boolean` | `true` | Render tool calls as interactive cards with buttons |
 
 ### Disabling cards
 
-Set `cards: false` to render tool calls as plain text instead of rich cards. This is useful for platforms with limited card support or when you want simpler output:
+Set `cards: false` on an adapter to render tool calls as plain text instead of rich cards. This is useful for platforms with card rendering issues:
 
 ```typescript
 const agent = new Agent({
   // ...
-  channelOptions: {
-    cards: false,
+  channels: {
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter({
+          /* ... */
+        }),
+        cards: false,
+      },
+    },
   },
 })
 ```
 
 When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide whether to proceed based on the conversation context.
+
+## Custom handlers
+
+Override or disable default message handlers using the `handlers` option:
+
+```typescript
+const agent = new Agent({
+  // ...
+  channels: {
+    adapters: {
+      /* ... */
+    },
+    handlers: {
+      // Disable direct message handling
+      onDirectMessage: false,
+
+      // Wrap the default mention handler with custom logic
+      onNewMention: (thread, message, defaultHandler) => {
+        console.log('Received mention:', message.text)
+        // Call the default handler to process normally
+        defaultHandler()
+      },
+    },
+  },
+})
+```
+
+| Handler | Description |
+| - | - |
+| `onDirectMessage` | Called when the bot receives a direct message |
+| `onNewMention` | Called when the bot is mentioned in a channel |
+| `onSubscribedMessage` | Called for messages in subscribed threads |
+
+Each handler can be:
+
+- Omitted: Uses the default Mastra handler
+- `false`: Disables the handler entirely
+- A function: `(thread, message, defaultHandler) => void` to wrap or replace the default
 
 ## Tool approval
 
@@ -187,7 +246,7 @@ Each platform requires specific configuration. See the Chat SDK documentation fo
 1. Enable the bot and get the bot token
 1. Enable "Message Content Intent" in the Bot settings
 1. For webhooks, set the Interactions Endpoint URL to `/api/agents/{agentId}/channels/discord/webhook`
-1. For Gateway mode, set `gateway: true` in `channelOptions`
+1. For Gateway mode (recommended), wrap the adapter: `{ adapter: createDiscordAdapter(), gateway: true }`
 
 ### Telegram
 

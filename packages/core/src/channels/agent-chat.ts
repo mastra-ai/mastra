@@ -81,7 +81,80 @@ export interface ChannelAdapterConfig {
   formatError?: (error: Error) => PostableMessage;
 }
 
-/** Global options for configuring channel behavior. */
+/**
+ * Handler function for channel events.
+ * Receives the thread, message, and the default handler implementation.
+ * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
+ */
+export type ChannelHandler = (
+  thread: Thread,
+  message: Message,
+  defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+) => Promise<void>;
+
+/**
+ * Handler configuration for channel events.
+ * - `undefined` or omitted → use default handler
+ * - `false` → disable handler entirely
+ * - function → custom handler (receives defaultHandler as 3rd arg to wrap/extend)
+ */
+export type ChannelHandlerConfig = ChannelHandler | false | undefined;
+
+/** Handler overrides for built-in channel event handlers. */
+export interface ChannelHandlers {
+  /**
+   * Handler for direct messages to the bot.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onDirectMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for @mentions of the bot in channels.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onMention?: ChannelHandlerConfig;
+
+  /**
+   * Handler for messages in subscribed threads.
+   * Default: Routes to agent.stream and posts the response.
+   */
+  onSubscribedMessage?: ChannelHandlerConfig;
+}
+
+/** Configuration for agent chat channels. */
+export interface ChannelConfig {
+  /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
+  adapters: Record<string, Adapter | ChannelAdapterConfig>;
+
+  /**
+   * Override built-in event handlers.
+   * Use this to customize how the agent responds to DMs, mentions, etc.
+   *
+   * @example
+   * ```ts
+   * handlers: {
+   *   // Wrap the default handler with logging
+   *   onDirectMessage: async (thread, message, defaultHandler) => {
+   *     console.log('Received DM:', message.text);
+   *     await defaultHandler(thread, message);
+   *   },
+   *   // Disable mention handling entirely
+   *   onMention: false,
+   * }
+   * ```
+   */
+  handlers?: ChannelHandlers;
+
+  /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
+  state?: StateAdapter;
+
+  /** The bot's display name (default: agent's name, or `'Mastra'`). */
+  userName?: string;
+}
+
+/**
+ * @deprecated Use `ChannelConfig` instead. This type will be removed in a future version.
+ */
 export interface ChannelOptions {
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
@@ -107,10 +180,12 @@ export class AgentChat {
   private userName: string;
   /** Normalized per-adapter configs (gateway flags, hooks, etc.). */
   private adapterConfigs: Record<string, ChannelAdapterConfig>;
+  /** Handler overrides from config. */
+  private handlerOverrides: ChannelHandlers;
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
 
-  constructor(config: { adapters: Record<string, Adapter | ChannelAdapterConfig> } & ChannelOptions) {
+  constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
     const adapters: Record<string, Adapter> = {};
     const adapterConfigs: Record<string, ChannelAdapterConfig> = {};
@@ -128,6 +203,7 @@ export class AgentChat {
 
     this.adapters = adapters;
     this.adapterConfigs = adapterConfigs;
+    this.handlerOverrides = config.handlers ?? {};
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
 
@@ -200,11 +276,38 @@ export class AgentChat {
       concurrency: { strategy: 'queue' },
     });
 
-    const handler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
+    // Default handler that routes messages to the agent
+    const defaultHandler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
 
-    chat.onDirectMessage(handler);
-    chat.onNewMention(handler);
-    chat.onSubscribedMessage(handler);
+    // Register handlers with optional overrides
+    const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
+
+    if (onDirectMessage !== false) {
+      chat.onDirectMessage((thread, message) => {
+        if (typeof onDirectMessage === 'function') {
+          return onDirectMessage(thread, message, defaultHandler);
+        }
+        return defaultHandler(thread, message);
+      });
+    }
+
+    if (onMention !== false) {
+      chat.onNewMention((thread, message) => {
+        if (typeof onMention === 'function') {
+          return onMention(thread, message, defaultHandler);
+        }
+        return defaultHandler(thread, message);
+      });
+    }
+
+    if (onSubscribedMessage !== false) {
+      chat.onSubscribedMessage((thread, message) => {
+        if (typeof onSubscribedMessage === 'function') {
+          return onSubscribedMessage(thread, message, defaultHandler);
+        }
+        return defaultHandler(thread, message);
+      });
+    }
 
     // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
     chat.onAction(async event => {

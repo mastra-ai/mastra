@@ -1,10 +1,9 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
-import type { Adapter } from 'chat';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
-import type { AgentChat, ChannelAdapterConfig } from '../channels/agent-chat';
+import type { AgentChat, ChannelConfig } from '../channels/agent-chat';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -300,17 +299,28 @@ export interface AgentConfig<
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
-   * Each entry can be a bare adapter (uses defaults) or a config object with per-adapter options:
+   * @example
    * ```ts
    * channels: {
-   *   discord: new DiscordAdapter({ ... }),
-   *   slack: { adapter: new SlackAdapter({ ... }), gateway: false },
+   *   adapters: {
+   *     discord: createDiscordAdapter(),
+   *     slack: { adapter: createSlackAdapter(), cards: false },
+   *   },
+   *   handlers: {
+   *     // Wrap default DM handler with logging
+   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Disable mention handling
+   *     onMention: false,
+   *   },
    * }
    * ```
    *
    * For full control, pass an `AgentChat` instance directly.
    */
-  channels?: Record<string, (Adapter & { adapter?: never }) | ChannelAdapterConfig> | AgentChat;
+  channels?: ChannelConfig | AgentChat;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
