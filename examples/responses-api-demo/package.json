@@ -16,7 +16,7 @@
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
     "mastra": "latest",
-    "next": "^15.5.12",
+    "next": "^15.5.14",
     "openai": "^6.33.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
