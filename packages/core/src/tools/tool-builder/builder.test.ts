@@ -1,10 +1,11 @@
-import type { ProviderDefinedTool } from '@internal/external-types';
+import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { isProviderDefinedTool, isVercelTool } from '../toolchecks';
 import { CoreToolBuilder } from './builder';
 
 describe('MCP Tool Tracing', () => {
@@ -212,23 +213,24 @@ describe('MCP Tool Tracing', () => {
 });
 
 describe('Provider-defined Tool Handling', () => {
-  it('should not crash when autoResumeSuspendedTools is enabled with provider-defined tools', () => {
-    // Simulate a provider-defined tool like openai.tools.webSearch()
-    const providerTool: ProviderDefinedTool = {
-      type: 'provider-defined',
-      id: 'openai.web_search',
-      // Provider tools have a lazy inputSchema that returns an AI SDK Schema, not Zod
-      inputSchema: () => ({
-        '~standard': { vendor: 'openai', version: 1, validate: () => ({ value: {} }) },
-        // Note: no jsonSchema property - this is what caused the original crash
-      }),
-    };
+  it('should not crash when autoResumeSuspendedTools is enabled with openai.tools.webSearch()', () => {
+    const webSearchTool = openai.tools.webSearch({});
+
+    // Verify this is actually a provider-defined tool (v5 uses 'provider-defined', v6 uses 'provider')
+    expect(['provider-defined', 'provider']).toContain(webSearchTool.type);
+    expect(webSearchTool.id).toBe('openai.web_search');
+
+    // Verify isProviderDefinedTool detects it correctly
+    expect(isProviderDefinedTool(webSearchTool)).toBe(true);
+    // Verify isVercelTool does NOT match (so the schema extension code path would be entered without the fix)
+    expect(isVercelTool(webSearchTool as any)).toBe(false);
 
     // This should not throw - previously it crashed with:
     // TypeError: Cannot read properties of undefined (reading 'jsonSchema')
+    // because provider-defined tools have a lazy inputSchema that doesn't conform to standard schemas
     expect(() => {
       new CoreToolBuilder({
-        originalTool: providerTool,
+        originalTool: webSearchTool,
         options: {
           name: 'web_search',
           logger: {
@@ -238,36 +240,6 @@ describe('Provider-defined Tool Handling', () => {
             trackException: vi.fn(),
           } as any,
           description: 'Search the web',
-          requestContext: new RequestContext(),
-        },
-        autoResumeSuspendedTools: true,
-      });
-    }).not.toThrow();
-  });
-
-  it('should not attempt to extend schema for provider-defined tools', () => {
-    // Simulate a provider-defined tool with type: 'provider' (AI SDK v6 style)
-    const providerToolV6: ProviderDefinedTool = {
-      type: 'provider',
-      id: 'google.google_search',
-      inputSchema: () => ({
-        '~standard': { vendor: 'google', version: 1, validate: () => ({ value: {} }) },
-      }),
-    };
-
-    // This should not throw for v6-style provider tools either
-    expect(() => {
-      new CoreToolBuilder({
-        originalTool: providerToolV6,
-        options: {
-          name: 'google_search',
-          logger: {
-            debug: vi.fn(),
-            warn: vi.fn(),
-            error: vi.fn(),
-            trackException: vi.fn(),
-          } as any,
-          description: 'Search with Google',
           requestContext: new RequestContext(),
         },
         autoResumeSuspendedTools: true,
