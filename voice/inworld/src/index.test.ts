@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InworldVoice } from './index';
 
 // Helper to collect a stream into a buffer
@@ -49,16 +49,25 @@ function createNdjsonBodyNoTrailingNewline(audioChunks: string[]): ReadableStrea
 }
 
 describe('InworldVoice', () => {
+  let savedApiKey: string | undefined;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    savedApiKey = process.env.INWORLD_API_KEY;
+    delete process.env.INWORLD_API_KEY;
+  });
+
+  afterEach(() => {
+    if (savedApiKey !== undefined) {
+      process.env.INWORLD_API_KEY = savedApiKey;
+    } else {
+      delete process.env.INWORLD_API_KEY;
+    }
   });
 
   describe('constructor', () => {
     it('throws if no API key is provided', () => {
-      const original = process.env.INWORLD_API_KEY;
-      delete process.env.INWORLD_API_KEY;
       expect(() => new InworldVoice()).toThrow('Inworld API key is required');
-      if (original) process.env.INWORLD_API_KEY = original;
     });
 
     it('accepts API key from speechModel config', () => {
@@ -70,7 +79,6 @@ describe('InworldVoice', () => {
       process.env.INWORLD_API_KEY = 'env-key';
       const voice = new InworldVoice();
       expect(voice).toBeInstanceOf(InworldVoice);
-      delete process.env.INWORLD_API_KEY;
     });
 
     it('uses default speaker Dennis', () => {

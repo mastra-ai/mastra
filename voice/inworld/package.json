@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts && tsc -p tsconfig.build.json",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },

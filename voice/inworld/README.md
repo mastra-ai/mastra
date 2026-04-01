@@ -33,15 +33,15 @@ const voices = await voice.getSpeakers();
 const voice = new InworldVoice({
   speechModel: {
     name: 'inworld-tts-1.5-max', // or 'inworld-tts-1.5-mini' for lower latency
-    apiKey: 'your-key',           // or set INWORLD_API_KEY env var
+    apiKey: 'your-key', // or set INWORLD_API_KEY env var
   },
   listeningModel: {
-    name: 'groq/whisper-large-v3', // or 'inworld/inworld-stt-1'
+    name: 'groq/whisper-large-v3',
   },
-  speaker: 'Dennis',               // default voice
-  audioEncoding: 'MP3',            // MP3, WAV, OGG_OPUS, LINEAR16, PCM, ALAW, MULAW, FLAC
-  sampleRateHertz: 48000,          // 8000-48000
-  language: 'en-US',               // BCP-47 language code for STT
+  speaker: 'Dennis', // default voice
+  audioEncoding: 'MP3', // MP3, WAV, OGG_OPUS, LINEAR16, PCM, ALAW, MULAW, FLAC
+  sampleRateHertz: 48000, // 8000-48000
+  language: 'en-US', // BCP-47 language code for STT
 });
 ```
 
@@ -49,11 +49,11 @@ const voice = new InworldVoice({
 
 ```typescript
 const stream = await voice.speak('Hello', {
-  speaker: 'Olivia',        // override voice
-  audioEncoding: 'WAV',     // override format
-  sampleRateHertz: 24000,   // override sample rate
-  speakingRate: 1.2,         // 0.5 - 1.5
-  temperature: 0.8,          // (0, 2]
+  speaker: 'Olivia', // override voice
+  audioEncoding: 'WAV', // override format
+  sampleRateHertz: 24000, // override sample rate
+  speakingRate: 1.2, // 0.5 - 1.5
+  temperature: 0.8, // (0, 2]
 });
 ```
 
@@ -77,8 +77,8 @@ import { InworldVoice } from '@mastra/voice-inworld';
 import { DeepgramVoice } from '@mastra/voice-deepgram';
 
 const voice = new CompositeVoice({
-  output: new InworldVoice({ speaker: 'Olivia' }),   // Inworld for TTS
-  input: new DeepgramVoice(),                          // Deepgram for STT
+  output: new InworldVoice({ speaker: 'Olivia' }), // Inworld for TTS
+  input: new DeepgramVoice(), // Deepgram for STT
 });
 ```
 
@@ -88,17 +88,16 @@ Alex, Ashley, Craig, Deborah, Dennis, Dominus, Edward, Elizabeth, Hades, Heitor,
 
 ## TTS Models
 
-| Model | Quality | Latency |
-|-------|---------|---------|
-| `inworld-tts-1.5-max` | Highest | ~200ms median |
-| `inworld-tts-1.5-mini` | Good | ~100ms median |
+| Model                  | Quality | Latency       |
+| ---------------------- | ------- | ------------- |
+| `inworld-tts-1.5-max`  | Highest | ~200ms median |
+| `inworld-tts-1.5-mini` | Good    | ~100ms median |
 
 ## STT Models
 
-| Model | Languages | Notes |
-|-------|-----------|-------|
-| `groq/whisper-large-v3` | 99+ | Best multilingual coverage |
-| `inworld/inworld-stt-1` | Multiple | Includes voice profiles |
+| Model                   | Languages | Notes                      |
+| ----------------------- | --------- | -------------------------- |
+| `groq/whisper-large-v3` | 99+       | Best multilingual coverage |
 
 ## Streaming
 

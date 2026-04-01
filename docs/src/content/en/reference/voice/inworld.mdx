@@ -248,6 +248,13 @@ const transcript = await voice.listen(audioStream, {
             isOptional: true,
             defaultValue: "'en-US'",
           },
+          {
+            name: 'numberOfChannels',
+            type: 'number',
+            description: 'Number of audio channels in the input.',
+            isOptional: true,
+            defaultValue: '1',
+          },
         ],
       },
     ],

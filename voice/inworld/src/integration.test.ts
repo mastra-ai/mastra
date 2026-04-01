@@ -15,6 +15,7 @@ import { InworldVoice } from './index';
 
 const API_KEY = process.env.INWORLD_API_KEY;
 const describeIf = API_KEY ? describe : describe.skip;
+const RUN_PERF = process.env.PERF_TESTS === 'true';
 
 /**
  * Consume a stream, measuring time-to-first-audio-byte from a given start time.
@@ -74,8 +75,8 @@ describeIf('InworldVoice — real API integration', () => {
     const stream = await voice.speak('Hello, this is a test of Inworld text to speech.');
     const { buffer, ttfaMs } = await consumeStream(stream, start);
 
+    console.log(`TTS Max — TTFA: ${ttfaMs}ms, size: ${buffer.length} bytes`);
     expect(buffer.length).toBeGreaterThan(1000);
-    expect(ttfaMs).toBeLessThan(3000);
   }, 30_000);
 
   it('TTS 1.5 Mini', async () => {
@@ -88,8 +89,8 @@ describeIf('InworldVoice — real API integration', () => {
     const stream = await miniVoice.speak('Hello from the mini model.');
     const { buffer, ttfaMs } = await consumeStream(stream, start);
 
+    console.log(`TTS Mini — TTFA: ${ttfaMs}ms, size: ${buffer.length} bytes`);
     expect(buffer.length).toBeGreaterThan(500);
-    expect(ttfaMs).toBeLessThan(2000);
   }, 30_000);
 
   it('STT 1', async () => {
@@ -104,9 +105,57 @@ describeIf('InworldVoice — real API integration', () => {
     const transcript = await voice.listen(audioInput, { audioEncoding: 'MP3' });
     const sttMs = Math.round(performance.now() - sttStart);
 
+    console.log(`STT — latency: ${sttMs}ms, transcript: "${transcript}"`);
     expect(transcript.length).toBeGreaterThan(0);
     const lower = transcript.toLowerCase();
     expect(lower.includes('fox') || lower.includes('dog') || lower.includes('quick')).toBe(true);
+  }, 60_000);
+});
+
+describeIf('InworldVoice — performance thresholds', () => {
+  if (!RUN_PERF) {
+    it.skip('skipped (set PERF_TESTS=true to enable)', () => {});
+    return;
+  }
+
+  let voice: InworldVoice;
+
+  beforeAll(async () => {
+    voice = new InworldVoice({
+      speechModel: { apiKey: API_KEY! },
+    });
+    await warmupConnection(voice);
+  }, 30_000);
+
+  it('TTS Max TTFA < 3000ms', async () => {
+    const start = performance.now();
+    const stream = await voice.speak('Hello, this is a latency test.');
+    const { ttfaMs } = await consumeStream(stream, start);
+    expect(ttfaMs).toBeLessThan(3000);
+  }, 30_000);
+
+  it('TTS Mini TTFA < 2000ms', async () => {
+    const miniVoice = new InworldVoice({
+      speechModel: { apiKey: API_KEY!, name: 'inworld-tts-1.5-mini' },
+    });
+    await warmupConnection(miniVoice);
+
+    const start = performance.now();
+    const stream = await miniVoice.speak('Hello from the mini model.');
+    const { ttfaMs } = await consumeStream(stream, start);
+    expect(ttfaMs).toBeLessThan(2000);
+  }, 30_000);
+
+  it('STT latency < 10000ms', async () => {
+    const ttsStream = await voice.speak('The quick brown fox jumps over the lazy dog.', {
+      audioEncoding: 'MP3',
+    });
+    const { buffer: audioBuffer } = await consumeStream(ttsStream, performance.now());
+
+    const sttStart = performance.now();
+    const audioInput = Readable.from(audioBuffer);
+    await voice.listen(audioInput, { audioEncoding: 'MP3' });
+    const sttMs = Math.round(performance.now() - sttStart);
     expect(sttMs).toBeLessThan(10000);
   }, 60_000);
 });

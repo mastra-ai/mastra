@@ -33,6 +33,7 @@ interface InworldListenOptions {
   audioEncoding?: SttAudioEncoding;
   sampleRateHertz?: number;
   language?: string;
+  numberOfChannels?: number;
 }
 
 export type {
@@ -284,7 +285,7 @@ export class InworldVoice extends MastraVoice {
         audioEncoding: options?.audioEncoding ?? 'AUTO_DETECT',
         language: options?.language ?? this.language,
         sampleRateHertz: options?.sampleRateHertz ?? 16000,
-        numberOfChannels: 1,
+        numberOfChannels: options?.numberOfChannels ?? 1,
       },
       audioData: {
         content: audioBase64,
