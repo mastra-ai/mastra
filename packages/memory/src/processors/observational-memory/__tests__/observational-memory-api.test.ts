@@ -16,6 +16,7 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 
 // =============================================================================
@@ -396,19 +397,17 @@ describe('observe()', () => {
         onObservationEnd: vi.fn(),
       };
 
-      // observe() should not throw — errors are caught internally
-      const result = await failOm.observe({
-        threadId,
-        messages: createBulkMessages(10, threadId),
-        hooks,
-      });
+      // Sync observation propagates observer errors; hooks still run in finally.
+      await expect(
+        failOm.observe({
+          threadId,
+          messages: createBulkMessages(10, threadId),
+          hooks,
+        }),
+      ).rejects.toThrow(/Observer failed/);
 
-      // Hooks are called in the finally block regardless of observer errors
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
-      // The observation flow completes (error is caught inside doSynchronousObservation)
-      // so observed=true even though the observer model failed
-      expect(result.observed).toBe(true);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {
@@ -985,6 +984,26 @@ describe('getResolvedConfig()', () => {
 
     const config = await om.getResolvedConfig();
     expect(config.scope).toBe('resource');
+  });
+
+  it('should surface tiered observer model config without failing resolution', async () => {
+    const storage = createInMemoryStorage();
+    const om = createOM(storage, {
+      observerModel: new ModelByInputTokens({
+        upTo: {
+          1000: 'openai/gpt-4o-mini',
+          5000: 'openai/gpt-4o',
+        },
+      }),
+    });
+
+    const config = await om.getResolvedConfig();
+
+    expect(config.observation.model).toBe('openai/gpt-4o-mini');
+    expect(config.observation.routing).toEqual([
+      { upTo: 1000, model: 'openai/gpt-4o-mini' },
+      { upTo: 5000, model: 'openai/gpt-4o' },
+    ]);
   });
 });
 

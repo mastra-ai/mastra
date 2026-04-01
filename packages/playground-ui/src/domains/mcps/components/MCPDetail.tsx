@@ -68,10 +68,10 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </Txt>
 
         <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm !text-neutral4">
+          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm text-neutral4!">
             Version
           </Badge>
-          <Badge className="rounded-l-sm !text-neutral4">{server.version_detail.version}</Badge>
+          <Badge className="rounded-l-sm text-neutral4!">{server.version_detail.version}</Badge>
         </div>
 
         <Txt className="text-neutral3 pb-4">

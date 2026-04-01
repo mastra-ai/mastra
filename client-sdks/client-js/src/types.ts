@@ -73,6 +73,8 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
+export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -81,6 +83,264 @@ export interface RequestOptions {
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }
+
+export type ResponseInputTextPart = {
+  type: 'input_text' | 'text' | 'output_text';
+  text: string;
+};
+
+export type ResponseInputMessage = {
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: string | ResponseInputTextPart[];
+};
+
+export type ResponseTextFormat =
+  | {
+      type: 'json_object';
+    }
+  | {
+      type: 'json_schema';
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+
+export type ResponseTextConfig = {
+  format: ResponseTextFormat;
+};
+
+export type ResponseOutputText = {
+  type: 'output_text';
+  text: string;
+  annotations?: unknown[];
+  logprobs?: unknown[];
+};
+
+export type ResponseOutputMessage = {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'in_progress' | 'completed' | 'incomplete';
+  content: ResponseOutputText[];
+};
+
+export type ResponseOutputFunctionCall = {
+  id: string;
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: 'in_progress' | 'completed' | 'incomplete';
+};
+
+export type ResponseOutputFunctionCallOutput = {
+  id: string;
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
+
+export type ResponseUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  input_tokens_details?: {
+    cached_tokens: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens: number;
+  };
+};
+
+export type ResponseTool = {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: unknown;
+};
+
+export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemInputText = {
+  type: 'input_text';
+  text: string;
+};
+
+export type ConversationItemMessage = {
+  id: string;
+  type: 'message';
+  role: 'system' | 'user' | 'assistant';
+  status: 'completed';
+  content: Array<ConversationItemInputText | ResponseOutputText>;
+};
+
+export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemsPage = {
+  object: 'list';
+  data: ConversationItem[];
+  first_id: string | null;
+  last_id: string | null;
+  has_more: boolean;
+};
+
+export type ResponsesResponse = {
+  id: string;
+  object: 'response';
+  created_at: number;
+  completed_at?: number | null;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: ResponseOutputItem[];
+  usage: ResponseUsage | null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+  incomplete_details?: {
+    reason?: string;
+  } | null;
+  instructions?: string | null;
+  text?: ResponseTextConfig | null;
+  previous_response_id?: string | null;
+  conversation_id?: string | null;
+  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  tools?: ResponseTool[];
+  store?: boolean;
+  output_text: string;
+};
+
+export type ResponsesDeleteResponse = {
+  id: string;
+  object: 'response';
+  deleted: true;
+};
+
+export type CreateResponseParams = {
+  /** Target model identifier, such as `openai/gpt-5`. */
+  model: string;
+  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
+  agent_id?: string;
+  /** Input text or message history for the current turn. */
+  input: string | ResponseInputMessage[];
+  /** Request-scoped instructions for the current response. */
+  instructions?: string;
+  /** Optional text output format. Supports `json_object` and `json_schema`. */
+  text?: ResponseTextConfig;
+  /** Optional conversation ID. In Mastra this is the raw threadId. */
+  conversation_id?: string;
+  /** Optional provider-specific options passed through to the underlying model call. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** When true, returns a streaming Responses API event stream. */
+  stream?: boolean;
+  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
+  store?: boolean;
+  /** Continues a previously stored response chain. */
+  previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type Conversation = {
+  id: string;
+  object: 'conversation';
+  thread: StorageThreadType;
+};
+
+export type ConversationDeleted = {
+  id: string;
+  object: 'conversation.deleted';
+  deleted: true;
+};
+
+export type CreateConversationParams = {
+  agent_id: string;
+  conversation_id?: string;
+  resource_id?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type ResponsesCreatedEvent = {
+  type: 'response.created';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesInProgressEvent = {
+  type: 'response.in_progress';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemAddedEvent = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartAddedEvent = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDoneEvent = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartDoneEvent = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemDoneEvent = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesCompletedEvent = {
+  type: 'response.completed';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesStreamEvent =
+  | ResponsesCreatedEvent
+  | ResponsesInProgressEvent
+  | ResponsesOutputItemAddedEvent
+  | ResponsesContentPartAddedEvent
+  | ResponsesOutputTextDeltaEvent
+  | ResponsesOutputTextDoneEvent
+  | ResponsesContentPartDoneEvent
+  | ResponsesOutputItemDoneEvent
+  | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
@@ -1224,6 +1484,12 @@ export interface CreateAgentVersionParams {
   changeMessage?: string;
 }
 
+export interface CreateCodeAgentVersionParams {
+  instructions?: AgentVersionResponse['instructions'];
+  tools?: AgentVersionResponse['tools'];
+  changeMessage?: string;
+}
+
 export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
@@ -2055,6 +2321,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: string | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2119,6 +2386,7 @@ export interface CreateDatasetParams {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetParams {
@@ -2132,6 +2400,7 @@ export interface UpdateDatasetParams {
   tags?: string[];
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemParams {

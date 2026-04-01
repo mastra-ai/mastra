@@ -62,7 +62,9 @@ function formatExpectedSteps(steps: ExpectedStep[], indent: number = 0): string 
   return steps
     .map((step: ExpectedStep, i: number) => {
       const typeStr = step.stepType ? `[${step.stepType}] ` : '';
-      const dataStr = step.data ? ` (data: ${JSON.stringify(step.data)})` : '';
+      // Extract variant-specific fields (exclude structural fields)
+      const { name: _, stepType: _t, children: _c, ...fields } = step;
+      const dataStr = Object.keys(fields).length > 0 ? ` (${JSON.stringify(fields)})` : '';
       let line = `${prefix}${i + 1}. ${typeStr}${step.name}${dataStr}`;
       if (step.children?.steps && step.children.steps.length > 0) {
         line += `\n${formatExpectedSteps(step.children.steps, indent + 1)}`;
@@ -131,23 +133,15 @@ export function createTrajectoryAccuracyScorerLLM({
         if (Array.isArray(staticExpectedTrajectory)) {
           expectedSteps = staticExpectedTrajectory;
         } else {
-          // Preserve full step data from Trajectory steps
-          expectedSteps = staticExpectedTrajectory.steps.map((s: TrajectoryStep): ExpectedStep => {
-            const result: ExpectedStep = { name: s.name, stepType: s.stepType };
-            const data: Record<string, unknown> = {};
-            if ((s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call') && s.toolArgs !== undefined)
-              data.input = s.toolArgs;
-            if ((s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call') && s.toolResult !== undefined)
-              data.output = s.toolResult;
-            if (s.stepType === 'workflow_step' && s.output !== undefined) data.output = s.output;
-            if (Object.keys(data).length > 0) result.data = data;
-            if (s.children && s.children.length > 0) {
-              result.children = {
-                steps: s.children.map((c: TrajectoryStep): ExpectedStep => ({ name: c.name, stepType: c.stepType })),
-              };
+          const toExpectedStep = (s: TrajectoryStep): ExpectedStep => {
+            const { durationMs: _, metadata: _m, children, ...rest } = s;
+            const result: ExpectedStep = rest as ExpectedStep;
+            if (children && children.length > 0) {
+              result.children = { steps: children.map(toExpectedStep) };
             }
             return result;
-          });
+          };
+          expectedSteps = staticExpectedTrajectory.steps.map(toExpectedStep);
         }
       } else if (run.expectedTrajectory) {
         const expectation = run.expectedTrajectory as TrajectoryExpectation;

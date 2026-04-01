@@ -414,4 +414,96 @@ describe('AgentsMDInjector', () => {
       `<system-reminder type="dynamic-agents-md" path="/repo/nested/AGENTS.md">Nested guidance</system-reminder>`,
     ]);
   });
+
+  it('truncates reminder content that exceeds maxTokens', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-truncated';
+    const longContent = [
+      '# Root AGENTS',
+      '',
+      ...Array.from({ length: 20 }, () => 'alpha beta gamma delta epsilon zeta'),
+    ].join('\n');
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      maxTokens: 10,
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => longContent,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/AGENTS.md' }, 'view', toolCallId)]),
+    );
+
+    const [reminder] = extractReminderMarkup(messageList);
+    expect(reminder.startsWith('<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">')).toBe(true);
+    expect(reminder.endsWith('</system-reminder>')).toBe(true);
+    expect(reminder.match(/<system-reminder/g)?.length).toBe(1);
+    expect(reminder.match(/<\/system-reminder>/g)?.length).toBe(1);
+    expect(reminder).toContain('[truncated — showing first ~');
+    expect(reminder).toContain('of ~');
+    expect(reminder).toContain('# Root AGENTS');
+  });
+
+  it('leaves reminder content unchanged when it is under maxTokens', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-short';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      maxTokens: 1000,
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/AGENTS.md' }, 'view', toolCallId)]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
+    ]);
+  });
+
+  it('truncates at newline boundaries when possible', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-newline';
+    const content = ['# Root AGENTS', '', 'first line words', 'second line words', 'third line words'].join('\n');
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      maxTokens: 6,
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => content,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/AGENTS.md' }, 'view', toolCallId)]),
+    );
+
+    const [reminder] = extractReminderMarkup(messageList);
+    expect(reminder).toContain('<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md"># Root AGENTS');
+    expect(reminder).not.toContain('first line words');
+    expect(reminder).not.toContain('second line words');
+    expect(reminder).toContain('[truncated — showing first ~');
+    expect(reminder.endsWith('</system-reminder>')).toBe(true);
+  });
 });
