@@ -142,6 +142,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   await gatewayRegistry.syncGateways(true);
 
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+
   // Project detection
   const project = detectProject(cwd);
 
