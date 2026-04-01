@@ -17,7 +17,8 @@ import { createEvaluateTool } from './evaluate';
 import { createGotoTool } from './goto';
 import { createHoverTool } from './hover';
 import { createPressTool } from './press';
-import { createScreenshotTool } from './screenshot';
+// TODO: Re-enable once we have proper image handling in tool results (COR-761)
+// import { createScreenshotTool } from './screenshot';
 import { createScrollTool } from './scroll';
 import { createSelectTool } from './select';
 import { createSnapshotTool } from './snapshot';
@@ -42,7 +43,8 @@ export function createAgentBrowserTools(browser: AgentBrowser): Record<string, T
     [BROWSER_TOOLS.PRESS]: createPressTool(browser),
     [BROWSER_TOOLS.SELECT]: createSelectTool(browser),
     [BROWSER_TOOLS.SCROLL]: createScrollTool(browser),
-    [BROWSER_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
+    // TODO: Re-enable once we have proper image handling in tool results (COR-761)
+    // [BROWSER_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
     [BROWSER_TOOLS.CLOSE]: createCloseTool(browser),
     // Extended (7)
     [BROWSER_TOOLS.HOVER]: createHoverTool(browser),

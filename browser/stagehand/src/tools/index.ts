@@ -12,7 +12,8 @@ import { STAGEHAND_TOOLS } from './constants';
 import { createExtractTool } from './extract';
 import { createNavigateTool } from './navigate';
 import { createObserveTool } from './observe';
-import { createScreenshotTool } from './screenshot';
+// TODO: Re-enable once we have proper image handling in tool results (COR-761)
+// import { createScreenshotTool } from './screenshot';
 import { createTabsTool } from './tabs';
 
 export { STAGEHAND_TOOLS, type StagehandToolName } from './constants';
@@ -29,7 +30,8 @@ export function createStagehandTools(browser: StagehandBrowser): Record<string, 
     [STAGEHAND_TOOLS.OBSERVE]: createObserveTool(browser),
     // Navigation & State
     [STAGEHAND_TOOLS.NAVIGATE]: createNavigateTool(browser),
-    [STAGEHAND_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
+    // TODO: Re-enable once we have proper image handling in tool results (COR-761)
+    // [STAGEHAND_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
     [STAGEHAND_TOOLS.TABS]: createTabsTool(browser),
     [STAGEHAND_TOOLS.CLOSE]: createCloseTool(browser),
   };
