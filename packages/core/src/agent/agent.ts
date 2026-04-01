@@ -305,7 +305,7 @@ export class Agent<
       if (config.channels instanceof AgentChat) {
         this.#agentChat = config.channels;
       } else if (Object.keys(config.channels).length > 0) {
-        this.#agentChat = new AgentChat({ adapters: config.channels });
+        this.#agentChat = new AgentChat({ adapters: config.channels, userName: config.name });
       }
       this.#agentChat?.__setAgent(this);
     }

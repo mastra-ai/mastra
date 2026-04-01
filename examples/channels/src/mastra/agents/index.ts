@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { ChatChannelProcessor } from '@mastra/core/channels';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { createDiscordAdapter } from '@chat-adapter/discord';
+
 import { createSlackAdapter } from '@chat-adapter/slack';
 import { createTelegramAdapter } from '@chat-adapter/telegram';
 import { Memory } from '@mastra/memory';

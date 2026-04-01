@@ -158,6 +158,22 @@ export class AgentChat {
   }
 
   /**
+   * Get the underlying Chat SDK instance.
+   * Available after Mastra initialization. Use this to register additional
+   * event handlers or access adapter-specific methods.
+   *
+   * @example
+   * ```ts
+   * agent.channels.sdk.onReaction((thread, reaction) => {
+   *   console.log('Reaction received:', reaction);
+   * });
+   * ```
+   */
+  get sdk(): Chat | null {
+    return this.chat;
+  }
+
+  /**
    * Initialize the Chat SDK, register handlers, and start gateway listeners.
    * Called by Mastra.addAgent after the server is ready.
    */
