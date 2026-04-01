@@ -2,13 +2,24 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
-import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
-import { openaiCodexProvider } from '../providers/openai-codex.js';
+import { getCustomProviderId, loadSettings, MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings.js';
+import {
+  buildAnthropicOAuthFetch,
+  claudeCodeMiddleware,
+  opencodeClaudeMaxProvider,
+  promptCacheMiddleware,
+} from '../providers/claude-max.js';
+import {
+  buildOpenAICodexOAuthFetch,
+  createCodexMiddleware,
+  getEffectiveThinkingLevel,
+  openaiCodexProvider,
+  THINKING_LEVEL_TO_REASONING_EFFORT,
+} from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 
 const authStorage = new AuthStorage();
@@ -141,6 +152,72 @@ export function resolveModel(
       apiKey: customProvider.apiKey,
       headers,
     });
+  }
+
+  // --- Memory Gateway path ---
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  if (mgApiKey) {
+    // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
+    const rawBase = settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
+    const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+
+    const anthropicCred = authStorage.get('anthropic');
+    const openaiCred = authStorage.get('openai-codex');
+
+    // Anthropic OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
+    // Required because claudeCodeMiddleware must inject the Claude Code identity system message
+    if (modelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
+      const bareModelId = modelId.substring('anthropic/'.length);
+      const anthropic = createAnthropic({
+        apiKey: 'oauth-gateway-placeholder',
+        baseURL: gatewayBaseURL,
+        headers: {
+          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
+          ...headers,
+        },
+        fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
+      });
+      return wrapLanguageModel({
+        model: anthropic(bareModelId),
+        middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+      });
+    }
+
+    // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
+    // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
+    if (modelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
+      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
+      const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
+      const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+      const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+      const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
+      const middleware = createCodexMiddleware(reasoningEffort);
+
+      const openai = createOpenAI({
+        apiKey: 'oauth-gateway-placeholder',
+        baseURL: gatewayBaseURL,
+        headers: {
+          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
+          ...headers,
+        },
+        fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
+      });
+      return wrapLanguageModel({
+        model: openai.responses(resolvedBareModelId),
+        middleware: [middleware],
+      });
+    }
+
+    // All other models: route through MastraGateway + ModelRouterLanguageModel
+    const gateway = new MastraGateway({
+      apiKey: mgApiKey,
+      baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
+    });
+
+    return new ModelRouterLanguageModel(
+      { id: `mastra/${modelId}` as `${string}/${string}`, headers },
+      [gateway],
+    );
   }
 
   const isAnthropicModel = modelId.startsWith('anthropic/');
