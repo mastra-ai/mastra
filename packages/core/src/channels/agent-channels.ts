@@ -82,6 +82,19 @@ export interface ChannelAdapterConfig {
 }
 
 /**
+ * Represents a message posted to a platform during agent stream consumption.
+ * Used to associate platform message IDs with Mastra message metadata.
+ */
+export interface PostedMessage {
+  /** Platform-assigned message ID */
+  platformMessageId: string;
+  /** Type of content that was posted */
+  type: 'text' | 'tool-running' | 'tool-result' | 'tool-approval' | 'error';
+  /** Tool call ID if this message is tool-related */
+  toolCallId?: string;
+}
+
+/**
  * Handler function for channel events.
  * Receives the thread, message, and the default handler implementation.
  * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
@@ -223,6 +236,8 @@ export class AgentChannels {
   private threadContext: { maxMessages?: number };
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
+  /** Track the bot's last message ID per SDK thread for self-reference. */
+  private lastBotMessageIds = new Map<string, string>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -470,12 +485,17 @@ export class AgentChannels {
           requestContext,
         });
 
-        await this.consumeAgentStream(
+        const { postedMessages } = await this.consumeAgentStream(
           resumedStream,
           sdkThread,
           platform,
           toolCallId ? { toolCallId, messageId } : undefined,
         );
+
+        // Update saved messages with platform message IDs
+        if (postedMessages.length > 0) {
+          await this.associatePlatformMessageIds(resumedStream, platform, postedMessages);
+        }
       } catch (err) {
         const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
         if (isStaleApproval) {
@@ -694,6 +714,12 @@ export class AgentChannels {
     const metadataParts = [`Event: ${eventType}`];
     if (message.id) metadataParts.push(`Message ID: ${message.id}`);
 
+    // Include the bot's last message ID for self-reference (e.g., "delete my last message")
+    const lastBotMessageId = this.lastBotMessageIds.get(sdkThread.id);
+    if (lastBotMessageId) {
+      metadataParts.push(`Your last message ID: ${lastBotMessageId}`);
+    }
+
     // Include thread history inline when available (for mid-conversation mentions)
     let historyBlock = '';
     if (threadHistory && threadHistory.length > 0) {
@@ -759,7 +785,12 @@ export class AgentChannels {
       autoResumeSuspendedTools: useCards ? undefined : true,
     });
 
-    await this.consumeAgentStream(stream, sdkThread, platform);
+    const { postedMessages } = await this.consumeAgentStream(stream, sdkThread, platform);
+
+    // Update saved messages with platform message IDs for self-reference
+    if (postedMessages.length > 0) {
+      await this.associatePlatformMessageIds(stream, platform, postedMessages);
+    }
 
     // Subscribe so follow-up messages also get handled
     await sdkThread.subscribe();
@@ -816,7 +847,7 @@ export class AgentChannels {
     sdkThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
-  ): Promise<void> {
+  ): Promise<{ postedMessages: PostedMessage[] }> {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
@@ -831,6 +862,9 @@ export class AgentChannels {
       messageId?: string; // platform message ID for editing
     }
     const toolCalls = new Map<string, TrackedTool>();
+
+    // Track all messages posted to the platform for metadata association
+    const postedMessages: PostedMessage[] = [];
 
     // Pre-seed the approved tool so its result can edit the approval card
     if (approvalContext) {
@@ -853,7 +887,11 @@ export class AgentChannels {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
-        await sdkThread.post(textBuffer.trim());
+        const sentMessage = await sdkThread.post(textBuffer.trim());
+        if (sentMessage?.id) {
+          this.lastBotMessageIds.set(sdkThread.id, sentMessage.id);
+          postedMessages.push({ platformMessageId: sentMessage.id, type: 'text' });
+        }
         textBuffer = '';
       }
     };
@@ -893,6 +931,13 @@ export class AgentChannels {
         if (!adapterConfig?.formatToolCall) {
           const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
           messageId = sentMessage?.id;
+          if (messageId) {
+            postedMessages.push({
+              platformMessageId: messageId,
+              type: 'tool-running',
+              toolCallId: chunk.payload.toolCallId,
+            });
+          }
         }
 
         toolCalls.set(chunk.payload.toolCallId, {
@@ -981,7 +1026,66 @@ export class AgentChannels {
     // Check for errors that occurred during streaming
     if (stream.error) {
       this.log('error', `[${platform}] Stream completed with error`, { error: JSON.stringify(stream.error, null, 2) });
-      await sdkThread.post(`❌ Error: ${stream.error.message}`);
+      const errorMsg = await sdkThread.post(`❌ Error: ${stream.error.message}`);
+      if (errorMsg?.id) {
+        postedMessages.push({ platformMessageId: errorMsg.id, type: 'error' });
+      }
+    }
+
+    return { postedMessages };
+  }
+
+  /**
+   * Associate platform message IDs with the saved Mastra messages.
+   * Updates the last assistant message's metadata to include channel info.
+   */
+  private async associatePlatformMessageIds(
+    stream: MastraModelOutput,
+    platform: string,
+    postedMessages: PostedMessage[],
+  ): Promise<void> {
+    try {
+      // Get the full output which includes the saved messages
+      const fullOutput = await stream.getFullOutput();
+      const messages = fullOutput.messages;
+      if (!messages?.length) return;
+
+      // Find the last assistant message
+      const assistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
+      if (!assistantMessage) return;
+
+      // Find the last text message ID for easy self-reference
+      const lastTextMessage = [...postedMessages].reverse().find(m => m.type === 'text');
+
+      // Update the message metadata via storage
+      const mastra = this.agent.getMastraInstance?.();
+      const storage = mastra?.getStorage();
+      if (!storage) return;
+
+      const memoryStore = await storage.getStore('memory');
+      if (!memoryStore) return;
+
+      await memoryStore.updateMessages({
+        messages: [
+          {
+            id: assistantMessage.id,
+            content: {
+              ...assistantMessage.content,
+              metadata: {
+                ...assistantMessage.content?.metadata,
+                'mastra.channels': {
+                  [platform]: {
+                    messages: postedMessages,
+                    lastTextMessageId: lastTextMessage?.platformMessageId,
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
+    } catch (err) {
+      this.logger?.warn?.(`Failed to associate platform message IDs: ${err}`);
     }
   }
 
