@@ -21,11 +21,7 @@ const releaseStatusTool = createTool({
       feature,
       owner: 'platform',
       status: 'on track',
-      openItems: [
-        'run final regression pass',
-        'prepare rollout notes',
-        'confirm monitoring alerts',
-      ],
+      openItems: ['run final regression pass', 'prepare rollout notes', 'confirm monitoring alerts'],
     };
   },
 });
