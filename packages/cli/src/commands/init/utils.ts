@@ -26,7 +26,6 @@ export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
 
 export type LLMProvider = (typeof LLMProvider)[number];
 export type Component = (typeof COMPONENTS)[number];
-export type ConnectionMethod = 'direct' | 'gateway';
 
 /**
  * Type-guard to check if a value is a valid LLMProvider
@@ -42,10 +41,7 @@ export function areValidComponents(values: string[]): values is Component[] {
   return values.every(value => COMPONENTS.includes(value as Component));
 }
 
-export const getModelIdentifier = (
-  llmProvider: LLMProvider,
-  connectionMethod: ConnectionMethod = 'direct',
-): ModelRouterModelId => {
+export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
   let model: ModelRouterModelId = 'openai/gpt-5-mini';
 
   if (llmProvider === 'anthropic') {
@@ -60,10 +56,6 @@ export const getModelIdentifier = (
     model = 'mistral/mistral-medium-2508';
   }
 
-  if (connectionMethod === 'gateway') {
-    return `mastra/${model}` as ModelRouterModelId;
-  }
-
   return model;
 };
 
@@ -72,9 +64,8 @@ export async function writeAgentSample(
   destPath: string,
   addExampleTool: boolean,
   addScorers: boolean,
-  connectionMethod: ConnectionMethod = 'direct',
 ) {
-  const modelString = getModelIdentifier(llmProvider, connectionMethod);
+  const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -90,12 +81,10 @@ export async function writeAgentSample(
 
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
-
-  const memoryImport = connectionMethod !== 'gateway' ? `import { Memory } from '@mastra/memory';\n` : '';
-
   const content = `
 import { Agent } from '@mastra/core/agent';
-${memoryImport}${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
+import { Memory } from '@mastra/memory';
+${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
@@ -627,26 +616,11 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async ({
-  provider,
-  apiKey,
-  connectionMethod,
-}: {
-  provider: LLMProvider;
-  apiKey?: string;
-  connectionMethod?: ConnectionMethod;
-}) => {
+export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider; apiKey?: string }) => {
   /**
    * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
    */
   const envFileName = apiKey ? '.env' : '.env.example';
-
-  if (connectionMethod === 'gateway') {
-    const escapedKey = shellQuote.quote(['MASTRA_GATEWAY_API_KEY']);
-    const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-gateway-api-key']);
-    await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
-    return;
-  }
 
   const key = await getAPIKey(provider);
   const escapedKey = shellQuote.quote([key]);

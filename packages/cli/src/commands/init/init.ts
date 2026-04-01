@@ -17,21 +17,9 @@ import {
   writeCodeSample,
   writeIndexFile,
 } from './utils';
-import type { Component, ConnectionMethod, LLMProvider } from './utils';
+import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
-
-async function installWithFallback(depService: DepsService, pkg: string, versionTag: string) {
-  try {
-    await depService.installPackages([`${pkg}${versionTag}`]);
-  } catch {
-    if (versionTag && versionTag !== '@latest') {
-      await depService.installPackages([`${pkg}@latest`]);
-    } else {
-      throw new Error(`Failed to install ${pkg}`);
-    }
-  }
-}
 
 export const init = async ({
   directory = 'src/',
@@ -43,7 +31,6 @@ export const init = async ({
   mcpServer,
   versionTag,
   initGit = false,
-  connectionMethod = 'direct',
 }: {
   directory?: string;
   components: Component[];
@@ -54,7 +41,6 @@ export const init = async ({
   mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
-  connectionMethod?: ConnectionMethod;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -69,7 +55,7 @@ export const init = async ({
 
     const dirPath = result.dirPath;
 
-    const initTasks: Promise<unknown>[] = [
+    await Promise.all([
       writeIndexFile({
         dirPath,
         addExample,
@@ -78,15 +64,8 @@ export const init = async ({
         addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
-    ];
-
-    if (connectionMethod === 'gateway') {
-      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey, connectionMethod }));
-    } else {
-      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }));
-    }
-
-    await Promise.all(initTasks);
+      writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
+    ]);
 
     if (addExample) {
       await Promise.all([
@@ -124,7 +103,7 @@ export const init = async ({
       const needsEvals =
         components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
       if (needsEvals) {
-        await installWithFallback(depService, '@mastra/evals', packageVersionTag);
+        await depService.installPackages([`@mastra/evals${packageVersionTag}`]);
       }
     }
 
@@ -202,13 +181,7 @@ export const init = async ({
       }
     }
 
-    if (connectionMethod === 'gateway') {
-      p.note(`
-      ${color.green('Mastra initialized successfully!')}
-
-      Your ${color.cyan('MASTRA_GATEWAY_API_KEY')} has been written to ${color.cyan('.env')}
-      `);
-    } else if (!llmApiKey) {
+    if (!llmApiKey) {
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 
