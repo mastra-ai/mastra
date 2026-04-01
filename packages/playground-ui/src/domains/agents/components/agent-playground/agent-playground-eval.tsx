@@ -122,7 +122,11 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
   const client = useMastraClient();
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data: trajectory, isLoading } = useQuery({
+  const {
+    data: trajectory,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['trajectory', traceId],
     queryFn: () => client.getTraceTrajectory(traceId),
     enabled: isOpen,
@@ -142,6 +146,10 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
               Loading trajectory...
             </Txt>
           </div>
+        ) : isError ? (
+          <Txt variant="ui-xs" className="text-red-400 mt-1 px-3 py-2">
+            Failed to load trajectory steps
+          </Txt>
         ) : trajectory?.steps && trajectory.steps.length > 0 ? (
           <div className="mt-1 space-y-1">
             {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
