@@ -31,6 +31,9 @@
  */
 
 import * as path from 'node:path';
+import type { BrowserContext } from '../browser/processor';
+import { BrowserViewer, CLI_SKILL_REPOS, CLI_PROVIDER_COMMANDS } from '../browser/viewer';
+import type { BuiltInCLIProvider } from '../browser/viewer';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
@@ -52,7 +55,7 @@ import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument }
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
-import type { WorkspaceStatus } from './types';
+import type { WorkspaceStatus, BrowserCapabilities } from './types';
 
 // =============================================================================
 // Workspace Configuration
@@ -304,6 +307,40 @@ export interface WorkspaceConfig<
   tools?: WorkspaceToolsConfig;
 
   // ---------------------------------------------------------------------------
+  // Browser Capabilities
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Browser viewing capabilities for sandbox-based browser automation.
+   *
+   * When configured, enables:
+   * - Screencast streaming via CDP
+   * - Browser context injection (current URL in prompts)
+   * - Input injection for interactive viewing
+   *
+   * The agent uses workspace_execute_command + CLI skills for automation.
+   * This config only handles the "viewing" side.
+   *
+   * @example Cloud provider (recommended)
+   * ```typescript
+   * browser: {
+   *   cli: 'agent-browser',
+   *   provider: 'browserbase',
+   *   apiKey: process.env.BROWSERBASE_API_KEY,
+   * }
+   * ```
+   *
+   * @example Direct CDP URL (local development)
+   * ```typescript
+   * browser: {
+   *   cli: 'agent-browser',
+   *   cdpUrl: 'ws://localhost:9222/devtools/browser/...',
+   * }
+   * ```
+   */
+  browser?: BrowserCapabilities;
+
+  // ---------------------------------------------------------------------------
   // Lifecycle Options
   // ---------------------------------------------------------------------------
 
@@ -416,6 +453,9 @@ export class Workspace<
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
+  private _browserViewer?: BrowserViewer;
+  private _browserReadyPromise?: Promise<void>;
+  private _browserReady = false;
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
@@ -585,6 +625,346 @@ export class Workspace<
    */
   get lsp(): LSPManager | undefined {
     return this._lsp;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Browser Capabilities
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the browser viewer for screencast and context injection.
+   * Returns undefined if browser is not configured.
+   *
+   * This method automatically ensures the browser CLI skill is installed
+   * before returning the viewer (lazy initialization).
+   *
+   * @example
+   * ```typescript
+   * const viewer = await workspace.getBrowserViewer();
+   * if (viewer) {
+   *   await viewer.connect();
+   *   const stream = await viewer.startScreencast();
+   *   stream.on('frame', (frame) => console.log('Frame!'));
+   * }
+   * ```
+   */
+  async getBrowserViewer(): Promise<BrowserViewer | undefined> {
+    if (!this._config.browser) {
+      return undefined;
+    }
+
+    // Ensure browser skill is installed (lazy init)
+    await this.ensureBrowserReady();
+
+    // Create viewer if needed
+    if (!this._browserViewer) {
+      this._browserViewer = this.createBrowserViewer(this._config.browser);
+    }
+
+    return this._browserViewer;
+  }
+
+  /**
+   * Get browser context for prompt injection.
+   * Returns null if browser is not configured or not connected.
+   *
+   * This method automatically ensures the browser CLI skill is installed
+   * before accessing the viewer.
+   *
+   * Use this with BrowserContextProcessor to inject browser state into prompts.
+   *
+   * @example
+   * ```typescript
+   * const context = await workspace.getBrowserContext();
+   * if (context) {
+   *   console.log(`Current URL: ${context.url}`);
+   * }
+   * ```
+   */
+  async getBrowserContext(): Promise<BrowserContext | null> {
+    const viewer = await this.getBrowserViewer();
+    if (!viewer) {
+      return null;
+    }
+
+    // Auto-connect if not already connected
+    if (!viewer.isConnected) {
+      try {
+        await viewer.connect();
+      } catch {
+        // Browser might not be running yet - return null context
+        return null;
+      }
+    }
+
+    const url = await viewer.getCurrentUrl();
+    const title = await viewer.getTitle();
+
+    // Get provider name for context
+    const cli = this._config.browser?.cli;
+    const providerName = typeof cli === 'string' ? cli : cli ? 'custom-browser' : 'workspace-browser';
+
+    return {
+      provider: providerName,
+      currentUrl: url ?? undefined,
+      pageTitle: title ?? undefined,
+      isRunning: viewer.isConnected,
+    };
+  }
+
+  /**
+   * Create a BrowserViewer from browser config.
+   * Handles CDP URL resolution from various sources.
+   *
+   * Priority:
+   * 1. Direct cdpUrl (static or function)
+   * 2. Cloud provider (fetches CDP URL from API)
+   * 3. CLI provider (gets CDP URL via `cli get cdp-url`)
+   */
+  private createBrowserViewer(config: BrowserCapabilities): BrowserViewer {
+    let cdpUrl = config.cdpUrl;
+
+    // If no direct CDP URL but provider is specified, create a function to fetch it
+    if (!cdpUrl && config.provider) {
+      cdpUrl = () => this.fetchCdpUrlFromProvider(config);
+    }
+
+    // Create BrowserViewer with CLI provider (if specified) and optional direct cdpUrl
+    return new BrowserViewer({
+      cli: config.cli,
+      cdpUrl,
+      screencast: config.screencast,
+      headless: config.headless,
+      autoReconnect: false, // Let user control reconnection
+      // Prefer processManager for spawning (enables PID tracking and thread isolation)
+      processManager: this._sandbox?.processes,
+      // Fallback to executeCommand for one-shot commands
+      execCommand: this._sandbox?.executeCommand
+        ? async (command: string) => {
+            // Pass command as-is (no splitting) to allow shell syntax (pipes, redirects)
+            const result = await this._sandbox!.executeCommand!(command, [], { timeout: 10000 });
+            return {
+              stdout: result.stdout ?? '',
+              stderr: result.stderr ?? '',
+            };
+          }
+        : undefined,
+    });
+  }
+
+  /**
+   * Fetch CDP URL from a cloud provider's API.
+   * Currently a placeholder - will be implemented per provider.
+   */
+  private async fetchCdpUrlFromProvider(config: BrowserCapabilities): Promise<string> {
+    switch (config.provider) {
+      case 'browserbase':
+        // TODO: Implement Browserbase API call
+        // const session = await browserbaseClient.createSession({ projectId: config.projectId });
+        // return session.connectUrl;
+        throw new WorkspaceError(
+          'Browserbase provider not yet implemented. Use cdpUrl directly.',
+          'NOT_IMPLEMENTED',
+          this.id,
+        );
+
+      case 'kernel':
+        // TODO: Implement Kernel API call
+        throw new WorkspaceError(
+          'Kernel provider not yet implemented. Use cdpUrl directly.',
+          'NOT_IMPLEMENTED',
+          this.id,
+        );
+
+      case 'browser-use-cloud':
+        // TODO: Implement Browser-Use Cloud API call
+        throw new WorkspaceError(
+          'Browser-Use Cloud provider not yet implemented. Use cdpUrl directly.',
+          'NOT_IMPLEMENTED',
+          this.id,
+        );
+
+      default:
+        throw new WorkspaceError(`Unknown browser provider: ${config.provider}`, 'INVALID_CONFIG', this.id);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Browser Setup (CLI + Skill installation)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ensure browser CLI and skill are ready.
+   *
+   * Installs the CLI and skill if not already present. This is called automatically
+   * during `init()` if browser is configured, or lazily when browser capabilities
+   * are first accessed.
+   *
+   * This method is idempotent and race-condition-safe - concurrent calls return
+   * the same promise.
+   *
+   * @example
+   * ```typescript
+   * // Explicit setup
+   * await workspace.ensureBrowserReady();
+   *
+   * // Or implicit via init()
+   * const workspace = new Workspace({ browser: { cli: 'agent-browser' } });
+   * await workspace.init(); // Automatically calls ensureBrowserReady()
+   * ```
+   */
+  async ensureBrowserReady(): Promise<void> {
+    // No browser configured
+    if (!this._config.browser?.cli) {
+      return;
+    }
+
+    // Already ready
+    if (this._browserReady) {
+      return;
+    }
+
+    // Setup in progress - return existing promise
+    if (this._browserReadyPromise) {
+      return this._browserReadyPromise;
+    }
+
+    // Start setup
+    this._browserReadyPromise = this._setupBrowser();
+
+    try {
+      await this._browserReadyPromise;
+      this._browserReady = true;
+    } finally {
+      this._browserReadyPromise = undefined;
+    }
+  }
+
+  /**
+   * Internal browser setup - installs CLI and skill, configures env vars.
+   */
+  private async _setupBrowser(): Promise<void> {
+    const browserConfig = this._config.browser;
+    const cli = browserConfig?.cli;
+    if (!cli) return;
+
+    // Configure headed mode env var if headless is false
+    // This makes browser CLIs open visible windows by default
+    if (browserConfig?.headless === false && this._sandbox?.addEnv) {
+      this._sandbox.addEnv({
+        AGENT_BROWSER_HEADED: '1', // agent-browser
+        // playwright-cli doesn't support env var, but the skill has --headed examples
+      });
+    }
+
+    // Only handle built-in CLI providers (string names)
+    if (typeof cli !== 'string') {
+      // Custom CLI provider - user is responsible for setup
+      return;
+    }
+
+    const skillInfo = CLI_SKILL_REPOS[cli as BuiltInCLIProvider];
+    if (!skillInfo) {
+      // Unknown CLI - skip auto-setup
+      return;
+    }
+
+    // Need sandbox to run commands
+    if (!this._sandbox?.executeCommand) {
+      console.warn(
+        `[Workspace] Browser CLI "${cli}" configured but no sandbox available for setup. ` +
+          `Install skill manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
+      );
+      return;
+    }
+
+    // Ensure sandbox is running
+    if (this._sandbox instanceof MastraSandbox) {
+      await (this._sandbox as MastraSandbox).ensureRunning();
+    }
+
+    // Check if skill is already installed by looking for it in configured skill paths
+    const skillInstalled = await this._checkSkillInstalled(skillInfo.skill);
+    if (skillInstalled) {
+      console.info(`[Workspace "${this.name}"] Browser skill already installed: ${skillInfo.skill}`);
+    } else {
+      // Install skill via npx skills CLI
+      // Note: This installs to multiple agent folders (.claude/, .agents/, etc.)
+      // Future improvement: Use skills API directly like the studio does to only install to .agents/skills/
+      console.info(`[Workspace "${this.name}"] Installing browser skill "${skillInfo.skill}" from ${skillInfo.repo}`);
+      try {
+        await this._sandbox.executeCommand('npx', ['skills', 'add', skillInfo.repo, '--skill', skillInfo.skill, '-y'], {
+          timeout: 60000, // 60s timeout for npm install
+        });
+        console.info(`[Workspace "${this.name}"] Browser skill installed successfully`);
+      } catch (error) {
+        console.warn(
+          `[Workspace "${this.name}"] Failed to install browser skill: ${error}. ` +
+            `Install manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
+        );
+      }
+    }
+
+    // Always try to install the CLI binary (checks if already installed first)
+    await this._installBrowserCLI(cli);
+  }
+
+  /**
+   * Install the browser CLI binary if not already available.
+   */
+  private async _installBrowserCLI(cli: BuiltInCLIProvider): Promise<void> {
+    const commands = CLI_PROVIDER_COMMANDS[cli];
+    if (!commands || !this._sandbox?.executeCommand) {
+      return;
+    }
+
+    // Check if CLI is already installed
+    try {
+      const result = await this._sandbox.executeCommand(commands.binary, commands.checkArgs, {
+        timeout: 5000,
+      });
+      if (result.exitCode === 0) {
+        console.info(`[Workspace "${this.name}"] Browser CLI "${commands.binary}" is already installed`);
+        return;
+      }
+      // Non-zero exit code means CLI not working properly, continue to install
+    } catch {
+      // CLI not installed or check failed, continue to install
+    }
+
+    // Parse and execute install command
+    console.info(`[Workspace "${this.name}"] Installing browser CLI: ${commands.install}`);
+    try {
+      const [cmd, ...args] = commands.install.split(' ');
+      await this._sandbox.executeCommand(cmd!, args, {
+        timeout: 120000, // 2 min timeout for install
+      });
+      console.info(`[Workspace "${this.name}"] Browser CLI installed successfully`);
+    } catch (error) {
+      console.warn(
+        `[Workspace "${this.name}"] Failed to install browser CLI: ${error}. ` +
+          `Install manually: ${commands.install}`,
+      );
+    }
+  }
+
+  /**
+   * Check if a skill is installed by searching for it in configured skill paths.
+   */
+  private async _checkSkillInstalled(skillName: string): Promise<boolean> {
+    if (!this._skills && !this.hasSkillsConfig()) {
+      return false;
+    }
+
+    try {
+      const skills = this.skills;
+      if (!skills) return false;
+
+      const skill = await skills.get(skillName);
+      return skill !== null;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -832,7 +1212,8 @@ export class Workspace<
 
   /**
    * Initialize the workspace.
-   * Starts the sandbox, initializes the filesystem, and auto-mounts filesystems.
+   * Starts the sandbox, initializes the filesystem, sets up browser capabilities,
+   * and auto-mounts filesystems.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
@@ -844,6 +1225,11 @@ export class Workspace<
 
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'start');
+      }
+
+      // Setup browser CLI and skill if configured
+      if (this._config.browser?.cli) {
+        await this.ensureBrowserReady();
       }
 
       // Auto-index files if autoIndexPaths is configured
@@ -865,6 +1251,18 @@ export class Workspace<
     this._status = 'destroying';
 
     try {
+      // Close browser first to kill any browser processes
+      if (this._browserViewer) {
+        try {
+          await this._browserViewer.close();
+        } catch {
+          // Browser close errors are non-blocking
+        }
+        this._browserViewer = undefined;
+        this._browserReady = false;
+        this._browserReadyPromise = undefined;
+      }
+
       // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
       if (this._lsp) {
         try {
