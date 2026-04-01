@@ -82,27 +82,33 @@ describe('gateway-sync', () => {
       },
     });
 
-    // Simulate MastraGateway when no API key is set: shouldEnable returns false,
-    // but providers are still defined (they just won't be fetched)
+    // Use a gateway with shouldEnable=true and real providers so skipping
+    // is driven by MastraGateway's own shouldEnable() checking the env var,
+    // not by the mock hardcoding false.
     const mastra = createGateway(
       'mastra',
       {
-        google: {
-          name: 'Google',
+        myMastra: {
+          name: 'Mastra',
           gateway: 'mastra',
           apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
           models: ['gemini-2.5-flash'],
         },
       },
-      false,
+      true,
+    );
+
+    // Override shouldEnable to use the real env-var check
+    (mastra.shouldEnable as ReturnType<typeof vi.fn>).mockImplementation(
+      () => !!process.env['MASTRA_GATEWAY_API_KEY'],
     );
 
     const { providers } = await fetchProvidersFromGateways([modelsDev, netlify, mastra]);
 
     expect(providers.openai).toBeDefined();
     expect(providers['netlify/xai']).toBeDefined();
-    // Mastra providers are skipped because shouldEnable() returned false
-    expect(providers['mastra/google']).toBeUndefined();
+    // Mastra providers are skipped because MASTRA_GATEWAY_API_KEY is not set
+    expect(providers['mastra/myMastra']).toBeUndefined();
     expect(providers['mastra']).toBeUndefined();
   });
 
