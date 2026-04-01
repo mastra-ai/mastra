@@ -5,6 +5,7 @@ import {
   agentBrowserAgent,
   stagehandAgent,
   workspaceAgentBrowserAgent,
+  workspaceBrowserUseAgent,
 } from './agents/index.js';
 
 export const mastra = new Mastra({
@@ -12,6 +13,7 @@ export const mastra = new Mastra({
     agentBrowserAgent,
     stagehandAgent,
     workspaceAgentBrowserAgent,
+    workspaceBrowserUseAgent,
   },
   storage: new LibSQLStore({
     id: 'browser-agent-storage',
