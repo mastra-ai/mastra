@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockLoadSettings, mockSaveSettings } = vi.hoisted(() => ({
+const { mockGatewayRegistryGetInstance, mockGatewayRegistrySyncGateways, mockLoadSettings, mockSaveSettings } = vi.hoisted(() => ({
+  mockGatewayRegistryGetInstance: vi.fn(),
+  mockGatewayRegistrySyncGateways: vi.fn(),
   mockLoadSettings: vi.fn(),
   mockSaveSettings: vi.fn(),
+}));
+
+vi.mock('@mastra/core/llm', () => ({
+  GatewayRegistry: {
+    getInstance: mockGatewayRegistryGetInstance,
+  },
 }));
 
 vi.mock('../../../onboarding/settings.js', () => ({
@@ -66,12 +74,15 @@ function createCtx() {
 describe('handleMemoryGatewayCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGatewayRegistryGetInstance.mockReturnValue({
+      syncGateways: mockGatewayRegistrySyncGateways,
+    });
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
     mockLoadSettings.mockReturnValue({ memoryGateway: {} });
   });
 
-  it('stores the API key and updates the gateway URL', async () => {
+  it('stores the API key and updates the gateway URL from the custom option', async () => {
     const { ctx, authStorage, components } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue(undefined);
 
@@ -82,14 +93,38 @@ describe('handleMemoryGatewayCommand', () => {
     await Promise.resolve();
 
     expect(components).toHaveLength(2);
-    components[1]!.config.onSubmit('https://gateway.example.com');
+    components[1]!.config.onSubmit('custom');
+    await Promise.resolve();
+
+    expect(components).toHaveLength(3);
+    components[2]!.config.onSubmit('https://gateway.example.com');
     await promise;
 
     expect(authStorage.setStoredApiKey).toHaveBeenCalledWith('mastra-gateway', 'mg_test_key', 'MASTRA_GATEWAY_API_KEY');
     expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'https://gateway.example.com' } });
-    expect(ctx.showInfo).toHaveBeenLastCalledWith(
-      'Memory gateway configured. Note: model list and memory mode changes take effect on next restart.',
-    );
+    expect(mockGatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
+    expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+    expect(ctx.showInfo).toHaveBeenLastCalledWith('Memory gateway configured. Memory mode changes take effect on next restart.');
+  });
+
+  it('prefills the existing API key and stores the localhost URL without prompting for custom input', async () => {
+    const { ctx, authStorage, components } = createCtx();
+    authStorage.getStoredApiKey.mockReturnValue('mg_existing_key');
+
+    const promise = handleMemoryGatewayCommand(ctx);
+
+    expect(components).toHaveLength(1);
+    expect(components[0]!.input.setValue).toHaveBeenCalledWith('mg_existing_key');
+    components[0]!.config.onCancel();
+    await Promise.resolve();
+
+    expect(components).toHaveLength(2);
+    components[1]!.config.onSubmit('http://localhost:4111');
+    await promise;
+
+    expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'http://localhost:4111' } });
+    expect(process.env.MASTRA_GATEWAY_URL).toBe('http://localhost:4111');
+    expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
   });
 
   it('clears stored gateway auth and settings', async () => {
@@ -109,8 +144,7 @@ describe('handleMemoryGatewayCommand', () => {
     expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: {} });
     expect(process.env.MASTRA_GATEWAY_API_KEY).toBeUndefined();
     expect(process.env.MASTRA_GATEWAY_URL).toBeUndefined();
-    expect(ctx.showInfo).toHaveBeenLastCalledWith(
-      'Memory gateway cleared. Note: model list and memory mode changes take effect on next restart.',
-    );
+    expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+    expect(ctx.showInfo).toHaveBeenLastCalledWith('Memory gateway cleared. Memory mode changes take effect on next restart.');
   });
 });

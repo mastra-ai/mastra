@@ -152,13 +152,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  // When a gateway API key is present (mgApiKey), local observational memory is disabled because
-  // the gateway server manages memory remotely. This means getDynamicMemory returns undefined and
-  // Harness.resolveMemory() will throw "Memory is not configured" if called. This decision is made
-  // once at startup — changing the gateway key mid-session (via /memory-gateway) requires a restart
-  // for memory mode to switch.
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  const memory = mgApiKey ? undefined : getDynamicMemory(storage);
+  const memory = getDynamicMemory(storage);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
