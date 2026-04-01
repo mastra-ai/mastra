@@ -5,10 +5,7 @@ const INWORLD_API_BASE = 'https://api.inworld.ai';
 
 type InworldTtsModel = 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini';
 
-type InworldSttModel =
-  | 'inworld/inworld-stt-1'
-  | 'groq/whisper-large-v3'
-  | 'assemblyai/universal-streaming-multilingual';
+type InworldSttModel = 'inworld/inworld-stt-1';
 
 type AudioEncoding = 'LINEAR16' | 'MP3' | 'OGG_OPUS' | 'ALAW' | 'MULAW' | 'FLAC' | 'PCM' | 'WAV';
 
@@ -60,7 +57,7 @@ export class InworldVoice extends MastraVoice {
    *
    * @param {Object} options - The options for the voice configuration.
    * @param {InworldVoiceConfig} [options.speechModel] - TTS model config. Default: inworld-tts-1.5-max.
-   * @param {InworldListeningConfig} [options.listeningModel] - STT model config. Default: groq/whisper-large-v3.
+   * @param {InworldListeningConfig} [options.listeningModel] - STT model config. Default: inworld/inworld-stt-1.
    * @param {string} [options.speaker] - Default voice ID. Default: 'Dennis'.
    * @param {AudioEncoding} [options.audioEncoding] - TTS audio format. Default: 'MP3'.
    * @param {number} [options.sampleRateHertz] - TTS sample rate. Default: 48000.
@@ -97,7 +94,7 @@ export class InworldVoice extends MastraVoice {
         apiKey,
       },
       listeningModel: {
-        name: listeningModel?.name ?? 'groq/whisper-large-v3',
+        name: listeningModel?.name ?? 'inworld/inworld-stt-1',
         apiKey,
       },
       speaker: speaker ?? 'Dennis',
@@ -281,7 +278,7 @@ export class InworldVoice extends MastraVoice {
 
     const body = {
       transcribeConfig: {
-        modelId: this.listeningModel?.name ?? 'groq/whisper-large-v3',
+        modelId: this.listeningModel?.name ?? 'inworld/inworld-stt-1',
         audioEncoding: options?.audioEncoding ?? 'AUTO_DETECT',
         language: options?.language ?? this.language,
         sampleRateHertz: options?.sampleRateHertz ?? 16000,
