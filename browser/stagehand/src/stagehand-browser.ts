@@ -7,7 +7,7 @@
  * Stagehand v3 is CDP-native and provides direct CDP access for screencast/input injection.
  */
 
-import type { Stagehand } from '@browserbasehq/stagehand';
+import { Stagehand } from '@browserbasehq/stagehand';
 import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserState,
@@ -145,7 +145,6 @@ export class StagehandBrowser extends MastraBrowser {
    * Used by thread manager for 'browser' isolation mode.
    */
   private async createStagehandInstance(): Promise<Stagehand> {
-    const { Stagehand } = await import('@browserbasehq/stagehand');
     const stagehandOptions = await this.buildStagehandOptions();
     const stagehand = new Stagehand(stagehandOptions);
     await stagehand.init();

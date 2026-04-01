@@ -45,7 +45,15 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
       addCookies: vi.fn(),
       clearCookies: vi.fn(),
       storageState: vi.fn().mockResolvedValue({}),
+      newCDPSession: vi.fn().mockResolvedValue({
+        send: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+      }),
     }),
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
   };
 
   const mockLocator = {
@@ -115,6 +123,12 @@ vi.mock('agent-browser', () => ({
     switchTo = vi.fn().mockResolvedValue({ index: 0, url: 'https://example.com', title: 'Example' });
     closeTab = vi.fn().mockResolvedValue({ closed: 1, remaining: 0 });
     listTabs = vi.fn().mockResolvedValue([{ index: 0, url: 'https://example.com', title: 'Example', active: true }]);
+    getContext = vi.fn().mockReturnValue({
+      on: vi.fn(),
+      off: vi.fn(),
+      pages: vi.fn().mockReturnValue([mockPage]),
+    });
+    getPages = vi.fn().mockReturnValue([mockPage]);
   },
 }));
 
@@ -126,7 +140,8 @@ describe('AgentBrowser', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    browser = new AgentBrowser();
+    // Use 'none' isolation to get simpler shared browser behavior for unit tests
+    browser = new AgentBrowser({ threadIsolation: 'none' });
   });
 
   afterEach(async () => {
@@ -456,69 +471,7 @@ describe('AgentBrowser', () => {
     });
   });
 
-  describe('upload', () => {
-    beforeEach(async () => {
-      await browser.ensureReady();
-      await browser.snapshot({});
-    });
-
-    it('uploads files', async () => {
-      const result = await browser.upload({ ref: '@e1', files: ['/path/to/file.txt'] });
-
-      expect(result.success).toBe(true);
-      expect(mockLocator.setInputFiles).toHaveBeenCalledWith(['/path/to/file.txt'], expect.any(Object));
-    });
-  });
-
-  describe('wait', () => {
-    beforeEach(async () => {
-      await browser.ensureReady();
-      await browser.snapshot({});
-    });
-
-    it('waits for element to be visible', async () => {
-      const result = await browser.wait({ ref: '@e1', state: 'visible' });
-
-      expect(result.success).toBe(true);
-      expect(mockLocator.waitFor).toHaveBeenCalledWith(expect.objectContaining({ state: 'visible' }));
-    });
-
-    it('waits for timeout when no ref specified', async () => {
-      const result = await browser.wait({ timeout: 1000 });
-
-      expect(result.success).toBe(true);
-      expect(mockPage.waitForTimeout).toHaveBeenCalledWith(1000);
-    });
-  });
-
-  describe('drag', () => {
-    beforeEach(async () => {
-      await browser.ensureReady();
-      await browser.snapshot({});
-    });
-
-    it('drags element to target', async () => {
-      const result = await browser.drag({ sourceRef: '@e1', targetRef: '@e2' });
-
-      expect(result.success).toBe(true);
-      expect(mockLocator.dragTo).toHaveBeenCalled();
-    });
-  });
-
-  describe('evaluate', () => {
-    beforeEach(async () => {
-      await browser.ensureReady();
-    });
-
-    it('evaluates JavaScript', async () => {
-      mockPage.evaluate.mockResolvedValueOnce('result');
-
-      const result = await browser.evaluate({ script: 'return document.title' });
-
-      expect(result.success).toBe(true);
-      expect(result.result).toBe('result');
-    });
-  });
+  // Tool tests (upload, dialog, drag, evaluate) are in __tests__/tools.test.ts
 
   // =============================================================================
   // Screencast

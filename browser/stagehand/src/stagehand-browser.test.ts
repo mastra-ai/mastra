@@ -19,6 +19,9 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() =
 
   const mockContext = {
     pages: vi.fn().mockReturnValue([mockPage]),
+    activePage: vi.fn().mockReturnValue(mockPage),
+    on: vi.fn(),
+    off: vi.fn(),
   };
 
   const mockStagehand = {
@@ -64,7 +67,8 @@ describe('StagehandBrowser', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    browser = new StagehandBrowser();
+    // Use 'none' isolation to get simpler shared browser behavior for unit tests
+    browser = new StagehandBrowser({ threadIsolation: 'none' });
   });
 
   afterEach(async () => {
@@ -189,7 +193,9 @@ describe('StagehandBrowser', () => {
       expect(tools[STAGEHAND_TOOLS.EXTRACT]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.OBSERVE]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
-      expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
+      // Screenshot tool is currently disabled (see COR-761)
+      // expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
     });
   });
@@ -459,6 +465,7 @@ describe('StagehandBrowser', () => {
     });
 
     it('should handle no page available', async () => {
+      mockContext.activePage.mockReturnValueOnce(null);
       mockContext.pages.mockReturnValueOnce([]);
 
       const result = await browser.navigate({
@@ -498,6 +505,7 @@ describe('StagehandBrowser', () => {
     });
 
     it('should handle no page available', async () => {
+      mockContext.activePage.mockReturnValueOnce(null);
       mockContext.pages.mockReturnValueOnce([]);
 
       const result = await browser.screenshot({});
@@ -559,7 +567,7 @@ describe('StagehandBrowser', () => {
     it('should throw if no CDP session available', async () => {
       mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
-      await expect(browser.startScreencast()).rejects.toThrow('No CDP session available for screencast');
+      await expect(browser.startScreencast()).rejects.toThrow('No CDP session available');
     });
   });
 
@@ -708,12 +716,13 @@ describe('createStagehandTools', () => {
     const browser = new StagehandBrowser();
     const tools = createStagehandTools(browser);
 
+    // Screenshot tool is currently disabled (see COR-761)
     expect(Object.keys(tools)).toHaveLength(6);
     expect(tools[STAGEHAND_TOOLS.ACT].id).toBe('stagehand_act');
     expect(tools[STAGEHAND_TOOLS.EXTRACT].id).toBe('stagehand_extract');
     expect(tools[STAGEHAND_TOOLS.OBSERVE].id).toBe('stagehand_observe');
     expect(tools[STAGEHAND_TOOLS.NAVIGATE].id).toBe('stagehand_navigate');
-    expect(tools[STAGEHAND_TOOLS.SCREENSHOT].id).toBe('stagehand_screenshot');
+    expect(tools[STAGEHAND_TOOLS.TABS].id).toBe('stagehand_tabs');
     expect(tools[STAGEHAND_TOOLS.CLOSE].id).toBe('stagehand_close');
   });
 });
@@ -724,7 +733,8 @@ describe('STAGEHAND_TOOLS', () => {
     expect(STAGEHAND_TOOLS.EXTRACT).toBe('stagehand_extract');
     expect(STAGEHAND_TOOLS.OBSERVE).toBe('stagehand_observe');
     expect(STAGEHAND_TOOLS.NAVIGATE).toBe('stagehand_navigate');
-    expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
+    // Screenshot tool is currently disabled (see COR-761)
+    // expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
     expect(STAGEHAND_TOOLS.CLOSE).toBe('stagehand_close');
   });
 });

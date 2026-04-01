@@ -6,18 +6,17 @@
  *
  * Skip when Playwright/Chromium is not available (CI without browsers).
  */
-import { BrowserManager } from 'agent-browser';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentBrowser } from './agent-browser';
 
-// Check if we can actually launch a browser
+// Check if we can actually launch a browser with AgentBrowser
 let canLaunchBrowser = true;
 try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
-  const mgr = new BrowserManager();
-  await mgr.launch({ headless: true });
-  await mgr.close();
+  const testBrowser = new AgentBrowser({ headless: true, threadIsolation: 'none' });
+  await testBrowser.ensureReady();
+  await testBrowser.close();
 } catch {
   canLaunchBrowser = false;
 }
@@ -26,7 +25,8 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   let browser: AgentBrowser;
 
   beforeAll(async () => {
-    browser = new AgentBrowser({ headless: true, timeout: 15_000 });
+    // Use 'none' isolation for simpler shared browser behavior in integration tests
+    browser = new AgentBrowser({ headless: true, timeout: 15_000, threadIsolation: 'none' });
     await browser.ensureReady();
   });
 
