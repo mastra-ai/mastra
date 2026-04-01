@@ -614,13 +614,12 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
 
       const result = messageList.get.all.db();
       const roles = result.map(m => m.role);
+      const texts = result.map(m => m.content?.parts?.[0]?.text);
 
-      for (let i = 1; i < roles.length; i++) {
-        if (roles[i] === 'user' && roles[i - 1] === 'user') {
-          const texts = result.map(m => m.content?.parts?.[0]?.text);
-          throw new Error(`Consecutive user messages at index ${i - 1},${i}: ${JSON.stringify(texts)}`);
-        }
-      }
+      // The older user message should be inserted before the assistant (chronological)
+      // and the input user message should remain at the end
+      expect(roles).toEqual(['user', 'assistant', 'user']);
+      expect(texts).toEqual(['Previous question', 'Hi! How can I help?', 'Hello, how are you?']);
     });
   });
 });

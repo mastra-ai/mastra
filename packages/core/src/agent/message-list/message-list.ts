@@ -1003,7 +1003,15 @@ export class MessageList {
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
             }
-            this.messages.push(messageV2);
+            // Insert at the correct chronological position so that removing the
+            // full-array sort does not leave split-off messages out of order.
+            const splitTime = messageV2.createdAt.getTime();
+            const splitIdx = this.messages.findIndex(m => m.createdAt.getTime() > splitTime);
+            if (splitIdx === -1) {
+              this.messages.push(messageV2);
+            } else {
+              this.messages.splice(splitIdx, 0, messageV2);
+            }
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else {
