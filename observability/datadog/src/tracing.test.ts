@@ -315,6 +315,7 @@ describe('DatadogExporter', () => {
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
       expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'runtime');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
     });
 
     it('uses "Error" as error.type fallback when neither name nor category is present', async () => {
@@ -328,6 +329,7 @@ describe('DatadogExporter', () => {
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
       expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'Error');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
     });
 
     it('does not set native error status for non-error spans', async () => {
