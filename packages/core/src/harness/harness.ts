@@ -1382,7 +1382,7 @@ export class Harness<TState = {}> {
           retryable: true,
         });
         this.followUpQueue.push({
-          content: '[System] Continue where you left off.',
+          content: '<system-reminder>There was an API error, please continue.</system-reminder>',
           requestContext: requestContextInput,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
