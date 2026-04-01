@@ -31,7 +31,7 @@ import {
   stripToolPrefix,
 } from './processor';
 import { MastraStateAdapter } from './state-adapter';
-import type { ChannelContext } from './types';
+import type { ChannelContext, ThreadHistoryMessage } from './types';
 
 /** Message content that can be posted to a channel. */
 export type PostableMessage = string | CardElement;
@@ -152,6 +152,24 @@ export interface ChannelConfig {
   userName?: string;
 
   /**
+   * Fetch recent thread messages from the platform to provide context when the agent
+   * is mentioned mid-conversation. Messages are converted to user/assistant pairs
+   * and prepended to the agent's memory.
+   *
+   * @example
+   * ```ts
+   * threadContext: { maxMessages: 10 }
+   * ```
+   */
+  threadContext?: {
+    /**
+     * Maximum number of recent platform messages to fetch (default: 0, disabled).
+     * Only applies to non-DM threads where the agent doesn't have full history.
+     */
+    maxMessages?: number;
+  };
+
+  /**
    * Additional options passed directly to the Chat SDK.
    * Use this for advanced configuration not exposed by Mastra.
    *
@@ -199,6 +217,8 @@ export class AgentChannels {
   private handlerOverrides: ChannelHandlers;
   /** Additional Chat SDK options. */
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
+  /** Thread context config for fetching prior messages. */
+  private threadContext: { maxMessages?: number };
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
 
@@ -224,6 +244,7 @@ export class AgentChannels {
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
+    this.threadContext = config.threadContext ?? {};
 
     this.channelToolNames = new Set([
       'send_message',
@@ -620,6 +641,14 @@ export class AgentChannels {
     // started it. Other participants' messages are still part of that thread's history.
     const threadResourceId = mastraThread.resourceId;
 
+    // Fetch recent thread history when configured and this is a non-DM mention.
+    // This provides context when the agent is mentioned mid-conversation.
+    let threadHistory: ThreadHistoryMessage[] | undefined;
+    const maxMessages = this.threadContext.maxMessages ?? 0;
+    if (maxMessages > 0 && !sdkThread.isDM) {
+      threadHistory = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+    }
+
     // Build request context with channel info
     const requestContext = new RequestContext();
     requestContext.set('channel', {
@@ -631,6 +660,7 @@ export class AgentChannels {
       messageId: message.id,
       userId: message.author.userId,
       userName: message.author.fullName || message.author.userName,
+      threadHistory,
     } satisfies ChannelContext);
 
     // Prefix the message with the author so the agent can distinguish
@@ -703,6 +733,42 @@ export class AgentChannels {
 
     // Subscribe so follow-up messages also get handled
     await sdkThread.subscribe();
+  }
+
+  /**
+   * Fetch recent messages from the platform thread to provide context.
+   * Returns messages in chronological order (oldest first), excluding the
+   * current triggering message.
+   */
+  private async fetchThreadHistory(
+    sdkThread: Thread,
+    currentMessageId: string,
+    maxMessages: number,
+  ): Promise<ThreadHistoryMessage[]> {
+    const messages: ThreadHistoryMessage[] = [];
+
+    try {
+      // sdkThread.messages is an async iterator that yields newest-first
+      for await (const msg of sdkThread.messages) {
+        // Skip the current message that triggered this request
+        if (msg.id === currentMessageId) continue;
+
+        const authorName = msg.author.fullName || msg.author.userName || 'Unknown';
+        messages.push({
+          author: authorName,
+          text: msg.text,
+          isBot: msg.author.isBot === true,
+        });
+
+        if (messages.length >= maxMessages) break;
+      }
+    } catch (err) {
+      this.logger?.warn?.(`Failed to fetch thread history: ${err}`);
+      return [];
+    }
+
+    // Reverse to get chronological order (oldest first)
+    return messages.reverse();
   }
 
   /**

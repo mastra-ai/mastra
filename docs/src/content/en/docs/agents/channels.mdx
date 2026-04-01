@@ -156,6 +156,7 @@ The top-level `channels` object supports these options:
 | `handlers` | `ChannelHandlers` | — | Override default message handlers |
 | `state` | `StateAdapter` | in-memory | State adapter for subscriptions and deduplication |
 | `userName` | `string` | agent's `name` | Bot display name shown in messages |
+| `threadContext` | `{ maxMessages?: number }` | — | Fetch prior messages when mentioned mid-conversation |
 | `chatOptions` | `ChatConfig` | — | Additional Chat SDK options (see below) |
 
 ```typescript
@@ -167,6 +168,7 @@ const agent = new Agent({
     },
     userName: 'Support Bot', // Defaults to agent's name if omitted
     state: createRedisState(), // Use Redis for persistent state
+    threadContext: { maxMessages: 10 }, // Fetch last 10 messages when mentioned
     chatOptions: {
       dedupeTtlMs: 600000, // 10 minute deduplication window
       fallbackStreamingPlaceholderText: '⏳',
@@ -176,6 +178,31 @@ const agent = new Agent({
 ```
 
 The `chatOptions` object accepts any [Chat SDK configuration](https://github.com/vercel/chat) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
+
+## Thread context
+
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. The `threadContext.maxMessages` option fetches recent messages from the platform to provide context:
+
+```typescript
+const agent = new Agent({
+  channels: {
+    adapters: {
+      slack: createSlackAdapter({
+        /* ... */
+      }),
+    },
+    threadContext: { maxMessages: 15 },
+  },
+})
+```
+
+When enabled:
+
+1. The agent fetches the most recent messages from the platform thread (excluding the triggering message)
+1. These messages are included in the system prompt as context
+1. The agent can reference what users were discussing before being mentioned
+
+This only applies to non-DM threads where the agent is mentioned. In DMs, the agent already has full conversation history through Mastra's memory system.
 
 ## Custom handlers
 

@@ -1,4 +1,17 @@
 /**
+ * A simplified message from the platform's thread history.
+ * Used to provide context when the agent is mentioned mid-conversation.
+ */
+export type ThreadHistoryMessage = {
+  /** The user who sent this message. */
+  author: string;
+  /** The message text. */
+  text: string;
+  /** Whether the author is a bot. */
+  isBot?: boolean;
+};
+
+/**
  * Channel context placed on `requestContext` under the 'channel' key.
  * Available to input processors via `requestContext.get('channel')`.
  *
@@ -23,4 +36,10 @@ export type ChannelContext = {
   userId: string;
   /** Display name of the sender, if available. */
   userName?: string;
+  /**
+   * Recent messages from the platform thread, fetched when the agent is mentioned
+   * mid-conversation and `threadContext.maxMessages` is configured.
+   * Ordered oldest-first (chronological).
+   */
+  threadHistory?: ThreadHistoryMessage[];
 };
