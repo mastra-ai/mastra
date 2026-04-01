@@ -39,7 +39,7 @@ Context:
 - `threadId`
 - `requestId`
 - `environment`
-- `source`
+- `executionSource`
 - `serviceName`
 - `provider`
 - `model`
@@ -70,7 +70,7 @@ Important note:
 
 Notes:
 
-- `name`, entity type fields, `environment`, `source`, `serviceName`, and `provider` are strong `LowCardinality` candidates
+- `name`, entity type fields, `environment`, `executionSource`, `serviceName`, and `provider` are strong `LowCardinality` candidates
 - `labels` should use `Map(LowCardinality(String), String)`
 - `tags` should use `Array(LowCardinality(String))`
 - `PARTITION BY toDate(timestamp)` supports day-granularity metric TTL management

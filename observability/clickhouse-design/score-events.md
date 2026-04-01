@@ -6,36 +6,53 @@ Define the logical shape, physical shape, and query contract for `score_events`.
 
 ## Logical Shape
 
-Scores are trace-attached annotations in v0. They should be modeled around the trace/span relationship rather than as a standalone event stream with broad cross-signal context.
+Scores may be attached to traces and spans, but `v-next` should also support score rows without a trace.
 
 Event metadata:
 
 - `timestamp`
 
-Trace correlation and supported typed context:
+Trace correlation:
 
 - `traceId`
 - `spanId`
 - `experimentId`
-- `organizationId`
 - `scoreTraceId`
 
-Notes:
+Entity hierarchy and context:
 
-- `organizationId` should be populated from score metadata at adapter insertion time when `metadata.organizationId` exists as a string
-- this is an adapter-level promoted field, not a reason to broaden score record-builder context shaping in v0
+- `entityType`
+- `entityId`
+- `entityName`
+- `parentEntityType`
+- `parentEntityId`
+- `parentEntityName`
+- `rootEntityType`
+- `rootEntityId`
+- `rootEntityName`
+- `userId`
+- `organizationId`
+- `resourceId`
+- `runId`
+- `sessionId`
+- `threadId`
+- `requestId`
+- `environment`
+- `executionSource`
+- `serviceName`
 
 Score-specific scalars:
 
 - `scorerId`
 - `scorerVersion`
-- `source`
+- `scoreSource`
 - `score`
 
 Information-only payloads:
 
 - `reason`
 - `metadata`
+- `scope`
 
 ## Physical Shape
 
@@ -45,10 +62,12 @@ Information-only payloads:
 
 Notes:
 
-- `source`, `scorerId`, and `scorerVersion` are strong `LowCardinality` candidates
+- `traceId` should be `Nullable(String)` so scores can exist outside traces
+- `scoreSource`, `scorerId`, and `scorerVersion` are strong `LowCardinality` candidates
 - `ORDER BY (traceId, timestamp)` is intentional in v0 because scores are expected to be consumed primarily in trace-scoped reads rather than global recency-first listing
 - recency-first global score listing is still supported as a secondary compatibility/admin surface, but it is not the primary physical-design driver for `score_events`
 - `PARTITION BY toDate(timestamp)` supports day-granularity score TTL management
+- nullable sort keys require the corresponding ClickHouse nullable-key setting in the table DDL
 
 ## Query Contract
 
@@ -59,17 +78,15 @@ Notes:
   - `organizationId`
   - `experimentId`
   - `scorerId`
+  - `scoreSource`
+  - `executionSource`
 - the physical layout intentionally favors trace-scoped score access over global recency-first listing in v0
 - `reason` is retained for display but does not participate in filtering, search, discovery, or grouping
-- `metadata` remains information-only in v0
-- `organizationId` should be filterable in v0, and adapter writes may derive it from `metadata.organizationId` when present
-- `score_events` should not add standalone entity/context columns such as `entityType`, `entityId`, `entityName`, `userId`, `environment`, or `serviceName` in v0 just for cross-signal symmetry
-- any score write-path alignment work should be limited to the current public score record and filter contract
+- `metadata` and `scope` remain information-only in v0
+- typed score context fields should be written from explicit top-level record fields rather than promoted from metadata
 - score `metadata` is present on the record but is not part of the current public score filter schema
 
 ## Intentional v0 Limitations
 
-- no parent or root entity hierarchy on scores in v0
-- no standalone score-oriented discovery or generic cross-signal entity filtering in v0
 - no metadata search on scores in v0
 - no queryable `reason` field in v0

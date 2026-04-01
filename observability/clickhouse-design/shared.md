@@ -28,7 +28,7 @@ Capture the cross-cutting decisions for ClickHouse `v-next` so the per-table doc
 - use plain `MergeTree` for `metric_events`, `log_events`, `score_events`, and `feedback_events`
 - use `insert-only` tracing routing in ClickHouse `v-next`
 - persist only create records for completed spans
-- treat scores and feedback as trace-attached annotations in v0 rather than standalone cross-signal event streams
+- allow scores and feedback to be associated with traces and spans when present, but still support rows with nullable `traceId`
 - normalize event spans so `endedAt = startedAt` when `isEvent = true` and `endedAt` is null before persistence
 - use `span_events` as the tracing write target and full-trace read table
 - use `trace_roots` as the `listTraces` helper table in v0
@@ -86,10 +86,8 @@ Important notes:
 - tracing writes should compute and persist `dedupeKey = traceId || ':' || spanId` in the ClickHouse adapter before insert
 - tracing reads should return one row per `dedupeKey` without relying solely on background `ReplacingMergeTree` merges
 - non-tracing signals remain append-only and are not retry-idempotent in v0
-- score/feedback schema design should stay aligned to the current narrow public score/feedback contracts rather than introducing extra typed context columns for symmetry with spans or logs
-- score/feedback adapter writes may promote `organizationId` from top-level `metadata.organizationId` when it exists as a string, similar to how tracing promotes selected metadata keys into typed columns
-- feedback adapter writes may also promote `userId` from top-level `metadata.userId` when it exists as a string
-- any remaining score/feedback write-path alignment work should be limited to fields already present in those public contracts plus these adapter-level promotion rules
+- scores and feedback should use the same broadened typed context pattern as logs and metrics for entity hierarchy, correlation ids, deployment metadata, and execution source
+- non-trace signals should treat `metadata` as information-only payload rather than a fallback source for typed identity fields
 
 ## v0 Trace Behavior
 
@@ -111,7 +109,8 @@ Implementation tests should lock in the lack of live-running trace visibility ex
 ### Column naming
 
 - prefer public field names directly as ClickHouse column names when there is no real ambiguity inside the table
-- do not introduce rename layers such as `spanName`, `metricName`, `feedbackSource`, or `scoreSource` in v0
+- use `executionSource` as the physical execution-context column for tracing storage, logs, metrics, scores, and feedback
+- keep `scoreSource` and `feedbackSource` as the signal-specific source columns for score and feedback records
 - if a storage-specific rename ever becomes necessary later, keep it explicit and centralized
 
 ### Tracing retry idempotency
@@ -212,7 +211,7 @@ Normalization rules:
   - `threadId`
   - `requestId`
   - `environment`
-  - `source`
+  - `executionSource`
   - `serviceName`
 
 Important note:

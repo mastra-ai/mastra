@@ -6,30 +6,44 @@ Define the logical shape, physical shape, and query contract for `feedback_event
 
 ## Logical Shape
 
-Feedback is trace-attached in v0. It should be modeled as an annotation on a trace or span, not as a standalone event stream with broad shared observability context.
+Feedback may be attached to traces and spans, but `v-next` should also support feedback rows without a trace.
 
 Event metadata:
 
 - `timestamp`
 
-Trace correlation and supported typed context:
+Trace correlation:
 
 - `traceId`
 - `spanId`
 - `experimentId`
+
+Entity hierarchy and context:
+
+- `entityType`
+- `entityId`
+- `entityName`
+- `parentEntityType`
+- `parentEntityId`
+- `parentEntityName`
+- `rootEntityType`
+- `rootEntityId`
+- `rootEntityName`
 - `userId`
 - `organizationId`
+- `resourceId`
+- `runId`
+- `sessionId`
+- `threadId`
+- `requestId`
+- `environment`
+- `executionSource`
+- `serviceName`
 - `sourceId`
-
-Notes:
-
-- `userId` should be populated from feedback metadata at adapter insertion time when `metadata.userId` exists as a string
-- `organizationId` should be populated from feedback metadata at adapter insertion time when `metadata.organizationId` exists as a string
-- these are adapter-level promoted fields, not a reason to broaden feedback record-builder context shaping in v0
 
 Feedback-specific scalars:
 
-- `source`
+- `feedbackSource`
 - `feedbackType`
 - logical `value`
 
@@ -41,7 +55,7 @@ Information-only payloads:
 Notes:
 
 - `sourceId` is the identifier of the source record the feedback is linked to, not the feedback category itself
-- the feedback category is stored separately in `source`
+- the feedback category is stored separately in `feedbackSource`
 - physical storage should split feedback value into typed columns rather than JSON-encoding a mixed scalar into one string column
 
 ## Physical Shape
@@ -52,11 +66,13 @@ Notes:
 
 Notes:
 
-- `source` and `feedbackType` are strong `LowCardinality` candidates
+- `traceId` should be `Nullable(String)` so feedback can exist outside traces
+- `feedbackSource` and `feedbackType` are strong `LowCardinality` candidates
 - `valueString` and `valueNumber` should not be treated as `LowCardinality`
 - `ORDER BY (traceId, timestamp)` is intentional in v0 because feedback is expected to be consumed primarily in trace-scoped reads rather than global recency-first listing
 - recency-first global feedback listing is still supported as a secondary compatibility/admin surface, but it is not the primary physical-design driver for `feedback_events`
 - `PARTITION BY toDate(timestamp)` supports day-granularity feedback TTL management
+- nullable sort keys require the corresponding ClickHouse nullable-key setting in the table DDL
 - physical value storage should use two nullable columns:
   - `valueString`
   - `valueNumber`
@@ -64,7 +80,7 @@ Notes:
 
 ## Query Contract
 
-- `source` should be filterable in v0
+- `feedbackSource` should be filterable in v0
 - `feedbackType` should be filterable in v0
 - `feedback_events` should support the rest of the current public feedback filter surface directly from feedback rows:
   - `timestamp`
@@ -73,6 +89,7 @@ Notes:
   - `userId`
   - `organizationId`
   - `experimentId`
+  - `executionSource`
 - the physical layout intentionally favors trace-scoped feedback access over global recency-first listing in v0
 - read-path reconstruction should expose the logical feedback `value` by choosing:
   - `valueNumber` when it is non-null
@@ -84,17 +101,12 @@ Notes:
 - split typed storage is intentional so later numeric ordering or numeric post-filter sorting can be added without redesigning the physical value representation
 - `comment` should not participate in filtering, search, discovery, or grouping
 - `metadata` remains information-only in v0
-- `userId` should be filterable in v0, and adapter writes may derive it from `metadata.userId` when present
-- `organizationId` should be filterable in v0, and adapter writes may derive it from `metadata.organizationId` when present
+- typed feedback context fields should be written from explicit top-level record fields rather than promoted from metadata
 - `sourceId` should be stored for source linkage, but it is not part of the current public feedback filter surface in v0
-- `feedback_events` should not add standalone entity/context columns such as `entityType`, `entityId`, `entityName`, `environment`, or `serviceName` in v0 just for cross-signal symmetry
-- any feedback write-path alignment work should be limited to the current public feedback record and filter contract
 - feedback `metadata` is present on the record but is not part of the current public feedback filter schema
 
 ## Intentional v0 Limitations
 
-- no parent or root entity hierarchy on feedback in v0
-- no standalone feedback-oriented discovery or generic cross-signal entity filtering in v0
 - no metadata search on feedback in v0
 - no searchable `value`
 - no searchable `comment`

@@ -48,7 +48,7 @@ Entity and context:
 - `threadId`
 - `requestId`
 - `environment`
-- `source`
+- public trace records still expose `source`, but the physical storage column is `executionSource`
 - `serviceName`
 - `requestContext`
 
@@ -152,7 +152,7 @@ Notes:
 - `dedupeKey` should be persisted with every row so tracing writes can be retried idempotently in v0
 - tracing retry-idempotency in v0 assumes duplicate rows for the same `dedupeKey` are byte-identical ended-span rows
 - read-path correctness should not rely solely on background merges; tracing queries should still return one row per `dedupeKey`
-- `spanType`, `entityType`, `environment`, `source`, and `serviceName` are strong `LowCardinality` candidates
+- `spanType`, `entityType`, `environment`, `executionSource`, and `serviceName` are strong `LowCardinality` candidates
 
 ## Query Contract
 

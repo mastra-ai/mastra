@@ -39,7 +39,7 @@ Context:
 - `threadId`
 - `requestId`
 - `environment`
-- `source`
+- `executionSource`
 - `serviceName`
 
 Log-specific scalars:
@@ -61,7 +61,7 @@ Flexible and JSON payloads:
 
 Notes:
 
-- `level`, entity type fields, `environment`, `source`, and `serviceName` are strong `LowCardinality` candidates
+- `level`, entity type fields, `environment`, `executionSource`, and `serviceName` are strong `LowCardinality` candidates
 - `tags` should use `Array(LowCardinality(String))`
 - `PARTITION BY toDate(timestamp)` supports day-granularity log TTL management
 - `ORDER BY (timestamp, traceId)` is intentional in v0 because logs are designed primarily for recency-first reads

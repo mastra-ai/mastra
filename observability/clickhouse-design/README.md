@@ -29,7 +29,8 @@ The shared doc captures the cross-cutting v0 decisions, including:
 - append-only ClickHouse storage across all five signals, with `ReplacingMergeTree` for tracing and `MergeTree` for the other four signals
 - insert-only tracing with `span_events` plus `trace_roots`
 - tracing retry-idempotency via a tracing-only `dedupeKey`
-- score and feedback storage being intentionally trace-attached rather than modeled as standalone cross-signal event streams
+- broader shared observability context across logs, metrics, scores, and feedback, with `executionSource` as the execution-context column and `scoreSource` / `feedbackSource` as signal-specific source fields
+- nullable `traceId` support for score and feedback events so those signals can still be recorded outside traces
 - intentionally narrowed v0 ClickHouse trace-filter semantics: top-level string-only metadata equality via `metadataSearch`, and no trace `scope` filtering
 - non-tracing signals intentionally remaining non-idempotent under retries in v0
 - refreshable discovery helper tables as a best-effort optional subsystem, not a startup requirement for the core observability adapter

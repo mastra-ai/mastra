@@ -42,7 +42,7 @@ Important note:
 - `threadId`: `Nullable(String)`
 - `requestId`: `Nullable(String)`
 - `environment`: `LowCardinality(Nullable(String))`
-- `source`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
 - `serviceName`: `LowCardinality(Nullable(String))`
 - `requestContext`: `Nullable(String)`
 - `name`: `String`
@@ -85,7 +85,7 @@ Read-path notes:
 - `threadId`: `Nullable(String)`
 - `requestId`: `Nullable(String)`
 - `environment`: `LowCardinality(Nullable(String))`
-- `source`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
 - `serviceName`: `LowCardinality(Nullable(String))`
 - `requestContext`: `Nullable(String)`
 - `name`: `String`
@@ -134,7 +134,7 @@ Read-path notes:
 - `threadId`: `Nullable(String)`
 - `requestId`: `Nullable(String)`
 - `environment`: `LowCardinality(Nullable(String))`
-- `source`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
 - `serviceName`: `LowCardinality(Nullable(String))`
 - `provider`: `LowCardinality(Nullable(String))`
 - `model`: `Nullable(String)`
@@ -173,7 +173,7 @@ Read-path notes:
 - `threadId`: `Nullable(String)`
 - `requestId`: `Nullable(String)`
 - `environment`: `LowCardinality(Nullable(String))`
-- `source`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
 - `serviceName`: `LowCardinality(Nullable(String))`
 - `tags`: `Array(LowCardinality(String)) DEFAULT []`
 - `metadata`: `Nullable(String)`
@@ -182,33 +182,73 @@ Read-path notes:
 ## `score_events`
 
 - `timestamp`: `DateTime64(3, 'UTC')`
-- `traceId`: `String`
+- `traceId`: `Nullable(String)`
 - `spanId`: `Nullable(String)`
 - `experimentId`: `Nullable(String)`
 - `scoreTraceId`: `Nullable(String)`
+- `entityType`: `LowCardinality(Nullable(String))`
+- `entityId`: `Nullable(String)`
+- `entityName`: `Nullable(String)`
+- `parentEntityType`: `LowCardinality(Nullable(String))`
+- `parentEntityId`: `Nullable(String)`
+- `parentEntityName`: `Nullable(String)`
+- `rootEntityType`: `LowCardinality(Nullable(String))`
+- `rootEntityId`: `Nullable(String)`
+- `rootEntityName`: `Nullable(String)`
+- `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `resourceId`: `Nullable(String)`
+- `runId`: `Nullable(String)`
+- `sessionId`: `Nullable(String)`
+- `threadId`: `Nullable(String)`
+- `requestId`: `Nullable(String)`
+- `environment`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
+- `serviceName`: `LowCardinality(Nullable(String))`
 - `scorerId`: `LowCardinality(String)`
 - `scorerVersion`: `LowCardinality(Nullable(String))`
-- `source`: `LowCardinality(Nullable(String))`
+- `scoreSource`: `LowCardinality(Nullable(String))`
 - `score`: `Float64`
 - `reason`: `Nullable(String)`
+- `tags`: `Array(LowCardinality(String)) DEFAULT []`
 - `metadata`: `Nullable(String)`
+- `scope`: `Nullable(String)`
 
 ## `feedback_events`
 
 - `timestamp`: `DateTime64(3, 'UTC')`
-- `traceId`: `String`
+- `traceId`: `Nullable(String)`
 - `spanId`: `Nullable(String)`
 - `experimentId`: `Nullable(String)`
+- `entityType`: `LowCardinality(Nullable(String))`
+- `entityId`: `Nullable(String)`
+- `entityName`: `Nullable(String)`
+- `parentEntityType`: `LowCardinality(Nullable(String))`
+- `parentEntityId`: `Nullable(String)`
+- `parentEntityName`: `Nullable(String)`
+- `rootEntityType`: `LowCardinality(Nullable(String))`
+- `rootEntityId`: `Nullable(String)`
+- `rootEntityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
+- `feedbackUserId`: `Nullable(String)`
 - `sourceId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
-- `source`: `LowCardinality(String)`
+- `resourceId`: `Nullable(String)`
+- `runId`: `Nullable(String)`
+- `sessionId`: `Nullable(String)`
+- `threadId`: `Nullable(String)`
+- `requestId`: `Nullable(String)`
+- `environment`: `LowCardinality(Nullable(String))`
+- `executionSource`: `LowCardinality(Nullable(String))`
+- `serviceName`: `LowCardinality(Nullable(String))`
+- `feedbackSource`: `LowCardinality(String)`
 - `feedbackType`: `LowCardinality(String)`
 - `valueString`: `Nullable(String)`
 - `valueNumber`: `Nullable(Float64)`
 - `comment`: `Nullable(String)`
+- `tags`: `Array(LowCardinality(String)) DEFAULT []`
 - `metadata`: `Nullable(String)`
+- `scope`: `Nullable(String)`
 
 Important note:
 
