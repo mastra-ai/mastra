@@ -1,3 +1,4 @@
+import type { ProviderDefinedTool } from '@internal/external-types';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
@@ -207,5 +208,70 @@ describe('MCP Tool Tracing', () => {
     const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(spanArgs.attributes).not.toHaveProperty('mcpServer');
     expect(spanArgs.attributes).not.toHaveProperty('serverVersion');
+  });
+});
+
+describe('Provider-defined Tool Handling', () => {
+  it('should not crash when autoResumeSuspendedTools is enabled with provider-defined tools', () => {
+    // Simulate a provider-defined tool like openai.tools.webSearch()
+    const providerTool: ProviderDefinedTool = {
+      type: 'provider-defined',
+      id: 'openai.web_search',
+      // Provider tools have a lazy inputSchema that returns an AI SDK Schema, not Zod
+      inputSchema: () => ({
+        '~standard': { vendor: 'openai', version: 1, validate: () => ({ value: {} }) },
+        // Note: no jsonSchema property - this is what caused the original crash
+      }),
+    };
+
+    // This should not throw - previously it crashed with:
+    // TypeError: Cannot read properties of undefined (reading 'jsonSchema')
+    expect(() => {
+      new CoreToolBuilder({
+        originalTool: providerTool,
+        options: {
+          name: 'web_search',
+          logger: {
+            debug: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            trackException: vi.fn(),
+          } as any,
+          description: 'Search the web',
+          requestContext: new RequestContext(),
+        },
+        autoResumeSuspendedTools: true,
+      });
+    }).not.toThrow();
+  });
+
+  it('should not attempt to extend schema for provider-defined tools', () => {
+    // Simulate a provider-defined tool with type: 'provider' (AI SDK v6 style)
+    const providerToolV6: ProviderDefinedTool = {
+      type: 'provider',
+      id: 'google.google_search',
+      inputSchema: () => ({
+        '~standard': { vendor: 'google', version: 1, validate: () => ({ value: {} }) },
+      }),
+    };
+
+    // This should not throw for v6-style provider tools either
+    expect(() => {
+      new CoreToolBuilder({
+        originalTool: providerToolV6,
+        options: {
+          name: 'google_search',
+          logger: {
+            debug: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            trackException: vi.fn(),
+          } as any,
+          description: 'Search with Google',
+          requestContext: new RequestContext(),
+        },
+        autoResumeSuspendedTools: true,
+      });
+    }).not.toThrow();
   });
 });
