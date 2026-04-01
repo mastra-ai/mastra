@@ -601,14 +601,8 @@ class MastraScorer<
         const targetTraceId = input.targetTraceId ?? input.targetCorrelationContext?.traceId;
         const targetSpanId = input.targetSpanId ?? input.targetCorrelationContext?.spanId;
 
-        // TODO: Remove this gate once @mastra/observability supports emitting
-        // unanchored scores end-to-end without a target trace ID.
-        if (!targetTraceId) {
-          return scorerResult;
-        }
-
         await this.#mastra.observability.addScore({
-          traceId: targetTraceId,
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
           ...(targetSpanId ? { spanId: targetSpanId } : {}),
           ...(input.targetCorrelationContext ? { correlationContext: input.targetCorrelationContext } : {}),
           score: {
