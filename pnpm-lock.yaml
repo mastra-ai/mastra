@@ -3252,6 +3252,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
+      '@mastra/agent-browser':
+        specifier: workspace:*
+        version: link:../../browser/agent-browser
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
