@@ -252,7 +252,7 @@ describe('InworldVoice', () => {
       expect(fetchCall[0]).toBe('https://api.inworld.ai/stt/v1/transcribe');
 
       const reqBody = JSON.parse(fetchCall[1]!.body as string);
-      expect(reqBody.transcribeConfig.modelId).toBe('inworld/inworld-stt-1');
+      expect(reqBody.transcribeConfig.modelId).toBe('groq/whisper-large-v3');
       expect(reqBody.transcribeConfig.audioEncoding).toBe('AUTO_DETECT');
       expect(reqBody.transcribeConfig.language).toBe('en-US');
       expect(reqBody.audioData.content).toBe(Buffer.from('fake-audio-data').toString('base64'));
@@ -271,7 +271,7 @@ describe('InworldVoice', () => {
     it('uses custom STT options', async () => {
       const voice = new InworldVoice({
         speechModel: { apiKey: 'test-key' },
-        listeningModel: { name: 'inworld/inworld-stt-1' },
+        listeningModel: { name: 'groq/whisper-large-v3' },
         language: 'ja-JP',
       });
 
@@ -289,7 +289,7 @@ describe('InworldVoice', () => {
       expect(result).toBe('こんにちは');
 
       const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
-      expect(reqBody.transcribeConfig.modelId).toBe('inworld/inworld-stt-1');
+      expect(reqBody.transcribeConfig.modelId).toBe('groq/whisper-large-v3');
       expect(reqBody.transcribeConfig.audioEncoding).toBe('MP3');
       expect(reqBody.transcribeConfig.sampleRateHertz).toBe(44100);
       expect(reqBody.transcribeConfig.language).toBe('ja-JP');

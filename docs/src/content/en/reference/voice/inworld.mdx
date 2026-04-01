@@ -24,7 +24,7 @@ const voice = new InworldVoice({
     apiKey: 'your-api-key',
   },
   listeningModel: {
-    name: 'inworld/inworld-stt-1',
+    name: 'groq/whisper-large-v3',
     apiKey: 'your-api-key',
   },
   speaker: 'Dennis',
@@ -73,17 +73,17 @@ const transcript = await voice.listen(audioStream)
     type: 'InworldListeningConfig',
     description: 'Configuration for speech-to-text functionality.',
     isOptional: true,
-    defaultValue: "{ name: 'inworld/inworld-stt-1' }",
+    defaultValue: "{ name: 'groq/whisper-large-v3' }",
     properties: [
       {
         type: 'InworldListeningConfig',
         parameters: [
           {
             name: 'name',
-            type: "'inworld/inworld-stt-1'",
+            type: "'groq/whisper-large-v3'",
             description: 'The Inworld STT model to use.',
             isOptional: true,
-            defaultValue: "'inworld/inworld-stt-1'",
+            defaultValue: "'groq/whisper-large-v3'",
           },
           {
             name: 'apiKey',
