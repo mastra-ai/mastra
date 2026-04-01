@@ -6,11 +6,11 @@ import { parseArgs } from 'node:util';
 import type { Harness, HarnessEvent } from '@mastra/core/harness';
 
 // Imported from local modules
+import { loadHeadlessConfig, resolveProfile, VALID_MODES, VALID_THINKING_LEVELS } from './headless-config.js';
+import type { HeadlessConfig, HeadlessProfileConfig } from './headless-config.js';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
-import { loadHeadlessConfig, resolveProfile, VALID_MODES, VALID_THINKING_LEVELS } from './headless-config.js';
-import type { HeadlessProfileConfig } from './headless-config.js';
 
 export interface PackContext {
   builtinPacks: Array<{ id: string; models: Record<string, string> }>;
@@ -306,7 +306,7 @@ export async function runHeadless(
   }
 
   // --- Load config file ---
-  let config: import('./headless-config.js').HeadlessConfig = {};
+  let config: HeadlessConfig = {};
   try {
     config = loadHeadlessConfig({
       configPath: args.config,

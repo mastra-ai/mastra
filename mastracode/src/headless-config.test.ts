@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterAll, vi } from 'vitest';
 
-import { loadHeadlessConfig, resolveProfile, type HeadlessConfig } from './headless-config.js';
+import { loadHeadlessConfig, resolveProfile  } from './headless-config.js';
+import type {HeadlessConfig} from './headless-config.js';
 
 const tempDirs: string[] = [];
 function makeTempDir(): string {

@@ -12,7 +12,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
-import { runHeadless, type PackContext } from './headless.js';
+import { runHeadless  } from './headless.js';
+import type {PackContext} from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
