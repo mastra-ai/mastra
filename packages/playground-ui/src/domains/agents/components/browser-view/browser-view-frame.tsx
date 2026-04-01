@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBrowserStream } from '../../hooks/use-browser-stream';
+import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { useClickRipple } from '../../hooks/use-click-ripple';
 import { useInputCoordination } from '../../hooks/use-input-coordination';
@@ -21,11 +21,13 @@ interface BrowserViewFrameProps {
 
 /**
  * Browser view frame component that displays screencast stream.
+ *
+ * Consumes the shared WebSocket connection from BrowserSessionContext.
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
 export function BrowserViewFrame({
-  agentId,
-  threadId,
+  agentId: _agentId,
+  threadId: _threadId,
   className,
   onStatusChange,
   onUrlChange,
@@ -37,23 +39,19 @@ export function BrowserViewFrame({
   const [isInteractive, setIsInteractive] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
 
-  // Memoize onFrame to avoid recreation
-  const handleFrame = useCallback((data: string) => {
-    if (imgRef.current) {
-      imgRef.current.src = `data:image/jpeg;base64,${data}`;
+  // Get shared state from context (WebSocket is managed by provider)
+  const { status, currentUrl, latestFrame, viewport, sendMessage } = useBrowserSession();
+
+  // Update img.src when new frame arrives
+  useEffect(() => {
+    if (latestFrame && imgRef.current) {
+      imgRef.current.src = `data:image/jpeg;base64,${latestFrame}`;
       if (!imgRef.current.dataset.loaded) {
         imgRef.current.dataset.loaded = '1';
         setHasFrame(true);
       }
     }
-  }, []);
-
-  const { status, error, currentUrl, viewport, sendMessage, connect } = useBrowserStream({
-    agentId,
-    threadId,
-    enabled: true,
-    onFrame: handleFrame,
-  });
+  }, [latestFrame]);
 
   const exitInteractive = useCallback(() => {
     setIsInteractive(false);
@@ -108,18 +106,6 @@ export function BrowserViewFrame({
       onFirstFrame?.();
     }
   }, [hasFrame, onFirstFrame]);
-
-  // Auto-connect when component mounts or threadId changes
-  // Also reset frame state when threadId changes to show loading state
-  useEffect(() => {
-    // Reset frame state for new thread
-    setHasFrame(false);
-    if (imgRef.current) {
-      imgRef.current.dataset.loaded = '';
-      imgRef.current.src = '';
-    }
-    connect();
-  }, [connect]);
 
   // Exit interactive mode on click-outside or window blur
   useEffect(() => {
@@ -275,7 +261,7 @@ export function BrowserViewFrame({
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-lg font-medium text-white">Connection Error</span>
-              {error && <span className="text-sm text-white/70">{error}</span>}
+              <span className="text-sm text-white/70">Failed to connect to browser</span>
             </div>
           </div>
         </div>

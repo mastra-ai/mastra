@@ -27,7 +27,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
   if (toolCalls.length === 0) return null;
 
   return (
-    <div className={cn('border-t border-border1 flex flex-col overflow-hidden', className)}>
+    <div className={cn('flex flex-col overflow-hidden', className)}>
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}

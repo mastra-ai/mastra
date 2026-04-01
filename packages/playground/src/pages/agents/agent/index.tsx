@@ -124,7 +124,7 @@ function Agent() {
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
             <BrowserToolCallsProvider key={`browser-${actualThreadId}`}>
-              <BrowserSessionProvider key={`session-${actualThreadId}`}>
+              <BrowserSessionProvider key={`session-${actualThreadId}`} agentId={agentId!} threadId={actualThreadId!}>
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>

@@ -8,6 +8,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
+import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
@@ -19,15 +20,23 @@ import { useAutoscroll } from '@/hooks/use-autoscroll';
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
+  threadId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
+  const { hasSession, viewMode, isInSidebar } = useBrowserSession();
+
+  // Show thumbnail in chat when:
+  // 1. There's an active session
+  // 2. View mode is collapsed or expanded (not modal)
+  // 3. NOT currently viewing browser in sidebar
+  const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded') && !isInSidebar;
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
@@ -56,6 +65,13 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelS
           <div />
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
+
+      {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
+      {showThumbnailInChat && agentId && threadId && (
+        <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
+          <BrowserThumbnail agentId={agentId} threadId={threadId} agentName={agentName} />
+        </div>
+      )}
 
       <Composer
         hasMemory={hasMemory}

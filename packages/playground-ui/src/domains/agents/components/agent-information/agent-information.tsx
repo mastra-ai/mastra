@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { AgentMetadata } from '../agent-metadata';
 import { AgentSettings } from '../agent-settings';
+import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
 import { AgentMemory } from './agent-memory';
 import { useMemory } from '@/domains/memory/hooks';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
@@ -17,6 +19,7 @@ export interface AgentInformationProps {
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { hasSession, isInSidebar } = useBrowserSession();
   const hasMemory = !isMemoryLoading && Boolean(memory?.result);
 
   const { selectedTab, handleTabChange } = useAgentInformationTab({
@@ -28,7 +31,15 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
     <AgentInformationLayout>
       <AgentEntityHeader agentId={agentId} />
 
-      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
+      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col relative">
+        {/* Browser sidebar overlay - takes over when in sidebar mode */}
+        {hasSession && isInSidebar && (
+          <div className="absolute inset-0 z-10 bg-surface1">
+            <BrowserSidebarTab agentId={agentId} threadId={threadId} />
+          </div>
+        )}
+
+        {/* Normal tabs - always rendered but hidden when browser overlay is active */}
         <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
@@ -73,27 +84,30 @@ export interface UseAgentInformationTabArgs {
   isMemoryLoading: boolean;
   hasMemory: boolean;
 }
+
 export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
-    return sessionStorage.getItem(STORAGE_KEY) || 'overview';
+    const stored = sessionStorage.getItem(STORAGE_KEY) || 'overview';
+    // Validate stored tab is still valid
+    if (stored === 'browser') return 'overview'; // browser tab removed
+    return stored;
   });
 
-  const handleTabChange = (value: string) => {
+  // Compute effective tab - handle unavailable tabs
+  const effectiveTab = (() => {
+    if (selectedTab === 'memory' && !isMemoryLoading && !hasMemory) {
+      return 'overview';
+    }
+    return selectedTab;
+  })();
+
+  const handleTabChange = useCallback((value: string) => {
     setSelectedTab(value);
     sessionStorage.setItem(STORAGE_KEY, value);
-  };
-
-  // Switch away from memory tab if memory is disabled (not just loading)
-  useEffect(() => {
-    if (!isMemoryLoading && !hasMemory && selectedTab === 'memory') {
-      // Switch to overview tab if memory is disabled
-      setSelectedTab('overview');
-      sessionStorage.setItem(STORAGE_KEY, 'overview');
-    }
-  }, [isMemoryLoading, hasMemory, selectedTab]);
+  }, []);
 
   return {
-    selectedTab,
+    selectedTab: effectiveTab,
     handleTabChange,
   };
 };

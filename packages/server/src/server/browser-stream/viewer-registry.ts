@@ -89,6 +89,33 @@ export class ViewerRegistry implements ViewerRegistryLike {
     // Use agentId for toolset lookup, viewerKey for registry keying
     if (wasEmpty) {
       await this.startScreencast(viewerKey, getToolset, agentId ?? viewerKey, threadId);
+    } else {
+      // Send current state to new viewer (screencast already running)
+      this.sendCurrentState(viewerKey, ws);
+    }
+  }
+
+  /**
+   * Send current state (URL, viewport) to a newly connected viewer.
+   */
+  private sendCurrentState(viewerKey: string, ws: BrowserStreamWebSocket): void {
+    try {
+      // Send last known URL
+      const lastUrl = this.lastUrls.get(viewerKey);
+      if (lastUrl) {
+        ws.send(JSON.stringify({ url: lastUrl }));
+      }
+
+      // Send last known viewport
+      const lastViewport = this.lastViewports.get(viewerKey);
+      if (lastViewport) {
+        ws.send(JSON.stringify({ viewport: lastViewport }));
+      }
+
+      // Send current status
+      ws.send(JSON.stringify({ status: 'streaming' }));
+    } catch (error) {
+      console.warn('[ViewerRegistry] Error sending current state to new viewer:', error);
     }
   }
 

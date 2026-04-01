@@ -11,6 +11,7 @@ export const stagehandBrowserToolset = new StagehandBrowser({
   model: 'openai/gpt-5.2',
   headless: false,
   verbose: 1,
+  threadIsolation: 'none',
 });
 
 export const stagehandAgent = new Agent({
