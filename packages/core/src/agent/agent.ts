@@ -2729,6 +2729,40 @@ export class Agent<
               args: parsedArgs,
             });
           }
+
+          // AI SDK v4 stores tool results inline as tool-invocation parts
+          if (part?.type === 'tool-invocation' && part.toolInvocation) {
+            const inv = part.toolInvocation;
+            if (excludeToolCallId && inv.toolCallId === excludeToolCallId) continue;
+            if (inv.state === 'result') {
+              const existing = toolCalls.get(inv.toolCallId);
+              if (existing) {
+                existing.result = inv.result;
+                if (inv.isError != null) {
+                  existing.isError = inv.isError;
+                }
+              } else {
+                const rawArgs = inv.args || {};
+                let parsedArgs: Record<string, unknown>;
+                if (typeof rawArgs === 'string') {
+                  try {
+                    parsedArgs = JSON.parse(rawArgs);
+                  } catch {
+                    parsedArgs = {};
+                  }
+                } else {
+                  parsedArgs = rawArgs as Record<string, unknown>;
+                }
+                toolCalls.set(inv.toolCallId, {
+                  id: inv.toolCallId,
+                  name: inv.toolName || '',
+                  args: parsedArgs,
+                  result: inv.result,
+                  isError: inv.isError,
+                });
+              }
+            }
+          }
         }
       }
 
