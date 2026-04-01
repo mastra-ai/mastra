@@ -152,7 +152,7 @@ function toSeriesName(values: unknown[]): string {
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
     timestamp: toDate(row.timestamp),
-    traceId: row.traceId as string,
+    traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     scoreTraceId: (row.scoreTraceId as string) ?? null,

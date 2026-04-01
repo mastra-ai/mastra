@@ -316,7 +316,8 @@ export function AgentStructuredResponsesExample() {
           </div>
 
           <p className="demo-brand__subtitle">
-            Uses `text.format.type = 'json_schema'` so the response comes back as structured JSON through the Responses API.
+            Uses `text.format.type = 'json_schema'` so the response comes back as structured JSON through the Responses
+            API.
           </p>
         </div>
 
@@ -336,7 +337,10 @@ export function AgentStructuredResponsesExample() {
         <div className="demo-messages">
           {turns.length === 0 ? (
             <div className="demo-empty-state">
-              <p>These prompts send `text.format.type = 'json_schema'` so the agent returns a JSON object that matches the schema.</p>
+              <p>
+                These prompts send `text.format.type = 'json_schema'` so the agent returns a JSON object that matches
+                the schema.
+              </p>
               <div className="demo-chip-list">
                 {[
                   'Summarize this support ticket: login page fails only on Safari and users need a workaround.',
