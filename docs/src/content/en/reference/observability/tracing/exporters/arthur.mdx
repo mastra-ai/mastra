@@ -56,7 +56,8 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
   {
     name: 'taskId',
     type: 'string',
-    description: 'Arthur task ID to associate traces with. Falls back to ARTHUR_TASK_ID env var.',
+    description:
+      'Route traces to a pre-existing Arthur task by ID. Falls back to ARTHUR_TASK_ID env var. If omitted, Arthur Engine routes traces by serviceName instead.',
     required: false,
   },
   {
