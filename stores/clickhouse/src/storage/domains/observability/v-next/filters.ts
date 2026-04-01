@@ -179,18 +179,6 @@ function addCommonFilterFields(
   addTags(col('tags'), filters.tags, out);
 }
 
-function addSignalCommonFilters(
-  filters: LogsFilter | MetricsFilter | undefined,
-  tableAlias: string | undefined,
-  out: FilterResult,
-): void {
-  if (!filters) return;
-  const replacement = 'executionSource';
-  const signalName = 'level' in filters ? 'logs' : 'metrics';
-  assertNoDeprecatedSourceFilter(filters.source, replacement, signalName);
-  addCommonFilterFields(filters, tableAlias, out);
-}
-
 // ---------------------------------------------------------------------------
 // Trace filter builder (for trace_roots table)
 // ---------------------------------------------------------------------------
@@ -245,7 +233,8 @@ export function buildLogsFilterConditions(filters: LogsFilter | undefined, table
   if (!filters) return out;
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
-  addSignalCommonFilters(filters, tableAlias, out);
+  assertNoDeprecatedSourceFilter(filters.source, 'executionSource', 'logs');
+  addCommonFilterFields(filters, tableAlias, out);
 
   if (typeof filters.level === 'string') {
     addEq(col('level'), filters.level, 'level', 'String', out);
@@ -261,7 +250,8 @@ export function buildMetricsFilterConditions(filters: MetricsFilter | undefined,
   if (!filters) return out;
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
-  addSignalCommonFilters(filters, tableAlias, out);
+  assertNoDeprecatedSourceFilter(filters.source, 'executionSource', 'metrics');
+  addCommonFilterFields(filters, tableAlias, out);
   addIn(col('name'), filters.name, 'metricNames', out);
   addEq(col('provider'), filters.provider, 'provider', 'String', out);
   addEq(col('model'), filters.model, 'model', 'String', out);
