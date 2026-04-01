@@ -28,7 +28,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
               size="lg"
               variant="outline"
               as="a"
-              href="https://mastra.ai/docs/observability/datasets/overview"
+              href="https://mastra.ai/docs/evals/datasets/overview"
               target="_blank"
               rel="noopener noreferrer"
             >

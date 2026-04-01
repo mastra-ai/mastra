@@ -31,30 +31,13 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   requestContext,
   agentSpan,
   methodType,
-  memory,
+  memory: _memory,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),
     outputSchema: prepareToolsStepOutputSchema,
     execute: async () => {
-      const toolEnhancements = [
-        options?.toolsets && Object.keys(options?.toolsets || {}).length > 0
-          ? `toolsets present (${Object.keys(options?.toolsets || {}).length} tools)`
-          : undefined,
-        memory && resourceId ? 'memory and resourceId available' : undefined,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
-      capabilities.logger.debug(`[Agent:${capabilities.agentName}] - Enhancing tools: ${toolEnhancements}`, {
-        runId,
-        toolsets: options?.toolsets ? Object.keys(options?.toolsets) : undefined,
-        clientTools: options?.clientTools ? Object.keys(options?.clientTools) : undefined,
-        hasMemory: !!memory,
-        hasResourceId: !!resourceId,
-      });
-
       const threadId = threadFromArgs?.id;
 
       const convertedTools = await capabilities.convertTools({

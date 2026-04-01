@@ -22,6 +22,7 @@ import type {
   ListExperimentsOutput,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
+  ExperimentReviewCounts,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -554,6 +555,44 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { experimentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Aggregation
+  // -------------------------------------------------------------------------
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      const pipeline = [
+        {
+          $group: {
+            _id: '$experimentId',
+            total: { $sum: 1 },
+            needsReview: { $sum: { $cond: [{ $eq: ['$status', 'needs-review'] }, 1, 0] } },
+            reviewed: { $sum: { $cond: [{ $eq: ['$status', 'reviewed'] }, 1, 0] } },
+            complete: { $sum: { $cond: [{ $eq: ['$status', 'complete'] }, 1, 0] } },
+          },
+        },
+      ];
+      const results = await collection.aggregate(pipeline).toArray();
+      return results.map(row => ({
+        experimentId: row._id as string,
+        total: Number(row.total ?? 0),
+        needsReview: Number(row.needsReview ?? 0),
+        reviewed: Number(row.reviewed ?? 0),
+        complete: Number(row.complete ?? 0),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_REVIEW_SUMMARY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

@@ -483,7 +483,7 @@ describe('MastraLLM', () => {
       expect(streamSpy).toHaveBeenCalled();
     });
 
-    it('should log debug messages', async () => {
+    it('should not log when no span context is available', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
 
@@ -498,14 +498,7 @@ describe('MastraLLM', () => {
 
       expect(streamSpy).toHaveBeenCalled();
 
-      expect(mockMastra.logger.debug).toHaveBeenCalledWith(
-        '[LLM] - Streaming text',
-        expect.objectContaining({
-          runId,
-          messages: expect.any(Array),
-          maxSteps: 5,
-        }),
-      );
+      expect(mockMastra.logger.debug).not.toHaveBeenCalledWith('Streaming text', expect.anything());
     });
 
     it('should handle step change logging', async () => {

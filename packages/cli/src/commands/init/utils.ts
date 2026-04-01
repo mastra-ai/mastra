@@ -495,6 +495,8 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from "@mastra/duckdb";
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -502,10 +504,15 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into persistent file storage
-    url: "file:./mastra.db",
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:./mastra.db",
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    }
   }),
   logger: new PinoLogger({
     name: 'Mastra',
@@ -712,9 +719,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         });
 
         if (keyChoice === 'enter') {
-          return p.text({
+          return p.password({
             message: 'Enter your API key:',
-            placeholder: 'sk-...',
+            mask: '*',
+            clearOnError: true,
             validate: value => {
               if (!value || value.length === 0) return 'API key cannot be empty';
             },

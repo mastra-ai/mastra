@@ -385,7 +385,8 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const log = event.log;
-      const logMessage = `[TestExporter] log.${log.level}: "${log.message}"${log.traceId ? ` (trace: ${log.traceId.slice(-8)})` : ''}`;
+      const traceId = log.traceId;
+      const logMessage = `[TestExporter] log.${log.level}: "${log.message}"${traceId ? ` (trace: ${traceId.slice(-8)})` : ''}`;
       this.#debugLogs.push(logMessage);
     }
 

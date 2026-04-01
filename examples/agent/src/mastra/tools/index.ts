@@ -8,7 +8,7 @@ export const cookingTool = createTool({
     ingredient: z.string(),
   }),
   requestContextSchema: z.object({
-    userId: z.string(),
+    userId: z.string().default('default-user-id'),
   }),
   execute: async (inputData, { requestContext }) => {
     const userId = requestContext?.get('userId');

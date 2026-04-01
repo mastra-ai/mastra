@@ -9,6 +9,8 @@ export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
   isDev: z.boolean(),
   cmsEnabled: z.boolean(),
+  storageType: z.string().optional(),
+  observabilityStorageType: z.string().optional(),
 });
 
 export type MastraPackage = z.infer<typeof mastraPackageSchema>;

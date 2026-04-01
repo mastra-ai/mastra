@@ -113,7 +113,6 @@ export function createOnScorerHook(mastra: Mastra) {
       );
 
       mastra.getLogger()?.trackException(mastraError);
-      mastra.getLogger()?.error(mastraError.toString());
     }
   };
 }
