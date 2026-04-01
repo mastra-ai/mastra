@@ -4155,6 +4155,8 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
       });
 
       expect(capturedToolCalls).toBeDefined();
+      expect(capturedToolCalls!.length).toBeGreaterThan(0);
+      expect(capturedToolCalls!.some((tc: ParentToolCall) => tc.name.startsWith('agent-'))).toBe(true);
       const nonDelegationCalls = capturedToolCalls!.filter(
         (tc: ParentToolCall) => !tc.name.startsWith('agent-') && !tc.name.startsWith('workflow-'),
       );
