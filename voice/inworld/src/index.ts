@@ -109,7 +109,7 @@ export class InworldVoice extends MastraVoice {
   /**
    * Retrieves a list of available voices from the Inworld API.
    *
-   * @returns {Promise<Array<{ voiceId: string; name: string; language: string; gender: string }>>}
+   * @returns {Promise<Array<{ voiceId: string; name: string; language: string; description: string; tags: string[]; source: string }>>}
    */
   async getSpeakers() {
     const response = await fetch(`${INWORLD_API_BASE}/voices/v1/voices`, {
@@ -137,7 +137,9 @@ export class InworldVoice extends MastraVoice {
         voiceId: v.voiceId,
         name: v.displayName ?? v.voiceId,
         language: v.langCode ?? 'en',
-        gender: 'neutral',
+        description: v.description ?? '',
+        tags: v.tags ?? [],
+        source: v.source ?? 'SYSTEM',
       })) ?? []
     );
   }

@@ -106,7 +106,9 @@ describe('InworldVoice', () => {
         voiceId: 'Dennis',
         name: 'Dennis',
         language: 'en',
-        gender: 'neutral',
+        description: '',
+        tags: [],
+        source: 'SYSTEM',
       });
     });
 

@@ -263,10 +263,10 @@ Returns a list of available voices from the Inworld API.
 
 ```typescript
 const speakers = await voice.getSpeakers()
-// [{ voiceId: 'Dennis', name: 'Dennis', language: 'en', gender: 'neutral' }, ...]
+// [{ voiceId: 'Dennis', name: 'Dennis', language: 'en', description: '...', tags: ['friendly'], source: 'SYSTEM' }, ...]
 ```
 
-**Returns:** `Promise<Array<{ voiceId: string; name: string; language: string; gender: string }>>`
+**Returns:** `Promise<Array<{ voiceId: string; name: string; language: string; description: string; tags: string[]; source: string }>>`
 
 ## Notes
 
