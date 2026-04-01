@@ -26,6 +26,14 @@ import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
   FeedbackFilter,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
@@ -49,7 +57,21 @@ import type {
 } from './metrics';
 import { listMetricsArgsSchema } from './metrics';
 import { listScoresArgsSchema } from './scores';
-import type { BatchCreateScoresArgs, CreateScoreArgs, ListScoresArgs, ListScoresResponse, ScoreRecord } from './scores';
+import type {
+  BatchCreateScoresArgs,
+  CreateScoreArgs,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  ListScoresArgs,
+  ListScoresResponse,
+  ScoreRecord,
+} from './scores';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -565,7 +587,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private aggregate(values: number[], type: AggregationType): number | null {
+  private aggregate(values: number[], type: AggregationType, timestamps?: number[]): number | null {
     if (values.length === 0) return null;
     switch (type) {
       case 'sum':
@@ -578,11 +600,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return Math.max(...values);
       case 'count':
         return values.length;
-      case 'last':
-        return values[values.length - 1]!;
+      case 'last': {
+        if (!timestamps || timestamps.length !== values.length) {
+          return values[values.length - 1]!;
+        }
+
+        let latestIndex = 0;
+        let latestTimestamp = timestamps[0]!;
+
+        for (let i = 1; i < timestamps.length; i++) {
+          const timestamp = timestamps[i]!;
+          if (timestamp >= latestTimestamp) {
+            latestTimestamp = timestamp;
+            latestIndex = i;
+          }
+        }
+
+        return values[latestIndex]!;
+      }
       default:
         return values.reduce((a, b) => a + b, 0);
     }
+  }
+
+  private interpolatePercentile(sortedValues: number[], percentile: number): number {
+    if (sortedValues.length === 0) return 0;
+
+    const position = percentile * (sortedValues.length - 1);
+    const lowerIndex = Math.floor(position);
+    const upperIndex = Math.ceil(position);
+    const lowerValue = sortedValues[lowerIndex]!;
+    const upperValue = sortedValues[upperIndex]!;
+
+    if (lowerIndex === upperIndex) {
+      return lowerValue;
+    }
+
+    return lowerValue + (upperValue - lowerValue) * (position - lowerIndex);
   }
 
   /**
@@ -1101,6 +1155,228 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return true;
   }
 
+  async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    const filtered = this.db.scoreRecords
+      .filter(score => this.scoreMatchesFilters(score, args.filters))
+      .filter(score => score.scorerId === args.scorerId)
+      .filter(score => (args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true));
+    const value = this.aggregate(
+      filtered.map(score => score.score),
+      args.aggregation,
+      filtered.map(score => score.timestamp.getTime()),
+    );
+
+    if (args.comparePeriod && args.filters?.timestamp) {
+      const previousRange = this.getComparisonDateRange(args.comparePeriod, args.filters.timestamp);
+      if (previousRange) {
+        const previousFiltered = this.db.scoreRecords
+          .filter(score =>
+            this.scoreMatchesFilters(score, {
+              ...(args.filters ?? {}),
+              timestamp: previousRange,
+            }),
+          )
+          .filter(score => score.scorerId === args.scorerId)
+          .filter(score =>
+            args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true,
+          );
+
+        const previousValue = this.aggregate(
+          previousFiltered.map(score => score.score),
+          args.aggregation,
+          previousFiltered.map(score => score.timestamp.getTime()),
+        );
+
+        let changePercent: number | null = null;
+        if (previousValue !== null && previousValue !== 0 && value !== null) {
+          changePercent = ((value - previousValue) / Math.abs(previousValue)) * 100;
+        }
+
+        return { value, previousValue, changePercent };
+      }
+    }
+
+    return { value };
+  }
+
+  async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    const filtered = this.db.scoreRecords
+      .filter(score => this.scoreMatchesFilters(score, args.filters))
+      .filter(score => score.scorerId === args.scorerId)
+      .filter(score => (args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true));
+
+    const groupMap = new Map<string, ScoreRecord[]>();
+    for (const score of filtered) {
+      const dims: Record<string, string | null> = {};
+      for (const col of args.groupBy) {
+        const value = (score as Record<string, unknown>)[col];
+        dims[col] = value === null || value === undefined ? null : String(value);
+      }
+      const key = JSON.stringify(dims);
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(score);
+    }
+
+    const groups = Array.from(groupMap.entries()).map(([key, records]) => ({
+      dimensions: JSON.parse(key) as Record<string, string | null>,
+      value:
+        this.aggregate(
+          records.map(record => record.score),
+          args.aggregation,
+          records.map(record => record.timestamp.getTime()),
+        ) ?? 0,
+    }));
+    groups.sort((a, b) => b.value - a.value);
+
+    return { groups };
+  }
+
+  async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    const filtered = this.db.scoreRecords
+      .filter(score => this.scoreMatchesFilters(score, args.filters))
+      .filter(score => score.scorerId === args.scorerId)
+      .filter(score => (args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true));
+    const intervalMs = this.intervalToMs(args.interval);
+
+    if (args.groupBy && args.groupBy.length > 0) {
+      const seriesMap = new Map<string, Map<number, ScoreRecord[]>>();
+      const seriesNames = new Map<string, string>();
+
+      for (const score of filtered) {
+        const values = args.groupBy.map(col => (score as Record<string, unknown>)[col] ?? '');
+        const key = JSON.stringify(values);
+        if (!seriesMap.has(key)) seriesMap.set(key, new Map());
+        if (!seriesNames.has(key)) {
+          seriesNames.set(
+            key,
+            values.map(value => (value === null || value === undefined ? '' : String(value))).join('|'),
+          );
+        }
+        const bucket = Math.floor(score.timestamp.getTime() / intervalMs) * intervalMs;
+        const bucketMap = seriesMap.get(key)!;
+        if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+        bucketMap.get(bucket)!.push(score);
+      }
+
+      return {
+        series: Array.from(seriesMap.entries()).map(([key, bucketMap]) => ({
+          name: seriesNames.get(key)!,
+          points: Array.from(bucketMap.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([ts, records]) => ({
+              timestamp: new Date(ts),
+              value:
+                this.aggregate(
+                  records.map(record => record.score),
+                  args.aggregation,
+                  records.map(record => record.timestamp.getTime()),
+                ) ?? 0,
+            })),
+        })),
+      };
+    }
+
+    const bucketMap = new Map<number, ScoreRecord[]>();
+    for (const score of filtered) {
+      const bucket = Math.floor(score.timestamp.getTime() / intervalMs) * intervalMs;
+      if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+      bucketMap.get(bucket)!.push(score);
+    }
+
+    return {
+      series: [
+        {
+          name: args.scoreSource ? `${args.scorerId}|${args.scoreSource}` : args.scorerId,
+          points: Array.from(bucketMap.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([ts, records]) => ({
+              timestamp: new Date(ts),
+              value:
+                this.aggregate(
+                  records.map(record => record.score),
+                  args.aggregation,
+                  records.map(record => record.timestamp.getTime()),
+                ) ?? 0,
+            })),
+        },
+      ],
+    };
+  }
+
+  async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    const filtered = this.db.scoreRecords
+      .filter(score => this.scoreMatchesFilters(score, args.filters))
+      .filter(score => score.scorerId === args.scorerId)
+      .filter(score => (args.scoreSource ? (score.scoreSource ?? score.source ?? null) === args.scoreSource : true));
+    const intervalMs = this.intervalToMs(args.interval);
+
+    const bucketMap = new Map<number, number[]>();
+    for (const score of filtered) {
+      const bucket = Math.floor(score.timestamp.getTime() / intervalMs) * intervalMs;
+      if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+      bucketMap.get(bucket)!.push(score.score);
+    }
+
+    const sortedBuckets = Array.from(bucketMap.entries()).sort(([a], [b]) => a - b);
+
+    return {
+      series: args.percentiles.map(percentile => ({
+        percentile,
+        points: sortedBuckets.map(([ts, values]) => {
+          const sorted = [...values].sort((a, b) => a - b);
+          return { timestamp: new Date(ts), value: this.interpolatePercentile(sorted, percentile) };
+        }),
+      })),
+    };
+  }
+
+  private getNumericFeedbackValue(value: FeedbackRecord['value']): number | null {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) return null;
+      const numeric = Number(trimmed);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+
+    return null;
+  }
+
+  private getComparisonDateRange(
+    comparePeriod: 'previous_period' | 'previous_day' | 'previous_week',
+    timestamp: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean },
+  ): { start: Date; end: Date; startExclusive?: boolean; endExclusive?: boolean } | null {
+    if (!timestamp.start || !timestamp.end) return null;
+
+    const duration = timestamp.end.getTime() - timestamp.start.getTime();
+    switch (comparePeriod) {
+      case 'previous_period':
+        return {
+          start: new Date(timestamp.start.getTime() - duration),
+          end: new Date(timestamp.end.getTime() - duration),
+          startExclusive: timestamp.startExclusive,
+          endExclusive: timestamp.endExclusive,
+        };
+      case 'previous_day':
+        return {
+          start: new Date(timestamp.start.getTime() - 86_400_000),
+          end: new Date(timestamp.end.getTime() - 86_400_000),
+          startExclusive: timestamp.startExclusive,
+          endExclusive: timestamp.endExclusive,
+        };
+      case 'previous_week':
+        return {
+          start: new Date(timestamp.start.getTime() - 604_800_000),
+          end: new Date(timestamp.end.getTime() - 604_800_000),
+          startExclusive: timestamp.startExclusive,
+          endExclusive: timestamp.endExclusive,
+        };
+    }
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -1147,6 +1423,224 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       feedback: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
+    };
+  }
+
+  async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    const filtered = this.db.feedbackRecords
+      .filter(feedback => this.feedbackMatchesFilters(feedback, args.filters))
+      .filter(feedback => feedback.feedbackType === args.feedbackType)
+      .filter(feedback =>
+        args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
+      );
+    const numericEntries = filtered.flatMap(feedback => {
+      const numericValue = this.getNumericFeedbackValue(feedback.value);
+      return numericValue === null ? [] : [{ numericValue, timestamp: feedback.timestamp.getTime() }];
+    });
+    const value = this.aggregate(
+      numericEntries.map(entry => entry.numericValue),
+      args.aggregation,
+      numericEntries.map(entry => entry.timestamp),
+    );
+
+    if (args.comparePeriod && args.filters?.timestamp) {
+      const previousRange = this.getComparisonDateRange(args.comparePeriod, args.filters.timestamp);
+      if (previousRange) {
+        const previousNumericEntries = this.db.feedbackRecords
+          .filter(feedback =>
+            this.feedbackMatchesFilters(feedback, {
+              ...(args.filters ?? {}),
+              timestamp: previousRange,
+            }),
+          )
+          .filter(feedback => feedback.feedbackType === args.feedbackType)
+          .filter(feedback =>
+            args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
+          )
+          .flatMap(feedback => {
+            const numericValue = this.getNumericFeedbackValue(feedback.value);
+            return numericValue === null ? [] : [{ numericValue, timestamp: feedback.timestamp.getTime() }];
+          });
+
+        const previousValue = this.aggregate(
+          previousNumericEntries.map(entry => entry.numericValue),
+          args.aggregation,
+          previousNumericEntries.map(entry => entry.timestamp),
+        );
+        let changePercent: number | null = null;
+        if (previousValue !== null && previousValue !== 0 && value !== null) {
+          changePercent = ((value - previousValue) / Math.abs(previousValue)) * 100;
+        }
+
+        return { value, previousValue, changePercent };
+      }
+    }
+
+    return { value };
+  }
+
+  async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    const filtered = this.db.feedbackRecords
+      .filter(feedback => this.feedbackMatchesFilters(feedback, args.filters))
+      .filter(feedback => feedback.feedbackType === args.feedbackType)
+      .filter(feedback =>
+        args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
+      )
+      .filter(feedback => this.getNumericFeedbackValue(feedback.value) !== null);
+
+    const groupMap = new Map<string, FeedbackRecord[]>();
+    for (const feedback of filtered) {
+      const dims: Record<string, string | null> = {};
+      for (const col of args.groupBy) {
+        const rawValue = (feedback as Record<string, unknown>)[col];
+        dims[col] = rawValue === null || rawValue === undefined ? null : String(rawValue);
+      }
+      const key = JSON.stringify(dims);
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(feedback);
+    }
+
+    const groups = Array.from(groupMap.entries()).map(([key, records]) => ({
+      dimensions: JSON.parse(key) as Record<string, string | null>,
+      value: (() => {
+        const numericEntries = records.flatMap(record => {
+          const numericValue = this.getNumericFeedbackValue(record.value);
+          return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+        });
+
+        return (
+          this.aggregate(
+            numericEntries.map(entry => entry.numericValue),
+            args.aggregation,
+            numericEntries.map(entry => entry.timestamp),
+          ) ?? 0
+        );
+      })(),
+    }));
+    groups.sort((a, b) => b.value - a.value);
+
+    return { groups };
+  }
+
+  async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    const filtered = this.db.feedbackRecords
+      .filter(feedback => this.feedbackMatchesFilters(feedback, args.filters))
+      .filter(feedback => feedback.feedbackType === args.feedbackType)
+      .filter(feedback =>
+        args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
+      )
+      .filter(feedback => this.getNumericFeedbackValue(feedback.value) !== null);
+    const intervalMs = this.intervalToMs(args.interval);
+
+    if (args.groupBy && args.groupBy.length > 0) {
+      const seriesMap = new Map<string, Map<number, FeedbackRecord[]>>();
+      const seriesNames = new Map<string, string>();
+
+      for (const feedback of filtered) {
+        const values = args.groupBy.map(col => (feedback as Record<string, unknown>)[col] ?? '');
+        const key = JSON.stringify(values);
+        if (!seriesMap.has(key)) seriesMap.set(key, new Map());
+        if (!seriesNames.has(key)) {
+          seriesNames.set(
+            key,
+            values.map(value => (value === null || value === undefined ? '' : String(value))).join('|'),
+          );
+        }
+        const bucket = Math.floor(feedback.timestamp.getTime() / intervalMs) * intervalMs;
+        const bucketMap = seriesMap.get(key)!;
+        if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+        bucketMap.get(bucket)!.push(feedback);
+      }
+
+      return {
+        series: Array.from(seriesMap.entries()).map(([key, bucketMap]) => ({
+          name: seriesNames.get(key)!,
+          points: Array.from(bucketMap.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([ts, records]) => ({
+              timestamp: new Date(ts),
+              value: (() => {
+                const numericEntries = records.flatMap(record => {
+                  const numericValue = this.getNumericFeedbackValue(record.value);
+                  return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+                });
+
+                return (
+                  this.aggregate(
+                    numericEntries.map(entry => entry.numericValue),
+                    args.aggregation,
+                    numericEntries.map(entry => entry.timestamp),
+                  ) ?? 0
+                );
+              })(),
+            })),
+        })),
+      };
+    }
+
+    const bucketMap = new Map<number, FeedbackRecord[]>();
+    for (const feedback of filtered) {
+      const bucket = Math.floor(feedback.timestamp.getTime() / intervalMs) * intervalMs;
+      if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+      bucketMap.get(bucket)!.push(feedback);
+    }
+
+    return {
+      series: [
+        {
+          name: args.feedbackSource ? `${args.feedbackType}|${args.feedbackSource}` : args.feedbackType,
+          points: Array.from(bucketMap.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([ts, records]) => ({
+              timestamp: new Date(ts),
+              value: (() => {
+                const numericEntries = records.flatMap(record => {
+                  const numericValue = this.getNumericFeedbackValue(record.value);
+                  return numericValue === null ? [] : [{ numericValue, timestamp: record.timestamp.getTime() }];
+                });
+
+                return (
+                  this.aggregate(
+                    numericEntries.map(entry => entry.numericValue),
+                    args.aggregation,
+                    numericEntries.map(entry => entry.timestamp),
+                  ) ?? 0
+                );
+              })(),
+            })),
+        },
+      ],
+    };
+  }
+
+  async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    const filtered = this.db.feedbackRecords
+      .filter(feedback => this.feedbackMatchesFilters(feedback, args.filters))
+      .filter(feedback => feedback.feedbackType === args.feedbackType)
+      .filter(feedback =>
+        args.feedbackSource ? (feedback.feedbackSource ?? feedback.source ?? '') === args.feedbackSource : true,
+      );
+    const intervalMs = this.intervalToMs(args.interval);
+
+    const bucketMap = new Map<number, number[]>();
+    for (const feedback of filtered) {
+      const numericValue = this.getNumericFeedbackValue(feedback.value);
+      if (numericValue === null) continue;
+      const bucket = Math.floor(feedback.timestamp.getTime() / intervalMs) * intervalMs;
+      if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+      bucketMap.get(bucket)!.push(numericValue);
+    }
+
+    const sortedBuckets = Array.from(bucketMap.entries()).sort(([a], [b]) => a - b);
+
+    return {
+      series: args.percentiles.map(percentile => ({
+        percentile,
+        points: sortedBuckets.map(([ts, values]) => {
+          const sorted = [...values].sort((a, b) => a - b);
+          return { timestamp: new Date(ts), value: this.interpolatePercentile(sorted, percentile) };
+        }),
+      })),
     };
   }
 

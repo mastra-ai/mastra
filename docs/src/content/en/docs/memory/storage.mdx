@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::tip[Sharing the database with Mastra Studio]
+:::tip[Sharing the database with Studio]
 When running `mastra dev` alongside your application (e.g., Next.js), use an absolute path to ensure both processes access the same database:
 
 ```typescript
@@ -151,7 +151,7 @@ Mastra organizes conversations using two identifiers:
 Both identifiers are required for agents to store information:
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     ```typescript
     const response = await agent.generate('hello', {
       memory: {
@@ -162,7 +162,7 @@ Both identifiers are required for agents to store information:
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     ```typescript
     const stream = await agent.stream('hello', {
       memory: {
@@ -175,7 +175,7 @@ Both identifiers are required for agents to store information:
 </Tabs>
 
 :::note
-[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
+[Studio](/docs/studio/overview) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
 :::
 
 ### Thread title generation

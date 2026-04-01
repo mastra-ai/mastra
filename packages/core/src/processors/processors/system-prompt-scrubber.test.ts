@@ -7,9 +7,9 @@ import { ChunkFrom } from '../../stream/types';
 import { SystemPromptScrubber } from './system-prompt-scrubber';
 
 // Helper function to create test messages
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant'): MastraDBMessage {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant', id = 'test-id'): MastraDBMessage {
   return {
-    id: 'test-id',
+    id,
     role,
     content: {
       format: 2,
@@ -190,6 +190,32 @@ describe('SystemPromptScrubber', () => {
       const result = await processor.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toHaveLength(1);
       expect((result[0].content.parts[0] as TextPart).text).toBe('This message should remain.');
+    });
+
+    it('should only inspect the last message when lastMessageOnly is enabled', async () => {
+      processor = new SystemPromptScrubber({
+        model: mockModel,
+        strategy: 'filter',
+        lastMessageOnly: true,
+      });
+
+      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        text: JSON.stringify({
+          detections: null,
+          reason: null,
+        }),
+        finishReason: 'stop',
+        usage: { completionTokens: 10, promptTokens: 5 },
+      });
+
+      const messages = [
+        createTestMessage('You are a helpful assistant. Hello there!', 'assistant', 'msg1'),
+        createTestMessage('This message should remain.', 'assistant', 'msg2'),
+      ];
+
+      const result = await processor.processOutputResult({ messages, abort: vi.fn() as any });
+      expect(result).toEqual(messages);
     });
   });
 

@@ -179,6 +179,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guide/firecrawl',
+              label: 'Tools: Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'guide/ai-recruiter',
               label: 'Workflows: AI Recruiter',
             },

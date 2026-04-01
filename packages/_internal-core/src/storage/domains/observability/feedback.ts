@@ -1,10 +1,21 @@
 import { z } from 'zod/v4';
 import {
+  aggregateResponseFields,
+  aggregationIntervalSchema,
+  aggregationTypeSchema,
+  aggregatedValueField,
+  bucketTimestampField,
+  comparePeriodSchema,
   commonFilterFields,
   experimentIdField,
   contextFields,
+  dimensionsField,
+  groupBySchema,
   paginationArgsSchema,
   paginationInfoSchema,
+  percentileField,
+  percentileBucketValueField,
+  percentilesSchema,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -177,11 +188,11 @@ const feedbackFilterObjectSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Filter by feedback type(s)'),
-  feedbackSource: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+  feedbackSource: feedbackSourceField.optional(),
   /**
    * @deprecated Use `feedbackSource` instead.
    */
-  source: feedbackSourceField.optional().describe('Filter by feedback source (e.g., user, system, manual)'),
+  source: feedbackSourceField.optional(),
   feedbackUserId: feedbackUserIdField.optional(),
 });
 
@@ -232,3 +243,103 @@ export const listFeedbackResponseSchema = z.object({
 
 /** Response containing paginated feedback */
 export type ListFeedbackResponse = z.infer<typeof listFeedbackResponseSchema>;
+
+// ============================================================================
+// OLAP Query Schemas
+// ============================================================================
+
+export const getFeedbackAggregateArgsSchema = z
+  .object({
+    feedbackType: feedbackTypeField,
+    feedbackSource: feedbackSourceField.optional(),
+    aggregation: aggregationTypeSchema,
+    filters: feedbackFilterSchema.optional(),
+    comparePeriod: comparePeriodSchema.optional(),
+  })
+  .describe('Arguments for getting a feedback aggregate over numeric values');
+
+export type GetFeedbackAggregateArgs = z.infer<typeof getFeedbackAggregateArgsSchema>;
+
+export const getFeedbackAggregateResponseSchema = z.object(aggregateResponseFields);
+
+export type GetFeedbackAggregateResponse = z.infer<typeof getFeedbackAggregateResponseSchema>;
+
+export const getFeedbackBreakdownArgsSchema = z
+  .object({
+    feedbackType: feedbackTypeField,
+    feedbackSource: feedbackSourceField.optional(),
+    groupBy: groupBySchema,
+    aggregation: aggregationTypeSchema,
+    filters: feedbackFilterSchema.optional(),
+  })
+  .describe('Arguments for getting a feedback breakdown over numeric values');
+
+export type GetFeedbackBreakdownArgs = z.infer<typeof getFeedbackBreakdownArgsSchema>;
+
+export const getFeedbackBreakdownResponseSchema = z.object({
+  groups: z.array(
+    z.object({
+      dimensions: dimensionsField,
+      value: aggregatedValueField,
+    }),
+  ),
+});
+
+export type GetFeedbackBreakdownResponse = z.infer<typeof getFeedbackBreakdownResponseSchema>;
+
+export const getFeedbackTimeSeriesArgsSchema = z
+  .object({
+    feedbackType: feedbackTypeField,
+    feedbackSource: feedbackSourceField.optional(),
+    interval: aggregationIntervalSchema,
+    aggregation: aggregationTypeSchema,
+    filters: feedbackFilterSchema.optional(),
+    groupBy: groupBySchema.optional(),
+  })
+  .describe('Arguments for getting feedback time series over numeric values');
+
+export type GetFeedbackTimeSeriesArgs = z.infer<typeof getFeedbackTimeSeriesArgsSchema>;
+
+export const getFeedbackTimeSeriesResponseSchema = z.object({
+  series: z.array(
+    z.object({
+      name: z.string().describe('Series name (feedback type or group key)'),
+      points: z.array(
+        z.object({
+          timestamp: bucketTimestampField,
+          value: aggregatedValueField,
+        }),
+      ),
+    }),
+  ),
+});
+
+export type GetFeedbackTimeSeriesResponse = z.infer<typeof getFeedbackTimeSeriesResponseSchema>;
+
+export const getFeedbackPercentilesArgsSchema = z
+  .object({
+    feedbackType: feedbackTypeField,
+    feedbackSource: feedbackSourceField.optional(),
+    percentiles: percentilesSchema,
+    interval: aggregationIntervalSchema,
+    filters: feedbackFilterSchema.optional(),
+  })
+  .describe('Arguments for getting feedback percentiles over numeric values');
+
+export type GetFeedbackPercentilesArgs = z.infer<typeof getFeedbackPercentilesArgsSchema>;
+
+export const getFeedbackPercentilesResponseSchema = z.object({
+  series: z.array(
+    z.object({
+      percentile: percentileField,
+      points: z.array(
+        z.object({
+          timestamp: bucketTimestampField,
+          value: percentileBucketValueField,
+        }),
+      ),
+    }),
+  ),
+});
+
+export type GetFeedbackPercentilesResponse = z.infer<typeof getFeedbackPercentilesResponseSchema>;

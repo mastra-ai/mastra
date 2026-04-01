@@ -182,7 +182,7 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
       targetVersion: 'v2',
     });
 
-    await router.doGenerate({
+    const result = await router.doGenerate({
       inputFormat: 'messages',
       ...preparedTools,
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Search the web' }] }],
@@ -195,6 +195,13 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
     expect(passedOptions.tools).toBeDefined();
     expect(passedOptions.tools).toHaveLength(1);
     expect(passedOptions.tools[0].type).toBe('provider');
+
+    expect(result).toMatchObject({
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 5 },
+      request: {},
+      response: { id: 'test', modelId: 'gpt-4o' },
+    });
   });
 
   it('should not remap function tools when routing to V3 model', async () => {

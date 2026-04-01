@@ -27,6 +27,7 @@ export {
   type TranslationResult,
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
+export { type LastMessageOnlyOption } from './message-selection';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,

@@ -7,6 +7,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
+import { executeWithContextSync } from '../../observability/utils';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -47,7 +48,6 @@ export class MastraLLMVNext extends MastraBase {
         category: ErrorCategory.USER,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     } else {
       this.#models = models;
@@ -145,13 +145,6 @@ export class MastraLLMVNext extends MastraBase {
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      tools: Object.keys(tools || {}),
-    });
 
     const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
@@ -173,6 +166,20 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
+
+    if (modelSpan) {
+      executeWithContextSync({
+        span: modelSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
 
     // Create model span tracker that will be shared across all LLM execution steps
     const modelSpanTracker = modelSpan?.createTracker();
@@ -242,7 +249,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Step Change:', {
+            this.logger.debug('Stream step change', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
@@ -308,7 +315,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Finished:', {
+            this.logger.debug('Stream finished', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
