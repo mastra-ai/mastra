@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Added `loadUnobservedMessages({ threadId, resourceId? })` as a public method on `ObservationalMemory`. ([#14921](https://github.com/mastra-ai/mastra/pull/14921))
+
+  This lets external consumers (e.g. the Mastra gateway proxy) load previously-stored messages that haven't been observed yet, without having to reimplement the internal storage query and part-level filtering logic. The method fetches the OM record, queries storage for messages after the `lastObservedAt` cursor, and applies part-level filtering so partially-observed messages only return their unobserved parts.
+
+  ```ts
+  const unobserved = await om.loadUnobservedMessages({
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
 ## 1.12.1
 
 ### Patch Changes

@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 21.0.0-alpha.1
+
+### Patch Changes
+
+- Added component tests for StudioConfigForm apiPrefix handling to validate the fix for issue #14634. ([#14893](https://github.com/mastra-ai/mastra/pull/14893))
+
+- Fixed SearchFieldBlock search icon sizing and vertical alignment to properly scale across all input sizes (sm, md, default, lg) ([#14927](https://github.com/mastra-ai/mastra/pull/14927))
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+  - @mastra/client-js@1.12.0-alpha.1
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.21-alpha.1
+
 ## 21.0.0-alpha.0
 
 ### Patch Changes
