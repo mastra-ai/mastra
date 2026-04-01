@@ -99,6 +99,7 @@ describe('setupKeyboardShortcuts', () => {
 
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
+    expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
     expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
   });

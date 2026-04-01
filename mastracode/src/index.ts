@@ -106,6 +106,17 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
+  const globalSettings = loadSettings();
+  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
+
+  if (storedGatewayKey) {
+    process.env['MASTRA_GATEWAY_API_KEY'] = storedGatewayKey;
+  }
+
+  if (storedGatewayUrl) {
+    process.env['MASTRA_GATEWAY_URL'] = storedGatewayUrl;
+  }
 
   // Load user-entered API keys from auth.json into process.env
   // (only sets env vars that aren't already present — env vars take precedence)
@@ -137,9 +148,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
-
-  // Load global settings to resolve storage preferences (needed before storage creation)
-  const globalSettings = loadSettings();
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);

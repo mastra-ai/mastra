@@ -291,7 +291,6 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
-    { name: 'memory-gateway', description: 'Configure Mastra memory gateway' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

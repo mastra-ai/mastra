@@ -74,9 +74,10 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   } else if (keyAnswer.toLowerCase() === 'clear') {
     authStorage.remove(`apikey:${MEMORY_GATEWAY_PROVIDER}`);
     delete process.env['MASTRA_GATEWAY_API_KEY'];
+    delete process.env['MASTRA_GATEWAY_URL'];
     settings.memoryGateway = {};
     saveSettings(settings);
-    ctx.showInfo('Memory gateway cleared. Note: memory mode changes take effect on next restart.');
+    ctx.showInfo('Memory gateway cleared. Note: model list and memory mode changes take effect on next restart.');
     return;
   } else if (keyAnswer.length > 0) {
     authStorage.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
@@ -86,10 +87,12 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   const urlAnswer = await askText(ctx, `Gateway URL (ESC for default):`, effectiveUrl);
   if (urlAnswer && urlAnswer !== MEMORY_GATEWAY_DEFAULT_URL) {
     settings.memoryGateway = { baseUrl: urlAnswer };
+    process.env['MASTRA_GATEWAY_URL'] = urlAnswer;
   } else {
     settings.memoryGateway = {};
+    delete process.env['MASTRA_GATEWAY_URL'];
   }
   saveSettings(settings);
 
-  ctx.showInfo('Memory gateway configured. Note: memory mode changes take effect on next restart.');
+  ctx.showInfo('Memory gateway configured. Note: model list and memory mode changes take effect on next restart.');
 }

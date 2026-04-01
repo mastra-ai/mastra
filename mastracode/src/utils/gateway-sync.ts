@@ -56,6 +56,10 @@ export async function fetchProvidersFromGateways(
 
   for (const gateway of gateways) {
     try {
+      if (!(await gateway.shouldEnable())) {
+        continue;
+      }
+
       const providers = await gateway.fetchProviders();
 
       // models.dev is a provider registry, not a true gateway - don't prefix its providers
