@@ -21,7 +21,7 @@ export class MastraGateway extends MastraModelGateway {
   }
 
   private getBaseUrl(): string {
-    return this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
+    return this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
   }
 
   override shouldEnable(): boolean {

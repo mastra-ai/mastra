@@ -252,7 +252,7 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
  */
 export function getGatewayClient(): GatewayMemoryClient | null {
   if (_gatewayClient !== undefined) return _gatewayClient;
-  const url = process.env.MASTRA_GATEWAY_URL || 'https://server.mastra.ai';
+  const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
   if (!key) {
     _gatewayClient = null;
