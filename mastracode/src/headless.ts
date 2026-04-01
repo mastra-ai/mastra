@@ -108,11 +108,21 @@ export function printHeadlessUsage(): void {
 Usage: mastracode --prompt <text> [options]
 
 Headless (non-interactive) mode options:
-  --prompt, -p <text>   The task to execute (required, or pipe via stdin)
-  --continue, -c        Resume the most recent thread instead of creating a new one
-  --timeout <seconds>   Exit with code 2 if not complete within timeout
-  --format <type>       Output format: "default" or "json" (default: "default")
-  --model, -m <id>      Model to use (e.g., "anthropic/claude-sonnet-4-20250514")
+  --prompt, -p <text>           The task to execute (required, or pipe via stdin)
+  --continue, -c                Resume the most recent thread instead of creating a new one
+  --timeout <seconds>           Exit with code 2 if not complete within timeout
+  --format <type>               Output format: "default" or "json" (default: "default")
+  --model, -m <id>              Model override (e.g., "anthropic/claude-sonnet-4-5")
+  --mode {build|plan|fast}      Execution mode (uses that mode's configured model)
+  --thinking-level <level>      Thinking level: off, low, medium, high, xhigh
+  --config <path>               Path to headless config file (default: .mastracode/headless.json)
+
+Config file:
+  Place a headless.json in .mastracode/ (project) or ~/.mastracode/ (global):
+  {
+    "models": { "modeDefaults": { "build": "anthropic/claude-sonnet-4-5" } },
+    "preferences": { "thinkingLevel": "medium", "yolo": true }
+  }
 
 Exit codes:
   0  Agent completed successfully
@@ -122,9 +132,10 @@ Exit codes:
 Examples:
   mastracode --prompt "Fix the bug in auth.ts"
   mastracode --prompt "Add tests" --timeout 300
+  mastracode --prompt "Fix the bug" --mode fast --thinking-level high
+  mastracode --config ./ci.json --prompt "Run tests"
   mastracode -c --prompt "Continue where you left off"
   mastracode --prompt "Refactor utils" --format json
-  mastracode --prompt "Fix the bug" --model anthropic/claude-sonnet-4-20250514
   echo "task description" | mastracode --prompt -
 
 Run without --prompt for the interactive TUI.
