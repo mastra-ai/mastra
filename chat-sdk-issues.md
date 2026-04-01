@@ -58,6 +58,8 @@ This also affects any `CardText` containing markdown formatting — backticks, a
 
 **Impact:** Tool call cards, approval cards, and any formatted card content fails to post on Telegram. The `formatError` hook catches the error, but the original message is lost.
 
+**Our workaround:** We use `*toolname*` (italic) instead of `**toolname**` (bold) in tool card formatting, which avoids the triple-asterisk collision. This is a cosmetic compromise but keeps messages deliverable.
+
 **Recommended fix:** Switch to `MarkdownV2` parse mode and properly escape special characters (`. - ( ) ! > # + = | { }`) outside of entities. `MarkdownV2` supports all current formatting plus underline, strikethrough, and spoilers.
 
 **Related issue:** [#276](https://github.com/vercel/chat/issues/276) (different symptom — empty edit validation error, but same root cause: legacy Markdown limitations)
