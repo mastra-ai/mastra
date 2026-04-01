@@ -60,7 +60,7 @@ export interface StorageSettings {
 export const MEMORY_GATEWAY_PROVIDER = 'mastra-gateway';
 
 /** Default gateway URL. */
-export const MEMORY_GATEWAY_DEFAULT_URL = 'https://server.mastra.ai';
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';

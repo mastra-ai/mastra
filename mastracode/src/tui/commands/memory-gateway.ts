@@ -131,7 +131,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
 
   const urlChoice = await askSelect(ctx, 'Gateway URL', [
     {
-      label: 'https://server.mastra.ai',
+      label: MEMORY_GATEWAY_DEFAULT_URL,
       value: MEMORY_GATEWAY_DEFAULT_URL,
       description: effectiveUrl === MEMORY_GATEWAY_DEFAULT_URL ? 'current' : 'hosted default',
     },

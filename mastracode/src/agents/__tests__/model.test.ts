@@ -119,7 +119,7 @@ vi.mock('../../onboarding/settings.js', () => ({
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
   MEMORY_GATEWAY_PROVIDER: 'mastra-gateway',
-  MEMORY_GATEWAY_DEFAULT_URL: 'https://server.mastra.ai',
+  MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -150,6 +150,7 @@ describe('resolveModel', () => {
     mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.MASTRA_GATEWAY_URL;
   });
 
   afterEach(() => {
@@ -344,7 +345,7 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://server.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
       expect(ModelRouterLanguageModel).toHaveBeenCalledWith(
         { id: 'mastra/anthropic/claude-sonnet-4', headers: undefined },
         [expect.objectContaining({ __gateway: 'mastra', apiKey: 'msk_gateway_key_123' })],
@@ -365,7 +366,7 @@ describe('resolveModel', () => {
       expect(createAnthropic).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'oauth-gateway-placeholder',
-          baseURL: 'https://server.mastra.ai/v1',
+          baseURL: 'https://gateway-api.mastra.ai/v1',
           fetch: mockAnthropicOAuthFetch,
         }),
       );
@@ -398,7 +399,7 @@ describe('resolveModel', () => {
       expect(createOpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'oauth-gateway-placeholder',
-          baseURL: 'https://server.mastra.ai/v1',
+          baseURL: 'https://gateway-api.mastra.ai/v1',
           fetch: mockCodexOAuthFetch,
         }),
       );
@@ -428,7 +429,7 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://server.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
       expect(buildAnthropicOAuthFetch).not.toHaveBeenCalled();
     });
 
@@ -437,7 +438,7 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/google/gemini-2.0-flash');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://server.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
     });
 
     it('custom provider bypasses gateway', () => {
@@ -480,7 +481,7 @@ describe('resolveModel', () => {
 
       resolveModel('mastra/anthropic/claude-sonnet-4');
 
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://server.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
     });
 
     it('passes harness headers to ModelRouterLanguageModel for explicit mastra-prefixed models', () => {
@@ -532,7 +533,7 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_env_key', baseUrl: 'https://server.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_env_key', baseUrl: 'https://gateway-api.mastra.ai' });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
   });

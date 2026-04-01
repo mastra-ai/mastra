@@ -17,7 +17,7 @@ vi.mock('../../../onboarding/settings.js', () => ({
   loadSettings: mockLoadSettings,
   saveSettings: mockSaveSettings,
   MEMORY_GATEWAY_PROVIDER: 'mastra-gateway',
-  MEMORY_GATEWAY_DEFAULT_URL: 'https://server.mastra.ai',
+  MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
 const { MockAskQuestionInlineComponent } = vi.hoisted(() => ({
