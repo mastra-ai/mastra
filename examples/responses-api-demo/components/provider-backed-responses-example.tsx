@@ -392,16 +392,28 @@ export function ProviderBackedResponsesExample() {
 
       <div className="demo-thread">
         <span className="demo-thread__dot" aria-hidden="true" />
-        <span>Turn {String(Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1)).padStart(2, '0')}</span>
+        <span>
+          Turn{' '}
+          {String(
+            Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1),
+          ).padStart(2, '0')}
+        </span>
         <span className="demo-thread__separator" aria-hidden="true" />
-        <span>{currentAnchor ? `next turn will use provider response ${truncateId(currentAnchor)}` : 'first provider response creates the continuation anchor'}</span>
+        <span>
+          {currentAnchor
+            ? `next turn will use provider response ${truncateId(currentAnchor)}`
+            : 'first provider response creates the continuation anchor'}
+        </span>
       </div>
 
       <section className="demo-chat">
         <div className="demo-messages">
           {turns.length === 0 ? (
             <div className="demo-empty-state">
-              <p>Each response returns the provider response ID, and the next turn sends it back through `providerOptions`.</p>
+              <p>
+                Each response returns the provider response ID, and the next turn sends it back through
+                `providerOptions`.
+              </p>
               <div className="demo-chip-list">
                 {[
                   'Tell me three facts about Saturn.',
@@ -431,7 +443,9 @@ export function ProviderBackedResponsesExample() {
                     <div className="demo-message__role">Mastra</div>
                     <div className="demo-message__bubble demo-message__bubble--assistant">
                       <div className="demo-message__toolbar">
-                        <div className="demo-message__response-id">{turn.providerResponseId ?? 'awaiting provider response'}</div>
+                        <div className="demo-message__response-id">
+                          {turn.providerResponseId ?? 'awaiting provider response'}
+                        </div>
 
                         <div className="demo-message__actions">
                           <button
@@ -458,7 +472,9 @@ export function ProviderBackedResponsesExample() {
                                   <div className="demo-tool__section">
                                     <span className="demo-tool__label">Arguments</span>
                                     <pre className="demo-tool__value">
-                                      {typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments, null, 2)}
+                                      {typeof tool.arguments === 'string'
+                                        ? tool.arguments
+                                        : JSON.stringify(tool.arguments, null, 2)}
                                     </pre>
                                   </div>
                                 ) : null}
@@ -466,7 +482,9 @@ export function ProviderBackedResponsesExample() {
                                   <div className="demo-tool__section">
                                     <span className="demo-tool__label">Output</span>
                                     <pre className="demo-tool__value">
-                                      {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
+                                      {typeof tool.output === 'string'
+                                        ? tool.output
+                                        : JSON.stringify(tool.output, null, 2)}
                                     </pre>
                                   </div>
                                 ) : null}
@@ -476,7 +494,9 @@ export function ProviderBackedResponsesExample() {
                         ) : null}
 
                         {turn.text ? (
-                          <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>{turn.text}</p>
+                          <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>
+                            {turn.text}
+                          </p>
                         ) : (
                           <div className="demo-turn__pending">
                             <div className="demo-turn__shimmer" />
