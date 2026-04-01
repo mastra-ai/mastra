@@ -9,6 +9,7 @@ import type { Harness, HarnessEvent } from '@mastra/core/harness';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
+import { loadHeadlessConfig } from './headless-config.js';
 
 export interface HeadlessArgs {
   prompt?: string;
@@ -266,7 +267,24 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     }
   }
 
+  // --- Load config file ---
+  let config: import('./headless-config.js').HeadlessConfig = {};
+  try {
+    config = loadHeadlessConfig({
+      configPath: args.config,
+      projectDir: process.cwd(),
+    });
+  } catch (err) {
+    return failEarly((err as Error).message);
+  }
+
+  // --- Resolve model ---
+  if (args.model && args.mode) {
+    process.stderr.write('Warning: --model overrides --mode, ignoring --mode\n');
+  }
+
   if (args.model) {
+    // Highest priority: explicit --model flag
     const available = await harness.listAvailableModels();
     const match = available.find(m => m.id === args.model);
     if (!match) {
@@ -278,6 +296,36 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     }
     await harness.switchModel({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
+  } else {
+    // Resolve from --mode or config modeDefaults
+    const mode = args.mode ?? 'build';
+    const modelId = config.models?.modeDefaults?.[mode];
+    if (modelId) {
+      const available = await harness.listAvailableModels();
+      const match = available.find(m => m.id === modelId);
+      if (!match) {
+        return failEarly(`Unknown model "${modelId}" configured for mode "${mode}"`);
+      }
+      if (!match.hasApiKey) {
+        const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+        return failEarly(`Model "${modelId}" (mode: ${mode}) has no API key configured.${keyHint}`);
+      }
+      await harness.switchModel({ modelId });
+      if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${mode})\n`);
+    }
+    // If no modelId from config, fall through to harness default — no action needed
+  }
+
+  // --- Resolve thinking level ---
+  const thinkingLevel = args.thinkingLevel ?? config.preferences?.thinkingLevel;
+  if (thinkingLevel) {
+    await harness.setState({ thinkingLevel } as any);
+    if (!emit) process.stderr.write(`[thinking] ${thinkingLevel}\n`);
+  }
+
+  // --- Resolve yolo from config (flag already handled at harness init) ---
+  if (config.preferences?.yolo !== undefined) {
+    await harness.setState({ yolo: config.preferences.yolo } as any);
   }
 
   // --- Subscribe and send (after all pre-flight checks pass) ---
