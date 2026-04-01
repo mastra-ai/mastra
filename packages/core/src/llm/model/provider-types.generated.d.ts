@@ -1822,6 +1822,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
+    'z-ai/glm-5-turbo',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
