@@ -2713,10 +2713,20 @@ export class Agent<
           if (part?.type === 'tool-call' && part.toolCallId) {
             if (excludeToolCallId && part.toolCallId === excludeToolCallId) continue;
             const rawArgs = part.args || part.input || {};
+            let parsedArgs: Record<string, unknown>;
+            if (typeof rawArgs === 'string') {
+              try {
+                parsedArgs = JSON.parse(rawArgs);
+              } catch {
+                parsedArgs = {};
+              }
+            } else {
+              parsedArgs = rawArgs as Record<string, unknown>;
+            }
             toolCalls.set(part.toolCallId, {
               id: part.toolCallId,
               name: part.toolName || '',
-              args: (typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs) as Record<string, unknown>,
+              args: parsedArgs,
             });
           }
         }
