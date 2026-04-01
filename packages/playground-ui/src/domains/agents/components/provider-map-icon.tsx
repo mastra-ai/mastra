@@ -6,6 +6,7 @@ import { AzureIcon } from '@/ds/icons/AzureIcon';
 import { CohereIcon } from '@/ds/icons/CohereIcon';
 import { GroqIcon } from '@/ds/icons/GroqIcon';
 import { MistralIcon } from '@/ds/icons/MistralIcon';
+import { MastraIcon } from '@/ds/icons/MastraIcon';
 import { NetlifyIcon } from '@/ds/icons/NetlifyIcon';
 import { OpenaiChatIcon } from '@/ds/icons/OpenaiChatIcon';
 import { XGroqIcon } from '@/ds/icons/XGroqIcon';
@@ -23,4 +24,5 @@ export const providerMapToIcon = {
   X_GROK: <XGroqIcon />,
   MISTRAL: <MistralIcon />,
   netlify: <NetlifyIcon />,
+  mastra: <MastraIcon />,
 };

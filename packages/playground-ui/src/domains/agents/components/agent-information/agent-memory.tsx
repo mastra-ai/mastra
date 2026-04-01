@@ -195,7 +195,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <h3 className="text-sm font-medium text-neutral5">Memory Gateway</h3>
             </div>
             <p className="text-xs text-neutral3">
-              Memory is managed by the Mastra Gateway. Threads and observations are stored remotely.
+              Memory is managed by the Memory Gateway. Threads and observations are stored remotely.
             </p>
           </div>
         </div>

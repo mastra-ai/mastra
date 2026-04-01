@@ -14,7 +14,7 @@ export interface MastraGatewayConfig {
 
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
-  readonly name = 'Mastra Gateway';
+  readonly name = 'Memory Gateway';
 
   constructor(private config?: MastraGatewayConfig) {
     super();
@@ -41,7 +41,7 @@ export class MastraGateway extends MastraModelGateway {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
-        name: 'Mastra Gateway',
+        name: 'Memory Gateway',
         gateway: 'mastra',
         models: [...models],
         docUrl: 'https://mastra.ai/docs/gateway',
