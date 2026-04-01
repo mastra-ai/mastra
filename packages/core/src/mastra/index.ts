@@ -17,7 +17,14 @@ import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../observability';
+import type {
+  DefinitionSource,
+  ObservabilityEntrypoint,
+  ObservabilityExporter,
+  ObservabilityInstance,
+  LoggerContext,
+  MetricsContext,
+} from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
@@ -495,6 +502,36 @@ export class Mastra<
   }
 
   /**
+   * Registers an exporter on the default observability instance.
+   *
+   * If the current observability is a no-op (user didn't configure any), it is
+   * first replaced with the provided entrypoint and the instance is registered
+   * as default. If a real observability entrypoint already exists, the exporter
+   * is added directly to the existing default instance.
+   *
+   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
+   * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
+   */
+  public registerExporter(
+    exporter: ObservabilityExporter,
+    instance: ObservabilityInstance,
+    entrypoint: ObservabilityEntrypoint,
+  ): void {
+    if (this.#observability instanceof NoOpObservability) {
+      this.#observability = entrypoint;
+      this.#observability.setLogger({ logger: this.#logger });
+      this.#observability.setMastraContext({ mastra: this });
+      this.#observability.registerInstance('default', instance, true);
+    }
+
+    const defaultInstance = this.#observability.getDefaultInstance();
+    if (defaultInstance?.registerExporter) {
+      defaultInstance.registerExporter(exporter);
+    }
+  }
+
+  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
@@ -929,7 +966,7 @@ export class Mastra<
   public addAgent<A extends Agent | ToolLoopAgentLike>(
     agent: A,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
@@ -1614,7 +1651,7 @@ export class Mastra<
   public addScorer<S extends MastraScorer<any, any, any, any>>(
     scorer: S,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);

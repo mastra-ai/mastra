@@ -1,5 +1,78 @@
 # @mastra/playground-ui
 
+## 21.0.0-alpha.0
+
+### Patch Changes
+
+- Fixed broken colors in DataDetailsPanelCodeSection when using Light theme by adding theme-aware CodeMirror styling and container classes ([#14923](https://github.com/mastra-ai/mastra/pull/14923))
+
+- Reverted HorizontalBars layout to original inline style with label overlaid inside the bar and total displayed to the right ([#14919](https://github.com/mastra-ai/mastra/pull/14919))
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`edf8f9d`](https://github.com/mastra-ai/mastra/commit/edf8f9d9cd671ffbc8533ac154da6c3386799b33)]:
+  - @mastra/core@1.21.0-alpha.0
+  - @mastra/client-js@1.12.0-alpha.0
+  - @mastra/react@0.2.21-alpha.0
+
+## 20.0.2
+
+### Patch Changes
+
+- **New components for the Logs MVP** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - `DataDetailsPanel` — composable detail panel with header, key-value list, code sections, and loading/empty states.
+  - `DataList` — generic data list with row links, top cells, skeleton loading, and pagination.
+  - `LogsDataList` — log-specific data list cells (level, date, time, entity, message).
+  - `SelectDataFilter` — dropdown filter with searchable categories, single/multi selection, and active count badge.
+
+  **`ListSearch`** now accepts a `size` prop to control input height:
+
+  ```tsx
+  <ListSearch size="sm" onSearch={handleSearch} label="Filter" placeholder="Search..." />
+  ```
+
+- **Logs UI improvements** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - Added `SelectDataFilter` dropdown component to the design system for reusable multi-category filtering with search, single/multi selection modes, and active filter count badge.
+  - Updated `LogsToolbar` with `SelectDataFilter` integration and a Reset button that appears when filters are active.
+  - Replaced custom `DetailRow` in log `SpanDetails` with `DataDetailsPanel.KeyValueList` for consistent key-value rendering.
+  - Improved `LogDetails` span button to disable when traceId is missing.
+  - Enabled line numbers and code folding in `DataDetailsPanelCodeSection` to match `SideDialogCodeSection` behavior.
+  - Fixed `bgColor` values in span type mapping to use valid CSS color strings.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0
+  - @mastra/client-js@1.11.2
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.20
+
+## 20.0.2-alpha.0
+
+### Patch Changes
+
+- **New components for the Logs MVP** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - `DataDetailsPanel` — composable detail panel with header, key-value list, code sections, and loading/empty states.
+  - `DataList` — generic data list with row links, top cells, skeleton loading, and pagination.
+  - `LogsDataList` — log-specific data list cells (level, date, time, entity, message).
+  - `SelectDataFilter` — dropdown filter with searchable categories, single/multi selection, and active count badge.
+
+  **`ListSearch`** now accepts a `size` prop to control input height:
+
+  ```tsx
+  <ListSearch size="sm" onSearch={handleSearch} label="Filter" placeholder="Search..." />
+  ```
+
+- **Logs UI improvements** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - Added `SelectDataFilter` dropdown component to the design system for reusable multi-category filtering with search, single/multi selection modes, and active filter count badge.
+  - Updated `LogsToolbar` with `SelectDataFilter` integration and a Reset button that appears when filters are active.
+  - Replaced custom `DetailRow` in log `SpanDetails` with `DataDetailsPanel.KeyValueList` for consistent key-value rendering.
+  - Improved `LogDetails` span button to disable when traceId is missing.
+  - Enabled line numbers and code folding in `DataDetailsPanelCodeSection` to match `SideDialogCodeSection` behavior.
+  - Fixed `bgColor` values in span type mapping to use valid CSS color strings.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+  - @mastra/client-js@1.11.2-alpha.0
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.20-alpha.0
+
 ## 20.0.1
 
 ### Patch Changes

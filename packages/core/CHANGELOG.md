@@ -1,5 +1,97 @@
 # @mastra/core
 
+## 1.21.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a))
+
+## 1.20.0
+
+### Minor Changes
+
+- Added DualLogger that transparently forwards all infrastructure logger calls (debug, info, warn, error, trackException) to the observability system (loggerVNext). This means all internal Mastra logs now automatically appear in your observability storage (e.g. DuckDB) without any code changes. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  **trackException** now extracts structured error data (errorId, domain, category, details, cause) and forwards it as an error-level log to observability storage, so exceptions are queryable alongside regular logs.
+
+  Added `logging` config option to ObservabilityInstance for controlling which logs reach observability storage:
+
+  ```ts
+  new Observability({
+    instance: new MastraObservability({
+      logging: {
+        enabled: true, // set to false to disable log forwarding
+        level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+      },
+    }),
+  });
+  ```
+
+- Add `registerExporter` method to the observability stack and Mastra class for runtime exporter registration ([#14730](https://github.com/mastra-ai/mastra/pull/14730))
+
+### Patch Changes
+
+- Fixed Anthropic API rejection of empty user text content blocks. ([#14906](https://github.com/mastra-ai/mastra/pull/14906))
+
+  User messages containing only empty text parts (e.g., `{ type: 'text', text: '' }`) are now filtered out before being sent to the LLM. This prevents the "text content blocks must be non-empty" error that could occur when corrupted messages existed in the database.
+
+  Note: The root cause of how these empty user messages get persisted is still under investigation.
+
+- Improved the `pattern` field description in the `list_files` workspace tool to prevent AI models from passing `"*"` when they intend to match all files. The description now clarifies that omitting `pattern` lists all files, that `*` only matches within a single directory level (standard glob), and that glob patterns only filter files while directories are always shown. ([#14897](https://github.com/mastra-ai/mastra/pull/14897))
+
+- Added a `lastMessageOnly` option to the LLM-backed moderation, language detection, prompt injection, PII, and system prompt scrubber processors so they can inspect only the newest message instead of re-checking the full conversation on every run. ([#14903](https://github.com/mastra-ai/mastra/pull/14903))
+
+- Fixed providerMetadata (e.g. Gemini's thoughtSignature) being stripped from tool-call events when using the non-streaming (generate) code path ([#14900](https://github.com/mastra-ai/mastra/pull/14900))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Fixed duplicate OpenAI item ID errors when using web search. When OpenAI streams responses with web search citations, it interleaves source chunks with text, causing multiple message parts to share the same item ID. This resulted in 'Duplicate item found' errors on subsequent requests. The fix prevents text flushing on source chunks and merges any existing duplicate parts. ([#14908](https://github.com/mastra-ai/mastra/pull/14908))
+
+## 1.20.0-alpha.0
+
+### Minor Changes
+
+- Added DualLogger that transparently forwards all infrastructure logger calls (debug, info, warn, error, trackException) to the observability system (loggerVNext). This means all internal Mastra logs now automatically appear in your observability storage (e.g. DuckDB) without any code changes. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  **trackException** now extracts structured error data (errorId, domain, category, details, cause) and forwards it as an error-level log to observability storage, so exceptions are queryable alongside regular logs.
+
+  Added `logging` config option to ObservabilityInstance for controlling which logs reach observability storage:
+
+  ```ts
+  new Observability({
+    instance: new MastraObservability({
+      logging: {
+        enabled: true, // set to false to disable log forwarding
+        level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+      },
+    }),
+  });
+  ```
+
+- Add `registerExporter` method to the observability stack and Mastra class for runtime exporter registration ([#14730](https://github.com/mastra-ai/mastra/pull/14730))
+
+### Patch Changes
+
+- Fixed Anthropic API rejection of empty user text content blocks. ([#14906](https://github.com/mastra-ai/mastra/pull/14906))
+
+  User messages containing only empty text parts (e.g., `{ type: 'text', text: '' }`) are now filtered out before being sent to the LLM. This prevents the "text content blocks must be non-empty" error that could occur when corrupted messages existed in the database.
+
+  Note: The root cause of how these empty user messages get persisted is still under investigation.
+
+- Improved the `pattern` field description in the `list_files` workspace tool to prevent AI models from passing `"*"` when they intend to match all files. The description now clarifies that omitting `pattern` lists all files, that `*` only matches within a single directory level (standard glob), and that glob patterns only filter files while directories are always shown. ([#14897](https://github.com/mastra-ai/mastra/pull/14897))
+
+- Added a `lastMessageOnly` option to the LLM-backed moderation, language detection, prompt injection, PII, and system prompt scrubber processors so they can inspect only the newest message instead of re-checking the full conversation on every run. ([#14903](https://github.com/mastra-ai/mastra/pull/14903))
+
+- Fixed providerMetadata (e.g. Gemini's thoughtSignature) being stripped from tool-call events when using the non-streaming (generate) code path ([#14900](https://github.com/mastra-ai/mastra/pull/14900))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Fixed duplicate OpenAI item ID errors when using web search. When OpenAI streams responses with web search citations, it interleaves source chunks with text, causing multiple message parts to share the same item ID. This resulted in 'Duplicate item found' errors on subsequent requests. The fix prevents text flushing on source chunks and merges any existing duplicate parts. ([#14908](https://github.com/mastra-ai/mastra/pull/14908))
+
 ## 1.19.0
 
 ### Minor Changes

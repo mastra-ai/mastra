@@ -2197,7 +2197,8 @@
         "z-ai/glm-4.6:exacto",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash",
-        "z-ai/glm-5"
+        "z-ai/glm-5",
+        "z-ai/glm-5-turbo"
       ],
       "docUrl": "https://openrouter.ai/models",
       "gateway": "models.dev",
@@ -6229,7 +6230,8 @@
       "z-ai/glm-4.6:exacto",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash",
-      "z-ai/glm-5"
+      "z-ai/glm-5",
+      "z-ai/glm-5-turbo"
     ],
     "zenmux": [
       "anthropic/claude-3.5-haiku",

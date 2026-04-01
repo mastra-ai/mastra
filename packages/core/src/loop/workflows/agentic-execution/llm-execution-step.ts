@@ -118,6 +118,10 @@ async function processOutputStream<OUTPUT = undefined>({
       // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
       // simple solution for now is to not flush text deltas on response-metadata
       chunk.type !== 'response-metadata' &&
+      // Don't flush on source chunks - OpenAI web search interleaves source citations
+      // with text-deltas, all sharing the same itemId. Flushing creates multiple parts
+      // with duplicate itemIds, causing "Duplicate item found" errors on the next request.
+      chunk.type !== 'source' &&
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
