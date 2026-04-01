@@ -10,7 +10,6 @@ import type { Mastra } from '../mastra';
 import {
   createObservabilityContext,
   EntityType,
-  executeWithContext,
   getOrCreateSpan,
   resolveObservabilityContext,
   SpanType,
@@ -24,6 +23,7 @@ import type {
   ScorerTargetScope,
   Span,
 } from '../observability';
+import { executeWithContext } from '../observability/context-storage';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
