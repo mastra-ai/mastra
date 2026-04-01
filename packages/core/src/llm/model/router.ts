@@ -98,6 +98,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
   readonly modelId: string;
   readonly provider: string;
+  readonly gatewayId: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
@@ -146,6 +147,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
     // Resolve gateway once using the normalized ID
     this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
+    this.gatewayId = this.gateway.id;
     // Extract provider from id if present
     // Gateway ID is used as prefix (except for models.dev which is a provider registry)
     const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
