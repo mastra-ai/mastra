@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterAll, vi } from 'vitest';
 
-import { loadHeadlessConfig, resolveProfile  } from './headless-config.js';
-import type {HeadlessConfig} from './headless-config.js';
+import { loadHeadlessConfig, resolveProfile } from './headless-config.js';
+import type { HeadlessConfig } from './headless-config.js';
 
 const tempDirs: string[] = [];
 function makeTempDir(): string {
@@ -292,25 +292,36 @@ describe('loadHeadlessConfig', () => {
     expect(config.models?.subagentModels?.execute).toBe('openai/gpt-4o');
   });
 
-  it('ignores non-string subagentModels entries', () => {
-    const dir = makeTempDir();
-    mkdirSync(join(dir, '.mastracode'));
-    writeFileSync(
-      join(dir, '.mastracode', 'headless.json'),
-      JSON.stringify({
-        models: {
-          subagentModels: {
-            explore: 'anthropic/claude-haiku-4-5',
-            execute: 123,
-            plan: null,
+  it('warns and ignores non-string subagentModels entries', () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      const dir = makeTempDir();
+      mkdirSync(join(dir, '.mastracode'));
+      writeFileSync(
+        join(dir, '.mastracode', 'headless.json'),
+        JSON.stringify({
+          models: {
+            subagentModels: {
+              explore: 'anthropic/claude-haiku-4-5',
+              execute: 123,
+              plan: null,
+            },
           },
-        },
-      }),
-    );
-    const config = loadHeadlessConfig({ projectDir: dir });
-    expect(config.models?.subagentModels?.explore).toBe('anthropic/claude-haiku-4-5');
-    expect(config.models?.subagentModels?.execute).toBeUndefined();
-    expect(config.models?.subagentModels?.plan).toBeUndefined();
+        }),
+      );
+      const config = loadHeadlessConfig({ projectDir: dir });
+      expect(config.models?.subagentModels?.explore).toBe('anthropic/claude-haiku-4-5');
+      expect(config.models?.subagentModels?.execute).toBeUndefined();
+      expect(config.models?.subagentModels?.plan).toBeUndefined();
+      expect(stderrSpy).toHaveBeenCalledWith(
+        'Warning: subagentModels["execute"] is not a string in headless.json, ignoring\n',
+      );
+      expect(stderrSpy).toHaveBeenCalledWith(
+        'Warning: subagentModels["plan"] is not a string in headless.json, ignoring\n',
+      );
+    } finally {
+      stderrSpy.mockRestore();
+    }
   });
 
   it('parses config with OM thresholds (number and null)', () => {

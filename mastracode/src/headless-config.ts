@@ -156,6 +156,8 @@ function validateProfileBody(obj: Record<string, unknown>): HeadlessProfileConfi
       for (const [key, value] of Object.entries(raw)) {
         if (typeof value === 'string') {
           subagentModels[key] = value;
+        } else {
+          process.stderr.write(`Warning: subagentModels["${key}"] is not a string in headless.json, ignoring\n`);
         }
       }
       if (Object.keys(subagentModels).length > 0) {
