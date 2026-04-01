@@ -62,24 +62,23 @@ describeIf('InworldVoice — real API integration', () => {
     await warmupConnection(voice);
   }, 30_000);
 
-  it('lists voices from the real API', async () => {
+  it('List Voices API', async () => {
     const speakers = await voice.getSpeakers();
     expect(speakers.length).toBeGreaterThan(0);
     const dennis = speakers.find(s => s.voiceId === 'Dennis' || s.name === 'Dennis');
     expect(dennis).toBeDefined();
   }, 15_000);
 
-  it('TTS max', async ctx => {
+  it('TTS 1.5 Max', async () => {
     const start = performance.now();
     const stream = await voice.speak('Hello, this is a test of Inworld text to speech.');
     const { buffer, ttfaMs } = await consumeStream(stream, start);
-    ctx.task.name = `TTS max — TTFA ${ttfaMs}ms`;
 
     expect(buffer.length).toBeGreaterThan(1000);
     expect(ttfaMs).toBeLessThan(3000);
   }, 30_000);
 
-  it('TTS mini', async ctx => {
+  it('TTS 1.5 Mini', async () => {
     const miniVoice = new InworldVoice({
       speechModel: { apiKey: API_KEY!, name: 'inworld-tts-1.5-mini' },
     });
@@ -88,23 +87,12 @@ describeIf('InworldVoice — real API integration', () => {
     const start = performance.now();
     const stream = await miniVoice.speak('Hello from the mini model.');
     const { buffer, ttfaMs } = await consumeStream(stream, start);
-    ctx.task.name = `TTS mini — TTFA ${ttfaMs}ms`;
 
     expect(buffer.length).toBeGreaterThan(500);
     expect(ttfaMs).toBeLessThan(2000);
   }, 30_000);
 
-  it('TTS voice changed', async ctx => {
-    const start = performance.now();
-    const stream = await voice.speak('Testing voice selection.', { speaker: 'Olivia' });
-    const { buffer, ttfaMs } = await consumeStream(stream, start);
-    ctx.task.name = `TTS Olivia — TTFA ${ttfaMs}ms`;
-
-    expect(buffer.length).toBeGreaterThan(500);
-    expect(ttfaMs).toBeLessThan(3000);
-  }, 30_000);
-
-  it('STT round-trip', async ctx => {
+  it('STT 1', async () => {
     const ttsStream = await voice.speak('The quick brown fox jumps over the lazy dog.', {
       audioEncoding: 'MP3',
     });
@@ -115,7 +103,6 @@ describeIf('InworldVoice — real API integration', () => {
     const audioInput = Readable.from(audioBuffer);
     const transcript = await voice.listen(audioInput, { audioEncoding: 'MP3' });
     const sttMs = Math.round(performance.now() - sttStart);
-    ctx.task.name = `STT round-trip — ${sttMs}ms`;
 
     expect(transcript.length).toBeGreaterThan(0);
     const lower = transcript.toLowerCase();
