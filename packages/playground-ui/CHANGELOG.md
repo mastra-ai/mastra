@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 21.0.0-alpha.0
+
+### Patch Changes
+
+- Fixed broken colors in DataDetailsPanelCodeSection when using Light theme by adding theme-aware CodeMirror styling and container classes ([#14923](https://github.com/mastra-ai/mastra/pull/14923))
+
+- Reverted HorizontalBars layout to original inline style with label overlaid inside the bar and total displayed to the right ([#14919](https://github.com/mastra-ai/mastra/pull/14919))
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`edf8f9d`](https://github.com/mastra-ai/mastra/commit/edf8f9d9cd671ffbc8533ac154da6c3386799b33)]:
+  - @mastra/core@1.21.0-alpha.0
+  - @mastra/client-js@1.12.0-alpha.0
+  - @mastra/react@0.2.21-alpha.0
+
 ## 20.0.2
 
 ### Patch Changes

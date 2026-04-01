@@ -123,6 +123,10 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260401-064804",
+    "green-birds-knock",
+    "polite-zebras-tan",
+    "silver-rivers-clean",
+    "wild-rules-train"
   ]
 }
