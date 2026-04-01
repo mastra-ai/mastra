@@ -1,12 +1,7 @@
 import type { CardElement } from 'chat';
 import { Actions, Button, Card, CardText } from 'chat';
 
-import type {
-  ProcessInputArgs,
-  ProcessInputResult,
-  ProcessInputStepArgs,
-  ProcessInputStepResult,
-} from '../processors/index';
+import type { ProcessInputArgs, ProcessInputResult } from '../processors/index';
 import type { ChannelContext } from './types';
 
 // ---------------------------------------------------------------------------
@@ -238,56 +233,7 @@ export class ChatChannelProcessor {
     return { messages: args.messages, systemMessages };
   }
 
-  processInputStep(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {
-    // Only inject per-request context at the first step
-    if (args.stepNumber !== 0) return;
-
-    const ctx = args.requestContext?.get('channel') as ChannelContext | undefined;
-    if (!ctx) return;
-
-    const parts: string[] = [];
-
-    if (ctx.messageId) {
-      parts.push(`Message ID: ${ctx.messageId}`);
-    }
-
-    if (ctx.eventType) {
-      parts.push(`Event: ${ctx.eventType}`);
-    }
-
-    if (parts.length === 0) return;
-
-    const reminder = `<system-reminder>${parts.join(' | ')}</system-reminder>\n\n`;
-
-    // Prepend reminder to the last user message's text parts
-    const messages = [...args.messages];
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]!;
-      if (msg.role === 'user') {
-        const content = msg.content;
-        // MastraMessageContentV2: { format: 2, parts: [...] }
-        const existingParts = content.parts ?? [];
-        const firstTextIdx = existingParts.findIndex((p: { type: string }) => p.type === 'text');
-
-        if (firstTextIdx >= 0) {
-          const textPart = existingParts[firstTextIdx] as { type: 'text'; text: string };
-          const newParts = [...existingParts];
-          newParts[firstTextIdx] = { ...textPart, text: reminder + textPart.text };
-          messages[i] = { ...msg, content: { ...content, parts: newParts } };
-        } else {
-          messages[i] = {
-            ...msg,
-            content: {
-              ...content,
-              parts: [{ type: 'text' as const, text: reminder }, ...existingParts],
-            },
-          };
-        }
-        break;
-      }
-    }
-
-    return { messages };
-  }
+  // Note: Per-message metadata (event type, message ID) is injected directly
+  // into the user message text in AgentChannels.processChatMessage, so we
+  // don't need processInputStep here.
 }

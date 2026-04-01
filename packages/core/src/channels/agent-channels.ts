@@ -663,9 +663,9 @@ export class AgentChannels {
       threadHistory,
     } satisfies ChannelContext);
 
-    // Prefix the message with the author so the agent can distinguish
-    // who said what in multi-user threads and mention them if needed.
-    // Uses the platform's native mention format (e.g. <@U123|Name> for Slack).
+    // Build the message text with author prefix and metadata reminder.
+    // The author prefix helps the agent distinguish speakers in multi-user threads.
+    // The metadata reminder provides context about the event type.
     const authorName = message.author.fullName || message.author.userName;
     const authorId = message.author.userId;
     let authorPrefix = '';
@@ -678,7 +678,15 @@ export class AgentChannels {
     if (message.author.isBot && authorPrefix) {
       authorPrefix += ' (bot)';
     }
-    const rawText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
+
+    // Build metadata reminder (event type, message ID for reference)
+    const eventType = sdkThread.isDM ? 'message' : 'mention';
+    const metadataParts = [`Event: ${eventType}`];
+    if (message.id) metadataParts.push(`Message ID: ${message.id}`);
+    const metadataReminder = `<system-reminder>${metadataParts.join(' | ')}</system-reminder>\n\n`;
+
+    const messageBody = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
+    const rawText = metadataReminder + messageBody;
 
     // Build multimodal content if the message has image/file attachments,
     // otherwise pass a plain string. Use fetchData() when available (e.g. Slack
