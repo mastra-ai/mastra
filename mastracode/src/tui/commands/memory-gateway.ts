@@ -51,36 +51,39 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     return;
   }
 
-  // Show current state
-  const currentKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  // Resolve effective state from storage + env
+  const currentKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   const settings = loadSettings();
-  const currentUrl = settings.memoryGateway?.baseUrl ?? MEMORY_GATEWAY_DEFAULT_URL;
+  const effectiveUrl =
+    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? MEMORY_GATEWAY_DEFAULT_URL;
 
   if (currentKey) {
     const masked = currentKey.length > 6 ? `****${currentKey.slice(-4)}` : '****';
-    ctx.showInfo(`Current API key: ${masked} | URL: ${currentUrl}`);
+    ctx.showInfo(`Current API key: ${masked} | URL: ${effectiveUrl}`);
   } else {
-    ctx.showInfo(`No API key set | URL: ${currentUrl}`);
+    ctx.showInfo(`No API key set | URL: ${effectiveUrl}`);
   }
 
   // Ask for API key
-  const keyAnswer = await askText(ctx, `API key (or 'clear' to remove, ESC to cancel):`);
-  if (keyAnswer === null) return; // ESC
-
-  if (keyAnswer.toLowerCase() === 'clear') {
+  const keyAnswer = await askText(ctx, currentKey
+    ? `API key (ENTER to keep current, 'clear' to remove, ESC to cancel):`
+    : `API key (or 'clear' to remove, ESC to cancel):`);
+  if (keyAnswer === null) {
+    // ESC with no key — abort; ESC with existing key — proceed to URL prompt
+    if (!currentKey) return;
+  } else if (keyAnswer.toLowerCase() === 'clear') {
     authStorage.remove(`apikey:${MEMORY_GATEWAY_PROVIDER}`);
     delete process.env['MASTRA_GATEWAY_API_KEY'];
     settings.memoryGateway = {};
     saveSettings(settings);
     ctx.showInfo('Memory gateway cleared. Note: memory mode changes take effect on next restart.');
     return;
+  } else if (keyAnswer.length > 0) {
+    authStorage.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
   }
 
-  // Store the key
-  authStorage.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
-
-  // Ask for URL
-  const urlAnswer = await askText(ctx, `Gateway URL (ESC for default):`, currentUrl);
+  // Always prompt for URL so users can change it independently
+  const urlAnswer = await askText(ctx, `Gateway URL (ESC for default):`, effectiveUrl);
   if (urlAnswer && urlAnswer !== MEMORY_GATEWAY_DEFAULT_URL) {
     settings.memoryGateway = { baseUrl: urlAnswer };
   } else {

@@ -157,8 +157,10 @@ export function resolveModel(
   // --- Memory Gateway path ---
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   if (mgApiKey) {
-    const baseUrl = settings.memoryGateway?.baseUrl;
-    const gatewayBaseURL = `${baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai'}/v1`;
+    // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
+    const rawBase = settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
+    const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+
     const anthropicCred = authStorage.get('anthropic');
     const openaiCred = authStorage.get('openai-codex');
 
@@ -209,7 +211,7 @@ export function resolveModel(
     // All other models: route through MastraGateway + ModelRouterLanguageModel
     const gateway = new MastraGateway({
       apiKey: mgApiKey,
-      ...(baseUrl ? { baseUrl } : {}),
+      baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
     });
 
     return new ModelRouterLanguageModel(
