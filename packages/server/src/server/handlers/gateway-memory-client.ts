@@ -58,6 +58,10 @@ export class GatewayMemoryClient {
     this.apiKey = apiKey;
   }
 
+  private threadPath(threadId: string): string {
+    return `/threads/${encodeURIComponent(threadId)}`;
+  }
+
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
@@ -101,7 +105,7 @@ export class GatewayMemoryClient {
 
   async getThread(threadId: string): Promise<{ thread: GatewayThread } | null> {
     try {
-      return await this.request(`/threads/${threadId}`);
+      return await this.request(this.threadPath(threadId));
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes('404')) return null;
       throw e;
@@ -125,7 +129,7 @@ export class GatewayMemoryClient {
     params: { title?: string; metadata?: Record<string, unknown> },
   ): Promise<{ thread: GatewayThread } | null> {
     try {
-      return await this.request(`/threads/${threadId}`, {
+      return await this.request(this.threadPath(threadId), {
         method: 'PATCH',
         body: JSON.stringify(params),
       });
@@ -137,7 +141,7 @@ export class GatewayMemoryClient {
 
   async deleteThread(threadId: string): Promise<{ ok: boolean }> {
     try {
-      return await this.request(`/threads/${threadId}`, { method: 'DELETE' });
+      return await this.request(this.threadPath(threadId), { method: 'DELETE' });
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes('404')) return { ok: false };
       throw e;
@@ -156,7 +160,7 @@ export class GatewayMemoryClient {
     if (params.order) query.set('order', params.order);
     const qs = query.toString();
     try {
-      return await this.request(`/threads/${threadId}/messages${qs ? '?' + qs : ''}`);
+      return await this.request(`${this.threadPath(threadId)}/messages${qs ? '?' + qs : ''}`);
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes('404')) return null;
       throw e;
@@ -169,7 +173,7 @@ export class GatewayMemoryClient {
     const query = new URLSearchParams();
     if (resourceId) query.set('resourceId', resourceId);
     const qs = query.toString();
-    return this.request(`/threads/${threadId}/observations${qs ? '?' + qs : ''}`);
+    return this.request(`${this.threadPath(threadId)}/observations${qs ? '?' + qs : ''}`);
   }
 
   async getObservationRecord(threadId: string, resourceId?: string): Promise<{ record: GatewayOMRecord | null }> {
@@ -177,7 +181,7 @@ export class GatewayMemoryClient {
     if (resourceId) query.set('resourceId', resourceId);
     const qs = query.toString();
     try {
-      return await this.request(`/threads/${threadId}/observations/record${qs ? '?' + qs : ''}`);
+      return await this.request(`${this.threadPath(threadId)}/observations/record${qs ? '?' + qs : ''}`);
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes('404')) return { record: null };
       throw e;
@@ -193,7 +197,7 @@ export class GatewayMemoryClient {
     if (params.limit != null) query.set('limit', String(params.limit));
     const qs = query.toString();
     try {
-      return await this.request(`/threads/${threadId}/observations/history${qs ? '?' + qs : ''}`);
+      return await this.request(`${this.threadPath(threadId)}/observations/history${qs ? '?' + qs : ''}`);
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes('404')) return { records: [] };
       throw e;
