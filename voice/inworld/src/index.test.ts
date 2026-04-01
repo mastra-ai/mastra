@@ -224,6 +224,54 @@ describe('InworldVoice', () => {
       expect(buffer.toString()).toBe('chunk-achunk-b');
     });
 
+    it('destroys stream on malformed NDJSON frame', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const encoder = new TextEncoder();
+
+      // Stream with a valid frame followed by a malformed one
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const valid = JSON.stringify({ result: { audioContent: Buffer.from('good').toString('base64') } });
+          controller.enqueue(encoder.encode(valid + '\n'));
+          controller.enqueue(encoder.encode('{not-valid-json}\n'));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body, { status: 200 }));
+
+      const stream = await voice.speak('Hello');
+
+      await expect(async () => {
+        for await (const _ of stream) {
+          // consume
+        }
+      }).rejects.toThrow();
+    });
+
+    it('destroys stream on malformed trailing NDJSON frame', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const encoder = new TextEncoder();
+
+      // Stream where the last chunk has no trailing newline and is malformed
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('{bad-trailing'));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body, { status: 200 }));
+
+      const stream = await voice.speak('Hello');
+
+      await expect(async () => {
+        for await (const _ of stream) {
+          // consume
+        }
+      }).rejects.toThrow();
+    });
+
     it('throws on empty input text', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
       await expect(voice.speak('   ')).rejects.toThrow('Input text is empty');

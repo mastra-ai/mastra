@@ -215,22 +215,40 @@ export class InworldVoice extends MastraVoice {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // Write with backpressure: await drain when the consumer is slow.
+    const writeChunk = async (data: Buffer) => {
+      if (outputStream.destroyed) return;
+      if (!outputStream.write(data)) {
+        await new Promise<void>((resolve, reject) => {
+          outputStream.once('drain', resolve);
+          outputStream.once('close', resolve);
+          outputStream.once('error', reject);
+        });
+      }
+    };
+
+    // Cancel the upstream reader when the consumer closes early.
+    outputStream.once('close', () => {
+      void reader.cancel().catch(() => {});
+    });
+
     void (async () => {
       try {
         while (true) {
+          if (outputStream.destroyed) {
+            void reader.cancel().catch(() => {});
+            break;
+          }
+
           const { done, value } = await reader.read();
           if (done) {
             // Process any remaining data in the buffer before ending
             const remaining = buffer.trim();
             if (remaining) {
-              try {
-                const chunk = JSON.parse(remaining);
-                const audioContent = chunk.result?.audioContent ?? chunk.audioContent;
-                if (audioContent) {
-                  outputStream.write(Buffer.from(audioContent, 'base64'));
-                }
-              } catch {
-                // skip malformed trailing data
+              const chunk = JSON.parse(remaining);
+              const audioContent = chunk.result?.audioContent ?? chunk.audioContent;
+              if (audioContent) {
+                await writeChunk(Buffer.from(audioContent, 'base64'));
               }
             }
             outputStream.end();
@@ -244,14 +262,16 @@ export class InworldVoice extends MastraVoice {
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
-            try {
-              const chunk = JSON.parse(trimmed);
-              const audioContent = chunk.result?.audioContent ?? chunk.audioContent;
-              if (audioContent) {
-                outputStream.write(Buffer.from(audioContent, 'base64'));
-              }
-            } catch {
-              // skip malformed NDJSON lines
+
+            if (outputStream.destroyed) {
+              void reader.cancel().catch(() => {});
+              return;
+            }
+
+            const chunk = JSON.parse(trimmed);
+            const audioContent = chunk.result?.audioContent ?? chunk.audioContent;
+            if (audioContent) {
+              await writeChunk(Buffer.from(audioContent, 'base64'));
             }
           }
         }
@@ -259,6 +279,7 @@ export class InworldVoice extends MastraVoice {
         if (!outputStream.destroyed) {
           outputStream.destroy(err instanceof Error ? err : new Error(String(err)));
         }
+        void reader.cancel().catch(() => {});
       }
     })().catch(() => {});
 
