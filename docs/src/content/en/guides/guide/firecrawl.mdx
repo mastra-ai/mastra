@@ -15,21 +15,21 @@ Firecrawl is a web data API that turns websites into clean markdown or structure
 - Node.js `v22.13.0` or later installed
 - A Firecrawl API key (get one at [https://firecrawl.dev](https://firecrawl.dev))
 - An API key from a supported [Model Provider](/models)
-- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart))
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Installation
 
-Install the Firecrawl SDK and Zod for schema validation:
+Install the Firecrawl SDK:
 
 ```bash npm2yarn
-npm install @mendable/firecrawl-js zod
+npm install @mendable/firecrawl-js
 ```
 
 ## Configure environment variables
 
 Create a `.env` file in your project root:
 
-```
+```bash title=".env"
 FIRECRAWL_API_KEY=fc-your-api-key
 # Optional: FIRECRAWL_API_URL=http://localhost:3002
 ```
@@ -39,8 +39,8 @@ FIRECRAWL_API_KEY=fc-your-api-key
 Create a tool file that exposes Firecrawl search and scrape to Mastra.
 
 <Steps>
-  <StepItem title="Create the tools file">
-    Create `src/mastra/tools/firecrawl.ts`:
+  <StepItem>
+    Create `src/mastra/tools/firecrawl.ts` and set up Firecrawl:
 
     ```ts title="src/mastra/tools/firecrawl.ts"
     import Firecrawl from '@mendable/firecrawl-js'
@@ -88,10 +88,10 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     ```
   </StepItem>
 
-  <StepItem title="Attach tools to an agent">
-    Create `src/mastra/agents/webAgent.ts`:
+  <StepItem>
+    Create a new agent at `src/mastra/agents/web-agent.ts`:
 
-    ```ts title="src/mastra/agents/webAgent.ts"
+    ```ts title="src/mastra/agents/web-agent.ts"
     import { Agent } from '@mastra/core/agent'
     import { firecrawlSearch, firecrawlScrape } from '../tools/firecrawl'
 
@@ -105,12 +105,12 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     ```
   </StepItem>
 
-  <StepItem title="Register the agent with Mastra">
-    In `src/mastra/index.ts`:
+  <StepItem>
+    Register the newly created agent in `src/mastra/index.ts` on your Mastra instance:
 
     ```ts title="src/mastra/index.ts" {2, 5}
     import { Mastra } from '@mastra/core'
-    import { webAgent } from './agents/webAgent'
+    import { webAgent } from './agents/web-agent'
 
     export const mastra = new Mastra({
       agents: { webAgent },
@@ -121,7 +121,7 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
 
 ## Test in Studio
 
-Run the dev server and open Studio:
+Run the dev server and open [Studio](/docs/studio/overview):
 
 ```bash
 mastra dev
@@ -136,7 +136,7 @@ In Studio, open the **Web Agent** and try:
 
 If you run Firecrawl locally, set `FIRECRAWL_API_URL` or pass `apiUrl` in the client:
 
-```ts
+```ts title="src/mastra/tools/firecrawl.ts"
 const firecrawl = new Firecrawl({
   apiKey: process.env.FIRECRAWL_API_KEY!,
   apiUrl: process.env.FIRECRAWL_API_URL,
@@ -145,6 +145,4 @@ const firecrawl = new Firecrawl({
 
 ## Related
 
-- [Tools](/docs/agents/using-tools)
-- [`createTool`](/reference/tools/create-tool)
-- Firecrawl docs: [https://docs.firecrawl.dev](https://docs.firecrawl.dev)
+- [Firecrawl documentation](https://docs.firecrawl.dev)
