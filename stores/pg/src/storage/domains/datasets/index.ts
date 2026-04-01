@@ -704,13 +704,14 @@ export class DatasetsPG extends DatasetsStorage {
 
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             id,
             datasetId,
             newVersion,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
+            jsonbArg(existing.expectedTrajectory),
             jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             jsonbArg(existing.source),
@@ -878,13 +879,14 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [
               item.id,
               input.datasetId,
               newVersion,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
+              jsonbArg(item.expectedTrajectory),
               jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               jsonbArg(item.source),
