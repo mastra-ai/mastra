@@ -62,10 +62,10 @@ export function BulkTraceReviewDialog({
         onClose();
         return prev;
       }
+      setCurrentIndex(idx => Math.min(idx, next.length - 1));
       return next;
     });
-    setCurrentIndex(prev => Math.min(prev, items.length - 2));
-  }, [currentIndex, items.length, onClose]);
+  }, [currentIndex, onClose]);
 
   const handleSubmit = async () => {
     const parsed = [];
