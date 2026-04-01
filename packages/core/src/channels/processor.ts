@@ -218,16 +218,6 @@ export class ChatChannelProcessor {
       lines.push(`The user you are talking to is "${ctx.userName}".`);
     }
 
-    // Include recent thread history when available (for mid-conversation mentions)
-    if (ctx.threadHistory && ctx.threadHistory.length > 0) {
-      lines.push('\n\nRecent messages in this thread (for context):');
-      for (const msg of ctx.threadHistory) {
-        const prefix = msg.isBot ? `${msg.author} (bot)` : msg.author;
-        lines.push(`[${prefix}]: ${msg.text}`);
-      }
-      lines.push(''); // Empty line before the current message
-    }
-
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];
 
     return { messages: args.messages, systemMessages };

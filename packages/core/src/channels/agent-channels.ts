@@ -651,7 +651,11 @@ export class AgentChannels {
     if (maxMessages > 0 && !sdkThread.isDM) {
       const alreadySubscribed = await sdkThread.isSubscribed();
       if (!alreadySubscribed) {
+        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${sdkThread.id}`);
         threadHistory = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+        this.logger?.debug?.(`Fetched ${threadHistory.length} messages from thread history`);
+      } else {
+        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${sdkThread.id}`);
       }
     }
 
@@ -689,10 +693,22 @@ export class AgentChannels {
     const eventType = sdkThread.isDM ? 'message' : 'mention';
     const metadataParts = [`Event: ${eventType}`];
     if (message.id) metadataParts.push(`Message ID: ${message.id}`);
+
+    // Include thread history inline when available (for mid-conversation mentions)
+    let historyBlock = '';
+    if (threadHistory && threadHistory.length > 0) {
+      const historyLines = ['Recent messages in this thread (for context):'];
+      for (const msg of threadHistory) {
+        const prefix = msg.isBot ? `${msg.author} (bot)` : msg.author;
+        historyLines.push(`[${prefix}]: ${msg.text}`);
+      }
+      historyBlock = historyLines.join('\n') + '\n\n';
+    }
+
     const metadataReminder = `<system-reminder>${metadataParts.join(' | ')}</system-reminder>\n\n`;
 
     const messageBody = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
-    const rawText = metadataReminder + messageBody;
+    const rawText = metadataReminder + historyBlock + messageBody;
 
     // Build multimodal content if the message has image/file attachments,
     // otherwise pass a plain string. Use fetchData() when available (e.g. Slack
