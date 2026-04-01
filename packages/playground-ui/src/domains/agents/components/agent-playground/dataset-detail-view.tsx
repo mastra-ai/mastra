@@ -52,6 +52,12 @@ function truncateValue(value: unknown, maxLength = 120): string {
   return str.slice(0, maxLength) + '…';
 }
 
+function getExpectedTrajectoryLabel(expectedTrajectory: unknown): string {
+  const traj = expectedTrajectory as Record<string, unknown> | undefined;
+  const steps = Array.isArray(traj?.steps) ? traj.steps.length : 0;
+  return steps > 0 ? `${steps} expected steps` : 'trajectory';
+}
+
 // Deterministic tag color from string
 const TAG_COLORS = ['blue', 'green', 'purple', 'orange', 'cyan', 'pink', 'red', 'yellow'] as const;
 function getTagColor(tag: string): (typeof TAG_COLORS)[number] {
@@ -419,13 +425,7 @@ export function DatasetDetailView({
                             </Txt>
                             {item.expectedTrajectory != null && (
                               <Chip size="small" color="purple">
-                                {String(
-                                  (() => {
-                                    const traj = item.expectedTrajectory as Record<string, unknown> | undefined;
-                                    const steps = Array.isArray(traj?.steps) ? traj.steps.length : 0;
-                                    return steps > 0 ? `${steps} expected steps` : 'trajectory';
-                                  })(),
-                                )}
+                                {getExpectedTrajectoryLabel(item.expectedTrajectory)}
                               </Chip>
                             )}
                           </div>
