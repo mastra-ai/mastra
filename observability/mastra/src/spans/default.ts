@@ -93,9 +93,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
             category: error.category,
             domain: error.domain,
             message: error.message,
+            name: error.name,
+            stack: error.stack,
           }
         : {
             message: error.message,
+            name: error.name,
+            stack: error.stack,
           };
 
     // Update attributes if provided

@@ -211,6 +211,8 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   public readonly errorInfo?: {
     message: string;
     id?: string;
+    name?: string;
+    stack?: string;
     domain?: string;
     category?: string;
     details?: Record<string, any>;

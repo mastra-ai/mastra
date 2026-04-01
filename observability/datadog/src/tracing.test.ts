@@ -281,7 +281,43 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('sets native Datadog error status on ddSpan for error spans', async () => {
+    it('sets native Datadog error tags on ddSpan for error spans', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          name: 'ValidationError',
+          stack: 'ValidationError: Something went wrong\n    at test.ts:1:1',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      // Verify all native Datadog error tags are set for Error Tracking UI
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.message', 'Something went wrong');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'ValidationError');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith(
+        'error.stack',
+        'ValidationError: Something went wrong\n    at test.ts:1:1',
+      );
+    });
+
+    it('uses category as error.type fallback when name is not present', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          category: 'runtime',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'runtime');
+    });
+
+    it('uses "Error" as error.type fallback when neither name nor category is present', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -291,8 +327,7 @@ describe('DatadogExporter', () => {
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
-      // Verify setTag was called with error: true
-      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'Error');
     });
 
     it('does not set native error status for non-error spans', async () => {
