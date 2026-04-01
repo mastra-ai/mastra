@@ -47,9 +47,11 @@ export class MaskedInput implements Component, Focusable {
   render(width: number): string[] {
     // Temporarily swap the value to masked characters, render, then restore.
     const real = this.input.getValue();
-    this.input.setValue('*'.repeat(real.length));
-    const lines = this.input.render(width);
-    this.input.setValue(real);
-    return lines;
+    try {
+      this.input.setValue('*'.repeat(real.length));
+      return this.input.render(width);
+    } finally {
+      this.input.setValue(real);
+    }
   }
 }
