@@ -166,7 +166,7 @@ describe('getProvidersHandler', () => {
       const registryEntry = PROVIDER_REGISTRY[provider.id as keyof typeof PROVIDER_REGISTRY];
       expect(registryEntry).toBeDefined();
       expect(provider.name).toBe(registryEntry.name);
-      expect(provider.envVar).toBe(registryEntry.apiKeyEnvVar);
+      expect(provider.envVar).toEqual(registryEntry.apiKeyEnvVar);
       // Models should match (converting readonly to regular array)
       expect(provider.models).toEqual([...registryEntry.models]);
     });
