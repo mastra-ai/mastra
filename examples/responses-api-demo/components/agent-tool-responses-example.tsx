@@ -237,7 +237,8 @@ export function AgentToolResponsesExample() {
       model: `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-mini'}`,
       agent_id: 'tool-agent',
       input: prompt,
-      instructions: 'You are a Mastra agent with tools. Use tools when the user asks about launch readiness or release status.',
+      instructions:
+        'You are a Mastra agent with tools. Use tools when the user asks about launch readiness or release status.',
       store: true,
       previous_response_id: previousResponseId ?? undefined,
     } satisfies CreateResponseParams;
@@ -369,16 +370,28 @@ export function AgentToolResponsesExample() {
 
       <div className="demo-thread">
         <span className="demo-thread__dot" aria-hidden="true" />
-        <span>Turn {String(Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1)).padStart(2, '0')}</span>
+        <span>
+          Turn{' '}
+          {String(
+            Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1),
+          ).padStart(2, '0')}
+        </span>
         <span className="demo-thread__separator" aria-hidden="true" />
-        <span>{currentAnchor ? `next turn will use ${truncateId(currentAnchor)}` : 'first stored response creates the conversation anchor'}</span>
+        <span>
+          {currentAnchor
+            ? `next turn will use ${truncateId(currentAnchor)}`
+            : 'first stored response creates the conversation anchor'}
+        </span>
       </div>
 
       <section className="demo-chat">
         <div className="demo-messages">
           {turns.length === 0 ? (
             <div className="demo-empty-state">
-              <p>This agent can call `release-status`, then the stored response stays anchored on the final assistant message.</p>
+              <p>
+                This agent can call `release-status`, then the stored response stays anchored on the final assistant
+                message.
+              </p>
               <div className="demo-chip-list">
                 {[
                   'Check release readiness for the Responses API migration.',
@@ -435,7 +448,9 @@ export function AgentToolResponsesExample() {
                                   <div className="demo-tool__section">
                                     <span className="demo-tool__label">Arguments</span>
                                     <pre className="demo-tool__value">
-                                      {typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments, null, 2)}
+                                      {typeof tool.arguments === 'string'
+                                        ? tool.arguments
+                                        : JSON.stringify(tool.arguments, null, 2)}
                                     </pre>
                                   </div>
                                 ) : null}
@@ -443,7 +458,9 @@ export function AgentToolResponsesExample() {
                                   <div className="demo-tool__section">
                                     <span className="demo-tool__label">Output</span>
                                     <pre className="demo-tool__value">
-                                      {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
+                                      {typeof tool.output === 'string'
+                                        ? tool.output
+                                        : JSON.stringify(tool.output, null, 2)}
                                     </pre>
                                   </div>
                                 ) : null}
@@ -453,7 +470,9 @@ export function AgentToolResponsesExample() {
                         ) : null}
 
                         {turn.text ? (
-                          <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>{turn.text}</p>
+                          <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>
+                            {turn.text}
+                          </p>
                         ) : (
                           <div className="demo-turn__pending">
                             <div className="demo-turn__shimmer" />
