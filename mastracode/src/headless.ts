@@ -16,6 +16,9 @@ export interface HeadlessArgs {
   format: 'default' | 'json';
   continue_: boolean;
   model?: string;
+  mode?: 'build' | 'plan' | 'fast';
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  config?: string;
 }
 
 /** Returns true if argv contains --prompt or -p, indicating headless mode. */
@@ -29,10 +32,13 @@ const headlessOptions = {
   timeout: { type: 'string' }, // parsed to number after validation
   format: { type: 'string', default: 'default' },
   model: { type: 'string', short: 'm' },
+  mode: { type: 'string' },
+  'thinking-level': { type: 'string' },
+  config: { type: 'string' },
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
-/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model). */
+/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model, --mode, --thinking-level, --config). */
 export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const { values, positionals } = parseArgs({
     args: argv.slice(2),
@@ -59,12 +65,36 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const prompt = typeof values.prompt === 'string' ? values.prompt : positionals[0];
   const model = typeof values.model === 'string' ? values.model : undefined;
 
+  let mode: HeadlessArgs['mode'];
+  if (values.mode !== undefined) {
+    const raw = String(values.mode);
+    if (raw !== 'build' && raw !== 'plan' && raw !== 'fast') {
+      throw new Error('--mode must be "build", "plan", or "fast"');
+    }
+    mode = raw;
+  }
+
+  let thinkingLevel: HeadlessArgs['thinkingLevel'];
+  if (values['thinking-level'] !== undefined) {
+    const raw = String(values['thinking-level']);
+    const valid = ['off', 'low', 'medium', 'high', 'xhigh'];
+    if (!valid.includes(raw)) {
+      throw new Error('--thinking-level must be "off", "low", "medium", "high", or "xhigh"');
+    }
+    thinkingLevel = raw as HeadlessArgs['thinkingLevel'];
+  }
+
+  const config = typeof values.config === 'string' ? values.config : undefined;
+
   return {
     prompt,
     timeout,
     format: format as 'default' | 'json',
     continue_: Boolean(values.continue),
     model,
+    mode,
+    thinkingLevel,
+    config,
   };
 }
 

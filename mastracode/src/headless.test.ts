@@ -107,12 +107,21 @@ describe('parseHeadlessArgs', () => {
       'json',
       '--model',
       'anthropic/claude-sonnet-4-20250514',
+      '--mode',
+      'plan',
+      '--thinking-level',
+      'low',
+      '--config',
+      './config.json',
     ]);
     expect(args.prompt).toBe('Run tests');
     expect(args.continue_).toBe(true);
     expect(args.timeout).toBe(600);
     expect(args.format).toBe('json');
     expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+    expect(args.mode).toBe('plan');
+    expect(args.thinkingLevel).toBe('low');
+    expect(args.config).toBe('./config.json');
   });
 
   it('returns defaults when only prompt provided', () => {
@@ -145,6 +154,68 @@ describe('parseHeadlessArgs', () => {
   it('returns undefined model when not provided', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
     expect(args.model).toBeUndefined();
+  });
+
+  it('parses --mode with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'fast']);
+    expect(args.mode).toBe('fast');
+  });
+
+  it('throws on invalid --mode value', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'turbo']))
+      .toThrow('--mode must be "build", "plan", or "fast"');
+  });
+
+  it('returns undefined mode when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.mode).toBeUndefined();
+  });
+
+  it('parses --thinking-level with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'high']);
+    expect(args.thinkingLevel).toBe('high');
+  });
+
+  it('throws on invalid --thinking-level value', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'extreme']))
+      .toThrow('--thinking-level must be');
+  });
+
+  it('returns undefined thinkingLevel when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.thinkingLevel).toBeUndefined();
+  });
+
+  it('parses --config with path', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--config', './my-config.json']);
+    expect(args.config).toBe('./my-config.json');
+  });
+
+  it('returns undefined config when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.config).toBeUndefined();
+  });
+
+  it('parses all flags together including new ones', () => {
+    const args = parseHeadlessArgs([
+      'node', 'main.js',
+      '--prompt', 'Run tests',
+      '--continue',
+      '--timeout', '600',
+      '--format', 'json',
+      '--model', 'anthropic/claude-sonnet-4-20250514',
+      '--mode', 'build',
+      '--thinking-level', 'medium',
+      '--config', './ci.json',
+    ]);
+    expect(args.prompt).toBe('Run tests');
+    expect(args.continue_).toBe(true);
+    expect(args.timeout).toBe(600);
+    expect(args.format).toBe('json');
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+    expect(args.mode).toBe('build');
+    expect(args.thinkingLevel).toBe('medium');
+    expect(args.config).toBe('./ci.json');
   });
 });
 
