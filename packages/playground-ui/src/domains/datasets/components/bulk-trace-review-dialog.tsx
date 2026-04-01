@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -38,12 +38,12 @@ export function BulkTraceReviewDialog({
   const { batchInsertItems } = useDatasetMutations();
 
   // Reset state when dialog opens with new items
-  const [prevOpen, setPrevOpen] = useState(false);
-  if (isOpen && !prevOpen) {
-    setItems(initialItems);
-    setCurrentIndex(0);
-  }
-  if (isOpen !== prevOpen) setPrevOpen(isOpen);
+  useEffect(() => {
+    if (isOpen) {
+      setItems(initialItems);
+      setCurrentIndex(0);
+    }
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on open, not on initialItems change
 
   const currentItem = items[currentIndex];
   const total = items.length;
