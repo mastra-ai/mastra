@@ -28,26 +28,8 @@ export function useScoresMetrics() {
         timestamp: { start: timestamp.start, end: timestamp.end },
       };
 
-      // Discover scorer IDs from the eval system
       const scorersMap = await client.listScorers();
-      const scorerIdSet = new Set<string>();
-      for (const id of Object.keys(scorersMap ?? {})) scorerIdSet.add(id);
-
-      // TODO(temporary): Once the backend writes eval scores into the observability store
-      // with matching scorer IDs, remove this block. Currently eval scorer IDs (from listScorers)
-      // don't match observability scorer IDs, so we also scan the observability store to discover
-      // scorers that only exist there.
-      const [obsPage1, obsPage2, obsPage3] = await Promise.all([
-        client.listScores({ pagination: { perPage: 100, page: 0 } }),
-        client.listScores({ pagination: { perPage: 100, page: 1 } }),
-        client.listScores({ pagination: { perPage: 100, page: 2 } }),
-      ]);
-      for (const s of [...(obsPage1?.scores ?? []), ...(obsPage2?.scores ?? []), ...(obsPage3?.scores ?? [])]) {
-        if (s.scorerId) scorerIdSet.add(s.scorerId);
-      }
-      // END TODO(temporary)
-
-      const scorerIds = Array.from(scorerIdSet);
+      const scorerIds = Object.keys(scorersMap ?? {});
 
       if (scorerIds.length === 0) {
         return { summaryData: [], overTimeData: [], scorerNames: [], avgScore: null };
