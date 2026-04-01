@@ -20,6 +20,10 @@ Specialized tracing for AI operations that captures:
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Tracing with decorators
 
+### Logging
+
+All logger calls from your application and Mastra's internal components are automatically forwarded to observability storage when observability is configured. You can [control the log level and disable forwarding](/docs/observability/logging#logging-to-observability-storage) independently from your console logger.
+
 ## Storage requirements
 
 The `DefaultExporter` persists traces to your configured storage backend. Not all storage providers support observability—for the full list, see [Storage Provider Support](/docs/observability/tracing/exporters/default#storage-provider-support).
@@ -63,6 +67,9 @@ export const mastra = new Mastra({
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
+        logging: {
+          level: 'info', // Minimum log level forwarded to storage (default: 'debug')
+        },
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
         ],

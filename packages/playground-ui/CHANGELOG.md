@@ -1,5 +1,110 @@
 # @mastra/playground-ui
 
+## 20.0.2
+
+### Patch Changes
+
+- **New components for the Logs MVP** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - `DataDetailsPanel` — composable detail panel with header, key-value list, code sections, and loading/empty states.
+  - `DataList` — generic data list with row links, top cells, skeleton loading, and pagination.
+  - `LogsDataList` — log-specific data list cells (level, date, time, entity, message).
+  - `SelectDataFilter` — dropdown filter with searchable categories, single/multi selection, and active count badge.
+
+  **`ListSearch`** now accepts a `size` prop to control input height:
+
+  ```tsx
+  <ListSearch size="sm" onSearch={handleSearch} label="Filter" placeholder="Search..." />
+  ```
+
+- **Logs UI improvements** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - Added `SelectDataFilter` dropdown component to the design system for reusable multi-category filtering with search, single/multi selection modes, and active filter count badge.
+  - Updated `LogsToolbar` with `SelectDataFilter` integration and a Reset button that appears when filters are active.
+  - Replaced custom `DetailRow` in log `SpanDetails` with `DataDetailsPanel.KeyValueList` for consistent key-value rendering.
+  - Improved `LogDetails` span button to disable when traceId is missing.
+  - Enabled line numbers and code folding in `DataDetailsPanelCodeSection` to match `SideDialogCodeSection` behavior.
+  - Fixed `bgColor` values in span type mapping to use valid CSS color strings.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0
+  - @mastra/client-js@1.11.2
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.20
+
+## 20.0.2-alpha.0
+
+### Patch Changes
+
+- **New components for the Logs MVP** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - `DataDetailsPanel` — composable detail panel with header, key-value list, code sections, and loading/empty states.
+  - `DataList` — generic data list with row links, top cells, skeleton loading, and pagination.
+  - `LogsDataList` — log-specific data list cells (level, date, time, entity, message).
+  - `SelectDataFilter` — dropdown filter with searchable categories, single/multi selection, and active count badge.
+
+  **`ListSearch`** now accepts a `size` prop to control input height:
+
+  ```tsx
+  <ListSearch size="sm" onSearch={handleSearch} label="Filter" placeholder="Search..." />
+  ```
+
+- **Logs UI improvements** ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+  - Added `SelectDataFilter` dropdown component to the design system for reusable multi-category filtering with search, single/multi selection modes, and active filter count badge.
+  - Updated `LogsToolbar` with `SelectDataFilter` integration and a Reset button that appears when filters are active.
+  - Replaced custom `DetailRow` in log `SpanDetails` with `DataDetailsPanel.KeyValueList` for consistent key-value rendering.
+  - Improved `LogDetails` span button to disable when traceId is missing.
+  - Enabled line numbers and code folding in `DataDetailsPanelCodeSection` to match `SideDialogCodeSection` behavior.
+  - Fixed `bgColor` values in span type mapping to use valid CSS color strings.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+  - @mastra/client-js@1.11.2-alpha.0
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.20-alpha.0
+
+## 20.0.1
+
+### Patch Changes
+
+- Add optional chaining on `steps` in workflow-step-action-bar to prevent runtime crash during incremental SSE updates ([#14714](https://github.com/mastra-ai/mastra/pull/14714))
+
+- Fixed form fields to show default values from form defaults. ([#14733](https://github.com/mastra-ai/mastra/pull/14733))
+
+- Added Storybook theme switching support. The background toolbar now toggles between dark and light themes by applying the corresponding CSS class to the document. ([#14882](https://github.com/mastra-ai/mastra/pull/14882))
+
+- Removed unused `buttons` variant from `TabList` component. ([#14881](https://github.com/mastra-ai/mastra/pull/14881))
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599), [`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.19.0
+  - @mastra/client-js@1.11.1
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.19
+
+## 20.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57)]:
+  - @mastra/core@1.19.0-alpha.2
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/client-js@1.11.1-alpha.2
+  - @mastra/react@0.2.19-alpha.2
+
+## 20.0.1-alpha.1
+
+### Patch Changes
+
+- Add optional chaining on `steps` in workflow-step-action-bar to prevent runtime crash during incremental SSE updates ([#14714](https://github.com/mastra-ai/mastra/pull/14714))
+
+- Fixed form fields to show default values from form defaults. ([#14733](https://github.com/mastra-ai/mastra/pull/14733))
+
+- Added Storybook theme switching support. The background toolbar now toggles between dark and light themes by applying the corresponding CSS class to the document. ([#14882](https://github.com/mastra-ai/mastra/pull/14882))
+
+- Removed unused `buttons` variant from `TabList` component. ([#14881](https://github.com/mastra-ai/mastra/pull/14881))
+
+- Updated dependencies [[`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.18.1-alpha.1
+  - @mastra/client-js@1.11.1-alpha.1
+  - @mastra/react@0.2.19-alpha.1
+
 ## 20.0.1-alpha.0
 
 ### Patch Changes

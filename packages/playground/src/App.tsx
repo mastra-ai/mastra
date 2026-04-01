@@ -64,6 +64,7 @@ import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versio
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import { Login } from './pages/login';
+import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
@@ -204,6 +205,7 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
+      { path: '/logs', element: <Logs /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
