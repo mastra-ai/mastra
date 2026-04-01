@@ -1,5 +1,20 @@
 # @mastra/sentry
 
+## 1.0.11-alpha.0
+
+### Patch Changes
+
+- Added Sentry mappings for scorer tracing spans. ([#14920](https://github.com/mastra-ai/mastra/pull/14920))
+
+  **What changed**
+  - Added Sentry span mappings for `SCORER_RUN` and `SCORER_STEP`.
+
+  **Why**
+  This keeps scorer tracing visible in Sentry when the new scorer spans are emitted by `@mastra/core`.
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
 ## 1.0.10
 
 ### Patch Changes
