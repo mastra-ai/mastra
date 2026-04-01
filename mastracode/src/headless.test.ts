@@ -162,8 +162,9 @@ describe('parseHeadlessArgs', () => {
   });
 
   it('throws on invalid --mode value', () => {
-    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'turbo']))
-      .toThrow('--mode must be "build", "plan", or "fast"');
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'turbo'])).toThrow(
+      '--mode must be "build", "plan", "fast"',
+    );
   });
 
   it('returns undefined mode when not provided', () => {
@@ -177,8 +178,9 @@ describe('parseHeadlessArgs', () => {
   });
 
   it('throws on invalid --thinking-level value', () => {
-    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'extreme']))
-      .toThrow('--thinking-level must be');
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'extreme'])).toThrow(
+      '--thinking-level must be',
+    );
   });
 
   it('returns undefined thinkingLevel when not provided', () => {
@@ -196,17 +198,37 @@ describe('parseHeadlessArgs', () => {
     expect(args.config).toBeUndefined();
   });
 
+  it('parses --profile with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--profile', 'ci']);
+    expect(args.profile).toBe('ci');
+  });
+
+  it('returns undefined profile when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.profile).toBeUndefined();
+  });
+
   it('parses all flags together including new ones', () => {
     const args = parseHeadlessArgs([
-      'node', 'main.js',
-      '--prompt', 'Run tests',
+      'node',
+      'main.js',
+      '--prompt',
+      'Run tests',
       '--continue',
-      '--timeout', '600',
-      '--format', 'json',
-      '--model', 'anthropic/claude-sonnet-4-20250514',
-      '--mode', 'build',
-      '--thinking-level', 'medium',
-      '--config', './ci.json',
+      '--timeout',
+      '600',
+      '--format',
+      'json',
+      '--model',
+      'anthropic/claude-sonnet-4-20250514',
+      '--mode',
+      'build',
+      '--thinking-level',
+      'medium',
+      '--config',
+      './ci.json',
+      '--profile',
+      'ci',
     ]);
     expect(args.prompt).toBe('Run tests');
     expect(args.continue_).toBe(true);
@@ -216,6 +238,7 @@ describe('parseHeadlessArgs', () => {
     expect(args.mode).toBe('build');
     expect(args.thinkingLevel).toBe('medium');
     expect(args.config).toBe('./ci.json');
+    expect(args.profile).toBe('ci');
   });
 });
 

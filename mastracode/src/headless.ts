@@ -9,7 +9,13 @@ import type { Harness, HarnessEvent } from '@mastra/core/harness';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
-import { loadHeadlessConfig } from './headless-config.js';
+import { loadHeadlessConfig, resolveProfile, VALID_MODES, VALID_THINKING_LEVELS } from './headless-config.js';
+import type { HeadlessProfileConfig } from './headless-config.js';
+
+export interface PackContext {
+  builtinPacks: Array<{ id: string; models: Record<string, string> }>;
+  builtinOmPacks: Array<{ id: string; modelId: string }>;
+}
 
 export interface HeadlessArgs {
   prompt?: string;
@@ -20,6 +26,7 @@ export interface HeadlessArgs {
   mode?: 'build' | 'plan' | 'fast';
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
   config?: string;
+  profile?: string;
 }
 
 /** Returns true if argv contains --prompt or -p, indicating headless mode. */
@@ -36,10 +43,11 @@ const headlessOptions = {
   mode: { type: 'string' },
   'thinking-level': { type: 'string' },
   config: { type: 'string' },
+  profile: { type: 'string' },
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
-/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model, --mode, --thinking-level, --config). */
+/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model, --mode, --thinking-level, --config, --profile). */
 export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const { values, positionals } = parseArgs({
     args: argv.slice(2),
@@ -69,23 +77,23 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   let mode: HeadlessArgs['mode'];
   if (values.mode !== undefined) {
     const raw = String(values.mode);
-    if (raw !== 'build' && raw !== 'plan' && raw !== 'fast') {
-      throw new Error('--mode must be "build", "plan", or "fast"');
+    if (!(VALID_MODES as readonly string[]).includes(raw)) {
+      throw new Error(`--mode must be ${VALID_MODES.map(m => `"${m}"`).join(', ')}`);
     }
-    mode = raw;
+    mode = raw as HeadlessArgs['mode'];
   }
 
   let thinkingLevel: HeadlessArgs['thinkingLevel'];
   if (values['thinking-level'] !== undefined) {
     const raw = String(values['thinking-level']);
-    const valid = ['off', 'low', 'medium', 'high', 'xhigh'];
-    if (!valid.includes(raw)) {
-      throw new Error('--thinking-level must be "off", "low", "medium", "high", or "xhigh"');
+    if (!(VALID_THINKING_LEVELS as readonly string[]).includes(raw)) {
+      throw new Error(`--thinking-level must be ${VALID_THINKING_LEVELS.map(l => `"${l}"`).join(', ')}`);
     }
     thinkingLevel = raw as HeadlessArgs['thinkingLevel'];
   }
 
   const config = typeof values.config === 'string' ? values.config : undefined;
+  const profile = typeof values.profile === 'string' ? values.profile : undefined;
 
   return {
     prompt,
@@ -96,6 +104,7 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
     mode,
     thinkingLevel,
     config,
+    profile,
   };
 }
 
@@ -114,16 +123,36 @@ Headless (non-interactive) mode options:
   --timeout <seconds>           Exit with code 2 if not complete within timeout
   --format <type>               Output format: "default" or "json" (default: "default")
   --model, -m <id>              Model override (e.g., "anthropic/claude-sonnet-4-5")
-  --mode {build|plan|fast}      Execution mode (uses that mode's configured model)
+  --mode {build|plan|fast}      Execution mode — defaults to "build" if omitted
   --thinking-level <level>      Thinking level: off, low, medium, high, xhigh
   --config <path>               Path to headless config file (default: .mastracode/headless.json)
+  --profile <name>              Use a named profile from the config file
 
 Config file:
-  Place a headless.json in .mastracode/ (project) or ~/.mastracode/ (global):
+  Place a headless.json in .mastracode/ (project) or ~/.mastracode/ (global).
+  Project config replaces global config entirely (no merge between them).
   {
-    "models": { "modeDefaults": { "build": "anthropic/claude-sonnet-4-5" } },
-    "preferences": { "thinkingLevel": "medium", "yolo": true }
+    "models": {
+      "activeModelPackId": "anthropic",
+      "modeDefaults": {},
+      "activeOmPackId": "anthropic",
+      "omModelOverride": null,
+      "subagentModels": {},
+      "omObservationThreshold": null,
+      "omReflectionThreshold": null
+    },
+    "preferences": { "thinkingLevel": "medium", "yolo": true },
+    "profiles": {
+      "ci": {
+        "models": { "activeModelPackId": "anthropic" },
+        "preferences": { "thinkingLevel": "off" }
+      }
+    }
   }
+
+  Pack references: use built-in pack IDs (e.g., "anthropic", "openai") to
+  resolve models at runtime. Explicit modeDefaults override activeModelPackId.
+  Custom pack IDs ("custom:...") are not supported — use modeDefaults instead.
 
 Exit codes:
   0  Agent completed successfully
@@ -135,6 +164,7 @@ Examples:
   mastracode --prompt "Add tests" --timeout 300
   mastracode --prompt "Fix the bug" --mode fast --thinking-level high
   mastracode --config ./ci.json --prompt "Run tests"
+  mastracode --profile ci --prompt "Run lint checks"
   mastracode -c --prompt "Continue where you left off"
   mastracode --prompt "Refactor utils" --format json
   echo "task description" | mastracode --prompt -
@@ -227,7 +257,15 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
-export async function runHeadless(harness: Harness, args: HeadlessArgs & { prompt: string }): Promise<number> {
+export async function runHeadless(
+  harness: Harness,
+  args: HeadlessArgs & { prompt: string },
+  packContext?: PackContext,
+): Promise<number> {
+  // Harness is imported without its generic state param, so setState doesn't know about
+  // thinkingLevel, yolo, observationThreshold, etc. Cast once here instead of at every call site.
+  const setHarnessState = (state: Record<string, unknown>) => harness.setState(state as any);
+
   const emit =
     args.format === 'json'
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
@@ -278,9 +316,24 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     return failEarly((err as Error).message);
   }
 
+  // --- Resolve profile ---
+  let resolvedConfig: HeadlessProfileConfig = config;
+  if (args.profile) {
+    try {
+      resolvedConfig = resolveProfile(config, args.profile);
+      if (!emit) process.stderr.write(`[profile] ${args.profile}\n`);
+    } catch (err) {
+      return failEarly((err as Error).message);
+    }
+  }
+
   // --- Resolve model ---
   if (args.model && args.mode) {
-    process.stderr.write('Warning: --model overrides --mode, ignoring --mode\n');
+    if (emit) {
+      emit({ type: 'warning', message: '--model overrides --mode, ignoring --mode' });
+    } else {
+      process.stderr.write('Warning: --model overrides --mode, ignoring --mode\n');
+    }
   }
 
   if (args.model) {
@@ -296,36 +349,123 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     }
     await harness.switchModel({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
-  } else {
-    // Resolve from --mode or config modeDefaults
-    const mode = args.mode ?? 'build';
-    const modelId = config.models?.modeDefaults?.[mode];
-    if (modelId) {
-      const available = await harness.listAvailableModels();
-      const match = available.find(m => m.id === modelId);
-      if (!match) {
-        return failEarly(`Unknown model "${modelId}" configured for mode "${mode}"`);
+  } else if (resolvedConfig.models) {
+    const modelsConfig = resolvedConfig.models;
+
+    // 1. Resolve effective modeDefaults: explicit modeDefaults > activeModelPackId > none
+    let effectiveDefaults: Partial<Record<string, string>> | undefined;
+
+    if (modelsConfig.modeDefaults && Object.keys(modelsConfig.modeDefaults).length > 0) {
+      effectiveDefaults = modelsConfig.modeDefaults;
+    } else if (modelsConfig.activeModelPackId && packContext) {
+      const packId = modelsConfig.activeModelPackId;
+      if (packId.startsWith('custom:')) {
+        const warnMsg = 'Custom pack references are not supported in headless config. Use modeDefaults instead.';
+        if (emit) emit({ type: 'warning', message: warnMsg });
+        else process.stderr.write(`Warning: ${warnMsg}\n`);
+      } else {
+        const pack = packContext.builtinPacks.find(p => p.id === packId);
+        if (pack) {
+          effectiveDefaults = pack.models;
+        } else {
+          const warnMsg = `Unknown model pack "${packId}", ignoring`;
+          if (emit) emit({ type: 'warning', message: warnMsg });
+          else process.stderr.write(`Warning: ${warnMsg}\n`);
+        }
       }
-      if (!match.hasApiKey) {
-        const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-        return failEarly(`Model "${modelId}" (mode: ${mode}) has no API key configured.${keyHint}`);
-      }
-      await harness.switchModel({ modelId });
-      if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${mode})\n`);
     }
-    // If no modelId from config, fall through to harness default — no action needed
+
+    // 2. Apply effective modeDefaults
+    if (effectiveDefaults) {
+      const available = await harness.listAvailableModels();
+
+      for (const [modeId, modelId] of Object.entries(effectiveDefaults)) {
+        const match = available.find(m => m.id === modelId);
+        if (!match) {
+          return failEarly(`Unknown model "${modelId}" configured for mode "${modeId}"`);
+        }
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          return failEarly(`Model "${modelId}" (mode: ${modeId}) has no API key configured.${keyHint}`);
+        }
+        await harness.setThreadSetting({ key: `modeModelId_${modeId}`, value: modelId });
+      }
+
+      // Switch current mode's model
+      const mode = args.mode ?? 'build';
+      const currentModelId = effectiveDefaults[mode];
+      if (currentModelId) {
+        await harness.switchModel({ modelId: currentModelId });
+        if (!emit) process.stderr.write(`[model] ${currentModelId} (mode: ${mode})\n`);
+      }
+
+      // Wire subagent models (same mapping as applyPack: explore→fast, plan→plan, execute→build)
+      const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+      for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+        const saModelId = effectiveDefaults[modeId];
+        if (saModelId) {
+          await harness.setSubagentModelId({ modelId: saModelId, agentType });
+        }
+      }
+    }
+
+    // 3. Apply explicit subagentModels overrides (on top of pack-derived)
+    if (modelsConfig.subagentModels) {
+      for (const [agentType, modelId] of Object.entries(modelsConfig.subagentModels)) {
+        await harness.setSubagentModelId({ modelId, agentType });
+      }
+    }
+
+    // 4. Resolve OM model: omModelOverride > activeOmPackId > none
+    let omModelId: string | undefined;
+    if (typeof modelsConfig.omModelOverride === 'string') {
+      omModelId = modelsConfig.omModelOverride;
+    } else if (modelsConfig.activeOmPackId && packContext) {
+      const omPackId = modelsConfig.activeOmPackId;
+      if (omPackId.startsWith('custom:')) {
+        const warnMsg = 'Custom OM pack references are not supported in headless config. Use omModelOverride instead.';
+        if (emit) emit({ type: 'warning', message: warnMsg });
+        else process.stderr.write(`Warning: ${warnMsg}\n`);
+      } else {
+        const omPack = packContext.builtinOmPacks.find(p => p.id === omPackId);
+        if (omPack) {
+          omModelId = omPack.modelId;
+        } else {
+          const warnMsg = `Unknown OM pack "${omPackId}", ignoring`;
+          if (emit) emit({ type: 'warning', message: warnMsg });
+          else process.stderr.write(`Warning: ${warnMsg}\n`);
+        }
+      }
+    }
+
+    if (omModelId) {
+      await harness.switchObserverModel({ modelId: omModelId });
+      await harness.switchReflectorModel({ modelId: omModelId });
+      if (!emit) process.stderr.write(`[om-model] ${omModelId}\n`);
+    }
+
+    // 5. Apply OM thresholds
+    if (typeof modelsConfig.omObservationThreshold === 'number') {
+      await setHarnessState({ observationThreshold: modelsConfig.omObservationThreshold });
+    }
+    if (typeof modelsConfig.omReflectionThreshold === 'number') {
+      await setHarnessState({ reflectionThreshold: modelsConfig.omReflectionThreshold });
+    }
   }
 
   // --- Resolve thinking level ---
-  const thinkingLevel = args.thinkingLevel ?? config.preferences?.thinkingLevel;
+  const thinkingLevel = args.thinkingLevel ?? resolvedConfig.preferences?.thinkingLevel;
   if (thinkingLevel) {
-    await harness.setState({ thinkingLevel } as any);
+    await setHarnessState({ thinkingLevel });
     if (!emit) process.stderr.write(`[thinking] ${thinkingLevel}\n`);
   }
 
-  // --- Resolve yolo from config (flag already handled at harness init) ---
-  if (config.preferences?.yolo !== undefined) {
-    await harness.setState({ yolo: config.preferences.yolo } as any);
+  // --- Resolve yolo from config ---
+  // Headless mode starts with yolo: true (set at harness init in headlessMain).
+  // Config can explicitly override this — e.g., yolo: false for a review profile
+  // that should still prompt on destructive operations.
+  if (resolvedConfig.preferences?.yolo !== undefined) {
+    await setHarnessState({ yolo: resolvedConfig.preferences.yolo });
   }
 
   // --- Subscribe and send (after all pre-flight checks pass) ---
@@ -396,7 +536,7 @@ export async function headlessMain(): Promise<never> {
   }
 
   const result = await createMastraCode({ initialState: { yolo: true } });
-  const { harness, mcpManager } = result;
+  const { harness, mcpManager, builtinPacks, builtinOmPacks } = result;
 
   if (mcpManager?.hasServers()) {
     mcpManager.initInBackground().catch(() => {
@@ -407,7 +547,8 @@ export async function headlessMain(): Promise<never> {
   setupDebugLogging();
   await harness.init();
 
-  const exitCode = await runHeadless(harness, { ...args, prompt });
+  const packs: PackContext | undefined = builtinPacks && builtinOmPacks ? { builtinPacks, builtinOmPacks } : undefined;
+  const exitCode = await runHeadless(harness, { ...args, prompt }, packs);
 
   // Cleanup
   releaseAllThreadLocks();

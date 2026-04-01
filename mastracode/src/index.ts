@@ -383,5 +383,5 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
+  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning, builtinPacks, builtinOmPacks };
 }

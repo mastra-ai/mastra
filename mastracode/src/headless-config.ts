@@ -10,20 +10,30 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-const VALID_MODES = ['build', 'plan', 'fast'] as const;
-const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;
+export const VALID_MODES = ['build', 'plan', 'fast'] as const;
+export const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;
 
 export type HeadlessMode = (typeof VALID_MODES)[number];
 export type ThinkingLevel = (typeof VALID_THINKING_LEVELS)[number];
 
-export interface HeadlessConfig {
+export type HeadlessProfileConfig = {
   models?: {
+    activeModelPackId?: string;
     modeDefaults?: Partial<Record<HeadlessMode, string>>;
+    activeOmPackId?: string;
+    omModelOverride?: string;
+    subagentModels?: Record<string, string>;
+    omObservationThreshold?: number | null;
+    omReflectionThreshold?: number | null;
   };
   preferences?: {
     thinkingLevel?: ThinkingLevel;
     yolo?: boolean;
   };
+};
+
+export interface HeadlessConfig extends HeadlessProfileConfig {
+  profiles?: Record<string, HeadlessProfileConfig>;
 }
 
 export function getProjectHeadlessConfigPath(projectDir: string): string {
@@ -93,23 +103,25 @@ function loadAutoDiscover(projectDir?: string, globalDir?: string): HeadlessConf
   return {};
 }
 
-const KNOWN_TOP_LEVEL_KEYS = new Set(['models', 'preferences']);
+const KNOWN_TOP_LEVEL_KEYS = new Set(['models', 'preferences', 'profiles']);
 
-function validate(raw: unknown): HeadlessConfig {
-  if (!raw || typeof raw !== 'object') return {};
-  const obj = raw as Record<string, unknown>;
-  const config: HeadlessConfig = {};
+/**
+ * Validate models and preferences from an object (used for both top-level and profile entries).
+ */
+function validateProfileBody(obj: Record<string, unknown>): HeadlessProfileConfig {
+  const result: HeadlessProfileConfig = {};
 
-  // Warn on unknown top-level keys
-  for (const key of Object.keys(obj)) {
-    if (!KNOWN_TOP_LEVEL_KEYS.has(key)) {
-      process.stderr.write(`Warning: unknown config key "${key}" in headless.json, ignoring\n`);
-    }
-  }
-
-  // Validate models.modeDefaults
+  // Validate models
   if (obj.models && typeof obj.models === 'object') {
     const models = obj.models as Record<string, unknown>;
+    const resultModels: HeadlessProfileConfig['models'] = {};
+
+    // activeModelPackId
+    if (typeof models.activeModelPackId === 'string') {
+      resultModels.activeModelPackId = models.activeModelPackId;
+    }
+
+    // modeDefaults
     if (models.modeDefaults && typeof models.modeDefaults === 'object') {
       const defaults = models.modeDefaults as Record<string, unknown>;
       const modeDefaults: Partial<Record<HeadlessMode, string>> = {};
@@ -123,15 +135,57 @@ function validate(raw: unknown): HeadlessConfig {
         }
       }
       if (Object.keys(modeDefaults).length > 0) {
-        config.models = { modeDefaults };
+        resultModels.modeDefaults = modeDefaults;
       }
+    }
+
+    // activeOmPackId
+    if (typeof models.activeOmPackId === 'string') {
+      resultModels.activeOmPackId = models.activeOmPackId;
+    }
+
+    // omModelOverride — only meaningful as a string; null/undefined means "no override"
+    if (typeof models.omModelOverride === 'string') {
+      resultModels.omModelOverride = models.omModelOverride;
+    }
+
+    // subagentModels
+    if (models.subagentModels && typeof models.subagentModels === 'object') {
+      const raw = models.subagentModels as Record<string, unknown>;
+      const subagentModels: Record<string, string> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === 'string') {
+          subagentModels[key] = value;
+        }
+      }
+      if (Object.keys(subagentModels).length > 0) {
+        resultModels.subagentModels = subagentModels;
+      }
+    }
+
+    // omObservationThreshold (number or null)
+    if (typeof models.omObservationThreshold === 'number') {
+      resultModels.omObservationThreshold = models.omObservationThreshold;
+    } else if (models.omObservationThreshold === null) {
+      resultModels.omObservationThreshold = null;
+    }
+
+    // omReflectionThreshold (number or null)
+    if (typeof models.omReflectionThreshold === 'number') {
+      resultModels.omReflectionThreshold = models.omReflectionThreshold;
+    } else if (models.omReflectionThreshold === null) {
+      resultModels.omReflectionThreshold = null;
+    }
+
+    if (Object.keys(resultModels).length > 0) {
+      result.models = resultModels;
     }
   }
 
   // Validate preferences
   if (obj.preferences && typeof obj.preferences === 'object') {
     const prefs = obj.preferences as Record<string, unknown>;
-    const preferences: HeadlessConfig['preferences'] = {};
+    const preferences: HeadlessProfileConfig['preferences'] = {};
     if (typeof prefs.thinkingLevel === 'string') {
       if ((VALID_THINKING_LEVELS as readonly string[]).includes(prefs.thinkingLevel)) {
         preferences.thinkingLevel = prefs.thinkingLevel as ThinkingLevel;
@@ -143,9 +197,52 @@ function validate(raw: unknown): HeadlessConfig {
       preferences.yolo = prefs.yolo;
     }
     if (Object.keys(preferences).length > 0) {
-      config.preferences = preferences;
+      result.preferences = preferences;
+    }
+  }
+
+  return result;
+}
+
+function validate(raw: unknown): HeadlessConfig {
+  if (!raw || typeof raw !== 'object') return {};
+  const obj = raw as Record<string, unknown>;
+
+  // Warn on unknown top-level keys
+  for (const key of Object.keys(obj)) {
+    if (!KNOWN_TOP_LEVEL_KEYS.has(key)) {
+      process.stderr.write(`Warning: unknown config key "${key}" in headless.json, ignoring\n`);
+    }
+  }
+
+  const config: HeadlessConfig = validateProfileBody(obj);
+
+  // Validate profiles
+  if (obj.profiles && typeof obj.profiles === 'object') {
+    const rawProfiles = obj.profiles as Record<string, unknown>;
+    const profiles: Record<string, HeadlessProfileConfig> = {};
+    for (const [name, entry] of Object.entries(rawProfiles)) {
+      if (!entry || typeof entry !== 'object') {
+        process.stderr.write(`Warning: profile "${name}" is not an object in headless.json, ignoring\n`);
+        continue;
+      }
+      profiles[name] = validateProfileBody(entry as Record<string, unknown>);
+    }
+    if (Object.keys(profiles).length > 0) {
+      config.profiles = profiles;
     }
   }
 
   return config;
+}
+
+/**
+ * Resolve a named profile from config. Throws if the profile doesn't exist.
+ */
+export function resolveProfile(config: HeadlessConfig, profileName: string): HeadlessProfileConfig {
+  if (!config.profiles || !(profileName in config.profiles)) {
+    const available = Object.keys(config.profiles ?? {}).join(', ') || '(none)';
+    throw new Error(`Profile "${profileName}" not found in config. Available: ${available}`);
+  }
+  return config.profiles[profileName]!;
 }
