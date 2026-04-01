@@ -4130,7 +4130,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
       expect(lookupCall!.result).toBeDefined();
     });
 
-    it('should only contain the current delegation call when no prior regular tools were called', async () => {
+    it('should be empty when no prior tools were called before delegation', async () => {
       let capturedToolCalls: ParentToolCall[] | undefined;
 
       const subAgent = makeSubAgent('direct-agent', 'Direct response.');
@@ -4155,12 +4155,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
       });
 
       expect(capturedToolCalls).toBeDefined();
-      expect(capturedToolCalls!.length).toBeGreaterThan(0);
-      expect(capturedToolCalls!.some((tc: ParentToolCall) => tc.name.startsWith('agent-'))).toBe(true);
-      const nonDelegationCalls = capturedToolCalls!.filter(
-        (tc: ParentToolCall) => !tc.name.startsWith('agent-') && !tc.name.startsWith('workflow-'),
-      );
-      expect(nonDelegationCalls).toEqual([]);
+      expect(capturedToolCalls).toEqual([]);
     });
 
     it('should include multiple parent tool calls with their respective results', async () => {

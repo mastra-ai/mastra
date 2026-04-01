@@ -2702,7 +2702,7 @@ export class Agent<
    * tool-role messages. This method pairs them by toolCallId into a single list.
    * @internal
    */
-  private extractParentToolCalls(messages: MastraDBMessage[]): ParentToolCall[] {
+  private extractParentToolCalls(messages: MastraDBMessage[], excludeToolCallId?: string): ParentToolCall[] {
     const toolCalls = new Map<string, ParentToolCall>();
 
     for (const message of messages) {
@@ -2711,10 +2711,12 @@ export class Agent<
         if (!Array.isArray(parts)) continue;
         for (const part of parts) {
           if (part?.type === 'tool-call' && part.toolCallId) {
+            if (excludeToolCallId && part.toolCallId === excludeToolCallId) continue;
+            const rawArgs = part.args || part.input || {};
             toolCalls.set(part.toolCallId, {
               id: part.toolCallId,
               name: part.toolName || '',
-              args: (part.args || part.input || {}) as Record<string, unknown>,
+              args: (typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs) as Record<string, unknown>,
             });
           }
         }
@@ -2820,8 +2822,10 @@ export class Agent<
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
-            // Extract parent tool calls before stripping — hooks need this visibility
-            const parentToolCalls = this.extractParentToolCalls(contextMessages);
+            // Extract parent tool calls before stripping — hooks need this visibility.
+            // Exclude the current delegation tool call so parentToolCalls only
+            // contains calls made prior to this delegation.
+            const parentToolCalls = this.extractParentToolCalls(contextMessages, toolCallId);
 
             // Strip tool call/result parts from the context.
             const sanitizedMessages = this.stripParentToolParts(contextMessages);
