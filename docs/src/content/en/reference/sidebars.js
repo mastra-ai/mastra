@@ -296,6 +296,7 @@ const sidebars = {
               label: 'Exporters',
               items: [
                 { type: 'doc', id: 'observability/tracing/exporters/arize', label: 'Arize' },
+                { type: 'doc', id: 'observability/tracing/exporters/arthur', label: 'Arthur' },
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/braintrust',

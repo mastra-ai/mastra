@@ -1,7 +1,7 @@
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
-import { OpenInferenceOTLPTraceExporter } from '@mastra/openinference';
+import { OpenInferenceOTLPTraceExporter } from './openInferenceOTLPExporter.js';
 
 const LOG_PREFIX = '[ArthurExporter]';
 
