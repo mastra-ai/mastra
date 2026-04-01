@@ -172,7 +172,8 @@ export function resolveModel(
   const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   if (mgApiKey && isMastraGatewayModel) {
     // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
-    const rawBase = settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+    const rawBase =
+      settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
     const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
 
     const anthropicCred = authStorage.get('anthropic');
@@ -230,7 +231,9 @@ export function resolveModel(
       baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
     });
 
-    return new ModelRouterLanguageModel({ id: `mastra/${normalizedModelId}` as `${string}/${string}`, headers }, [gateway]);
+    return new ModelRouterLanguageModel({ id: `mastra/${normalizedModelId}` as `${string}/${string}`, headers }, [
+      gateway,
+    ]);
   }
 
   const isAnthropicModel = normalizedModelId.startsWith('anthropic/');

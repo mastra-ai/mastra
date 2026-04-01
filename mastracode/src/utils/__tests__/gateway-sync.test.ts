@@ -3,11 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchProvidersFromGateways, generateTypesContent } from '../gateway-sync.js';
 
-function createGateway(
-  id: string,
-  providers: Record<string, ProviderConfig>,
-  shouldEnable = true,
-): MastraModelGateway {
+function createGateway(id: string, providers: Record<string, ProviderConfig>, shouldEnable = true): MastraModelGateway {
   return {
     id,
     name: id,
@@ -100,6 +96,6 @@ describe('gateway-sync', () => {
     });
 
     expect(content).toContain("readonly 'mastra/google': readonly ['gemini-2.5-flash'];");
-    expect(content).toContain("[P in Provider]: `${P}/${ProviderModelsMap[P][number]}`;");
+    expect(content).toContain('[P in Provider]: `${P}/${ProviderModelsMap[P][number]}`;');
   });
 });

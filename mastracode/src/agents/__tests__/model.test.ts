@@ -1,4 +1,3 @@
-
 // Clear the module registry so vi.mock factories take effect even when
 // a previous test file (running under isolate:false) already cached the real modules.
 vi.hoisted(() => vi.resetModules());
@@ -358,7 +357,10 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({
+        apiKey: 'msk_gateway_key_123',
+        baseUrl: 'https://gateway-api.mastra.ai',
+      });
       expect(ModelRouterLanguageModel).toHaveBeenCalledWith(
         { id: 'mastra/anthropic/claude-sonnet-4', headers: undefined },
         [expect.objectContaining({ __gateway: 'mastra', apiKey: 'msk_gateway_key_123' })],
@@ -459,7 +461,10 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({
+        apiKey: 'msk_gateway_key_123',
+        baseUrl: 'https://gateway-api.mastra.ai',
+      });
       expect(buildAnthropicOAuthFetch).not.toHaveBeenCalled();
     });
 
@@ -468,14 +473,15 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('model-router');
       expect(result.modelId).toBe('mastra/google/gemini-2.0-flash');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({
+        apiKey: 'msk_gateway_key_123',
+        baseUrl: 'https://gateway-api.mastra.ai',
+      });
     });
 
     it('custom provider bypasses gateway', () => {
       mockLoadSettings.mockReturnValue({
-        customProviders: [
-          { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'acme-secret' },
-        ],
+        customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'acme-secret' }],
         memoryGateway: {},
       });
 
@@ -511,7 +517,10 @@ describe('resolveModel', () => {
 
       resolveModel('mastra/anthropic/claude-sonnet-4');
 
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_gateway_key_123', baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(MastraGateway).toHaveBeenCalledWith({
+        apiKey: 'msk_gateway_key_123',
+        baseUrl: 'https://gateway-api.mastra.ai',
+      });
     });
 
     it('passes harness headers to ModelRouterLanguageModel for explicit mastra-prefixed models', () => {

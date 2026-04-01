@@ -1,5 +1,5 @@
-import { GatewayRegistry } from '@mastra/core/llm';
 import { Spacer } from '@mariozechner/pi-tui';
+import { GatewayRegistry } from '@mastra/core/llm';
 import {
   loadSettings,
   saveSettings,
@@ -9,11 +9,7 @@ import {
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
-function askText(
-  ctx: SlashCommandContext,
-  question: string,
-  defaultValue?: string,
-): Promise<string | null> {
+function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
   return new Promise(resolve => {
     const component = new AskQuestionInlineComponent(
       {

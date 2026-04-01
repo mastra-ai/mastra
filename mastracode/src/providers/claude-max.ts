@@ -142,9 +142,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
 
     const storedCred = storage.get('anthropic');
     if (storedCred?.type === 'api_key') {
-      throw new Error(
-        'Anthropic API key credential is configured, but OAuth is required.',
-      );
+      throw new Error('Anthropic API key credential is configured, but OAuth is required.');
     }
 
     const accessToken = await storage.getApiKey('anthropic');

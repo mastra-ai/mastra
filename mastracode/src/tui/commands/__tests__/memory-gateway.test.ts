@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGatewayRegistryGetInstance, mockGatewayRegistrySyncGateways, mockLoadSettings, mockSaveSettings } = vi.hoisted(() => ({
-  mockGatewayRegistryGetInstance: vi.fn(),
-  mockGatewayRegistrySyncGateways: vi.fn(),
-  mockLoadSettings: vi.fn(),
-  mockSaveSettings: vi.fn(),
-}));
+const { mockGatewayRegistryGetInstance, mockGatewayRegistrySyncGateways, mockLoadSettings, mockSaveSettings } =
+  vi.hoisted(() => ({
+    mockGatewayRegistryGetInstance: vi.fn(),
+    mockGatewayRegistrySyncGateways: vi.fn(),
+    mockLoadSettings: vi.fn(),
+    mockSaveSettings: vi.fn(),
+  }));
 
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
@@ -100,7 +101,9 @@ describe('handleMemoryGatewayCommand', () => {
     expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'http://localhost:4111' } });
     expect(mockGatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    expect(ctx.showInfo).toHaveBeenLastCalledWith('Memory gateway configured. Memory mode changes take effect on next restart.');
+    expect(ctx.showInfo).toHaveBeenLastCalledWith(
+      'Memory gateway configured. Memory mode changes take effect on next restart.',
+    );
   });
 
   it('prefills the existing API key and stores the localhost URL without prompting for custom input', async () => {
@@ -160,6 +163,8 @@ describe('handleMemoryGatewayCommand', () => {
     expect(process.env.MASTRA_GATEWAY_API_KEY).toBeUndefined();
     expect(process.env.MASTRA_GATEWAY_URL).toBeUndefined();
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    expect(ctx.showInfo).toHaveBeenLastCalledWith('Memory gateway cleared. Memory mode changes take effect on next restart.');
+    expect(ctx.showInfo).toHaveBeenLastCalledWith(
+      'Memory gateway cleared. Memory mode changes take effect on next restart.',
+    );
   });
 });

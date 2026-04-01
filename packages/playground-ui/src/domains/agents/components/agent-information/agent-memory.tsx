@@ -130,60 +130,60 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Memory Search Section - hidden for gateway memory */}
       {!isGatewayMemory && (
-      <div className="p-4 border-b border-border1">
-        <div className="mb-2">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
-            {searchMemoryData?.searchScope && (
-              <span
-                className={cn(
-                  'text-xs font-medium px-2 py-0.5 rounded',
-                  searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
-                )}
-                title={
-                  searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
-                }
+        <div className="p-4 border-b border-border1">
+          <div className="mb-2">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
+              {searchMemoryData?.searchScope && (
+                <span
+                  className={cn(
+                    'text-xs font-medium px-2 py-0.5 rounded',
+                    searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                  )}
+                  title={
+                    searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
+                  }
+                >
+                  {searchScope}
+                </span>
+              )}
+            </div>
+          </div>
+          {isSemanticRecallEnabled ? (
+            <MemorySearch
+              searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
+              onResultClick={handleResultClick}
+              currentThreadId={threadId}
+              className="w-full"
+              chatInputValue={chatInputValue}
+            />
+          ) : (
+            <div className="bg-surface3 border border-border1 rounded-lg p-4">
+              <p className="text-sm text-neutral3 mb-3">
+                Semantic recall is not enabled for this agent. Enable it to search through conversation history.
+              </p>
+              <a
+                href="https://mastra.ai/en/docs/memory/semantic-recall"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
               >
-                {searchScope}
-              </span>
-            )}
-          </div>
+                Learn about semantic recall
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
         </div>
-        {isSemanticRecallEnabled ? (
-          <MemorySearch
-            searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
-            onResultClick={handleResultClick}
-            currentThreadId={threadId}
-            className="w-full"
-            chatInputValue={chatInputValue}
-          />
-        ) : (
-          <div className="bg-surface3 border border-border1 rounded-lg p-4">
-            <p className="text-sm text-neutral3 mb-3">
-              Semantic recall is not enabled for this agent. Enable it to search through conversation history.
-            </p>
-            <a
-              href="https://mastra.ai/en/docs/memory/semantic-recall"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Learn about semantic recall
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        )}
-      </div>
       )}
 
       {/* Working Memory & Config Section - hidden for gateway memory */}
       {!isGatewayMemory && (
-      <div className="flex-1 overflow-y-auto">
-        <AgentWorkingMemory agentId={agentId} />
-        <div className="border-t border-border1">
-          <AgentMemoryConfig agentId={agentId} />
+        <div className="flex-1 overflow-y-auto">
+          <AgentWorkingMemory agentId={agentId} />
+          <div className="border-t border-border1">
+            <AgentMemoryConfig agentId={agentId} />
+          </div>
         </div>
-      </div>
       )}
 
       {/* Gateway Memory indicator */}
