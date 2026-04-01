@@ -1372,6 +1372,20 @@ export class Harness<TState = {}> {
           requestContext: requestContextInput,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
+      } else if (
+        error instanceof Error &&
+        /does not support assistant message prefill|must end with a user message/i.test(error.message)
+      ) {
+        this.emit({
+          type: 'error',
+          error: new Error('Model does not support assistant message prefill. Retrying with a user message.'),
+          retryable: true,
+        });
+        this.followUpQueue.push({
+          content: '[System] Continue where you left off.',
+          requestContext: requestContextInput,
+        });
+        this.emit({ type: 'agent_end', reason: 'error' });
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
         this.emit({ type: 'error', error: err });
