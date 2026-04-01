@@ -126,6 +126,7 @@ function createStructuredOutput(text: CreateResponseBody['text']) {
     case 'json_object':
       return {
         schema: JSON_OBJECT_RESPONSE_SCHEMA,
+        jsonPromptInjection: true,
       };
     case 'json_schema':
       return {
