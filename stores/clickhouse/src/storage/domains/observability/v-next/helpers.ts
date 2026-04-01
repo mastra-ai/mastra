@@ -390,7 +390,8 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
 export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
   return {
     timestamp: toDate(row.timestamp),
-    traceId: row.traceId,
+    // Core score/feedback shapes still type traceId as required for now.
+    traceId: nullableString(row.traceId) as ScoreRecord['traceId'],
     spanId: nullableString(row.spanId),
     experimentId: nullableString(row.experimentId),
     scoreTraceId: nullableString(row.scoreTraceId),
@@ -430,7 +431,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
 
   return {
     timestamp: toISOString(score.timestamp),
-    traceId: score.traceId,
+    traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
     experimentId: score.experimentId ?? null,
     scoreTraceId: score.scoreTraceId ?? null,
@@ -474,7 +475,8 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
     timestamp: toDate(row.timestamp),
-    traceId: row.traceId,
+    // Core score/feedback shapes still type traceId as required for now.
+    traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
     spanId: nullableString(row.spanId),
     experimentId: nullableString(row.experimentId),
     entityType: nullableEntityType(row.entityType),
@@ -520,7 +522,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
 
   return {
     timestamp: toISOString(feedback.timestamp),
-    traceId: feedback.traceId,
+    traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,
     experimentId: feedback.experimentId ?? null,
     entityType: feedback.entityType ?? null,

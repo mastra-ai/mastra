@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  traceId            String,
+  traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
   scoreTraceId       Nullable(String),
@@ -363,6 +363,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
 ENGINE = MergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp)
+SETTINGS allow_nullable_key = 1
 `;
 
 // ---------------------------------------------------------------------------
@@ -375,7 +376,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  traceId            String,
+  traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
 
@@ -427,6 +428,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 ENGINE = MergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp)
+SETTINGS allow_nullable_key = 1
 `;
 
 // ---------------------------------------------------------------------------

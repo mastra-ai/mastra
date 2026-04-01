@@ -1542,6 +1542,27 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(match!.scoreSource).toBe('automated');
     });
 
+    it('supports nullable traceId for scores at the storage boundary', async () => {
+      await storage.createScore({
+        score: {
+          timestamp: new Date(),
+          traceId: null,
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          scoreSource: 'automated',
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listScores({});
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]!.traceId).toBeNull();
+      expect(result.scores[0]!.scoreSource).toBe('automated');
+    });
+
     it('filters scores by scoreSource', async () => {
       await storage.createScore({
         score: {
@@ -1711,6 +1732,29 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const match = result.feedback.find(f => f.traceId === 'trace-fbs');
       expect(match).toBeDefined();
       expect(match!.feedbackSource).toBe('manual');
+    });
+
+    it('supports nullable traceId for feedback at the storage boundary', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date(),
+          traceId: null,
+          spanId: null,
+          feedbackSource: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          userId: null,
+          sourceId: null,
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listFeedback({});
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]!.traceId).toBeNull();
+      expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('deprecated feedback source alias still writes to feedbackSource column', async () => {
