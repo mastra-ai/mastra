@@ -5,7 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { exampleAgent } from './agents';
 
 export const mastra = new Mastra({
-  logger: new ConsoleLogger({ name: 'Mastra', level: 'debug', components: ['CHANNEL'] }),
+  logger: new ConsoleLogger({ name: 'Mastra', level: 'debug' }),
   storage: new LibSQLStore({
     id: 'channels-example-storage',
     url: 'file:./mastra.db',
