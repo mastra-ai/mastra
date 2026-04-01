@@ -281,8 +281,15 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addScore?(args: { traceId?: string; spanId?: string; score: ScoreInput }): Promise<void>;
+  addScore?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void>;
 
   /**
    * Add feedback to a persisted trace or span without hydrating a RecordedTrace.
@@ -290,8 +297,15 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addFeedback?(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void>;
+  addFeedback?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;

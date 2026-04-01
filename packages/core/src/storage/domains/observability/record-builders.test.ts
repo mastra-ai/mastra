@@ -294,6 +294,27 @@ describe('record-builders', () => {
         }),
       );
     });
+
+    it('allows unanchored scores without traceId', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          timestamp,
+          scorerId: 'judge-unanchored',
+          score: 0.42,
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual(
+        expect.objectContaining({
+          traceId: null,
+          spanId: null,
+          scorerId: 'judge-unanchored',
+          score: 0.42,
+        }),
+      );
+    });
   });
 
   describe('buildFeedbackRecord', () => {
@@ -376,6 +397,29 @@ describe('record-builders', () => {
         expect.objectContaining({
           feedbackSource: 'legacy-api',
           source: 'legacy-api',
+        }),
+      );
+    });
+
+    it('allows unanchored feedback without traceId', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          timestamp,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual(
+        expect.objectContaining({
+          traceId: null,
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
         }),
       );
     });

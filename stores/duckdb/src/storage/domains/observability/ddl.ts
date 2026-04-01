@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  traceId VARCHAR NOT NULL,
+  traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
   scoreTraceId VARCHAR,
@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  traceId VARCHAR NOT NULL,
+  traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
   -- Entity hierarchy

@@ -16,6 +16,7 @@ import {
   SpanType,
 } from '../observability';
 import type {
+  CorrelationContext,
   DefinitionSource,
   ObservabilityContext,
   ScorerScoreSource,
@@ -108,11 +109,17 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** Entity type of the scored target when known. */
   targetEntityType?: EntityType;
 
-  /** Trace anchor for the target being scored. Required today for observability.addScore(). */
+  /** Trace anchor for the target being scored when available. */
   targetTraceId?: string;
 
   /** Optional span anchor for the target being scored. */
   targetSpanId?: string;
+
+  /** Live correlation snapshot for the target span/trace when available. */
+  targetCorrelationContext?: CorrelationContext;
+
+  /** Live target metadata to merge into emitted score metadata when available. */
+  targetMetadata?: Record<string, unknown>;
 }
 
 // Prompt object definition with conditional typing
@@ -591,15 +598,19 @@ class MastraScorer<
 
     if (this.#mastra?.observability.addScore && typeof scorerResult.score === 'number') {
       try {
+        const targetTraceId = input.targetTraceId ?? input.targetCorrelationContext?.traceId;
+        const targetSpanId = input.targetSpanId ?? input.targetCorrelationContext?.spanId;
+
         // TODO: Remove this gate once @mastra/observability supports emitting
         // unanchored scores end-to-end without a target trace ID.
-        if (!input.targetTraceId) {
+        if (!targetTraceId) {
           return scorerResult;
         }
 
         await this.#mastra.observability.addScore({
-          traceId: input.targetTraceId,
-          ...(input.targetSpanId ? { spanId: input.targetSpanId } : {}),
+          traceId: targetTraceId,
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          ...(input.targetCorrelationContext ? { correlationContext: input.targetCorrelationContext } : {}),
           score: {
             scorerId: this.id,
             scorerName: this.name,
@@ -609,6 +620,7 @@ class MastraScorer<
             ...(typeof scorerResult.scoreTraceId === 'string' ? { scoreTraceId: scorerResult.scoreTraceId } : {}),
             ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
             metadata: {
+              ...(input.targetMetadata ?? {}),
               hasGroundTruth: input.groundTruth !== undefined,
               ...(input.targetScope ? { targetScope: input.targetScope } : {}),
               ...(this.source ? { scorerDefinition: this.source } : {}),

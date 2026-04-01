@@ -288,8 +288,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const correlationFields = buildCorrelationRecordFields(s.correlationContext);
   return {
     timestamp: s.timestamp,
-    //TODO: update this and CreateScoreRecord to be able to handle a null traceId
-    traceId: s.traceId ?? s.correlationContext?.traceId ?? '',
+    traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
     spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
     scorerId: s.scorerId,
     scorerVersion: s.scorerVersion ?? null,
