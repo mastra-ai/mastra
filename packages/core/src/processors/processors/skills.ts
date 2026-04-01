@@ -105,7 +105,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Format skill location (path to SKILL.md file)
    */
   private formatLocation(skill: Skill): string {
-    return `${skill.path}/SKILL.md`;
+    return skill.path;
   }
 
   /**
