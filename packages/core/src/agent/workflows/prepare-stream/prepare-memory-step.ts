@@ -52,7 +52,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   options,
   threadFromArgs,
   resourceId,
-  runId,
+  runId: _runId,
   requestContext,
   instructions,
   memoryConfig,
@@ -126,21 +126,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           },
           text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${thread?.id}" and resourceId "${resourceId}"`,
         });
-        capabilities.logger.error(mastraError.toString());
         capabilities.logger.trackException(mastraError);
         throw mastraError;
       }
-
-      const store = memory.constructor.name;
-      capabilities.logger.debug(
-        `[Agent:${capabilities.agentName}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-        {
-          runId,
-          resourceId,
-          threadId: thread?.id,
-          memoryStore: store,
-        },
-      );
 
       let threadObject: StorageThreadType | undefined = undefined;
       const existingThread = await memory.getThreadById({ threadId: thread?.id });

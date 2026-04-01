@@ -9,7 +9,7 @@ export const createLogger = (options: {
 }) => {
   const logger = new ConsoleLogger(options);
 
-  logger.warn(`createLogger is deprecated. Please use "new ConsoleLogger()" from "@mastra/core/logger" instead.`);
+  logger.warn('createLogger is deprecated. Please use "new ConsoleLogger()" from "@mastra/core/logger" instead.');
 
   return logger;
 };

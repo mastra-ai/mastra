@@ -42,7 +42,6 @@ const getTraceStep = createStep({
           scorerId: inputData.scorerId,
         },
       });
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -63,7 +62,6 @@ const getTraceStep = createStep({
         },
         error,
       );
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -87,7 +85,6 @@ const getTraceStep = createStep({
             },
             error,
           );
-          logger?.error(mastraError.toString());
           logger?.trackException(mastraError);
         }
       },

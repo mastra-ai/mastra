@@ -1,5 +1,59 @@
 # @mastra/memory
 
+## 1.12.1
+
+### Patch Changes
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0
+
+## 1.12.1-alpha.0
+
+### Patch Changes
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+
+## 1.12.0
+
+### Minor Changes
+
+- Added more forgiving raw message browsing in the recall tool for agent follow-up calls. ([#14873](https://github.com/mastra-ai/mastra/pull/14873))
+
+  When an agent requests a `partIndex` greater than the highest visible part in a message, recall now returns the first visible part from the next visible message instead of failing. This makes it easier for agents using `recall` to keep browsing raw messages even when they guess the wrong part index.
+
+### Patch Changes
+
+- Fixed reflected observation groups so their metadata stays compact and marks reflection-derived content. ([#14791](https://github.com/mastra-ai/mastra/pull/14791))
+
+- Fixed synchronous observation error handling in Observational Memory. `observe()` now throws when synchronous (thread/resource-scoped) observation fails, instead of continuing silently with stale observations. Async buffered observation failures remain non-fatal. ([#14843](https://github.com/mastra-ai/mastra/pull/14843))
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599), [`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.19.0
+
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- Added more forgiving raw message browsing in the recall tool for agent follow-up calls. ([#14873](https://github.com/mastra-ai/mastra/pull/14873))
+
+  When an agent requests a `partIndex` greater than the highest visible part in a message, recall now returns the first visible part from the next visible message instead of failing. This makes it easier for agents using `recall` to keep browsing raw messages even when they guess the wrong part index.
+
+### Patch Changes
+
+- Fixed synchronous observation error handling in Observational Memory. `observe()` now throws when synchronous (thread/resource-scoped) observation fails, instead of continuing silently with stale observations. Async buffered observation failures remain non-fatal. ([#14843](https://github.com/mastra-ai/mastra/pull/14843))
+
+- Updated dependencies [[`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57)]:
+  - @mastra/core@1.19.0-alpha.2
+
 ## 1.11.1-alpha.0
 
 ### Patch Changes

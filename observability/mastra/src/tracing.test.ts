@@ -1451,6 +1451,41 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
+    it('getLoggerContext should respect logging.level config', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'warn' },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should be filtered');
+      loggerCtx.info('should be filtered');
+      loggerCtx.warn('should pass');
+      loggerCtx.error('should pass');
+
+      expect(testExporter.logEvents).toHaveLength(2);
+      expect(testExporter.logEvents.map(e => e.log.level)).toEqual(['warn', 'error']);
+    });
+
+    it('getLoggerContext should return noOp when logging.enabled is false', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { enabled: false },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should not emit');
+      loggerCtx.info('should not emit');
+      loggerCtx.warn('should not emit');
+      loggerCtx.error('should not emit');
+
+      expect(testExporter.logEvents).toHaveLength(0);
+    });
+
     it('getMetricsContext should emit user metrics with correlationContext only', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

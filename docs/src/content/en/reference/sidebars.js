@@ -575,6 +575,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
+        { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
         { type: 'doc', id: 'workspace/filesystem', label: 'WorkspaceFilesystem' },
         { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },

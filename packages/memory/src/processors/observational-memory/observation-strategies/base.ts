@@ -81,8 +81,12 @@ export abstract class ObservationStrategy {
     this.retrieval = deps.retrieval;
   }
 
-  /** Run the full observation lifecycle. */
-  async run(): Promise<void> {
+  /**
+   * Run the full observation lifecycle.
+   * @returns `true` if a full observation cycle completed; `false` if skipped (stale lock) or async-buffer failure was swallowed.
+   * @throws On sync/resource-scoped observer failure after failed markers (same as pre–Option-A contract).
+   */
+  async run(): Promise<boolean> {
     const { record, threadId, abortSignal, writer, reflectionHooks, requestContext } = this.opts;
     const cycleId = this.generateCycleId();
 
@@ -90,7 +94,7 @@ export abstract class ObservationStrategy {
       if (this.needsLock) {
         const fresh = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
         if (fresh?.lastObservedAt && record.lastObservedAt && fresh.lastObservedAt > record.lastObservedAt) {
-          return;
+          return false;
         }
       }
 
@@ -113,23 +117,32 @@ export abstract class ObservationStrategy {
           observabilityContext: this.opts.observabilityContext,
         });
       }
+
+      return true;
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
-      // Persist the failed marker to storage so it survives page reloads
-      const failedMarkerForStorage = {
-        type: 'data-om-observation-failed',
-        data: {
-          cycleId,
-          operationType: 'observation',
-          startedAt: new Date().toISOString(),
-          error: error instanceof Error ? error.message : String(error),
-          recordId: record.id,
-          threadId,
-        },
-      };
-      await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
-      if (abortSignal?.aborted) throw error;
+
+      if (!this.rethrowOnFailure) {
+        const failedMarkerForStorage = {
+          type: 'data-om-observation-failed',
+          data: {
+            cycleId,
+            operationType: 'observation',
+            startedAt: new Date().toISOString(),
+            error: error instanceof Error ? error.message : String(error),
+            recordId: record.id,
+            threadId,
+          },
+        };
+        await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
+        if (abortSignal?.aborted) throw error;
+        omError('[OM] Observation failed', error);
+        return false;
+      }
+
+      // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
       omError('[OM] Observation failed', error);
+      throw error;
     }
   }
 
@@ -387,6 +400,7 @@ export abstract class ObservationStrategy {
 
   abstract get needsLock(): boolean;
   abstract get needsReflection(): boolean;
+  abstract get rethrowOnFailure(): boolean;
   abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
   abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
