@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys, agentGenerate, shouldSkipLLMTest } from '@internal/test-utils';
+import { agentGenerate, shouldSkipLLMTest } from '@internal/test-utils';
 import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
@@ -18,12 +18,7 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
 const MODE = getLLMTestMode();
-// Set dummy API keys for replay/auto modes. These keys contain '-dummy-' so
-// hasRealApiKey() will correctly identify them as dummy keys. The dummy keys
-// satisfy provider validation while MSW intercepts the actual HTTP calls.
-setupDummyApiKeys(MODE, ['openai']);
 
 export async function getAgentMemoryTests({
   model,
