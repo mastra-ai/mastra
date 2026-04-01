@@ -53,12 +53,20 @@ export async function atomicWriteFile(
 export async function fetchProvidersFromGateways(
   gateways: MastraModelGateway[],
 ): Promise<{ providers: Record<string, ProviderConfig>; models: Record<string, string[]> }> {
+  const enabledGateways: MastraModelGateway[] = [];
+
+  for (const gateway of gateways) {
+    if (await gateway.shouldEnable()) {
+      enabledGateways.push(gateway);
+    }
+  }
+
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
 
   const maxRetries = 3;
 
-  for (const gateway of gateways) {
+  for (const gateway of enabledGateways) {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {

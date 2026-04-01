@@ -7,7 +7,7 @@ import type {
   HarnessMode,
   HarnessSubagent,
 } from '@mastra/core/harness';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -104,6 +104,8 @@ export function createAuthStorage() {
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
 
+  const gatewayRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
 
@@ -116,12 +118,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
-    // Include the memory gateway key so it's loaded from AuthStorage into process.env
-    providerEnvVars[MEMORY_GATEWAY_PROVIDER] = 'MASTRA_GATEWAY_API_KEY';
+    providerEnvVars.mastra ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
-    // Non-fatal — provider registry may not be available
+    authStorage.loadStoredApiKeysIntoEnv({ mastra: 'MASTRA_GATEWAY_API_KEY' });
   }
+
+  await gatewayRegistry.syncGateways(true);
 
   // Project detection
   const project = detectProject(cwd);

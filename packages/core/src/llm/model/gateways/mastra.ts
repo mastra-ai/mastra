@@ -24,11 +24,19 @@ export class MastraGateway extends MastraModelGateway {
     return this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://server.mastra.ai';
   }
 
+  override shouldEnable(): boolean {
+    return !!process.env['MASTRA_GATEWAY_API_KEY'];
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    if (!this.shouldEnable()) {
+      return {};
+    }
+
     const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
     const models = openrouterConfig?.models ?? [];
 
-    return {
+    const providers = {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
@@ -38,6 +46,8 @@ export class MastraGateway extends MastraModelGateway {
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };
+
+    return providers;
   }
 
   async buildUrl(_modelId: string): Promise<string> {
