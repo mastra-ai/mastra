@@ -169,7 +169,12 @@ export class GatewayMemoryClient {
     const query = new URLSearchParams();
     if (resourceId) query.set('resourceId', resourceId);
     const qs = query.toString();
-    return this.request(`/threads/${threadId}/observations/record${qs ? '?' + qs : ''}`);
+    try {
+      return await this.request(`/threads/${threadId}/observations/record${qs ? '?' + qs : ''}`);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('404')) return { record: null };
+      throw e;
+    }
   }
 
   async getObservationHistory(
@@ -180,7 +185,12 @@ export class GatewayMemoryClient {
     if (params.resourceId) query.set('resourceId', params.resourceId);
     if (params.limit != null) query.set('limit', String(params.limit));
     const qs = query.toString();
-    return this.request(`/threads/${threadId}/observations/history${qs ? '?' + qs : ''}`);
+    try {
+      return await this.request(`/threads/${threadId}/observations/history${qs ? '?' + qs : ''}`);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('404')) return { records: [] };
+      throw e;
+    }
   }
 }
 
