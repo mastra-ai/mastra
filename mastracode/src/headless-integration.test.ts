@@ -11,6 +11,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
+import { runHeadless } from './headless.js';
+
 vi.setConfig({ testTimeout: 30_000 });
 
 const REMINDER_TEXT =
@@ -352,5 +354,85 @@ describe('headless mode — event-driven auto-resolution', () => {
           part.message === instructionContents,
       ),
     ).toBe(true);
+  });
+});
+
+describe('headless mode — thread control', () => {
+  it('resumes a thread by ID with --thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Resumed!') }),
+    });
+
+    await harness.init();
+    const thread = await harness.createThread({ title: 'target-thread' });
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: thread.id,
+    });
+
+    expect(exitCode).toBe(0);
+  });
+
+  it('resumes a thread by title with --thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Found by title!') }),
+    });
+
+    await harness.init();
+    await harness.createThread({ title: 'my-feature' });
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'my-feature',
+    });
+
+    expect(exitCode).toBe(0);
+  });
+
+  it('returns exit code 1 for unknown thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Should not reach') }),
+    });
+
+    await harness.init();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'nonexistent-thread',
+    });
+
+    expect(exitCode).toBe(1);
+  });
+
+  it('renames thread with --title', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Titled!') }),
+    });
+
+    await harness.init();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      title: 'my-new-title',
+    });
+
+    expect(exitCode).toBe(0);
+
+    const threads = await harness.listThreads();
+    const titled = threads.find(t => t.title === 'my-new-title');
+    expect(titled).toBeDefined();
   });
 });
