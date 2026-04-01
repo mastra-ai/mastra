@@ -250,9 +250,7 @@ function buildTurnsFromItems(items: ConversationItem[]) {
       case 'message': {
         if (item.role === 'user') {
           pendingPrompt = Array.isArray(item.content)
-            ? item.content
-                .map(part => (isRecord(part) && typeof part.text === 'string' ? part.text : ''))
-                .join('')
+            ? item.content.map(part => (isRecord(part) && typeof part.text === 'string' ? part.text : '')).join('')
             : '';
           break;
         }
@@ -262,9 +260,7 @@ function buildTurnsFromItems(items: ConversationItem[]) {
         }
 
         const text = Array.isArray(item.content)
-          ? item.content
-              .map(part => (isRecord(part) && typeof part.text === 'string' ? part.text : ''))
-              .join('')
+          ? item.content.map(part => (isRecord(part) && typeof part.text === 'string' ? part.text : '')).join('')
           : '';
 
         turns.push({
@@ -616,7 +612,8 @@ export function ConversationsExample() {
               conversation.id === conversationId
                 ? {
                     ...conversation,
-                    title: conversation.title === 'New conversation' ? getConversationTitle(prompt) : conversation.title,
+                    title:
+                      conversation.title === 'New conversation' ? getConversationTitle(prompt) : conversation.title,
                     subtitle: 'Updated just now',
                   }
                 : conversation,
@@ -746,9 +743,18 @@ export function ConversationsExample() {
 
         <div className="demo-thread">
           <span className="demo-thread__dot" aria-hidden="true" />
-          <span>Turn {String(Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1)).padStart(2, '0')}</span>
+          <span>
+            Turn{' '}
+            {String(
+              Math.max(turns.filter(turn => turn.status === 'done').length + (mode !== 'idle' ? 1 : 0), 1),
+            ).padStart(2, '0')}
+          </span>
           <span className="demo-thread__separator" aria-hidden="true" />
-          <span>{activeConversationId ? `conversation ${truncateId(activeConversationId)}` : 'create a conversation or send the first stored turn'}</span>
+          <span>
+            {activeConversationId
+              ? `conversation ${truncateId(activeConversationId)}`
+              : 'create a conversation or send the first stored turn'}
+          </span>
         </div>
 
         <section className="demo-chat">
@@ -790,7 +796,9 @@ export function ConversationsExample() {
                       <div className="demo-message__role">Mastra</div>
                       <div className="demo-message__bubble demo-message__bubble--assistant">
                         <div className="demo-message__toolbar">
-                          <div className="demo-message__response-id">{turn.responseId ?? 'awaiting stored response'}</div>
+                          <div className="demo-message__response-id">
+                            {turn.responseId ?? 'awaiting stored response'}
+                          </div>
 
                           <div className="demo-message__actions">
                             <button
@@ -817,7 +825,9 @@ export function ConversationsExample() {
                                     <div className="demo-tool__section">
                                       <span className="demo-tool__label">Arguments</span>
                                       <pre className="demo-tool__value">
-                                        {typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments, null, 2)}
+                                        {typeof tool.arguments === 'string'
+                                          ? tool.arguments
+                                          : JSON.stringify(tool.arguments, null, 2)}
                                       </pre>
                                     </div>
                                   ) : null}
@@ -825,7 +835,9 @@ export function ConversationsExample() {
                                     <div className="demo-tool__section">
                                       <span className="demo-tool__label">Output</span>
                                       <pre className="demo-tool__value">
-                                        {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
+                                        {typeof tool.output === 'string'
+                                          ? tool.output
+                                          : JSON.stringify(tool.output, null, 2)}
                                       </pre>
                                     </div>
                                   ) : null}
@@ -835,7 +847,9 @@ export function ConversationsExample() {
                           ) : null}
 
                           {turn.text ? (
-                            <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>{turn.text}</p>
+                            <p className={turn.status === 'error' ? 'demo-turn__error' : 'demo-message__response'}>
+                              {turn.text}
+                            </p>
                           ) : (
                             <div className="demo-turn__pending">
                               <div className="demo-turn__shimmer" />
@@ -854,7 +868,9 @@ export function ConversationsExample() {
                         <div className={`demo-json-shell${isRawOpen ? ' is-open' : ''}`}>
                           <div className="demo-json-shell__inner">
                             <pre className="demo-json">
-                              <code>{isRawLoading ? 'Loading response JSON…' : turn.raw || 'No response payload yet.'}</code>
+                              <code>
+                                {isRawLoading ? 'Loading response JSON…' : turn.raw || 'No response payload yet.'}
+                              </code>
                             </pre>
                           </div>
                         </div>
@@ -968,7 +984,17 @@ export function ConversationsExample() {
                   aria-label={`Delete ${conversation.title}`}
                   title={`Delete ${conversation.title}`}
                 >
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M3 6h18" />
                     <path d="M8 6V4.8c0-.44.36-.8.8-.8h6.4c.44 0 .8.36.8.8V6" />
                     <path d="M6.8 6l.76 11.36c.05.78.7 1.39 1.48 1.39h6.92c.78 0 1.43-.61 1.48-1.39L18.2 6" />

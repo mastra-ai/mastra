@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  traceId VARCHAR NOT NULL,
+  traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
   scoreTraceId VARCHAR,
@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  traceId VARCHAR NOT NULL,
+  traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
   -- Entity hierarchy
@@ -326,6 +326,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scope JSON`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreSource VARCHAR`,
+  `ALTER TABLE score_events ALTER COLUMN traceId DROP NOT NULL`,
 
   // Feedback
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityType VARCHAR`,
@@ -352,4 +353,5 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS scope JSON`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
+  `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
 ];

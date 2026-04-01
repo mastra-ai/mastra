@@ -488,6 +488,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/the-grid-ai',
+          label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
         },
