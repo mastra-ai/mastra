@@ -700,18 +700,23 @@ class MastraScorer<
           let judgeModel: string | undefined;
 
           try {
-            if (scorerStep.isPromptObject) {
-              const promptStepResult = await this.executePromptStep(
-                scorerStep,
-                stepObservabilityContext,
-                executionContext,
-              );
-              stepResult = promptStepResult.result;
-              prompt = promptStepResult.prompt;
-              judgeModel = promptStepResult.judgeModel;
-            } else {
-              stepResult = await this.executeFunctionStep(scorerStep, executionContext);
-            }
+            await executeWithContext({
+              span: stepSpan,
+              fn: async () => {
+                if (scorerStep.isPromptObject) {
+                  const promptStepResult = await this.executePromptStep(
+                    scorerStep,
+                    stepObservabilityContext,
+                    executionContext,
+                  );
+                  stepResult = promptStepResult.result;
+                  prompt = promptStepResult.prompt;
+                  judgeModel = promptStepResult.judgeModel;
+                } else {
+                  stepResult = await this.executeFunctionStep(scorerStep, executionContext);
+                }
+              },
+            });
           } catch (error) {
             stepSpan?.error({ error: error as Error, endSpan: true });
             throw error;
