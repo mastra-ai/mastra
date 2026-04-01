@@ -18,7 +18,9 @@ Examples:
 - Exclude node_modules: { path: ".", exclude: "node_modules" }
 - Find TypeScript files: { path: "src", pattern: "**/*.ts" }
 - Find config files: { path: ".", pattern: "*.config.{js,ts}" }
-- Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }`,
+- Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }
+
+To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
   inputSchema: z.object({
     path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z
@@ -42,7 +44,7 @@ Examples:
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe(
-        'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+        'Glob pattern(s) to filter files. Omit this parameter to list all files (do NOT pass "*"). Use "**/*.ext" to match files recursively across directories. "*" only matches within a single directory level (standard glob). Glob patterns only filter files — directories are always shown to preserve tree structure. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}".',
       ),
     respectGitignore: z
       .boolean()

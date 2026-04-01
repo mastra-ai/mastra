@@ -1,4 +1,21 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
+
+/**
+ * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
+ * so that infrastructure code (e.g. DualLogger) can resolve the active span without
+ * being passed it explicitly.
+ */
+const spanContextStorage = new AsyncLocalStorage<AnySpan>();
+
+/**
+ * Returns the current span from AsyncLocalStorage, if one is active.
+ * Used by DualLogger to forward logs to a span-correlated loggerVNext.
+ */
+export function getCurrentSpan(): AnySpan | undefined {
+  return spanContextStorage.getStore();
+}
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -69,11 +86,14 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
 export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
   const { span, fn } = params;
 
+  // Wrap fn so the span is available via getCurrentSpan() inside the async context.
+  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
+
   if (span?.executeInContext) {
-    return span.executeInContext(fn);
+    return span.executeInContext(wrappedFn);
   }
 
-  return fn();
+  return wrappedFn();
 }
 
 /**
@@ -98,11 +118,14 @@ export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => 
 export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
   const { span, fn } = params;
 
+  // Wrap fn so the span is available via getCurrentSpan() inside the sync context.
+  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
+
   if (span?.executeInContextSync) {
-    return span.executeInContextSync(fn);
+    return span.executeInContextSync(wrappedFn);
   }
 
-  return fn();
+  return wrappedFn();
 }
 
 /**

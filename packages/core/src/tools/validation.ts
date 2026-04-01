@@ -525,6 +525,36 @@ export function validateToolInput<T = unknown>(
     return { data: retryValidation.value };
   }
 
+  // Step 6: Retry with common prompt alias normalization (GitHub #14154)
+  // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
+  // using "prompt" to "query", "message", or "input" after repeated sub-agent
+  // tool calls in the same thread. Coerce these aliases to "prompt" and retry.
+  // Only applies when the schema actually declares a "prompt" field.
+  const promptJsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+  const schemaExpectsPrompt =
+    promptJsonSchema.type === 'object' &&
+    promptJsonSchema.properties != null &&
+    'prompt' in promptJsonSchema.properties;
+
+  if (
+    schemaExpectsPrompt &&
+    normalizedInput != null &&
+    typeof normalizedInput === 'object' &&
+    !Array.isArray(normalizedInput)
+  ) {
+    const obj = normalizedInput as Record<string, unknown>;
+    if (obj.prompt == null) {
+      const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
+      if (alias !== undefined) {
+        const coercedPromptInput = { ...obj, prompt: alias };
+        const coercedPromptValidation = safeValidate(schema, coercedPromptInput);
+        if ('value' in coercedPromptValidation) {
+          return { data: coercedPromptValidation.value };
+        }
+      }
+    }
+  }
+
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
   const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');

@@ -177,7 +177,7 @@ async function captureDependenciesToOptimize(
           paths: [importerPath],
         });
         if (!resolvedPath) {
-          logger.warn(`Could not resolve path for workspace dependency ${dep}`);
+          logger.warn('Could not resolve path for workspace dependency', { dep });
           continue;
         }
 
@@ -207,7 +207,7 @@ async function captureDependenciesToOptimize(
           }
         }
       } catch (err) {
-        logger.error(`Failed to resolve or analyze dependency ${dep}: ${(err as Error).message}`);
+        logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });
       }
     }
 
