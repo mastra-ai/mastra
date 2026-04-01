@@ -70,78 +70,17 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 :::
 
-## OpenAI-compatible responses API
+## OpenAI Responses API
 
-Mastra also exposes a Responses API-compatible route. This route is an adapter layer on top of Mastra agents, memory, and storage, not a raw provider proxy. By default, the generated server serves it at `/api/v1/responses`, along with `GET /api/v1/responses/:responseId`, `DELETE /api/v1/responses/:responseId`, `POST /api/v1/conversations`, `GET /api/v1/conversations/:conversationId`, `DELETE /api/v1/conversations/:conversationId`, and `GET /api/v1/conversations/:conversationId/items`.
+Mastra exposes OpenAI-compatible Responses and Conversations routes. These routes are agent-backed adapters over Mastra agents, memory, and storage, so requests run through the selected Mastra agent instead of acting as a raw provider proxy.
 
-Use a Mastra model string such as `openai/gpt-5` for `model`, and pass `agent_id` to select the registered Mastra agent that should handle the request. Initial Responses requests must target an agent directly. Stored follow-up turns can omit `agent_id` when continuing with `previous_response_id`:
+These APIs are currently experimental.
 
-```typescript title="client.ts"
-const response = await fetch('http://localhost:4111/api/v1/responses', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'openai/gpt-5',
-    agent_id: 'support-agent',
-    input: 'Summarize this ticket for me',
-    store: true,
-  }),
-})
-```
+Use `agent_id` to select the Mastra agent that should handle the request. Initial requests target an agent directly, and stored follow-up turns can continue with `previous_response_id`. You can also pass `model` to override the agent's configured model for a single request. If you omit `model`, Mastra uses the model already configured on the agent.
 
-Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it doesn't require extra model calls. Tool-using turns can emit non-message `response.output_item.*` items such as `function_call` alongside assistant message items. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn.
+The Responses routes support streaming, function calling (tools), stored continuations with `previous_response_id`, conversation threads through `conversation_id`, provider-specific passthrough with `providerOptions`, and JSON output through `text.format`.
 
-If you need JSON output, pass `text.format`. Use `text.format.type = 'json_object'` for JSON mode, or `text.format.type = 'json_schema'` with a schema for schema-constrained structured output. Mastra routes both through the agent's structured output path and still returns the JSON as normal assistant message text.
-
-Stored responses also return `conversation_id`. In Mastra, this is the raw memory `threadId`. You can create a conversation explicitly with `POST /api/v1/conversations`, or let the first stored Responses request create it implicitly:
-
-```typescript title="client.ts"
-const response = await fetch('http://localhost:4111/api/v1/responses', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'openai/gpt-5',
-    agent_id: 'support-agent',
-    input: 'Start a support conversation',
-    store: true,
-  }),
-})
-
-const firstTurn = await response.json()
-console.log(firstTurn.conversation_id)
-```
-
-If you already have a conversation, pass `conversation_id` on the next request to keep writing to that same thread:
-
-```typescript title="client.ts"
-const response = await fetch('http://localhost:4111/api/v1/responses', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'openai/gpt-5',
-    agent_id: 'support-agent',
-    conversation_id: 'thread_123',
-    input: 'Continue this conversation',
-    store: true,
-  }),
-})
-```
-
-If you pass both `conversation_id` and `previous_response_id`, they must resolve to the same thread. Mastra uses the conversation thread as the source of truth and rejects mismatches.
-
-Configured tool definitions are returned under `tools`, while actual tool activity is emitted through `output` items such as `function_call`, `function_call_output`, and the final assistant `message`. This keeps the Responses adapter aligned with the OpenAI Responses object model while still running through Mastra agents and memory.
-
-For advanced provider-native features, the route also passes `providerOptions` through to the underlying agent `generate()` or `stream()` call. Use this as the escape hatch for provider-specific options that Mastra doesn't normalize at the Responses API layer. When the provider returns provider-native response state, Mastra includes it back on the response object as `providerOptions`, so follow-up requests can reuse values like `openai.responseId`.
-
-The route also supports agents backed by both AI SDK v5+ models and legacy AI SDK v4 models. Responses uses `generate()` and `stream()` for v5+ agents, and automatically falls back to `generateLegacy()` and `streamLegacy()` for legacy agents.
-
-For a working example that keeps the official `openai` SDK and swaps the base URL to Mastra, see the [Responses API demo](https://github.com/mastra-ai/mastra/tree/main/examples/responses-api-demo).
+For the full request and response contract, see the [Responses API reference](/reference/client-js/responses) and [Conversations API reference](/reference/client-js/conversations). For the complete list of HTTP routes, see [server routes](/reference/server/routes#responses-api).
 
 ## Stream data redaction
 

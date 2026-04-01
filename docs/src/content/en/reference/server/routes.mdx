@@ -74,75 +74,6 @@ GET /api/agents/my-agent?versionId=abc123
 }
 ```
 
-## Responses API
-
-| Method | Path | Description |
-| - | - | - |
-| `POST` | `/api/v1/responses` | Create a response through an OpenAI-compatible Responses API route |
-| `GET` | `/api/v1/responses/:responseId` | Retrieve a stored response |
-| `DELETE` | `/api/v1/responses/:responseId` | Delete a stored response |
-
-### Create response request body
-
-```typescript prettier:false
-{
-  model: string;                    // Required. Underlying provider/model, such as "openai/gpt-5".
-  agent_id: string;                 // Required on initial requests. Mastra agent ID.
-  input: string | Array<{
-    role: 'system' | 'developer' | 'user' | 'assistant';
-    content: string | Array<{
-      type: 'input_text' | 'text' | 'output_text';
-      text: string;
-    }>;
-  }>;
-  instructions?: string;            // Optional request-scoped instructions for this response
-  text?: {
-    format: {
-      type: 'json_object';          // Optional. Request JSON object output
-    } | {
-      type: 'json_schema';          // Optional. Request schema-constrained structured output
-      name: string;
-      schema: Record<string, unknown>;
-      description?: string;
-      strict?: boolean;
-    };
-  };
-  stream?: boolean;                 // Return SSE events instead of JSON
-  store?: boolean;                  // Persist the response through the selected agent's memory
-  previous_response_id?: string;    // Continue a previously stored response chain
-}
-```
-
-### Create response body
-
-```typescript prettier:false
-{
-  id: string;
-  object: 'response';
-  created_at: number;
-  model: string;
-  status: 'in_progress' | 'completed' | 'incomplete';
-  output: Array<{
-    id: string;
-    type: 'message';
-    role: 'assistant';
-    status: 'in_progress' | 'completed' | 'incomplete';
-    content: Array<{
-      type: 'output_text';
-      text: string;
-    }>;
-  }>;
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null;
-  instructions?: string | null;
-  previous_response_id?: string | null;
-  store?: boolean;                  // Reflects whether the response was actually persisted
-}
-```
-
 ## Workflows
 
 | Method | Path | Description |
@@ -323,6 +254,27 @@ GET /api/agents/my-agent?versionId=abc123
 | `GET` | `/api/mcp/servers/:serverId/tools` | List server tools |
 | `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
 | `GET` | `/api/mcp/:serverId/sse` | MCP SSE transport |
+
+## Responses API
+
+| Method | Path | Description |
+| - | - | - |
+| `POST` | `/api/v1/responses` | Create a response through the OpenAI-compatible Responses API route |
+| `GET` | `/api/v1/responses/:responseId` | Retrieve a stored response |
+| `DELETE` | `/api/v1/responses/:responseId` | Delete a stored response |
+
+For the full request and response contract, see the [Responses API reference](/reference/client-js/responses).
+
+## Conversations API
+
+| Method | Path | Description |
+| - | - | - |
+| `POST` | `/api/v1/conversations` | Create a conversation |
+| `GET` | `/api/v1/conversations/:conversationId` | Retrieve a conversation |
+| `DELETE` | `/api/v1/conversations/:conversationId` | Delete a conversation |
+| `GET` | `/api/v1/conversations/:conversationId/items` | List stored items for a conversation |
+
+For the full request and response contract, see the [Conversations API reference](/reference/client-js/conversations).
 
 ## Logs
 

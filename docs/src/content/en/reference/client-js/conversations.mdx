@@ -1,21 +1,40 @@
 ---
-title: "Reference: Conversations API | Client SDK"
-description: API reference for the client-js Conversations API helpers that target Mastra's `/v1/conversations` routes.
+title: "Reference: OpenAI Responses API Conversations | Client SDK"
+description: API reference for the client-js helpers that call Mastra's OpenAI-compatible `/v1/conversations` routes.
 packages:
   - "@mastra/client-js"
 ---
 
-# Conversations API
+# OpenAI Responses API Conversations
 
-The Conversations API adds a `conversations` namespace to `MastraClient` so you can create a thread-backed conversation, retrieve it, delete it, and list its stored items.
+The OpenAI Responses API Conversations surface provides methods to create, retrieve, delete, and inspect thread-backed conversations in Mastra.
 
-In Mastra, a conversation ID is the raw memory thread ID. Responses API calls can return this value as `conversation_id`, and the Conversations API lets you create and inspect the same thread directly.
+This API follows up on the [OpenAI Responses API](/reference/client-js/responses). Stored Responses calls return `conversation_id`, and in Mastra that value is the raw memory `threadId`. Use `client.conversations` when you want to work with that thread directly.
 
-If you want to compare this with a working app, see the [Responses API demo](https://github.com/mastra-ai/mastra/tree/main/examples/responses-api-demo).
+This API is currently experimental.
+
+## Relationship to OpenAI Responses
+
+Use the OpenAI Responses API for generation and continuation:
+
+```typescript
+const response = await client.responses.create({
+  agent_id: 'support-agent',
+  input: 'Start a support thread',
+  store: true,
+})
+
+console.log(response.conversation_id)
+```
+
+Use the Conversations API when you want to inspect or manage that stored thread:
+
+```typescript
+const conversation = await client.conversations.retrieve(response.conversation_id!)
+const items = await client.conversations.items.list(response.conversation_id!)
+```
 
 ## Usage example
-
-Create a conversation:
 
 ```typescript
 import { MastraClient } from '@mastra/client-js'
@@ -29,19 +48,84 @@ const conversation = await client.conversations.create({
 })
 
 console.log(conversation.id)
-
-const sameConversation = await client.conversations.retrieve(conversation.id)
-
-console.log(sameConversation.thread)
 ```
 
-List the stored items for a conversation:
+## Methods
+
+### Lifecycle
+
+#### `create(params)`
+
+Creates a new conversation thread for the selected agent.
+
+```typescript
+const conversation = await client.conversations.create({
+  agent_id: 'support-agent',
+  title: 'Billing support',
+})
+```
+
+**Returns:** `Promise<Conversation>`.
+
+#### `retrieve(conversationId, requestContext?)`
+
+Retrieves a conversation by its thread ID.
+
+```typescript
+const conversation = await client.conversations.retrieve('thread_123')
+
+console.log(conversation.thread)
+```
+
+**Returns:** `Promise<Conversation>`.
+
+#### `delete(conversationId, requestContext?)`
+
+Deletes a conversation by its thread ID.
+
+```typescript
+const deleted = await client.conversations.delete('thread_123')
+
+console.log(deleted.deleted)
+```
+
+**Returns:** `Promise<ConversationDeleted>`.
+
+### Items
+
+#### `items.list(conversationId, requestContext?)`
+
+Lists the stored items for a conversation.
 
 ```typescript
 const items = await client.conversations.items.list('thread_123')
 
 console.log(items.data)
 ```
+
+**Returns:** `Promise<ConversationItemsPage>`.
+
+## Response shape
+
+`create()` and `retrieve()` return a conversation object with:
+
+- `id`: The raw thread ID
+- `object`: Always `'conversation'`
+- `thread`: The stored thread record
+
+`delete()` returns:
+
+- `id`: The raw thread ID
+- `object`: Always `'conversation.deleted'`
+- `deleted`: Always `true`
+
+`items.list()` returns:
+
+- `object`: Always `'list'`
+- `data`: Conversation items such as `message`, `function_call`, and `function_call_output`
+- `first_id`: The first item ID in the page
+- `last_id`: The last item ID in the page
+- `has_more`: Whether more items exist beyond the current page
 
 ## Parameters
 
@@ -85,82 +169,3 @@ console.log(items.data)
   },
 ]}
 />
-
-## Methods
-
-### Lifecycle
-
-#### `create(params)`
-
-Creates a new conversation thread for the selected agent.
-
-```typescript
-const conversation = await client.conversations.create({
-  agent_id: 'support-agent',
-  title: 'Billing support',
-})
-```
-
-**Returns:** `Promise<Conversation>`.
-
-#### `retrieve(conversationId, requestContext?)`
-
-Retrieves a conversation object by its thread ID.
-
-```typescript
-const conversation = await client.conversations.retrieve('thread_123')
-
-console.log(conversation.thread)
-```
-
-**Returns:** `Promise<Conversation>`.
-
-#### `delete(conversationId, requestContext?)`
-
-Deletes a conversation by its raw thread ID.
-
-```typescript
-const deleted = await client.conversations.delete('thread_123')
-
-console.log(deleted.deleted)
-```
-
-**Returns:** `Promise<ConversationDeleted>`.
-
-### Items
-
-#### `items.list(conversationId, requestContext?)`
-
-Retrieves the item list for a conversation by its thread ID.
-
-```typescript
-const items = await client.conversations.items.list('thread_123')
-
-console.log(items.data)
-```
-
-**Returns:** `Promise<ConversationItemsPage>`.
-
-## Response shapes
-
-`create()` returns a conversation object with:
-
-- `id`: The raw thread ID
-- `object`: Always `'conversation'`
-- `thread`: The stored thread record
-
-`delete()` returns:
-
-- `id`: The raw thread ID
-- `object`: Always `'conversation.deleted'`
-- `deleted`: Always `true`
-
-`items.list()` returns an item list with:
-
-- `object`: Always `'list'`
-- `data`: Conversation items such as `message`, `function_call`, and `function_call_output`
-- `first_id`: The first item ID in the page
-- `last_id`: The last item ID in the page
-- `has_more`: Whether more items exist beyond this page
-
-Use this API when you want to create a conversation before the first Responses request, or when you want to inspect the stored item history behind a Responses flow.
