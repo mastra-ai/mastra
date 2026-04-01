@@ -5,7 +5,7 @@
  *   1. Identity (dedupeKey for tracing)
  *   2. IDs (trace, span, experiment)
  *   3. Entity hierarchy (entity, parent, root)
- *   4. Context (user, org, resource, run, session, thread, request, environment, source, serviceName)
+ *   4. Context (user, org, resource, run, session, thread, request, environment, executionSource, serviceName)
  *   5. Span / domain-specific scalars
  *   6. Query-relevant flexible fields (tags, labels, metadataSearch)
  *   7. Information-only JSON payloads
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   threadId           Nullable(String),
   requestId          Nullable(String),
   environment        LowCardinality(Nullable(String)),
-  source             LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
 
   -- Span scalars
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   threadId           Nullable(String),
   requestId          Nullable(String),
   environment        LowCardinality(Nullable(String)),
-  source             LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
 
   -- Span scalars
@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   threadId           Nullable(String),
   requestId          Nullable(String),
   environment        LowCardinality(Nullable(String)),
-  source             LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
 
   -- Metric scalars
@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   threadId           Nullable(String),
   requestId          Nullable(String),
   environment        LowCardinality(Nullable(String)),
-  source             LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
 
   -- Log scalars
@@ -345,7 +345,6 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   -- Scorer identity
   scorerId           LowCardinality(String),
   scorerVersion      LowCardinality(Nullable(String)),
-  source             LowCardinality(Nullable(String)),
   scoreSource        LowCardinality(Nullable(String)),
 
   -- Score value
@@ -408,8 +407,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   sourceId           Nullable(String),
 
   -- Feedback identity
-  source             LowCardinality(String),
-  feedbackSource     LowCardinality(Nullable(String)),
+  feedbackSource     LowCardinality(String),
   feedbackType       LowCardinality(String),
 
   -- Feedback value (exactly one non-null per valid row)

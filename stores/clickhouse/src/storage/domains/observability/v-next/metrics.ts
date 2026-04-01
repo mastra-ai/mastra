@@ -56,7 +56,7 @@ const METRIC_TYPED_COLUMNS = new Set([
   'threadId',
   'requestId',
   'environment',
-  'source',
+  'executionSource',
   'serviceName',
   'experimentId',
   'provider',

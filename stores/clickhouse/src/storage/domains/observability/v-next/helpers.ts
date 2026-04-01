@@ -50,7 +50,7 @@ const PROMOTED_KEYS = new Set([
   'threadId',
   'requestId',
   'environment',
-  'source',
+  'executionSource',
   'serviceName',
 ]);
 
@@ -173,7 +173,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     threadId: nullableString(row.threadId),
     requestId: nullableString(row.requestId),
     environment: nullableString(row.environment),
-    source: nullableString(row.source),
+    source: nullableString(row.executionSource),
     serviceName: nullableString(row.serviceName),
     experimentId: nullableString(row.experimentId),
     tags: normalizeTags(row.tags),
@@ -221,7 +221,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     threadId: span.threadId ?? null,
     requestId: span.requestId ?? null,
     environment: span.environment ?? null,
-    source: span.source ?? null,
+    executionSource: span.source ?? null,
     serviceName: span.serviceName ?? null,
     name: span.name,
     spanType: span.spanType,
@@ -267,8 +267,7 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
     threadId: nullableString(row.threadId),
     requestId: nullableString(row.requestId),
     environment: nullableString(row.environment),
-    source: nullableString(row.source),
-    executionSource: nullableString(row.source),
+    executionSource: nullableString(row.executionSource),
     serviceName: nullableString(row.serviceName),
     scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
     tags: normalizeTags(row.tags),
@@ -302,7 +301,7 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
     threadId: log.threadId ?? null,
     requestId: log.requestId ?? null,
     environment: log.environment ?? null,
-    source: log.executionSource ?? log.source ?? null,
+    executionSource: log.executionSource ?? log.source ?? null,
     serviceName: log.serviceName ?? null,
     tags: normalizeTags(log.tags),
     metadata: jsonEncode(log.metadata),
@@ -335,8 +334,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
     threadId: nullableString(row.threadId),
     requestId: nullableString(row.requestId),
     environment: nullableString(row.environment),
-    source: nullableString(row.source),
-    executionSource: nullableString(row.source),
+    executionSource: nullableString(row.executionSource),
     serviceName: nullableString(row.serviceName),
     scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
     provider: nullableString(row.provider),
@@ -375,7 +373,7 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
     threadId: metric.threadId ?? null,
     requestId: metric.requestId ?? null,
     environment: metric.environment ?? null,
-    source: metric.executionSource ?? metric.source ?? null,
+    executionSource: metric.executionSource ?? metric.source ?? null,
     serviceName: metric.serviceName ?? null,
     provider: metric.provider ?? null,
     model: metric.model ?? null,
@@ -417,8 +415,7 @@ export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
     serviceName: nullableString(row.serviceName),
     scorerId: row.scorerId,
     scorerVersion: nullableString(row.scorerVersion),
-    source: nullableString(row.scoreSource) ?? nullableString(row.source),
-    scoreSource: nullableString(row.scoreSource) ?? nullableString(row.source),
+    scoreSource: nullableString(row.scoreSource),
     score: Number(row.score),
     reason: nullableString(row.reason),
     tags: normalizeTags(row.tags),
@@ -462,7 +459,6 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
     serviceName: score.serviceName ?? null,
     scorerId: score.scorerId,
     scorerVersion: score.scorerVersion ?? null,
-    source: scoreSource,
     scoreSource,
     score: score.score,
     reason: score.reason ?? null,
@@ -474,7 +470,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
 
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
-  const feedbackSource = nullableString(row.feedbackSource) ?? row.source;
+  const feedbackSource = nullableString(row.feedbackSource);
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
     timestamp: toDate(row.timestamp),
@@ -502,7 +498,6 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     serviceName: nullableString(row.serviceName),
     feedbackUserId,
     sourceId: nullableString(row.sourceId),
-    source: feedbackSource,
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),
@@ -515,7 +510,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
 
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
-  const feedbackSource = feedback.feedbackSource ?? feedback.source;
+  const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
   const feedbackUserId =
     feedback.feedbackUserId ??
     feedback.userId ??
@@ -553,7 +548,6 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     serviceName: feedback.serviceName ?? null,
     feedbackUserId,
     sourceId: feedback.sourceId ?? null,
-    source: feedbackSource,
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,

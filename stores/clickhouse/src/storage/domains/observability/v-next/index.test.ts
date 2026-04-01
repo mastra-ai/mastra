@@ -720,7 +720,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date('2026-01-01T00:00:01Z'),
           traceId: 'fb-ord-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: null,
@@ -735,7 +735,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date('2026-01-01T00:00:03Z'),
           traceId: 'fb-ord-3',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 3,
           comment: null,
@@ -750,7 +750,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date('2026-01-01T00:00:02Z'),
           traceId: 'fb-ord-2',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 2,
           comment: null,
@@ -903,6 +903,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               threadId: 'thread-A',
               requestId: 'req-A',
               environment: 'staging',
+              executionSource: 'cloud',
               serviceName: 'svc-A',
               experimentId: 'exp-A',
               tags: ['alpha'],
@@ -919,6 +920,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               entityName: 'toolB',
               userId: 'user-B',
               environment: 'production',
+              executionSource: 'local',
               serviceName: 'svc-B',
               tags: ['beta'],
               metadata: null,
@@ -981,6 +983,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const result = await storage.listLogs({ filters: { environment: 'production' } });
         expect(result.logs).toHaveLength(1);
         expect(result.logs[0]!.message).toBe('log-B');
+      });
+
+      it('filters by executionSource', async () => {
+        const result = await storage.listLogs({ filters: { executionSource: 'cloud' } });
+        expect(result.logs).toHaveLength(1);
+        expect(result.logs[0]!.message).toBe('log-A');
+      });
+
+      it('rejects deprecated source filter', async () => {
+        await expect(storage.listLogs({ filters: { source: 'cloud' } as any })).rejects.toThrow(
+          'Deprecated `source` filter is not supported for logs; use `executionSource` instead.',
+        );
       });
 
       it('filters by serviceName', async () => {
@@ -1050,6 +1064,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               threadId: 'thread-A',
               requestId: 'req-A',
               environment: 'staging',
+              executionSource: 'cloud',
               serviceName: 'svc-A',
               experimentId: 'exp-A',
               tags: ['alpha'],
@@ -1065,6 +1080,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               entityName: 'toolB',
               userId: 'user-B',
               environment: 'production',
+              executionSource: 'local',
               serviceName: 'svc-B',
               tags: ['beta'],
             },
@@ -1094,6 +1110,20 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const result = await storage.listMetrics({ filters: { name: ['ft_metric'], environment: 'production' } });
         expect(result.metrics).toHaveLength(1);
         expect(result.metrics[0]!.value).toBe(200);
+      });
+
+      it('filters by executionSource', async () => {
+        const result = await storage.listMetrics({
+          filters: { name: ['ft_metric'], executionSource: 'cloud' },
+        });
+        expect(result.metrics).toHaveLength(1);
+        expect(result.metrics[0]!.value).toBe(100);
+      });
+
+      it('rejects deprecated source filter', async () => {
+        await expect(storage.listMetrics({ filters: { name: ['ft_metric'], source: 'cloud' } as any })).rejects.toThrow(
+          'Deprecated `source` filter is not supported for metrics; use `executionSource` instead.',
+        );
       });
 
       it('filters by traceId', async () => {
@@ -1195,6 +1225,12 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.traceId).toBe('sf-trace-2');
       });
+
+      it('rejects deprecated source filter', async () => {
+        await expect(storage.listScores({ filters: { source: 'manual' } as any })).rejects.toThrow(
+          'Deprecated `source` filter is not supported for scores; use `scoreSource or executionSource` instead.',
+        );
+      });
     });
 
     describe('feedback filters', () => {
@@ -1204,7 +1240,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'ff-trace-1',
             spanId: 'ff-span-1',
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             comment: null,
@@ -1220,7 +1256,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             timestamp: new Date('2026-01-01T00:00:05Z'),
             traceId: 'ff-trace-2',
             spanId: null,
-            source: 'reviewer',
+            feedbackSource: 'reviewer',
             feedbackType: 'rating',
             value: 4,
             comment: null,
@@ -1274,6 +1310,12 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         });
         expect(result.feedback).toHaveLength(1);
         expect(result.feedback[0]!.traceId).toBe('ff-trace-2');
+      });
+
+      it('rejects deprecated source filter', async () => {
+        await expect(storage.listFeedback({ filters: { source: 'user' } as any })).rejects.toThrow(
+          'Deprecated `source` filter is not supported for feedback; use `feedbackSource or executionSource` instead.',
+        );
       });
     });
   });
@@ -1479,7 +1521,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(filtered.scores[0]!.score).toBe(0.85);
     });
 
-    it('scoreSource round-trips through CH source column', async () => {
+    it('scoreSource round-trips through CH scoreSource column', async () => {
       await storage.createScore({
         score: {
           timestamp: new Date(),
@@ -1547,7 +1589,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Great!',
@@ -1563,7 +1605,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-2',
           spanId: null,
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
@@ -1578,7 +1620,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.feedback).toHaveLength(2);
 
       const filtered = await storage.listFeedback({
-        filters: { source: 'user' },
+        filters: { feedbackSource: 'user' },
       });
       expect(filtered.feedback).toHaveLength(1);
       expect(filtered.feedback[0]!.value).toBe(1);
@@ -1592,7 +1634,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-fbu',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: null,
@@ -1615,7 +1657,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-fbu-f1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: null,
@@ -1630,7 +1672,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-fbu-f2',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 0,
           comment: null,
@@ -1648,7 +1690,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.feedback[0]!.traceId).toBe('trace-fbu-f1');
     });
 
-    it('feedbackSource round-trips through CH source column', async () => {
+    it('feedbackSource round-trips through CH feedbackSource column', async () => {
       await storage.createFeedback({
         feedback: {
           timestamp: new Date(),
@@ -1669,6 +1711,29 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const match = result.feedback.find(f => f.traceId === 'trace-fbs');
       expect(match).toBeDefined();
       expect(match!.feedbackSource).toBe('manual');
+    });
+
+    it('deprecated feedback source alias still writes to feedbackSource column', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date(),
+          traceId: 'trace-fbs-compat',
+          spanId: null,
+          source: 'legacy-user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: null,
+          experimentId: null,
+          userId: null,
+          sourceId: null,
+          metadata: null,
+        },
+      });
+
+      const result = await storage.listFeedback({});
+      const match = result.feedback.find(f => f.traceId === 'trace-fbs-compat');
+      expect(match).toBeDefined();
+      expect(match!.feedbackSource).toBe('legacy-user');
     });
 
     it('filters feedback by feedbackSource', async () => {
@@ -1717,7 +1782,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'batch-trace-1',
             spanId: null,
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
@@ -1730,7 +1795,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             timestamp: new Date('2026-01-01T00:00:01Z'),
             traceId: 'batch-trace-2',
             spanId: 'span-2',
-            source: 'reviewer',
+            feedbackSource: 'reviewer',
             feedbackType: 'rating',
             value: 4,
             comment: null,
@@ -1743,7 +1808,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             timestamp: new Date('2026-01-01T00:00:02Z'),
             traceId: 'batch-trace-3',
             spanId: null,
-            source: 'system',
+            feedbackSource: 'system',
             feedbackType: 'flag',
             value: 'needs-review',
             comment: 'Escalated',
@@ -2322,6 +2387,79 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(withoutErrors.spans).toHaveLength(1);
       expect(withoutErrors.spans[0]!.traceId).toBe('clean-trace');
     });
+
+    it('maps trace source filter to executionSource column', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-source-cloud',
+            spanId: 'root-cloud',
+            parentSpanId: null,
+            name: 'cloud-trace',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: 'cloud',
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-01T00:00:00Z'),
+            endedAt: new Date('2026-01-01T00:00:01Z'),
+          },
+          {
+            traceId: 'trace-source-local',
+            spanId: 'root-local',
+            parentSpanId: null,
+            name: 'local-trace',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: 'local',
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-01T00:00:02Z'),
+            endedAt: new Date('2026-01-01T00:00:03Z'),
+          },
+        ],
+      });
+
+      const filtered = await storage.listTraces({ filters: { source: 'cloud' } });
+      expect(filtered.spans).toHaveLength(1);
+      expect(filtered.spans[0]!.traceId).toBe('trace-source-cloud');
+    });
   });
 
   // ==========================================================================
@@ -2497,7 +2635,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('PROMOTED_KEYS are excluded from metadataSearch', async () => {
-      // If metadata contains a promoted key (e.g. entityType), it should NOT be searchable
+      // If metadata contains a promoted key (e.g. entityType or executionSource), it should NOT be searchable
       // via metadata filter — promoted keys live in typed columns instead
       await storage.createSpan({
         span: {
@@ -2522,7 +2660,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           serviceName: null,
           scope: null,
           attributes: null,
-          metadata: { entityType: 'agent', customKey: 'findme' },
+          metadata: { entityType: 'agent', executionSource: 'cloud', customKey: 'findme' },
           tags: null,
           links: null,
           input: null,
@@ -2540,6 +2678,9 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       // entityType is a PROMOTED_KEY — should NOT be in metadataSearch, so metadata filter won't find it
       const notFound = await storage.listTraces({ filters: { metadata: { entityType: 'agent' } } });
       expect(notFound.spans).toHaveLength(0);
+
+      const sourceNotFound = await storage.listTraces({ filters: { metadata: { executionSource: 'cloud' } } });
+      expect(sourceNotFound.spans).toHaveLength(0);
     });
   });
 
@@ -2655,7 +2796,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
     });
 
-    it('log executionSource round-trips through CH source column', async () => {
+    it('log executionSource round-trips through CH executionSource column', async () => {
       await storage.batchCreateLogs({
         logs: [
           {
@@ -2674,7 +2815,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.logs[0]!.executionSource).toBe('cloud');
     });
 
-    it('metric executionSource round-trips through CH source column', async () => {
+    it('metric executionSource round-trips through CH executionSource column', async () => {
       await storage.batchCreateMetrics({
         metrics: [
           {
@@ -2718,7 +2859,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-meta-uid',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: null,
@@ -2740,7 +2881,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           timestamp: new Date(),
           traceId: 'trace-meta-fborg',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: null,

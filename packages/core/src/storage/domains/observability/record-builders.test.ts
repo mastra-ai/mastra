@@ -221,7 +221,7 @@ describe('record-builders', () => {
           spanId: 'span-1',
           scorerId: 'judge-1',
           scorerVersion: 'v1',
-          source: 'eval',
+          scoreSource: 'eval',
           score: 0.91,
           reason: 'good answer',
           experimentId: 'exp-1',
@@ -271,6 +271,27 @@ describe('record-builders', () => {
           kept: true,
         },
       });
+    });
+
+    it('keeps deprecated score source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          timestamp,
+          traceId: 'trace-legacy-score-source',
+          scorerId: 'judge-legacy',
+          source: 'legacy-eval',
+          score: 0.42,
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual(
+        expect.objectContaining({
+          scoreSource: 'legacy-eval',
+          source: 'legacy-eval',
+        }),
+      );
     });
 
     it('leaves organizationId null when metadata does not contain a string', () => {
@@ -337,7 +358,7 @@ describe('record-builders', () => {
           timestamp,
           traceId: 'trace-1',
           spanId: 'span-1',
-          source: 'playground',
+          feedbackSource: 'playground',
           feedbackType: 'thumbs-up',
           value: 'positive',
           comment: 'helpful',
@@ -391,6 +412,27 @@ describe('record-builders', () => {
       });
     });
 
+    it('keeps deprecated feedback source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          timestamp,
+          traceId: 'trace-legacy-feedback-source',
+          source: 'legacy-api',
+          feedbackType: 'rating',
+          value: 3,
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual(
+        expect.objectContaining({
+          feedbackSource: 'legacy-api',
+          source: 'legacy-api',
+        }),
+      );
+    });
+
     it('leaves organizationId and userId null when metadata values are not strings', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');
       const event: FeedbackEvent = {
@@ -398,7 +440,7 @@ describe('record-builders', () => {
         feedback: {
           timestamp,
           traceId: 'trace-2',
-          source: 'api',
+          feedbackSource: 'api',
           feedbackType: 'rating',
           value: 4,
           metadata: {

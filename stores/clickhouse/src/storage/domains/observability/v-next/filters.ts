@@ -47,6 +47,15 @@ interface DateRange {
   endExclusive?: boolean;
 }
 
+function assertNoDeprecatedSourceFilter(
+  source: string | undefined,
+  replacement: string,
+  signalName: 'logs' | 'metrics' | 'scores' | 'feedback',
+): void {
+  if (source === undefined) return;
+  throw new Error(`Deprecated \`source\` filter is not supported for ${signalName}; use \`${replacement}\` instead.`);
+}
+
 // ---------------------------------------------------------------------------
 // Date range helper
 // ---------------------------------------------------------------------------
@@ -117,10 +126,6 @@ function addStringMapFilters(
 /**
  * Adds shared context filter conditions (commonFilterFields) to the output.
  * Used by logs, metrics, scores, and feedback filter builders.
- *
- * The `sourceColumn` parameter controls which CH column the execution source maps to:
- * - 'source' for logs/metrics (where executionSource → source column)
- * - 'executionSource' for scores/feedback (which have a dedicated executionSource column)
  */
 function addCommonFilterFields(
   filters: {
@@ -147,7 +152,6 @@ function addCommonFilterFields(
     tags?: string[];
   },
   tableAlias: string | undefined,
-  sourceColumn: 'source' | 'executionSource',
   out: FilterResult,
 ): void {
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
@@ -171,7 +175,7 @@ function addCommonFilterFields(
   addEq(col('requestId'), filters.requestId, 'requestId', 'String', out);
   addEq(col('serviceName'), filters.serviceName, 'serviceName', 'String', out);
   addEq(col('environment'), filters.environment, 'environment', 'String', out);
-  addEq(col(sourceColumn), filters.executionSource, 'executionSource', 'String', out);
+  addEq(col('executionSource'), filters.executionSource, 'executionSource', 'String', out);
   addTags(col('tags'), filters.tags, out);
 }
 
@@ -181,13 +185,10 @@ function addSignalCommonFilters(
   out: FilterResult,
 ): void {
   if (!filters) return;
-  const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
-
-  addCommonFilterFields(filters, tableAlias, 'source', out);
-  // Legacy: logs/metrics map deprecated `source` filter to the `source` CH column
-  if (!filters.executionSource && filters.source) {
-    addEq(col('source'), filters.source, 'source', 'String', out);
-  }
+  const replacement = 'executionSource';
+  const signalName = 'level' in filters ? 'logs' : 'metrics';
+  assertNoDeprecatedSourceFilter(filters.source, replacement, signalName);
+  addCommonFilterFields(filters, tableAlias, out);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +222,8 @@ export function buildTraceFilterConditions(filters: TracesFilter | undefined, ta
   addEq(col('threadId'), filters.threadId, 'threadId', 'String', out);
   addEq(col('requestId'), filters.requestId, 'requestId', 'String', out);
   addEq(col('environment'), filters.environment, 'environment', 'String', out);
-  addEq(col('source'), filters.source, 'source', 'String', out);
+  // Trace filters still accept `source`, but it maps to the `executionSource` DB column.
+  addEq(col('executionSource'), filters.source, 'source', 'String', out);
   addEq(col('serviceName'), filters.serviceName, 'serviceName', 'String', out);
 
   addTags(col('tags'), filters.tags, out);
@@ -272,15 +274,15 @@ export function buildMetricsFilterConditions(filters: MetricsFilter | undefined,
 export function buildScoresFilterConditions(filters: ScoresFilter | undefined, tableAlias?: string): FilterResult {
   const out: FilterResult = { conditions: [], params: {} };
   if (!filters) return out;
+  assertNoDeprecatedSourceFilter(filters.source, 'scoreSource or executionSource', 'scores');
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
 
   // Shared context filters (scores have dedicated executionSource column)
-  addCommonFilterFields(filters, tableAlias, 'executionSource', out);
+  addCommonFilterFields(filters, tableAlias, out);
 
   // Score-specific filters
-  const scoreSrc = filters.scoreSource ?? filters.source;
-  addEq(col('scoreSource'), scoreSrc, 'scoreSource', 'String', out);
+  addEq(col('scoreSource'), filters.scoreSource, 'scoreSource', 'String', out);
 
   if (typeof filters.scorerId === 'string') {
     addEq(col('scorerId'), filters.scorerId, 'scorerId', 'String', out);
@@ -294,19 +296,19 @@ export function buildScoresFilterConditions(filters: ScoresFilter | undefined, t
 export function buildFeedbackFilterConditions(filters: FeedbackFilter | undefined, tableAlias?: string): FilterResult {
   const out: FilterResult = { conditions: [], params: {} };
   if (!filters) return out;
+  assertNoDeprecatedSourceFilter(filters.source, 'feedbackSource or executionSource', 'feedback');
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
 
   // Shared context filters (feedback has dedicated executionSource column)
-  addCommonFilterFields(filters, tableAlias, 'executionSource', out);
+  addCommonFilterFields(filters, tableAlias, out);
 
   // Feedback-specific filters
   const fbActor = filters.feedbackUserId ?? filters.userId;
   // feedbackUserId filter targets the dedicated feedbackUserId column
   addEq(col('feedbackUserId'), fbActor, 'feedbackUserId', 'String', out);
 
-  const fbSource = filters.feedbackSource ?? filters.source;
-  addEq(col('feedbackSource'), fbSource, 'feedbackSource', 'String', out);
+  addEq(col('feedbackSource'), filters.feedbackSource, 'feedbackSource', 'String', out);
 
   if (typeof filters.feedbackType === 'string') {
     addEq(col('feedbackType'), filters.feedbackType, 'feedbackType', 'String', out);
