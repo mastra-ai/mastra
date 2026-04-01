@@ -1,6 +1,6 @@
+import { Readable } from 'node:stream';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InworldVoice } from './index';
-import { Readable, PassThrough } from 'node:stream';
 
 // Helper to collect a stream into a buffer
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
@@ -15,6 +15,26 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 function createNdjsonBody(audioChunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const lines = audioChunks.map(b64 => JSON.stringify({ result: { audioContent: b64 } }) + '\n');
+  let index = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (index < lines.length) {
+        controller.enqueue(encoder.encode(lines[index]!));
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+// Variant that omits trailing newline on the last chunk
+function createNdjsonBodyNoTrailingNewline(audioChunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const lines = audioChunks.map((b64, i) => {
+    const json = JSON.stringify({ result: { audioContent: b64 } });
+    return i < audioChunks.length - 1 ? json + '\n' : json; // no trailing \n on last
+  });
   let index = 0;
   return new ReadableStream({
     pull(controller) {
@@ -93,16 +113,14 @@ describe('InworldVoice', () => {
     it('throws on API error', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
 
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response('Unauthorized', { status: 401 }),
-      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
       await expect(voice.getSpeakers()).rejects.toThrow('Inworld list voices failed (401)');
     });
   });
 
   describe('getListener', () => {
-    it('returns enabled', async () => {
+    it('returns enabled when listeningModel is configured', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
       const result = await voice.getListener();
       expect(result).toEqual({ enabled: true });
@@ -176,11 +194,29 @@ describe('InworldVoice', () => {
     it('throws on API error', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
 
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response('Bad Request', { status: 400 }),
-      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Bad Request', { status: 400 }));
 
       await expect(voice.speak('Hello')).rejects.toThrow('Inworld TTS failed (400)');
+    });
+
+    it('handles NDJSON stream without trailing newline', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64a = Buffer.from('chunk-a').toString('base64');
+      const audioBase64b = Buffer.from('chunk-b').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBodyNoTrailingNewline([audioBase64a, audioBase64b]), { status: 200 }),
+      );
+
+      const stream = await voice.speak('Hello world');
+      const buffer = await streamToBuffer(stream);
+
+      expect(buffer.toString()).toBe('chunk-achunk-b');
+    });
+
+    it('throws on empty input text', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      await expect(voice.speak('   ')).rejects.toThrow('Input text is empty');
     });
 
     it('uses mini model when configured', async () => {
@@ -205,10 +241,7 @@ describe('InworldVoice', () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
 
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ transcription: { transcript: 'Hello world', isFinal: true } }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ transcription: { transcript: 'Hello world', isFinal: true } }), { status: 200 }),
       );
 
       const audioStream = Readable.from([Buffer.from('fake-audio-data')]);
@@ -228,9 +261,7 @@ describe('InworldVoice', () => {
     it('returns empty string for missing transcript', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
 
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({}), { status: 200 }),
-      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
 
       const audioStream = Readable.from([Buffer.from('silence')]);
       const result = await voice.listen(audioStream);
@@ -245,10 +276,7 @@ describe('InworldVoice', () => {
       });
 
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ transcription: { transcript: 'こんにちは' } }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ transcription: { transcript: 'こんにちは' } }), { status: 200 }),
       );
 
       const audioStream = Readable.from([Buffer.from('audio')]);
@@ -270,9 +298,7 @@ describe('InworldVoice', () => {
     it('throws on API error', async () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
 
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response('Server Error', { status: 500 }),
-      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Server Error', { status: 500 }));
 
       const audioStream = Readable.from([Buffer.from('audio')]);
       await expect(voice.listen(audioStream)).rejects.toThrow('Inworld STT failed (500)');

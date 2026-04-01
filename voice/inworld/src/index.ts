@@ -38,6 +38,17 @@ interface InworldListenOptions {
   language?: string;
 }
 
+export type {
+  InworldVoiceConfig,
+  InworldListeningConfig,
+  InworldSpeakOptions,
+  InworldListenOptions,
+  InworldTtsModel,
+  InworldSttModel,
+  AudioEncoding,
+  SttAudioEncoding,
+};
+
 export class InworldVoice extends MastraVoice {
   private apiKey: string;
   private audioEncoding: AudioEncoding;
@@ -138,7 +149,7 @@ export class InworldVoice extends MastraVoice {
    * Checks if listening capabilities are enabled.
    */
   async getListener() {
-    return { enabled: true };
+    return { enabled: !!this.listeningModel };
   }
 
   /**
@@ -160,6 +171,11 @@ export class InworldVoice extends MastraVoice {
     options?: InworldSpeakOptions & { speaker?: string },
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
+
+    if (text.trim().length === 0) {
+      throw new Error('Input text is empty');
+    }
+
     const speaker = options?.speaker ?? this.speaker;
 
     const body = {
@@ -179,7 +195,6 @@ export class InworldVoice extends MastraVoice {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${this.apiKey}`,
-        Connection: 'keep-alive',
       },
       body: JSON.stringify(body),
     });
@@ -205,6 +220,19 @@ export class InworldVoice extends MastraVoice {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
+            // Process any remaining data in the buffer before ending
+            const remaining = buffer.trim();
+            if (remaining) {
+              try {
+                const chunk = JSON.parse(remaining);
+                const audioContent = chunk.result?.audioContent ?? chunk.audioContent;
+                if (audioContent) {
+                  outputStream.write(Buffer.from(audioContent, 'base64'));
+                }
+              } catch {
+                // skip malformed trailing data
+              }
+            }
             outputStream.end();
             break;
           }
@@ -228,9 +256,11 @@ export class InworldVoice extends MastraVoice {
           }
         }
       } catch (err) {
-        outputStream.destroy(err instanceof Error ? err : new Error(String(err)));
+        if (!outputStream.destroyed) {
+          outputStream.destroy(err instanceof Error ? err : new Error(String(err)));
+        }
       }
-    })();
+    })().catch(() => {});
 
     return outputStream;
   }
@@ -267,7 +297,6 @@ export class InworldVoice extends MastraVoice {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${this.apiKey}`,
-        Connection: 'keep-alive',
       },
       body: JSON.stringify(body),
     });
