@@ -35,7 +35,7 @@ function getInitialInput(traceDetails?: SpanRecord): string {
 export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose, level = 2 }: TraceAsItemDialogProps) {
   const client = useMastraClient();
 
-  const { data: trajectory } = useQuery({
+  const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
     queryFn: () => client.getTraceTrajectory(traceId!),
     enabled: isOpen && !!traceId,
@@ -68,6 +68,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose, leve
       initialInput={getInitialInput(traceDetails)}
       initialGroundTruth={traceDetails?.output != null ? JSON.stringify(traceDetails.output, null, 2) : ''}
       initialTrajectory={initialTrajectory}
+      trajectoryLoading={isTrajectoryLoading}
       breadcrumb={
         <TextAndIcon>
           <EyeIcon /> {getShortId(traceId)}

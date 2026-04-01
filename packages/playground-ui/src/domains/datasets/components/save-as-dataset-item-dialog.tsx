@@ -19,6 +19,8 @@ type SaveAsDatasetItemDialogProps = {
   initialGroundTruth: string;
   /** JSON string of the expected trajectory */
   initialTrajectory?: string;
+  /** Whether the trajectory is still being fetched */
+  trajectoryLoading?: boolean;
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
@@ -30,6 +32,7 @@ export function SaveAsDatasetItemDialog({
   initialInput,
   initialGroundTruth,
   initialTrajectory,
+  trajectoryLoading,
   breadcrumb,
   isOpen,
   onClose,
@@ -48,14 +51,27 @@ export function SaveAsDatasetItemDialog({
   const datasets = data?.datasets ?? [];
 
   const prevOpenRef = useRef(false);
+  const trajectorySeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
+      trajectorySeededRef.current = !!initialTrajectory;
     }
     prevOpenRef.current = isOpen;
+    if (!isOpen) {
+      trajectorySeededRef.current = false;
+    }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+
+  // Seed trajectory when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialTrajectory && !trajectorySeededRef.current) {
+      setExpectedTrajectory(initialTrajectory);
+      trajectorySeededRef.current = true;
+    }
+  }, [isOpen, initialTrajectory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,9 +210,9 @@ export function SaveAsDatasetItemDialog({
             <Button
               type="submit"
               variant="light"
-              disabled={addItem.isPending || !selectedDatasetId || datasets.length === 0}
+              disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
             >
-              {addItem.isPending ? 'Saving...' : 'Save Item'}
+              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}
             </Button>
           </div>
         </form>
