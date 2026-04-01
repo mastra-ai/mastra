@@ -288,7 +288,8 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const correlationFields = buildCorrelationRecordFields(s.correlationContext);
   return {
     timestamp: s.timestamp,
-    traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
+    //TODO: update this and CreateScoreRecord to be able to handle a null traceId
+    traceId: s.traceId ?? s.correlationContext?.traceId ?? '',
     spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
     scorerId: s.scorerId,
     scorerVersion: s.scorerVersion ?? null,
@@ -297,10 +298,11 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     score: s.score,
     reason: s.reason ?? null,
     ...correlationFields,
+    entityType: correlationFields.entityType ?? s.targetEntityType ?? null,
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.metadata ?? null,
+    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
   };
 }
 

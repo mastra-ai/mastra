@@ -102,7 +102,7 @@ export class NoOpObservability implements ObservabilityEntrypoint {
     return null;
   }
 
-  async addScore(_args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void> {
+  async addScore(_args: { traceId?: string; spanId?: string; score: ScoreInput }): Promise<void> {
     return;
   }
 

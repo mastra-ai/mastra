@@ -4,8 +4,10 @@ import { z } from 'zod/v4';
 export enum EntityType {
   /** Agent/Model execution */
   AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
+  /** Scorer definition/execution */
+  SCORER = 'scorer',
+  /** Trajectory evaluation target */
+  TRAJECTORY = 'trajectory',
   /** Input Processor */
   INPUT_PROCESSOR = 'input_processor',
   /** Input Step Processor */
