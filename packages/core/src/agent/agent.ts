@@ -2279,6 +2279,7 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
+    mastraProxy,
     autoResumeSuspendedTools,
     ...rest
   }: {
@@ -2286,6 +2287,7 @@ export class Agent<
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -2316,14 +2318,14 @@ export class Agent<
           threadId,
           resourceId,
           logger: this.logger,
-          mastra: undefined,
+          mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
-          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          browser: this.#browser,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedBrowserTools[toolName] = convertedToCoreTool;
@@ -4005,6 +4007,7 @@ export class Agent<
       threadId,
       requestContext,
       ...observabilityContext,
+      mastraProxy,
       autoResumeSuspendedTools,
     });
 
