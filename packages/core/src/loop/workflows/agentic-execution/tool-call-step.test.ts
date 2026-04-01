@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';

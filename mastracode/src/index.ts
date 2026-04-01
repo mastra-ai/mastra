@@ -9,11 +9,13 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
+import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { getDynamicModel, resolveModel } from './agents/model.js';
+import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
@@ -45,7 +47,7 @@ import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
-import { createStorage } from './utils/storage-factory.js';
+import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
@@ -155,8 +157,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  const memory = getDynamicMemory(storage);
+  // Vector store for recall search (separate DB file to avoid bloating main storage)
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  const memory = getDynamicMemory(storage, vectorStore);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
@@ -177,6 +181,18 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+    inputProcessors: [
+      new AgentsMDInjector({
+        getIgnoredInstructionPaths: ({ requestContext }) => {
+          const harnessContext = requestContext.get('harness') as
+            | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
+            | undefined;
+          const projectPath =
+            harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
+          return getStaticallyLoadedInstructionPaths(projectPath);
+        },
+      }),
+    ],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -260,6 +276,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
   const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
+  const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -297,6 +315,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveOmModel) {
     globalInitialState.observerModelId = effectiveOmModel;
     globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (effectiveObservationThreshold !== undefined) {
+    globalInitialState.observationThreshold = effectiveObservationThreshold;
+  }
+  if (effectiveReflectionThreshold !== undefined) {
+    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

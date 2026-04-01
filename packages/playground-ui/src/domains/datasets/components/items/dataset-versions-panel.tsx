@@ -75,7 +75,7 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <Column withLeftSeparator={true} className="w-[14rem]">
+    <Column withLeftSeparator={true} className="w-56">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>

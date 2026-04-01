@@ -1,6 +1,6 @@
 {
   "name": "@internal/workflow-test-utils",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "description": "Test utilities for workflow engines",
   "type": "module",
   "main": "src/index.ts",

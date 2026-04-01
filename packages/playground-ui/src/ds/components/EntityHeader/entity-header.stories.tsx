@@ -55,7 +55,7 @@ export const WithBadge: Story = {
 
 export const LongTitle: Story = {
   render: () => (
-    <div className="w-[300px] bg-surface3 rounded-lg">
+    <div className="w-dropdown-max-height bg-surface3 rounded-lg">
       <EntityHeader
         icon={<Settings />}
         title="This is a very long title that should be truncated when it exceeds the available width"

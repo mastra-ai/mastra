@@ -10,6 +10,62 @@ import type { AIV5Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
+ * Merges text parts that share the same OpenAI itemId.
+ *
+ * When OpenAI streams a response with web search, it interleaves `source` chunks
+ * with text-deltas. If the streaming pipeline flushes text on these source chunks,
+ * it creates multiple text parts all sharing the same `providerMetadata.openai.itemId`.
+ *
+ * When these parts are later converted to model messages, each part with an itemId
+ * becomes an `item_reference` pointing to the same ID, causing OpenAI to reject
+ * the request with: "Duplicate item found with id msg_*"
+ *
+ * This function merges consecutive text parts with the same itemId into a single part,
+ * concatenating their text content and keeping the metadata from the first part.
+ */
+function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
+  const result: T[] = [];
+
+  for (const part of parts) {
+    // Only process text parts with OpenAI itemId
+    if (part.type !== 'text') {
+      result.push(part);
+      continue;
+    }
+
+    const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
+    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
+      | string
+      | undefined;
+    if (!itemId) {
+      result.push(part);
+      continue;
+    }
+
+    // Find an existing text part in result with the same itemId
+    const existingIndex = result.findIndex(p => {
+      if (p.type !== 'text') return false;
+      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
+      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
+      return existingItemId === itemId;
+    });
+
+    if (existingIndex !== -1) {
+      // Merge: concatenate text into the existing part
+      const existing = result[existingIndex] as T & { text: string };
+      result[existingIndex] = {
+        ...existing,
+        text: existing.text + textPart.text,
+      };
+    } else {
+      result.push(part);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
  * Removes messages with empty parts arrays after sanitization.
  */
@@ -93,9 +149,14 @@ export function sanitizeV5UIMessages(
           return false;
         }
 
-        // Filter out empty text parts to handle legacy data from before this filtering was implemented
-        // But preserve them if they are the only parts (legitimate placeholder messages)
+        // Filter out empty text parts to handle legacy data from before this filtering was implemented.
+        // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
+        // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
         if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+          // Always filter empty text parts from user messages
+          if (m.role === 'user') return false;
+
+          // For non-user messages, only filter if there are other non-empty parts
           const hasNonEmptyParts = m.parts.some(
             part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
           );
@@ -124,9 +185,14 @@ export function sanitizeV5UIMessages(
 
       if (!safeParts.length) return false;
 
+      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // This can happen when streaming flushes text multiple times for the same response
+      // (e.g., when source citations are interleaved with text-deltas).
+      const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
+
       const sanitized = {
         ...m,
-        parts: safeParts.map(part => {
+        parts: mergedParts.map(part => {
           // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
           // parts so the SDK sends inline content instead of item_reference. This covers:
           //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
@@ -193,6 +259,23 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
       // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
       // However, we should NOT add step-start between consecutive tool parts (parallel tool calls)
       if (nextPart && nextPart.type !== `step-start` && !AIV5.isToolUIPart(nextPart)) {
+        message.parts.splice(index + 1, 0, { type: 'step-start' });
+      }
+
+      // Split client tools from completed provider-executed tools.
+      // Anthropic requires tool_result to immediately follow tool_use. When a client tool_use and
+      // a server_tool_use (with inline result) are in the same block, convertToModelMessages produces:
+      //   assistant: [tool_use(client), server_tool_use(provider), tool_result(provider)]
+      //   user:      [tool_result(client)]
+      // Anthropic rejects this because tool_result(client) doesn't immediately follow tool_use(client).
+      // Splitting them into separate blocks fixes the ordering.
+      if (
+        nextPart &&
+        AIV5.isToolUIPart(nextPart) &&
+        !part.providerExecuted &&
+        nextPart.providerExecuted &&
+        (nextPart.state === 'output-available' || nextPart.state === 'output-error')
+      ) {
         message.parts.splice(index + 1, 0, { type: 'step-start' });
       }
     }

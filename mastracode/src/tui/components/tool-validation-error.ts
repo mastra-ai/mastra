@@ -5,6 +5,7 @@
 
 import { Container, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import { safeStringify } from '@mastra/core/utils';
 import { MC_TOOLS } from '../../tool-names.js';
 import { theme } from '../theme.js';
 
@@ -99,7 +100,7 @@ function formatArgs(args: unknown): string[] {
     } else if (typeof value === 'string') {
       valueStr = value.length > 50 ? `"${value.slice(0, 47)}..."` : `"${value}"`;
     } else if (typeof value === 'object') {
-      valueStr = JSON.stringify(value);
+      valueStr = safeStringify(value);
       if (valueStr.length > 50) {
         valueStr = valueStr.slice(0, 47) + '...';
       }

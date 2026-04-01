@@ -12,7 +12,15 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type {
+  CustomSamplerOptions,
+  ObservabilityInstance,
+  CorrelationContext,
+  DefinitionSource,
+  ScorerScoreSource,
+  ScorerStepType,
+  ScorerTargetScope,
+} from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -26,6 +34,10 @@ import type { ScoreInput } from './scores';
 export enum SpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
+  /** Scorer execution */
+  SCORER_RUN = 'scorer_run',
+  /** Individual scorer pipeline step */
+  SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
   GENERIC = 'generic',
   /** Model generation with model calls, token usage, prompts, completions */
@@ -83,6 +95,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** The resolved agent version ID used for this execution */
+  resolvedVersionId?: string;
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -94,6 +108,28 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+}
+
+/**
+ * Scorer Run attributes
+ */
+export interface ScorerRunAttributes extends AIBaseAttributes {
+  scorerId?: string;
+  scorerName?: string;
+  scoreSource?: ScorerScoreSource;
+  targetScope?: ScorerTargetScope;
+  targetEntityType?: EntityType;
+  scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Scorer Step attributes
+ */
+export interface ScorerStepAttributes extends AIBaseAttributes {
+  step?: string;
+  stepType?: ScorerStepType;
+  prompt?: string;
+  judgeModel?: string;
 }
 
 /**
@@ -357,6 +393,8 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
  */
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
+  [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
   [SpanType.MODEL_STEP]: ModelStepAttributes;
@@ -473,6 +511,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
+
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
@@ -610,6 +654,7 @@ export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
 }
@@ -640,6 +685,10 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * - Spans loaded from storage for evaluation
  * - Spans from completed traces being annotated
  * - Post-hoc quality scoring and user feedback
+ *
+ * RecordedSpan objects are hydrated runtime wrappers and should not be treated as
+ * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
+ * top-level observability annotation APIs after resume.
  */
 export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
@@ -652,13 +701,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -671,7 +720,10 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
+ * RecordedTrace objects are hydrated runtime wrappers and should not be stored
+ * across durable workflow serialization boundaries. Persist identifiers instead
+ * and rehydrate, or use top-level observability annotation APIs after resume.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -694,13 +746,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
@@ -814,6 +866,8 @@ export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOption
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Span name override */
+  name?: string;
   /** Input data */
   input?: any;
   /** Output data */

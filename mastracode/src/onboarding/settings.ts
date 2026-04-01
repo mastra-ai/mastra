@@ -73,8 +73,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
-    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -97,6 +95,10 @@ export interface GlobalSettings {
     activeOmPackId: string | null;
     /** Explicit OM model override — used for custom OM pack or /om manual changes. */
     omModelOverride: string | null;
+    /** Default OM observation threshold used for new threads unless overridden per-thread. */
+    omObservationThreshold: number | null;
+    /** Default OM reflection threshold used for new threads unless overridden per-thread. */
+    omReflectionThreshold: number | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
@@ -138,13 +140,14 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    omObservationThreshold: null,
+    omReflectionThreshold: null,
     subagentModels: {},
   },
   preferences: {

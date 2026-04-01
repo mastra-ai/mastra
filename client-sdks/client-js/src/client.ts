@@ -14,11 +14,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -55,6 +71,7 @@ import {
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
   StoredAgent,
   StoredPromptBlock,
@@ -64,6 +81,7 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -75,6 +93,7 @@ import type {
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  AgentVersionIdentifier,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -132,6 +151,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
@@ -153,9 +173,13 @@ import { base64RequestContext, parseClientRequestContext, requestContextQueryStr
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
   }
 
   /**
@@ -190,10 +214,11 @@ export class MastraClient extends BaseResource {
   /**
    * Gets an agent instance by ID
    * @param agentId - ID of the agent to retrieve
+   * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string) {
-    return new Agent(this.options, agentId);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
+    return new Agent(this.options, agentId, version);
   }
 
   /**
@@ -917,6 +942,26 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -929,6 +974,26 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
   }
 
   // --------------------------------------------------------------------------
@@ -1606,6 +1671,27 @@ export class MastraClient extends BaseResource {
   // ============================================================================
   // Dataset Experiments
   // ============================================================================
+
+  /**
+   * Lists all experiments across all datasets
+   */
+  public listExperiments(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
+  }
 
   /**
    * Lists experiments for a dataset

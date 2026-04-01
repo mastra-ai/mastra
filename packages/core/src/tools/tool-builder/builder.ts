@@ -22,10 +22,12 @@ import {
   getOrCreateSpan,
   createObservabilityContext,
 } from '../../observability';
+import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
-import { isVercelTool } from '../../tools/toolchecks';
+import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { safeStringify } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
@@ -56,6 +58,7 @@ interface LogOptions {
 interface LogMessageOptions {
   start: string;
   error: string;
+  logData: Record<string, unknown>;
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -76,6 +79,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (
       !isVercelTool(this.originalTool) &&
+      !isProviderDefinedTool(this.originalTool) &&
       (input.autoResumeSuspendedTools ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
@@ -290,20 +294,11 @@ export class CoreToolBuilder extends MastraBase {
   }
 
   private createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
-    // If no agent name, use default format
-    if (!agentName) {
-      return {
-        start: `Executing tool ${toolName}`,
-        error: `Failed tool execution`,
-      };
-    }
-
-    const prefix = `[Agent:${agentName}]`;
     const toolType = type === 'toolset' ? 'toolset' : 'tool';
-
     return {
-      start: `${prefix} - Executing ${toolType} ${toolName}`,
-      error: `${prefix} - Failed ${toolType} execution`,
+      start: `Executing ${toolType}`,
+      error: `Failed ${toolType} execution`,
+      logData: { agent: agentName, tool: toolName },
     };
   }
 
@@ -325,46 +320,17 @@ export class CoreToolBuilder extends MastraBase {
       specificationVersion: model?.specificationVersion,
     };
 
-    const { start, error } = this.createLogMessageOptions({
+    const { start, logData } = this.createLogMessageOptions({
       agentName: options.agentName,
       toolName: options.name,
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
-      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
-      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
-      const tracingContext = execOptions.tracingContext || options.tracingContext;
+    // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
+    const mcpMeta =
+      !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-      // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
-      const mcpMeta =
-        !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
-
-      // Create tool span - either as child of existing span or as new root span (e.g. MCP tools)
-      const toolRequestContext = execOptions.requestContext ?? options.requestContext;
-      const toolSpan = getOrCreateSpan({
-        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
-        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
-        input: args,
-        entityType: EntityType.TOOL,
-        entityId: options.name,
-        entityName: options.name,
-        attributes: mcpMeta
-          ? {
-              mcpServer: mcpMeta.serverName,
-              serverVersion: mcpMeta.serverVersion,
-              toolDescription: options.description,
-            }
-          : {
-              toolDescription: options.description,
-              toolType: logType || 'tool',
-            },
-        tracingPolicy: options.tracingPolicy,
-        tracingContext: tracingContext,
-        requestContext: toolRequestContext,
-        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
-      });
-
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
       try {
         let result;
         let suspendData = null;
@@ -457,6 +423,7 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               agent: {
+                agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
@@ -547,8 +514,37 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
+
+      // Create tool span early so validation failures are always observable.
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions?.tracingContext || options.tracingContext;
+      const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
+      const toolSpan = getOrCreateSpan({
+        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
+        input: args,
+        entityType: EntityType.TOOL,
+        entityId: options.name,
+        entityName: options.name,
+        attributes: mcpMeta
+          ? {
+              mcpServer: mcpMeta.serverName,
+              serverVersion: mcpMeta.serverVersion,
+              toolDescription: options.description,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
+        tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
+        requestContext: toolRequestContext,
+        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
+      });
+
       try {
-        logger.debug(start, { ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
@@ -558,7 +554,8 @@ export class CoreToolBuilder extends MastraBase {
         const suspendedToolRunIdErrToIgnore =
           error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
         if (error && !suspendedToolRunIdErrToIgnore) {
-          logger.warn(error.message);
+          logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+          toolSpan?.end({ output: error, attributes: { success: false } });
           return error;
         }
         // Use validated/transformed data
@@ -568,7 +565,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!);
+              const result = await execFunction(args, execOptions!, toolSpan);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -583,14 +580,14 @@ export class CoreToolBuilder extends MastraBase {
             category: ErrorCategory.USER,
             details: {
               errorMessage: String(err),
-              argsJson: JSON.stringify(args),
+              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },
           err,
         );
-        logger.trackException(mastraError);
-        logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
+        toolSpan?.error({ error: mastraError, attributes: { success: false } });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
         throw mastraError;
       }
     };

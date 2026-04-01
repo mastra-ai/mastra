@@ -14,6 +14,7 @@ import type {
   ConfigSelector,
   SerializationOptions,
   CardinalityConfig,
+  LogLevel,
 } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 
@@ -87,6 +88,16 @@ export interface ObservabilityInstanceConfig {
    * Applied to all metrics (auto-extracted and user-defined).
    */
   cardinality?: CardinalityConfig;
+  /**
+   * Configuration for the observability logger (loggerVNext).
+   * Controls log level filtering and whether dual-write logging is enabled.
+   */
+  logging?: {
+    /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
+    enabled?: boolean;
+    /** Minimum log level to write to observability storage. Defaults to `'debug'`. */
+    level?: LogLevel;
+  };
 }
 
 /**

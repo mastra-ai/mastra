@@ -19,11 +19,21 @@ import {
 import type { DatasetVersion } from '@mastra/playground-ui';
 import { Database, Play } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
+
+type DatasetTab = 'items' | 'experiments' | 'review';
+const VALID_TABS = new Set<string>(['items', 'experiments', 'review']);
 
 function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab: DatasetTab = tabParam && VALID_TABS.has(tabParam) ? (tabParam as DatasetTab) : 'items';
+
+  const handleTabChange = (tab: DatasetTab) => {
+    setSearchParams(tab === 'items' ? {} : { tab }, { replace: true });
+  };
 
   // Dialog states
   const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
@@ -58,12 +68,12 @@ function DatasetPage() {
   }
 
   const handleExperimentSuccess = (experimentId: string) => {
-    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/evaluation/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
     // Navigate back to datasets list
-    void navigate('/datasets');
+    void navigate('/evaluation?tab=datasets');
   };
 
   // Version selection handler for contextual run button
@@ -75,7 +85,7 @@ function DatasetPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
@@ -95,6 +105,8 @@ function DatasetPage() {
           onDeleteClick={() => setDeleteDialogOpen(true)}
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
+          initialTab={initialTab}
+          onTabChange={handleTabChange}
           experimentTriggerSlot={
             <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
               <Play />

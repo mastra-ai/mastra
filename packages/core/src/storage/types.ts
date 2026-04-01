@@ -1003,6 +1003,8 @@ export interface BufferedObservationChunkInput {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -2152,6 +2154,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -2168,6 +2171,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2183,6 +2187,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2208,6 +2213,7 @@ export interface CreateDatasetInput {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: TargetType;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2221,12 +2227,14 @@ export interface UpdateDatasetInput {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2237,6 +2245,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2278,6 +2287,7 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2406,4 +2416,12 @@ export interface ListExperimentResultsInput {
 export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

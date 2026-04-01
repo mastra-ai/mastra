@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
@@ -74,6 +74,35 @@ function cleanDocumentationUrl(url: string | undefined): string | undefined {
   } catch {
     return url; // Return as-is if parsing fails
   }
+}
+
+function extractEnvVarsFromUrl(url?: string): string[] {
+  if (!url) return [];
+
+  const envVars: string[] = [];
+
+  for (const match of url.matchAll(/\$\{([^}]+)\}/g)) {
+    if (match[1]) {
+      envVars.push(match[1]);
+    }
+  }
+
+  return envVars;
+}
+
+function getRequiredEnvVars(provider: ProviderInfo): string[] {
+  const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+
+  return Array.from(new Set([...extractEnvVarsFromUrl(provider.url), ...authEnvVars]));
+}
+
+function getEnvVarPlaceholder(envVar: string): string {
+  if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
+  if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
+  if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
+    return 'your-account-id';
+  }
+  return 'your-value';
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -241,17 +270,30 @@ async function generateProviderPage(
   providerRegistry: Record<string, ProviderConfig>,
 ): Promise<string> {
   const modelCount = provider.models.length;
+  const requiredEnvVars = getRequiredEnvVars(provider);
+  const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  const additionalEnvVars = requiredEnvVars.filter(envVar => !authEnvVars.includes(envVar));
 
   // Get documentation URL if available
   const rawDocUrl = (providerRegistry[provider.id] as any).docUrl;
   const docUrl = cleanDocumentationUrl(rawDocUrl);
 
   // Create intro with optional documentation link
+  const authText =
+    authEnvVars.length === 1
+      ? `Authentication is handled automatically using the \`${authEnvVars[0]}\` environment variable.`
+      : `Authentication is handled automatically using one of the following environment variables: ${authEnvVars.map(envVar => `\`${envVar}\``).join(', ')}.`;
+
+  const setupText =
+    additionalEnvVars.length === 0
+      ? authText
+      : `${authText} Configure ${additionalEnvVars.map(envVar => `\`${envVar}\``).join(', ')} as well.`;
+
   const introText = docUrl
-    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.
+    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}
 
 Learn more in the [${provider.name} documentation](${docUrl}).`
-    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
+    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}`;
 
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
@@ -275,7 +317,7 @@ ${getGeneratedComment()}
 ${introText}
 
 \`\`\`bash title=".env"
-${provider.apiKeyEnvVar}=your-api-key
+${requiredEnvVars.map(envVar => `${envVar}=${getEnvVarPlaceholder(envVar)}`).join('\n')}
 \`\`\`
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
@@ -730,7 +772,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
 :::info
 

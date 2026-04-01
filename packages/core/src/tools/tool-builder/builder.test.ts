@@ -1,9 +1,11 @@
+import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { isProviderDefinedTool, isVercelTool } from '../toolchecks';
 import { CoreToolBuilder } from './builder';
 
 describe('MCP Tool Tracing', () => {
@@ -207,5 +209,41 @@ describe('MCP Tool Tracing', () => {
     const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(spanArgs.attributes).not.toHaveProperty('mcpServer');
     expect(spanArgs.attributes).not.toHaveProperty('serverVersion');
+  });
+});
+
+describe('Provider-defined Tool Handling', () => {
+  it('should not crash when autoResumeSuspendedTools is enabled with openai.tools.webSearch()', () => {
+    const webSearchTool = openai.tools.webSearch({});
+
+    // Verify this is actually a provider-defined tool (v5 uses 'provider-defined', v6 uses 'provider')
+    expect(['provider-defined', 'provider']).toContain(webSearchTool.type);
+    expect(webSearchTool.id).toBe('openai.web_search');
+
+    // Verify isProviderDefinedTool detects it correctly
+    expect(isProviderDefinedTool(webSearchTool)).toBe(true);
+    // Verify isVercelTool does NOT match (so the schema extension code path would be entered without the fix)
+    expect(isVercelTool(webSearchTool as any)).toBe(false);
+
+    // This should not throw - previously it crashed with:
+    // TypeError: Cannot read properties of undefined (reading 'jsonSchema')
+    // because provider-defined tools have a lazy inputSchema that doesn't conform to standard schemas
+    expect(() => {
+      new CoreToolBuilder({
+        originalTool: webSearchTool,
+        options: {
+          name: 'web_search',
+          logger: {
+            debug: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            trackException: vi.fn(),
+          } as any,
+          description: 'Search the web',
+          requestContext: new RequestContext(),
+        },
+        autoResumeSuspendedTools: true,
+      });
+    }).not.toThrow();
   });
 });

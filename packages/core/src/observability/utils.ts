@@ -1,4 +1,24 @@
-import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import { EntityType, SpanType } from './types';
+import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+
+const entityTypeValues = new Set(Object.values(EntityType));
+
+/**
+ * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
+ * so that infrastructure code (e.g. DualLogger) can resolve the active span without
+ * being passed it explicitly.
+ */
+const spanContextStorage = new AsyncLocalStorage<AnySpan>();
+
+/**
+ * Returns the current span from AsyncLocalStorage, if one is active.
+ * Used by DualLogger to forward logs to a span-correlated loggerVNext.
+ */
+export function getCurrentSpan(): AnySpan | undefined {
+  return spanContextStorage.getStore();
+}
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -69,11 +89,14 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
 export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
   const { span, fn } = params;
 
+  // Wrap fn so the span is available via getCurrentSpan() inside the async context.
+  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
+
   if (span?.executeInContext) {
-    return span.executeInContext(fn);
+    return span.executeInContext(wrappedFn);
   }
 
-  return fn();
+  return wrappedFn();
 }
 
 /**
@@ -98,11 +121,14 @@ export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => 
 export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
   const { span, fn } = params;
 
+  // Wrap fn so the span is available via getCurrentSpan() inside the sync context.
+  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
+
   if (span?.executeInContextSync) {
-    return span.executeInContextSync(fn);
+    return span.executeInContextSync(wrappedFn);
   }
 
-  return fn();
+  return wrappedFn();
 }
 
 /**
@@ -128,4 +154,38 @@ export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
   }
 
   return rootExportSpan;
+}
+
+/**
+ * Resolves the best available entity type for a span-like record.
+ *
+ * Prefers an explicit `entityType` when present and valid, then falls back to the
+ * span type for common observability entities.
+ */
+export function getEntityTypeForSpan(span: {
+  entityType?: string | null;
+  spanType?: SpanType | string | null;
+}): EntityType | undefined {
+  if (span.entityType && entityTypeValues.has(span.entityType as EntityType)) {
+    return span.entityType as EntityType;
+  }
+
+  switch (span.spanType) {
+    case SpanType.AGENT_RUN:
+      return EntityType.AGENT;
+    case SpanType.SCORER_RUN:
+    case SpanType.SCORER_STEP:
+      return EntityType.SCORER;
+    case SpanType.WORKFLOW_RUN:
+      return EntityType.WORKFLOW_RUN;
+    case SpanType.WORKFLOW_STEP:
+      return EntityType.WORKFLOW_STEP;
+    case SpanType.TOOL_CALL:
+    case SpanType.MCP_TOOL_CALL:
+      return EntityType.TOOL;
+    case SpanType.PROCESSOR_RUN:
+      return EntityType.OUTPUT_PROCESSOR;
+    default:
+      return undefined;
+  }
 }
