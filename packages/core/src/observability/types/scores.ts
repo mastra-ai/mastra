@@ -1,5 +1,6 @@
 // packages/core/src/observability/types/scores.ts
 import type { CorrelationContext } from './core';
+import type { EntityType } from './tracing';
 
 // ============================================================================
 // ScoreInput (User Input)
@@ -13,16 +14,19 @@ export interface ScoreInput {
   /** Identifier of the scorer (e.g., "relevance", "accuracy", "toxicity") */
   scorerId: string;
 
+  /** Display name of the scorer */
+  scorerName?: string;
+
   /** Version of the scorer */
   scorerVersion?: string;
 
   /**
    * @deprecated Use `scoreSource` instead.
-   * Source of the score (e.g., "manual", "automated", "experiment")
+   * How the score was produced (e.g., "manual", "automated", "experiment")
    */
   source?: string;
 
-  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  /** How the score was produced (e.g., "manual", "automated", "experiment") */
   scoreSource?: string;
 
   /** Numeric score value (typically 0-1 or 0-100) */
@@ -38,6 +42,9 @@ export interface ScoreInput {
 
   /** Trace ID of the scoring run itself (for debugging score generation) */
   scoreTraceId?: string;
+
+  /** Entity type the scorer evaluated when known */
+  targetEntityType?: EntityType;
 
   /** Additional metadata specific to this score */
   metadata?: Record<string, unknown>;
@@ -59,25 +66,28 @@ export interface ExportedScore {
   /** When the score was recorded */
   timestamp: Date;
 
-  /** Trace being scored */
-  traceId: string;
+  /** Trace that anchors the scored target when available */
+  traceId?: string;
 
-  /** Specific span being scored (undefined = trace-level score) */
+  /** Span anchor when the score is about a specific span */
   spanId?: string;
 
   /** Identifier of the scorer */
   scorerId: string;
+
+  /** Display name of the scorer */
+  scorerName?: string;
 
   /** Version of the scorer */
   scorerVersion?: string;
 
   /**
    * @deprecated Use `scoreSource` instead.
-   * Source of the score
+   * How the score was produced
    */
   source?: string;
 
-  /** Source of the score */
+  /** How the score was produced */
   scoreSource?: string;
 
   /** Numeric score value */
@@ -93,6 +103,9 @@ export interface ExportedScore {
 
   /** Trace ID of the scoring run itself (for debugging score generation) */
   scoreTraceId?: string;
+
+  /** Entity type the scorer evaluated when known */
+  targetEntityType?: EntityType;
 
   /** Canonical correlation context for this score event */
   correlationContext?: CorrelationContext;

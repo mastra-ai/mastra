@@ -448,6 +448,7 @@ describe('record-builders', () => {
           traceId: 'trace-1',
           spanId: 'span-1',
           scorerId: 'relevance',
+          scorerName: 'Relevance Scorer',
           score: 0.92,
           experimentId: 'deprecated-exp',
           correlationContext: {
@@ -510,7 +511,7 @@ describe('record-builders', () => {
         experimentId: 'context-exp',
         scope: null,
         scoreTraceId: null,
-        metadata: { kept: true },
+        metadata: { kept: true, scorerName: 'Relevance Scorer' },
       });
     });
   });

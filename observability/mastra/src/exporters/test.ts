@@ -419,7 +419,8 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const score = event.score;
-      const logMessage = `[TestExporter] score: ${score.scorerId}=${score.score} (trace: ${score.traceId.slice(-8)}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
+      const traceLabel = score.traceId ? score.traceId.slice(-8) : 'unanchored';
+      const logMessage = `[TestExporter] score: ${score.scorerId}=${score.score} (trace: ${traceLabel}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -622,7 +623,9 @@ export class TestExporter extends BaseExporter {
       if (event.log.traceId) traceIds.add(event.log.traceId);
     }
     for (const event of this.#scoreEvents) {
-      traceIds.add(event.score.traceId);
+      if (event.score.traceId) {
+        traceIds.add(event.score.traceId);
+      }
     }
     for (const event of this.#feedbackEvents) {
       traceIds.add(event.feedback.traceId);
