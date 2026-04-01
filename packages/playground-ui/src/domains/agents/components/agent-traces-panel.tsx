@@ -83,7 +83,6 @@ function extractInputPreview(input: unknown): string {
   return JSON.stringify(input).slice(0, 200);
 }
 
-
 /** Extract output text preview from root span output */
 function extractOutputPreview(output: unknown): string {
   if (!output) return '';
