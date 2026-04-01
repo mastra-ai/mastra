@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   color-scheme: light;
@@ -41,12 +41,12 @@
       system-ui,
       -apple-system,
       BlinkMacSystemFont,
-      "Segoe UI",
+      'Segoe UI',
       sans-serif;
   }
 
   body::before {
-    content: "";
+    content: '';
     @apply pointer-events-none fixed inset-0 opacity-20;
     background-image: radial-gradient(rgba(24, 134, 95, 0.045) 0.7px, transparent 0.7px);
     background-size: 10px 10px;
@@ -59,7 +59,7 @@
 
   code,
   pre {
-    font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-family: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
   }
 }
 
@@ -113,7 +113,7 @@
   }
 
   .demo-sidebar-item::before {
-    content: "";
+    content: '';
     @apply absolute inset-y-0 left-0 w-[3px];
     background: rgba(15, 90, 65, 0.14);
     transition: background-color var(--transition-fast);
@@ -255,7 +255,7 @@
   .demo-conversation-item__id {
     @apply text-[0.72rem];
     color: var(--muted);
-    font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-family: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
     overflow-wrap: anywhere;
   }
 
@@ -289,7 +289,7 @@
   .demo-thread,
   .demo-message__response-id,
   .demo-message__footer {
-    font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-family: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
   }
 
   .demo-response-badge {
@@ -474,7 +474,7 @@
   .demo-tool__name,
   .demo-tool__label,
   .demo-tool__state {
-    font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-family: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
     font-size: 0.74rem;
   }
 
@@ -501,7 +501,7 @@
 
   .demo-message__response {
     @apply m-0 text-[1.08rem] leading-[1.85];
-    font-family: Georgia, "Source Serif 4", "Times New Roman", serif;
+    font-family: Georgia, 'Source Serif 4', 'Times New Roman', serif;
     text-wrap: pretty;
   }
 

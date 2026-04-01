@@ -91,6 +91,16 @@
         "default": "./dist/vector/filter/index.cjs"
       }
     },
+    "./observability/context-storage": {
+      "import": {
+        "types": "./dist/observability/context-storage.d.ts",
+        "default": "./dist/observability/context-storage.js"
+      },
+      "require": {
+        "types": "./dist/observability/context-storage.d.ts",
+        "default": "./dist/observability/context-storage.cjs"
+      }
+    },
     "./utils": {
       "import": {
         "types": "./dist/utils.d.ts",
