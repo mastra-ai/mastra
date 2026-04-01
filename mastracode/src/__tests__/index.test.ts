@@ -16,8 +16,13 @@ vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
 }));
 
+const harnessConstructorMock = vi.fn();
+
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
+    constructor(config: unknown) {
+      harnessConstructorMock(config);
+    }
     subscribe() {}
   },
   taskWriteTool: {},
@@ -28,8 +33,10 @@ vi.mock('./agents/instructions.js', () => ({
   getDynamicInstructions: vi.fn(),
 }));
 
+const getDynamicMemoryMock = vi.fn();
+
 vi.mock('./agents/memory.js', () => ({
-  getDynamicMemory: vi.fn(),
+  getDynamicMemory: getDynamicMemoryMock,
 }));
 
 vi.mock('./agents/model.js', () => ({
@@ -124,8 +131,10 @@ vi.mock('./utils/project.js', () => ({
   getResourceIdOverride: vi.fn(() => undefined),
 }));
 
+const createStorageMock = vi.fn(() => ({ storage: {} }));
+
 vi.mock('./utils/storage-factory.js', () => ({
-  createStorage: vi.fn(() => ({})),
+  createStorage: createStorageMock,
 }));
 
 vi.mock('./utils/thread-lock.js', () => ({
@@ -138,6 +147,10 @@ describe('createMastraCode', () => {
     vi.resetModules();
     gatewayRegistrySyncGateways.mockReset();
     gatewayRegistryGetInstance.mockClear();
+    createStorageMock.mockReset();
+    createStorageMock.mockReturnValue({ storage: {} });
+    getDynamicMemoryMock.mockReset();
+    harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
     }));
@@ -157,5 +170,15 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+  });
+
+  it('always configures dynamic local memory at startup', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessConstructorMock).toHaveBeenCalled();
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
+    expect(typeof harnessConfig?.memory).toBe('function');
   });
 });

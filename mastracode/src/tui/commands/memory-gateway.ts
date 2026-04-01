@@ -1,3 +1,4 @@
+import { GatewayRegistry } from '@mastra/core/llm';
 import { Spacer } from '@mariozechner/pi-tui';
 import {
   loadSettings,
@@ -44,6 +45,46 @@ function askText(
   });
 }
 
+function askSelect(
+  ctx: SlashCommandContext,
+  question: string,
+  options: Array<{ label: string; value: string; description?: string }>,
+): Promise<string | null> {
+  return new Promise(resolve => {
+    const component = new AskQuestionInlineComponent(
+      {
+        question,
+        options: options.map(option => ({ label: option.label, description: option.description })),
+        onSubmit: answer => {
+          ctx.state.activeInlineQuestion = undefined;
+          const selected = options.find(option => option.label === answer);
+          resolve(selected?.value ?? null);
+        },
+        onCancel: () => {
+          ctx.state.activeInlineQuestion = undefined;
+          resolve(null);
+        },
+      },
+      ctx.state.ui,
+    );
+
+    ctx.state.activeInlineQuestion = component;
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.chatContainer.addChild(component);
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.ui.requestRender();
+    ctx.state.chatContainer.invalidate();
+  });
+}
+
+async function refreshGatewayModels(ctx: SlashCommandContext): Promise<void> {
+  try {
+    await GatewayRegistry.getInstance({ useDynamicLoading: true }).syncGateways(true);
+  } catch (error) {
+    ctx.showError(`Failed to refresh gateway models: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Promise<void> {
   const authStorage = ctx.authStorage;
   if (!authStorage) {
@@ -65,9 +106,13 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   }
 
   // Ask for API key
-  const keyAnswer = await askText(ctx, currentKey
-    ? `API key (ENTER to keep current, 'clear' to remove, ESC to cancel):`
-    : `API key (or 'clear' to remove, ESC to cancel):`);
+  const keyAnswer = await askText(
+    ctx,
+    currentKey
+      ? `API key (ENTER to keep current, 'clear' to remove, ESC to cancel):`
+      : `API key (or 'clear' to remove, ESC to cancel):`,
+    currentKey,
+  );
   if (keyAnswer === null) {
     // ESC with no key — abort; ESC with existing key — proceed to URL prompt
     if (!currentKey) return;
@@ -77,14 +122,39 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     delete process.env['MASTRA_GATEWAY_URL'];
     settings.memoryGateway = {};
     saveSettings(settings);
-    ctx.showInfo('Memory gateway cleared. Note: model list and memory mode changes take effect on next restart.');
+    await refreshGatewayModels(ctx);
+    ctx.showInfo('Memory gateway cleared. Memory mode changes take effect on next restart.');
     return;
   } else if (keyAnswer.length > 0) {
     authStorage.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
   }
 
-  // Always prompt for URL so users can change it independently
-  const urlAnswer = await askText(ctx, `Gateway URL (ESC for default):`, effectiveUrl);
+  const urlChoice = await askSelect(ctx, 'Gateway URL', [
+    {
+      label: 'https://server.mastra.ai',
+      value: MEMORY_GATEWAY_DEFAULT_URL,
+      description: effectiveUrl === MEMORY_GATEWAY_DEFAULT_URL ? 'current' : 'hosted default',
+    },
+    {
+      label: 'http://localhost:4111',
+      value: 'http://localhost:4111',
+      description: effectiveUrl === 'http://localhost:4111' ? 'current' : 'local development',
+    },
+    {
+      label: 'custom',
+      value: 'custom',
+      description:
+        effectiveUrl !== MEMORY_GATEWAY_DEFAULT_URL && effectiveUrl !== 'http://localhost:4111' ? effectiveUrl : 'enter a URL',
+    },
+  ]);
+
+  if (urlChoice === null) {
+    return;
+  }
+
+  const urlAnswer =
+    urlChoice === 'custom' ? await askText(ctx, 'Custom gateway URL', effectiveUrl) : urlChoice;
+
   if (urlAnswer && urlAnswer !== MEMORY_GATEWAY_DEFAULT_URL) {
     settings.memoryGateway = { baseUrl: urlAnswer };
     process.env['MASTRA_GATEWAY_URL'] = urlAnswer;
@@ -93,6 +163,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     delete process.env['MASTRA_GATEWAY_URL'];
   }
   saveSettings(settings);
+  await refreshGatewayModels(ctx);
 
-  ctx.showInfo('Memory gateway configured. Note: model list and memory mode changes take effect on next restart.');
+  ctx.showInfo('Memory gateway configured. Memory mode changes take effect on next restart.');
 }
