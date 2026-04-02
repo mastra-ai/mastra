@@ -991,12 +991,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                // Merge headers: modelConfig headers first, then modelSettings overrides them
-                // Only create object if there are actual headers to avoid passing empty {}
-                headers:
-                  modelHeaders || currentStep.modelSettings?.headers
-                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
-                    : undefined,
+                // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
+                // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                headers: (() => {
+                  const memoryHeaders: Record<string, string> = {};
+                  if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
+                  if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                  const merged = {
+                    ...memoryHeaders,
+                    ...modelHeaders,
+                    ...currentStep.modelSettings?.headers,
+                  };
+                  return Object.keys(merged).length > 0 ? merged : undefined;
+                })(),
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({
