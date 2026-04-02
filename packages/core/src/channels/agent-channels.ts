@@ -8,7 +8,7 @@ import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
-import type { InputProcessor, InputProcessorOrWorkflow, OutputProcessor } from '../processors';
+import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
@@ -541,14 +541,6 @@ export class AgentChannels {
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];
-  }
-
-  /**
-   * Returns channel output processors.
-   * Currently none — all output rendering is handled by `consumeAgentStream`.
-   */
-  getOutputProcessors(): OutputProcessor[] {
-    return [];
   }
 
   /**

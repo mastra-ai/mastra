@@ -610,13 +610,9 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
-    // Get channel output processors
-    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors() : [];
-
     // Combine all processors into a single workflow
-    // Channel processors run after configured but before memory (to annotate metadata before persistence)
     // Memory processors should run last (to persist messages after other processing)
-    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
