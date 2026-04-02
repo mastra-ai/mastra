@@ -119,28 +119,29 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     });
 
     // Update thread title immediately — don't wait for activation
-    const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      const oldTitle = thread.title?.trim();
-      const newTitle = processed.threadTitle?.trim();
-      const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
-      const newMetadata = setThreadOMMetadata(thread.metadata, {
-        threadTitle: processed.threadTitle,
-      });
-      await this.storage.updateThread({
-        id: threadId,
-        title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
-        metadata: newMetadata,
-      });
+    const newTitle = processed.threadTitle?.trim();
+    if (newTitle && newTitle.length >= 3) {
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const oldTitle = thread.title?.trim();
+        if (newTitle !== oldTitle) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            threadTitle: processed.threadTitle,
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: newMetadata,
+          });
 
-      if (shouldUpdateThreadTitle) {
-        const marker = createThreadUpdateMarker({
-          cycleId: this.cycleId,
-          threadId,
-          oldTitle,
-          newTitle,
-        });
-        await this.streamMarker(marker);
+          const marker = createThreadUpdateMarker({
+            cycleId: this.cycleId,
+            threadId,
+            oldTitle,
+            newTitle,
+          });
+          await this.streamMarker(marker);
+        }
       }
     }
 
