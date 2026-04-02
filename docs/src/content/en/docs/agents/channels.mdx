@@ -46,10 +46,14 @@ Register the agent in your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 import { supportAgent } from './agents/support-agent'
 
 export const mastra = new Mastra({
   agents: { supportAgent },
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL,
+  }),
 })
 ```
 
@@ -363,19 +367,7 @@ Each platform requires specific configuration. See the Chat SDK documentation fo
 
 ## Storage
 
-When Mastra storage is configured, thread subscriptions and mappings persist across restarts. Without storage, the agent uses in-memory state and subscriptions are lost on restart.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { LibSQLStore } from '@mastra/libsql'
-
-export const mastra = new Mastra({
-  agents: { supportAgent },
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL,
-  }),
-})
-```
+When Mastra storage is configured (as shown in the [quickstart](#quickstart)), thread subscriptions and mappings persist across restarts. Without storage, the agent uses in-memory state and subscriptions are lost on restart.
 
 ## Related
 
