@@ -412,6 +412,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
       authorization: 'Bearer model-token',
       'x-custom-header': 'settings-value',
+      'x-thread-id': 'thread-123',
+      'x-resource-id': 'resource-456',
     });
   });
 

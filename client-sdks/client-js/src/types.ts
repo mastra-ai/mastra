@@ -2102,6 +2102,7 @@ export interface AwaitBufferStatusResponse {
  */
 export interface GetMemoryStatusResponse {
   result: boolean;
+  memoryType?: 'local' | 'gateway';
   observationalMemory?: {
     enabled: boolean;
     hasRecord?: boolean;
@@ -2118,6 +2119,7 @@ export interface GetMemoryStatusResponse {
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;
@@ -2303,6 +2305,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2407,6 +2410,7 @@ export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2417,6 +2421,7 @@ export interface UpdateDatasetItemParams {
   itemId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2427,6 +2432,7 @@ export interface BatchInsertDatasetItemsParams {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
