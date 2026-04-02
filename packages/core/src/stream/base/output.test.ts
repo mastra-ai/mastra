@@ -23,7 +23,7 @@ function createChunkStream<OUTPUT = undefined>(chunks: ChunkType<OUTPUT>[]): Rea
 /**
  * Minimal step-finish chunk to populate bufferedSteps before the finish chunk.
  */
-function createStepFinishChunk(runId: string): ChunkType {
+function createStepFinishChunk(runId: string, providerMetadata?: Record<string, unknown>): ChunkType {
   return {
     type: 'step-finish',
     runId,
@@ -39,8 +39,9 @@ function createStepFinishChunk(runId: string): ChunkType {
         warnings: [],
         isContinued: false,
       },
-      metadata: {},
+      metadata: providerMetadata ? { providerMetadata } : {},
       messages: { nonUser: [], all: [] },
+      providerMetadata,
     },
   } as ChunkType;
 }
@@ -48,7 +49,7 @@ function createStepFinishChunk(runId: string): ChunkType {
 /**
  * Minimal finish chunk for the outer MastraModelOutput.
  */
-function createFinishChunk(runId: string): ChunkType {
+function createFinishChunk(runId: string, providerMetadata?: Record<string, unknown>): ChunkType {
   return {
     type: 'finish',
     runId,
@@ -65,6 +66,7 @@ function createFinishChunk(runId: string): ChunkType {
         isContinued: false,
       },
       metadata: {},
+      providerMetadata,
       messages: { nonUser: [], all: [] },
     },
   } as ChunkType;
@@ -168,6 +170,89 @@ describe('MastraModelOutput', () => {
       expect((customChunk as any).data).toEqual({ flagged: true });
       // Custom chunk should appear before the finish chunk
       expect(customIndex).toBeLessThan(finishIndex);
+    });
+
+    it('should resolve top-level finish providerMetadata on the final output', async () => {
+      const runId = 'test-run';
+      const providerMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 94,
+          cacheCreationInputTokens: 6,
+        },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      messageList.add(
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
+          createdAt: new Date(),
+        },
+        'response',
+      );
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId, providerMetadata)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.providerMetadata).toEqual(providerMetadata);
+    });
+
+    it('should propagate arbitrary finish providerMetadata to steps and onFinish', async () => {
+      const runId = 'test-run';
+      const providerMetadata = {
+        customProvider: {
+          route: 'priority',
+          finishMetrics: {
+            latencyMs: 42,
+            region: 'us-central1',
+          },
+        },
+      };
+      let onFinishPayload: any;
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      messageList.add(
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
+          createdAt: new Date(),
+        },
+        'response',
+      );
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId, providerMetadata)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            onFinishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.providerMetadata).toEqual(providerMetadata);
+      expect((await output.steps).at(-1)?.providerMetadata).toEqual(providerMetadata);
+      expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
     });
   });
 });

@@ -23,6 +23,21 @@ interface GoogleMetadata {
   usageMetadata?: GoogleUsageMetadata;
 }
 
+interface V3InputUsage {
+  total?: number;
+  noCache?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+interface V3RawUsage {
+  inputTokens?: V3InputUsage;
+}
+
+function isV3RawUsage(raw: unknown): raw is V3RawUsage {
+  return typeof raw === 'object' && raw !== null && 'inputTokens' in raw;
+}
+
 /**
  * Extracts and normalizes token usage from AI SDK response, including
  * provider-specific cache tokens from providerMetadata.
@@ -66,6 +81,11 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
+    const rawV3InputUsage = isV3RawUsage(usage.raw) ? usage.raw.inputTokens : undefined;
+    const hasV3CachedTotals =
+      rawV3InputUsage?.total !== undefined &&
+      (rawV3InputUsage.cacheRead !== undefined || rawV3InputUsage.cacheWrite !== undefined);
+
     if (anthropic.cacheReadInputTokens) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
@@ -73,10 +93,22 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // For Anthropic, adjust inputTokens to include cache tokens
-    // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
-    // cache_creation_input_tokens, and cache_read_input_tokens"
-    if (anthropic.cacheReadInputTokens || anthropic.cacheCreationInputTokens) {
+    // AI SDK v6-style usage already provides total input tokens including cache details.
+    // In that case preserve the total and expose the uncached text tokens separately.
+    if (hasV3CachedTotals) {
+      inputTokens = usage.inputTokens;
+      if (rawV3InputUsage?.noCache !== undefined) {
+        inputDetails.text = rawV3InputUsage.noCache;
+      } else if (usage.inputTokens !== undefined) {
+        inputDetails.text = Math.max(
+          0,
+          usage.inputTokens - (anthropic.cacheReadInputTokens ?? 0) - (anthropic.cacheCreationInputTokens ?? 0),
+        );
+      }
+      // For Anthropic v5-style usage, adjust inputTokens to include cache tokens
+      // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
+      // cache_creation_input_tokens, and cache_read_input_tokens"
+    } else if (anthropic.cacheReadInputTokens || anthropic.cacheCreationInputTokens) {
       inputDetails.text = usage.inputTokens;
       inputTokens =
         (usage.inputTokens ?? 0) + (anthropic.cacheReadInputTokens ?? 0) + (anthropic.cacheCreationInputTokens ?? 0);
