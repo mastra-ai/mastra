@@ -52,6 +52,12 @@ function truncateValue(value: unknown, maxLength = 120): string {
   return str.slice(0, maxLength) + '…';
 }
 
+function getExpectedTrajectoryLabel(expectedTrajectory: unknown): string {
+  const traj = expectedTrajectory as Record<string, unknown> | undefined;
+  const steps = Array.isArray(traj?.steps) ? traj.steps.length : 0;
+  return steps > 0 ? `${steps} expected steps` : 'trajectory';
+}
+
 // Deterministic tag color from string
 const TAG_COLORS = ['blue', 'green', 'purple', 'orange', 'cyan', 'pink', 'red', 'yellow'] as const;
 function getTagColor(tag: string): (typeof TAG_COLORS)[number] {
@@ -413,10 +419,15 @@ export function DatasetDetailView({
                           <Icon size="sm" className="text-neutral3 mt-0.5 shrink-0">
                             {isExpanded ? <ChevronDown /> : <ChevronRight />}
                           </Icon>
-                          <div className="flex-1 min-w-0">
-                            <Txt variant="ui-xs" className="text-neutral5 block truncate">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <Txt variant="ui-xs" className="text-neutral5 block truncate flex-1">
                               {truncateValue(item.input)}
                             </Txt>
+                            {item.expectedTrajectory != null && (
+                              <Chip size="small" color="purple">
+                                {getExpectedTrajectoryLabel(item.expectedTrajectory)}
+                              </Chip>
+                            )}
                           </div>
                         </button>
                         {isExpanded && <ExpandedItemEditor datasetId={datasetId} item={item} />}
@@ -567,19 +578,21 @@ function ExpandedItemEditor({
   item,
 }: {
   datasetId: string;
-  item: { id: string; input: unknown; groundTruth?: unknown; source?: unknown };
+  item: { id: string; input: unknown; groundTruth?: unknown; expectedTrajectory?: unknown; source?: unknown };
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
+  const [trajectoryValue, setTrajectoryValue] = useState('');
   const { updateItem, deleteItem } = useDatasetMutations();
 
   const startEditing = useCallback(() => {
     setInputValue(formatValue(item.input));
     setGroundTruthValue(formatValue(item.groundTruth));
+    setTrajectoryValue(formatValue(item.expectedTrajectory));
     setIsEditing(true);
-  }, [item.input, item.groundTruth]);
+  }, [item.input, item.groundTruth, item.expectedTrajectory]);
 
   const cancelEditing = useCallback(() => {
     setIsEditing(false);
@@ -611,19 +624,29 @@ function ExpandedItemEditor({
       }
     }
 
+    let parsedTrajectory: unknown | undefined;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        parsedTrajectory = trajectoryValue;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
         itemId: item.id,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        expectedTrajectory: parsedTrajectory,
       });
       toast.success('Item updated');
       setIsEditing(false);
     } catch (error) {
       toast.error(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [inputValue, groundTruthValue, datasetId, item.id, updateItem]);
+  }, [inputValue, groundTruthValue, trajectoryValue, datasetId, item.id, updateItem]);
 
   if (isEditing) {
     return (
@@ -649,6 +672,18 @@ function ExpandedItemEditor({
             className="mt-1 font-mono text-xs"
             rows={3}
             placeholder="Optional"
+          />
+        </div>
+        <div>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Expected Trajectory (JSON)
+          </Txt>
+          <Textarea
+            value={trajectoryValue}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTrajectoryValue(e.target.value)}
+            className="mt-1 font-mono text-xs"
+            rows={3}
+            placeholder="Optional — JSON trajectory expectation"
           />
         </div>
         <div className="flex items-center gap-2 pt-1">
@@ -690,6 +725,16 @@ function ExpandedItemEditor({
           </Txt>
           <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
             {formatValue(item.groundTruth)}
+          </pre>
+        </div>
+      )}
+      {item.expectedTrajectory != null && (
+        <div>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Expected Trajectory
+          </Txt>
+          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
+            {formatValue(item.expectedTrajectory)}
           </pre>
         </div>
       )}
