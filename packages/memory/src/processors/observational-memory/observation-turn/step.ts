@@ -53,6 +53,7 @@ export class ObservationStep {
     let buffered = false;
     let reflected = false;
     let didThresholdCleanup = false;
+    let observerExchange: StepContext['observerExchange'];
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
@@ -192,6 +193,7 @@ export class ObservationStep {
       if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
         const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation();
+        observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
           didThresholdCleanup = true;
@@ -263,6 +265,7 @@ export class ObservationStep {
 
     this._context = {
       systemMessage,
+      observerExchange,
       activated,
       observed,
       buffered,
@@ -289,6 +292,7 @@ export class ObservationStep {
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
+    observerExchange?: StepContext['observerExchange'];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
@@ -351,6 +355,10 @@ export class ObservationStep {
       observabilityContext: this.turn.observabilityContext,
     });
 
-    return { succeeded: obsResult.observed, record: obsResult.record };
+    return {
+      succeeded: obsResult.observed,
+      record: obsResult.record,
+      observerExchange: om.observer.lastExchange,
+    };
   }
 }

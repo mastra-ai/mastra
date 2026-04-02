@@ -294,7 +294,6 @@ export type ProviderModelsMap = {
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-7-sonnet-20250219',
-    'claude-3-7-sonnet-latest',
     'claude-3-haiku-20240307',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
@@ -1802,6 +1801,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
     'qwen/qwen3.6-plus-preview:free',
+    'qwen/qwen3.6-plus:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
@@ -3565,7 +3565,14 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/minimax-m2p5',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
+  readonly 'opencode-go': readonly [
+    'glm-5',
+    'kimi-k2.5',
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'minimax-m2.5',
+    'minimax-m2.7',
+  ];
   readonly abacus: readonly [
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-72B-Instruct',

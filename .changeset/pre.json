@@ -122,5 +122,21 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260402-063930",
+    "bright-squids-share",
+    "fair-ladybugs-jog",
+    "fix-sandbox-relative-cwd",
+    "gateway-client-js",
+    "gateway-mastracode",
+    "gateway-memory-server",
+    "gateway-playground-ui",
+    "good-towns-fix",
+    "green-birds-knock",
+    "huge-eels-appear",
+    "proud-spoons-throw",
+    "six-bats-roll",
+    "ten-states-create",
+    "tender-hairs-sell"
+  ]
 }

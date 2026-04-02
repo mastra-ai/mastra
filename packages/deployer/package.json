@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.21.0",
+  "version": "1.22.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -127,6 +127,7 @@
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",

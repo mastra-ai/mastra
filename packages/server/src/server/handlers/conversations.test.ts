@@ -11,6 +11,66 @@ import {
 } from './conversations';
 import { createTestServerContext } from './test-utils';
 
+class RootInjectedMockMemory extends MockMemory {
+  constructor() {
+    super();
+    this._storage = undefined;
+    this._hasOwnStorage = false;
+  }
+}
+
+function createMastraWithDedicatedAgentMemory() {
+  const rootStorage = new InMemoryStore();
+  const agentStorage = new InMemoryStore();
+  const memory = new MockMemory({ storage: agentStorage });
+  const agent = new Agent({
+    id: 'dedicated-agent',
+    name: 'dedicated-agent',
+    instructions: 'dedicated instructions',
+    model: {} as never,
+    memory,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    storage: rootStorage,
+    agents: {
+      'dedicated-agent': agent,
+    },
+  });
+
+  return {
+    agent,
+    mastra,
+    memory,
+    rootStorage,
+  };
+}
+
+function createMastraWithAgentMemoryUsingRootStorage() {
+  const rootStorage = new InMemoryStore();
+  const memory = new RootInjectedMockMemory();
+  const agent = new Agent({
+    id: 'root-backed-agent',
+    name: 'root-backed-agent',
+    instructions: 'root-backed instructions',
+    model: {} as never,
+    memory,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    storage: rootStorage,
+    agents: {
+      'root-backed-agent': agent,
+    },
+  });
+
+  return {
+    agent,
+    mastra,
+    rootStorage,
+  };
+}
+
 describe('Conversation Handlers', () => {
   let storage: InMemoryStore;
   let memory: MockMemory;
@@ -238,6 +298,115 @@ describe('Conversation Handlers', () => {
       }),
     ).rejects.toMatchObject({
       status: 404,
+    });
+  });
+
+  it('retrieves, lists items, and deletes conversations from the agent memory store when Mastra root storage is different', async () => {
+    const dedicated = createMastraWithDedicatedAgentMemory();
+
+    const created = await CREATE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      agent_id: 'dedicated-agent',
+      conversation_id: 'conv_dedicated',
+    });
+
+    await dedicated.memory.saveMessages({
+      messages: [
+        {
+          id: 'dedicated_msg_1',
+          threadId: 'conv_dedicated',
+          resourceId: 'conv_dedicated',
+          role: 'user',
+          type: 'text',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hello dedicated conversation' }],
+          },
+        },
+      ],
+    });
+
+    const rootMemoryStore = await dedicated.rootStorage.getStore('memory');
+    const rootThread = await rootMemoryStore!.getThreadById({ threadId: 'conv_dedicated' });
+    expect(rootThread).toBeNull();
+
+    const retrieved = await GET_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      conversationId: 'conv_dedicated',
+    });
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      object: 'conversation',
+      thread: {
+        id: 'conv_dedicated',
+        resourceId: 'conv_dedicated',
+      },
+    });
+
+    const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      conversationId: 'conv_dedicated',
+    });
+    expect(items).toMatchObject({
+      object: 'list',
+      data: [
+        {
+          id: 'dedicated_msg_1',
+          type: 'message',
+          role: 'user',
+        },
+      ],
+    });
+
+    const deleted = await DELETE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      conversationId: 'conv_dedicated',
+    });
+    expect(deleted).toEqual({
+      id: 'conv_dedicated',
+      object: 'conversation.deleted',
+      deleted: true,
+    });
+
+    await expect(
+      GET_CONVERSATION_ROUTE.handler({
+        ...createTestServerContext({ mastra: dedicated.mastra }),
+        conversationId: 'conv_dedicated',
+      }),
+    ).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('creates and retrieves conversations through agent memory when that memory inherits Mastra root storage', async () => {
+    const rootBacked = createMastraWithAgentMemoryUsingRootStorage();
+
+    const created = await CREATE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: rootBacked.mastra }),
+      agent_id: 'root-backed-agent',
+      conversation_id: 'conv_root_backed',
+    });
+
+    const rootMemoryStore = await rootBacked.rootStorage.getStore('memory');
+    const rootThread = await rootMemoryStore!.getThreadById({ threadId: 'conv_root_backed' });
+    expect(rootThread).toMatchObject({
+      id: 'conv_root_backed',
+      resourceId: 'conv_root_backed',
+    });
+
+    const retrieved = await GET_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: rootBacked.mastra }),
+      conversationId: 'conv_root_backed',
+    });
+
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      object: 'conversation',
+      thread: {
+        id: 'conv_root_backed',
+        resourceId: 'conv_root_backed',
+      },
     });
   });
 });
