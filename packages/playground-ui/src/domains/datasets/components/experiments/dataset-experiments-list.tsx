@@ -1,10 +1,12 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ItemList } from '@/ds/components/ItemList';
+import { EntityList } from '@/ds/components/EntityList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Chip } from '@/index';
+import { Chip } from '@/ds/components/Chip';
+import { cn } from '@/lib/utils';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '6rem' },
@@ -23,6 +25,17 @@ export interface DatasetExperimentsListProps {
   onToggleSelection: (experimentId: string) => void;
 }
 
+function formatDate(date: Date): string {
+  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
+  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
+  const time = format(date, "'at' h:mm aaa");
+  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function DatasetExperimentsList({
   experiments,
   isSelectionActive,
@@ -30,70 +43,90 @@ export function DatasetExperimentsList({
   onRowClick,
   onToggleSelection,
 }: DatasetExperimentsListProps) {
-  const columns = experimentsListColumns;
-
   if (experiments.length === 0) {
     return <EmptyDatasetExperimentsList />;
   }
 
+  const gridColumns = [
+    isSelectionActive ? '2rem' : '',
+    ...experimentsListColumns.map(c => c.size),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <ItemList>
-      <ItemList.Scroller>
-        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
-          {columns.map(col => (
-            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-          ))}
-        </ItemList.Header>
+    <EntityList columns={gridColumns}>
+      <EntityList.Top>
+        {isSelectionActive && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
+        {experimentsListColumns.map(col => (
+          <EntityList.TopCell key={col.name}>{col.label}</EntityList.TopCell>
+        ))}
+      </EntityList.Top>
 
-        <ItemList.Items>
-          {experiments.map(experiment => {
-            const status = experiment.status;
-            const isSelected = selectedExperimentIds.includes(experiment.id);
-            const entry = { id: experiment.id };
+      <EntityList.Rows>
+        {experiments.map(experiment => {
+          const isSelected = selectedExperimentIds.includes(experiment.id);
+          const createdAtDate = new Date(experiment.createdAt);
 
-            return (
-              <ItemList.Row key={experiment.id} isSelected={isSelected}>
-                {isSelectionActive && (
-                  <ItemList.LabelCell>
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => onToggleSelection(experiment.id)}
-                      aria-label={`Select experiment ${experiment.id}`}
-                    />
-                  </ItemList.LabelCell>
+          return (
+            <EntityList.Row key={experiment.id} onClick={() => onRowClick(experiment.id)} selected={isSelected}>
+              {isSelectionActive && (
+                <EntityList.Cell>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleSelection(experiment.id)}
+                    aria-label={`Select experiment ${experiment.id}`}
+                  />
+                </EntityList.Cell>
+              )}
+              <EntityList.TextCell>
+                <span className="truncate block font-mono">{experiment.id}</span>
+              </EntityList.TextCell>
+              <EntityList.Cell>
+                {experiment.status && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                        <div
+                          className={cn('w-2 h-2 rounded-full', {
+                            'bg-green-600': ['success', 'completed'].includes(experiment.status),
+                            'bg-red-700': ['error', 'failed'].includes(experiment.status),
+                            'bg-yellow-500': ['pending', 'running'].includes(experiment.status),
+                          })}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>{capitalize(experiment.status)}</TooltipContent>
+                  </Tooltip>
                 )}
-                <ItemList.RowButton
-                  item={entry}
-                  columns={experimentsListColumns}
-                  onClick={() => onRowClick(experiment.id)}
-                >
-                  <ItemList.IdCell id={experiment.id} />
-                  <ItemList.StatusCell status={status} />
-                  <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>
-                  <ItemList.TextCell>{experiment.targetId}</ItemList.TextCell>
-                  <ItemList.Cell>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex gap-1">
-                          {experiment.succeededCount > 0 && <Chip color="green">{experiment.succeededCount}</Chip>}
-                          {experiment.failedCount > 0 && <Chip color="red">{experiment.failedCount}</Chip>}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {experiment.succeededCount} Succeeded
-                        <br />
-                        {experiment.failedCount} Failed
-                      </TooltipContent>
-                    </Tooltip>
-                  </ItemList.Cell>
-                  <ItemList.DateCell date={experiment.createdAt} withTime={true} />
-                </ItemList.RowButton>
-              </ItemList.Row>
-            );
-          })}
-        </ItemList.Items>
-      </ItemList.Scroller>
-    </ItemList>
+              </EntityList.Cell>
+              <EntityList.TextCell>{experiment.targetType}</EntityList.TextCell>
+              <EntityList.TextCell>
+                <span className="truncate block">{experiment.targetId}</span>
+              </EntityList.TextCell>
+              <EntityList.Cell>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex gap-1">
+                      {experiment.succeededCount > 0 && <Chip color="green">{experiment.succeededCount}</Chip>}
+                      {experiment.failedCount > 0 && <Chip color="red">{experiment.failedCount}</Chip>}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {experiment.succeededCount} Succeeded
+                    <br />
+                    {experiment.failedCount} Failed
+                  </TooltipContent>
+                </Tooltip>
+              </EntityList.Cell>
+              <EntityList.TextCell>
+                <span className="truncate block text-neutral2">{formatDate(createdAtDate)}</span>
+              </EntityList.TextCell>
+            </EntityList.Row>
+          );
+        })}
+      </EntityList.Rows>
+    </EntityList>
   );
 }
 

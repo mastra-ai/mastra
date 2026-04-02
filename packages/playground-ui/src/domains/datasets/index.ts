@@ -3,6 +3,7 @@ export * from './hooks/use-datasets';
 export * from './hooks/use-dataset-items';
 export * from './hooks/use-dataset-item-versions';
 export * from './hooks/use-dataset-experiments';
+export * from './hooks/use-experiments';
 export * from './hooks/use-compare-experiments';
 export * from './hooks/use-dataset-versions';
 

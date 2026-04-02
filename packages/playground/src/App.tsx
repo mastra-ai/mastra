@@ -63,6 +63,7 @@ import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
@@ -137,6 +138,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
     `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/evaluation/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -295,6 +297,7 @@ const routes = [
               element: <DatasetItemVersionsComparePage />,
             },
             { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/evaluation/experiments/:experimentId', element: <ExperimentPage /> },
             { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
             { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },

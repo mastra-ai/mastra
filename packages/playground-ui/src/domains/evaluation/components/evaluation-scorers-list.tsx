@@ -1,14 +1,10 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { WorkflowIcon, XIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { WorkflowIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -20,20 +16,26 @@ export interface EvaluationScorersListProps {
   scorers: Record<string, GetScorerResponse>;
   isLoading: boolean;
   error?: Error | null;
+  search?: string;
+  sourceFilter?: string;
 }
 
-const COLUMNS = 'auto 1fr auto auto auto';
-
-const SOURCE_OPTIONS = [
+export const EVALUATION_SCORER_SOURCE_OPTIONS = [
   { value: 'all', label: 'All sources' },
   { value: 'code', label: 'Code' },
   { value: 'stored', label: 'Stored' },
-];
+] as const;
 
-export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationScorersListProps) {
+const COLUMNS = 'auto 1fr auto auto auto';
+
+export function EvaluationScorersList({
+  scorers,
+  isLoading,
+  error,
+  search = '',
+  sourceFilter = 'all',
+}: EvaluationScorersListProps) {
   const { paths } = useLinkComponent();
-  const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('all');
 
   const scorerData = useMemo(
     () =>
@@ -56,12 +58,6 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
     });
   }, [scorerData, search, sourceFilter]);
 
-  const hasActiveFilters = sourceFilter !== 'all';
-  const resetFilters = () => {
-    setSearch('');
-    setSourceFilter('all');
-  };
-
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="scorers" />;
   }
@@ -78,19 +74,17 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
           titleSlot="Configure Scorers"
           descriptionSlot="Mastra scorers are not configured yet. You can find more information in the documentation."
           actionSlot={
-            <Button
-              size="lg"
-              className="w-full"
-              variant="light"
-              as="a"
+            <a
+              className="inline-flex min-w-32 items-center justify-center gap-2 rounded-lg border border-border1 bg-surface2 px-4 py-2 text-sm font-medium text-icon3 transition-colors hover:bg-surface3"
               href="https://mastra.ai/en/docs/evals/overview"
               target="_blank"
+              rel="noreferrer"
             >
               <Icon>
                 <AgentIcon />
               </Icon>
               Docs
-            </Button>
+            </a>
           }
         />
       </div>
@@ -102,73 +96,43 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <SearchFieldBlock
-          name="search-scorers"
-          label="Search scorers"
-          labelIsHidden
-          placeholder="Filter by scorer name"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          onReset={() => setSearch('')}
-          className="w-full max-w-80"
+    <EntityList columns={COLUMNS}>
+      <EntityList.Top>
+        <EntityList.TopCell>Name</EntityList.TopCell>
+        <EntityList.TopCell>Description</EntityList.TopCell>
+        <EntityList.TopCell>Source</EntityList.TopCell>
+        <EntityList.TopCellSmart
+          long="Agents"
+          short={<AgentIcon />}
+          tooltip="Number of attached Agents"
+          className="text-center"
         />
-        <ButtonsGroup>
-          <SelectFieldBlock
-            label="Source"
-            labelIsHidden
-            name="filter-source"
-            options={SOURCE_OPTIONS}
-            value={sourceFilter}
-            onValueChange={setSourceFilter}
-            className="whitespace-nowrap"
-          />
-          {hasActiveFilters && (
-            <Button onClick={resetFilters} size="sm" variant="light">
-              <XIcon className="size-3" /> Reset
-            </Button>
-          )}
-        </ButtonsGroup>
-      </div>
-      <EntityList columns={COLUMNS}>
-        <EntityList.Top>
-          <EntityList.TopCell>Name</EntityList.TopCell>
-          <EntityList.TopCell>Description</EntityList.TopCell>
-          <EntityList.TopCell>Source</EntityList.TopCell>
-          <EntityList.TopCellSmart
-            long="Agents"
-            short={<AgentIcon />}
-            tooltip="Number of attached Agents"
-            className="text-center"
-          />
-          <EntityList.TopCellSmart
-            long="Workflows"
-            short={<WorkflowIcon />}
-            tooltip="Number of attached Workflows"
-            className="text-center"
-          />
-        </EntityList.Top>
+        <EntityList.TopCellSmart
+          long="Workflows"
+          short={<WorkflowIcon />}
+          tooltip="Number of attached Workflows"
+          className="text-center"
+        />
+      </EntityList.Top>
 
-        {filteredData.map(scorer => {
-          const name = scorer.scorer.config?.name || scorer.id;
-          const description = scorer.scorer.config?.description || '';
-          const agentCount = scorer.agentIds?.length ?? 0;
-          const workflowCount = scorer.workflowIds?.length ?? 0;
+      {filteredData.map(scorer => {
+        const name = scorer.scorer.config?.name || scorer.id;
+        const description = scorer.scorer.config?.description || '';
+        const agentCount = scorer.agentIds?.length ?? 0;
+        const workflowCount = scorer.workflowIds?.length ?? 0;
 
-          return (
-            <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.Cell>
-                <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
-              </EntityList.Cell>
-              <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
-              <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
-          );
-        })}
-      </EntityList>
-    </div>
+        return (
+          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.Cell>
+              <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
+            </EntityList.Cell>
+            <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
+            <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
+          </EntityList.RowLink>
+        );
+      })}
+    </EntityList>
   );
 }
