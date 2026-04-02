@@ -682,27 +682,27 @@ export class AgentChannels {
       textSegments.push(historyBlock);
     }
 
-    const eventType = sdkThread.isDM ? 'message' : 'mention';
-    const reminderLines = [`Event: ${eventType}`, `Message ID: ${message.id}`];
-    if (eventType === 'mention') {
+    if (sdkThread.isDM) {
+      // DMs: just the message text — system message already covers identity
+      textSegments.push(message.text);
+    } else {
+      // Non-DM: prepend metadata and author prefix for multi-user context
+      const reminderLines = [`Event: mention`, `Message ID: ${message.id}`];
       reminderLines.push('You were mentioned in this message. Respond to the user.');
-    }
-    const metadataBlock = `<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`;
-    textSegments.push(metadataBlock);
+      textSegments.push(`<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`);
 
-    // In multi-user threads (not DMs), prefix the message with author info
-    // to help the agent distinguish speakers.
-    if (!sdkThread.isDM && (authorName || authorMention)) {
       let authorPrefix = '';
       if (authorMention) {
         authorPrefix = authorName ? `${authorName} (${authorMention})` : authorMention;
-      } else {
-        authorPrefix = authorName!;
+      } else if (authorName) {
+        authorPrefix = authorName;
       }
-      if (message.author.isBot) authorPrefix += ' (bot)';
-      textSegments.push(`[${authorPrefix}]: ${message.text}`);
-    } else {
-      textSegments.push(message.text);
+      if (authorPrefix) {
+        if (message.author.isBot) authorPrefix += ' (bot)';
+        textSegments.push(`[${authorPrefix}]: ${message.text}`);
+      } else {
+        textSegments.push(message.text);
+      }
     }
 
     const rawText = textSegments.join('\n\n');
