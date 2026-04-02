@@ -141,8 +141,11 @@ async function resolveProject(
 
   if (flagProject) {
     const projects = await fetchServerProjects(token, orgId);
-    const match = projects.find(proj => proj.id === flagProject);
-    return { projectId: flagProject, projectName: match?.name ?? flagProject };
+    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    if (match) {
+      return { projectId: match.id, projectName: match.name };
+    }
+    return { projectId: flagProject, projectName: flagProject };
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
@@ -182,7 +185,13 @@ export async function serverDeployAction(
   const packageName = getPackageName(targetDir);
 
   // Step 1: Auth
-  const token = await getToken();
+  let token: string;
+  try {
+    token = await getToken();
+  } catch {
+    p.log.error(`Authentication failed. Run: mastra auth login`);
+    process.exit(1);
+  }
 
   // Step 2: Load existing project config
   const projectConfig = await loadProjectConfig(targetDir, opts.config);

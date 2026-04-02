@@ -3178,6 +3178,7 @@ export interface operations {
             instanceUrl: string | null;
             error: string | null;
             createdAt: string | null;
+            updatedAt: string | null;
           };
         };
       };
