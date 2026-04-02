@@ -1562,6 +1562,43 @@ External instructions.`;
 
       warnSpy.mockRestore();
     });
+
+    it('should resolve skill by path with /SKILL.md suffix (issue #14918)', async () => {
+      // The SkillsProcessor tells the LLM to use the "location" field
+      // (which is `${skill.path}/SKILL.md`) to disambiguate same-named skills.
+      // #resolveByPath must accept paths that include the trailing /SKILL.md.
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'custom-skills'],
+      });
+
+      // get() by exact path works without /SKILL.md (baseline)
+      const specific = await skills.get('skills/test-skill');
+      expect(specific?.instructions).toContain('This is the test skill instructions.');
+
+      // get() by path WITH /SKILL.md suffix — this is what the LLM sends
+      // because SkillsProcessor.formatLocation() returns `${skill.path}/SKILL.md`
+      const specificWithSuffix = await skills.get('skills/test-skill/SKILL.md');
+      expect(specificWithSuffix).not.toBeNull();
+      expect(specificWithSuffix?.instructions).toContain('This is the test skill instructions.');
+
+      const shadowWithSuffix = await skills.get('custom-skills/test-skill/SKILL.md');
+      expect(shadowWithSuffix).not.toBeNull();
+      expect(shadowWithSuffix?.instructions).toContain('Shadow instructions.');
+    });
   });
 
   describe('direct skill path discovery', () => {

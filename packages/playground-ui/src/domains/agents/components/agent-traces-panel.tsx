@@ -10,7 +10,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useAgentTraceScores } from '../hooks/use-agent-trace-scores';
 import { useAgentTracesFilters } from '../hooks/use-agent-traces-filters';
 import { extractErrorText } from '../utils/trace-utils';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { BulkTraceReviewDialog } from '@/domains/datasets/components/bulk-trace-review-dialog';
+import type { BulkTraceItem } from '@/domains/datasets/components/bulk-trace-review-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
@@ -30,7 +31,6 @@ import { Icon } from '@/ds/icons/Icon';
 import { useInView } from '@/hooks/use-in-view';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 const TRACES_PER_PAGE = 25;
@@ -82,18 +82,6 @@ function extractInputPreview(input: unknown): string {
   if (typeof obj.input === 'string') return obj.input;
 
   return JSON.stringify(input).slice(0, 200);
-}
-
-/** Unwrap agent message wrapper to get raw input for dataset items */
-function extractRawInput(input: unknown): unknown {
-  if (!input || typeof input !== 'object') return input;
-  const obj = input as Record<string, unknown>;
-  if (obj.messages && Array.isArray(obj.messages)) {
-    const userMsgs = (obj.messages as Array<Record<string, unknown>>).filter(m => m.role === 'user');
-    const last = userMsgs[userMsgs.length - 1];
-    if (last?.content) return last.content;
-  }
-  return input;
 }
 
 /** Extract output text preview from root span output */
@@ -534,6 +522,16 @@ export function AgentTracesPanel({
     });
   }, [displayTraces, checkedTraceIds.size]);
 
+  // Bulk review dialog state
+  const [bulkReview, setBulkReview] = useState<{
+    isOpen: boolean;
+    datasetId: string;
+    datasetName: string;
+    items: BulkTraceItem[];
+  }>({ isOpen: false, datasetId: '', datasetName: '', items: [] });
+
+  const [isPreparing, setIsPreparing] = useState(false);
+
   useEffect(() => {
     if (initialTraceId) {
       setSelectedTraceId(initialTraceId);
@@ -544,9 +542,6 @@ export function AgentTracesPanel({
     setSelectedTraceId(undefined);
     setDialogIsOpen(false);
   }, [initialTraceId]);
-
-  // Datasets
-  const { batchInsertItems } = useDatasetMutations();
 
   // Selection state
   const allSelected = displayTraces.length > 0 && displayTraces.every(t => checkedTraceIds.has(t.traceId));
@@ -588,26 +583,73 @@ export function AgentTracesPanel({
     }
   }, [allSelected, displayTraces]);
 
+  const { data: allDatasets } = useDatasets();
+
   const handleBulkAdd = useCallback(
     async (datasetId: string) => {
       const selected = displayTraces.filter(t => checkedTraceIds.has(t.traceId));
       if (!selected.length) return;
 
-      const items = selected.map(t => ({
-        input: extractRawInput(t.input),
-        groundTruth: t.output ?? undefined,
-        source: { type: 'trace' as const, referenceId: t.traceId },
-      }));
-
+      setIsPreparing(true);
       try {
-        await batchInsertItems.mutateAsync({ datasetId, items });
-        toast.success(`Added ${items.length} item${items.length !== 1 ? 's' : ''} to dataset`);
-        setCheckedTraceIds(new Set());
-      } catch {
-        toast.error('Failed to add items to dataset');
+        // Fetch trajectories in batches to avoid unbounded fan-out
+        const BATCH_SIZE = 5;
+        const trajectories: Array<Record<string, unknown> | undefined> = [];
+        for (let i = 0; i < selected.length; i += BATCH_SIZE) {
+          const batch = selected.slice(i, i + BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map(t => client.getTraceTrajectory(t.traceId).catch(() => undefined)),
+          );
+          trajectories.push(...results);
+        }
+
+        const items: BulkTraceItem[] = selected.map((t, i) => {
+          const trajectory = trajectories[i] as { steps?: Array<Record<string, unknown>> } | undefined;
+          let trajectoryExpectation: Record<string, unknown> | undefined;
+          if (trajectory?.steps && trajectory.steps.length > 0) {
+            trajectoryExpectation = {
+              steps: trajectory.steps.map(step => {
+                const { name, stepType, ...rest } = step as Record<string, unknown>;
+                const expected: Record<string, unknown> = { name, stepType };
+                for (const [k, v] of Object.entries(rest)) {
+                  if (v != null && k !== 'durationMs' && k !== 'metadata' && k !== 'children') {
+                    expected[k] = v;
+                  }
+                }
+                return expected;
+              }),
+              ordering: 'relaxed' as const,
+            };
+          }
+
+          const formatJson = (val: unknown) => (val != null ? JSON.stringify(val, null, 2) : '');
+
+          // Unwrap agent_run { messages } wrapper to preserve full conversation input
+          const rawInput =
+            t.spanType === 'agent_run' &&
+            t.input &&
+            typeof t.input === 'object' &&
+            !Array.isArray(t.input) &&
+            Array.isArray((t.input as Record<string, unknown>).messages)
+              ? (t.input as Record<string, unknown>).messages
+              : t.input;
+
+          return {
+            input: formatJson(rawInput),
+            groundTruth: formatJson(t.output),
+            expectedTrajectory: formatJson(trajectoryExpectation),
+            source: { type: 'trace' as const, referenceId: t.traceId },
+          };
+        });
+
+        const datasetName = allDatasets?.datasets?.find(d => d.id === datasetId)?.name ?? 'dataset';
+
+        setBulkReview({ isOpen: true, datasetId, datasetName, items });
+      } finally {
+        setIsPreparing(false);
       }
     },
-    [displayTraces, checkedTraceIds, batchInsertItems],
+    [displayTraces, checkedTraceIds, client, allDatasets],
   );
 
   const computeTraceLink = useCallback(
@@ -670,11 +712,7 @@ export function AgentTracesPanel({
       </EntityListPageLayout.Top>
 
       {someSelected && (
-        <BulkAddToDatasetBar
-          selectedCount={checkedTraceIds.size}
-          onAdd={handleBulkAdd}
-          isPending={batchInsertItems.isPending}
-        />
+        <BulkAddToDatasetBar selectedCount={checkedTraceIds.size} onAdd={handleBulkAdd} isPending={isPreparing} />
       )}
 
       {isTracesLoading ? (
@@ -821,6 +859,17 @@ export function AgentTracesPanel({
           isLoadingScorers={isLoadingScorers}
         />
       )}
+
+      <BulkTraceReviewDialog
+        isOpen={bulkReview.isOpen}
+        onClose={() => {
+          setBulkReview(prev => ({ ...prev, isOpen: false }));
+          setCheckedTraceIds(new Set());
+        }}
+        datasetId={bulkReview.datasetId}
+        datasetName={bulkReview.datasetName}
+        initialItems={bulkReview.items}
+      />
     </EntityListPageLayout>
   );
 }

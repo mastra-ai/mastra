@@ -1,6 +1,6 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { AlertDialog } from '@/ds/components/AlertDialog';
@@ -45,6 +45,7 @@ export function ItemDetailDialog({
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
+  const [trajectoryValue, setTrajectoryValue] = useState('');
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -55,6 +56,7 @@ export function ItemDetailDialog({
       setInputValue(JSON.stringify(item.input, null, 2));
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
     }
@@ -112,6 +114,17 @@ export function ItemDetailDialog({
       }
     }
 
+    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
+    let parsedTrajectory: unknown | null = null;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -119,6 +132,7 @@ export function ItemDetailDialog({
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        expectedTrajectory: parsedTrajectory,
       });
 
       toast.success('Item updated successfully');
@@ -133,6 +147,7 @@ export function ItemDetailDialog({
     setInputValue(JSON.stringify(item.input, null, 2));
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setIsEditing(false);
   };
 
@@ -196,6 +211,8 @@ export function ItemDetailDialog({
             setGroundTruthValue={setGroundTruthValue}
             metadataValue={metadataValue}
             setMetadataValue={setMetadataValue}
+            trajectoryValue={trajectoryValue}
+            setTrajectoryValue={setTrajectoryValue}
             onSave={handleSave}
             onCancel={handleCancel}
             isSaving={updateItem.isPending}
@@ -231,6 +248,7 @@ export function ItemDetailDialog({
  */
 function ReadOnlyContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
 
   return (
     <>
@@ -273,6 +291,10 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           />
         )}
 
+        {trajectoryDisplay && (
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
+        )}
+
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
       </Sections>
     </>
@@ -289,6 +311,8 @@ interface EditModeContentProps {
   setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  trajectoryValue: string;
+  setTrajectoryValue: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -301,6 +325,8 @@ function EditModeContent({
   setGroundTruthValue,
   metadataValue,
   setMetadataValue,
+  trajectoryValue,
+  setTrajectoryValue,
   onSave,
   onCancel,
   isSaving,
@@ -326,6 +352,16 @@ function EditModeContent({
             onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Expected Trajectory (JSON, optional)</Label>
+          <CodeEditor
+            value={trajectoryValue}
+            onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
           />
         </div>
 

@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -61,20 +61,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Resolves the memory storage used by response-turn records.
+ * Resolves the backing memory store for a specific agent.
+ *
+ * This follows the normal agent-memory path. `agent.getMemory()` injects Mastra
+ * root storage when the memory has no own storage, so this naturally prefers
+ * agent storage first and falls back to Mastra storage through the same codepath.
  */
-export async function getResponseMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage | null> {
-  const storage = mastra?.getStorage();
-  if (!storage) {
+export async function getAgentMemoryStore({
+  agent,
+  requestContext,
+}: {
+  agent: Agent<any, any, any, any>;
+  requestContext: RequestContext;
+}): Promise<MemoryStorage | null> {
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) {
     return null;
   }
 
-  const memoryStore = await storage.getStore('memory');
-  if (!memoryStore) {
+  try {
+    return (await memory.storage.getStore('memory')) ?? null;
+  } catch {
     return null;
   }
-
-  return memoryStore;
 }
 
 /**
@@ -151,15 +160,15 @@ function writeResponseTurnRecordMetadata(
  * reloading the full set of stored turn messages referenced by the metadata.
  */
 export async function findResponseTurnRecord({
-  mastra,
+  agent,
   responseId,
   requestContext,
 }: {
-  mastra: Mastra | undefined;
+  agent: Agent<any, any, any, any>;
   responseId: string;
   requestContext: RequestContext;
 }): Promise<ResponseTurnRecord | null> {
-  const memoryStore = await getResponseMemoryStore(mastra);
+  const memoryStore = await getAgentMemoryStore({ agent, requestContext });
   if (!memoryStore) {
     return null;
   }
@@ -172,7 +181,7 @@ export async function findResponseTurnRecord({
   }
 
   const metadata = readResponseTurnRecordMetadata(message);
-  if (!metadata) {
+  if (!metadata || metadata.agentId !== agent.id) {
     return null;
   }
 
@@ -190,6 +199,69 @@ export async function findResponseTurnRecord({
     .filter((storedMessage): storedMessage is MastraDBMessage => Boolean(storedMessage));
 
   return { metadata, message, messages: orderedMessages, thread, memoryStore };
+}
+
+export async function findResponseTurnRecordAcrossAgents({
+  mastra,
+  responseId,
+  requestContext,
+}: {
+  mastra: Mastra | undefined;
+  responseId: string;
+  requestContext: RequestContext;
+}): Promise<ResponseTurnRecord | null> {
+  if (!mastra) {
+    return null;
+  }
+
+  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+  for (const agent of agents) {
+    const match = await findResponseTurnRecord({ agent, responseId, requestContext });
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+export type ConversationThreadRecord = {
+  thread: StorageThreadType;
+  memoryStore: MemoryStorage;
+};
+
+export async function findConversationThreadAcrossAgents({
+  mastra,
+  conversationId,
+  requestContext,
+}: {
+  mastra: Mastra | undefined;
+  conversationId: string;
+  requestContext: RequestContext;
+}): Promise<ConversationThreadRecord | null> {
+  if (!mastra) {
+    return null;
+  }
+
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+
+  for (const agent of agents) {
+    const memoryStore = await getAgentMemoryStore({ agent, requestContext });
+    if (!memoryStore) {
+      continue;
+    }
+
+    const thread = await memoryStore.getThreadById({ threadId: conversationId });
+    if (!thread) {
+      continue;
+    }
+
+    await validateThreadOwnership(thread, effectiveResourceId);
+    return { thread, memoryStore };
+  }
+
+  return null;
 }
 
 /**
@@ -256,19 +328,18 @@ export async function resolveResponseTurnMessagesForStorage({
  * the Responses object from thread-backed storage.
  */
 export async function persistResponseTurnRecord({
-  mastra,
+  memoryStore,
   responseId,
   metadata,
   threadContext,
   messages,
 }: {
-  mastra: Mastra | undefined;
+  memoryStore: MemoryStorage | null;
   responseId: string;
   metadata: ResponseTurnRecordMetadata;
   threadContext: ThreadExecutionContext;
   messages: MastraDBMessage[];
 }): Promise<void> {
-  const memoryStore = await getResponseMemoryStore(mastra);
   if (!memoryStore) {
     throw new HTTPException(500, { message: 'Memory storage was not available while storing the response' });
   }
@@ -332,19 +403,14 @@ export async function persistResponseTurnRecord({
  * Removes all persisted messages for a stored response-turn record.
  */
 export async function deleteResponseTurnRecord({
-  mastra,
-  responseId,
-  requestContext,
+  responseTurnRecord,
 }: {
-  mastra: Mastra | undefined;
-  responseId: string;
-  requestContext: RequestContext;
-}): Promise<boolean> {
-  const match = await findResponseTurnRecord({ mastra, responseId, requestContext });
-  if (!match) {
-    return false;
-  }
+  responseTurnRecord: ResponseTurnRecord;
+}): Promise<void> {
+  const messageIds =
+    responseTurnRecord.messages.length > 0
+      ? responseTurnRecord.messages.map(message => message.id)
+      : [responseTurnRecord.message.id];
 
-  await match.memoryStore.deleteMessages(match.metadata.messageIds);
-  return true;
+  await responseTurnRecord.memoryStore.deleteMessages(messageIds);
 }
