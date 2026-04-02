@@ -59,6 +59,7 @@ export type ProviderModelsMap = {
   ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly openai: readonly [
+    'chatgpt-image-latest',
     'codex-mini-latest',
     'gpt-3.5-turbo',
     'gpt-4',
@@ -86,12 +87,16 @@ export type ProviderModelsMap = {
     'gpt-5.2-chat-latest',
     'gpt-5.2-codex',
     'gpt-5.2-pro',
+    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+    'gpt-image-1.5',
     'o1',
     'o1-mini',
     'o1-preview',
@@ -281,6 +286,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -404,6 +410,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5v-turbo',
   ];
   readonly xai: readonly [
     'grok-2',
@@ -482,6 +489,7 @@ export type ProviderModelsMap = {
     'ideogramai/ideogram-v2a',
     'ideogramai/ideogram-v2a-turbo',
     'lumalabs/ray2',
+    'novita/deepseek-v3.2',
     'novita/glm-4.6',
     'novita/glm-4.6v',
     'novita/glm-4.7',
@@ -554,6 +562,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast-reasoning',
     'xai/grok-4.1-fast-non-reasoning',
     'xai/grok-4.1-fast-reasoning',
+    'xai/grok-4.20-multi-agent',
     'xai/grok-code-fast-1',
   ];
   readonly opencode: readonly [
@@ -590,6 +599,7 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
+    'qwen3.6-plus-free',
   ];
   readonly berget: readonly [
     'BAAI/bge-reranker-v2-m3',
@@ -613,6 +623,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
     'glm-4.7-flashx',
     'glm-5',
+    'glm-5v-turbo',
   ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
@@ -772,7 +783,6 @@ export type ProviderModelsMap = {
     'gemini-3-1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
-    'glm-5',
     'gpt-4o',
     'gpt-5-3-codex',
     'gpt-5-4',
@@ -785,6 +795,7 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'kimi-k2.5',
     'minimax-m2-5',
+    'zai-glm-5',
   ];
   readonly google: readonly [
     'gemini-1.5-flash',
@@ -817,6 +828,11 @@ export type ProviderModelsMap = {
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
     'gemini-live-2.5-flash-preview-native-audio',
+    'gemma-3-12b-it',
+    'gemma-3-27b-it',
+    'gemma-3-4b-it',
+    'gemma-3n-e2b-it',
+    'gemma-3n-e4b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -1730,7 +1746,7 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-super-120b-a12b',
-    'nvidia/nemotron-3-super-120b-a12b-free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -1785,6 +1801,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
+    'qwen/qwen3.6-plus-preview:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
@@ -1812,6 +1829,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
+    'z-ai/glm-5-turbo',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -1832,7 +1850,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
-    'google/gemini-3-pro-image-preview',
     'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
@@ -2214,6 +2231,7 @@ export type ProviderModelsMap = {
     'inception/mercury-2',
     'inception/mercury-coder-small',
     'kwaipilot/kat-coder-pro-v1',
+    'kwaipilot/kat-coder-pro-v2',
     'meituan/longcat-flash-chat',
     'meituan/longcat-flash-thinking',
     'meituan/longcat-flash-thinking-2601',
@@ -2259,6 +2277,7 @@ export type ProviderModelsMap = {
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-nano-12b-v2-vl',
     'nvidia/nemotron-nano-9b-v2',
     'openai/codex-mini',
@@ -2364,6 +2383,7 @@ export type ProviderModelsMap = {
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',
     'hf:Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'hf:Qwen/Qwen3.5-397B-A17B',
     'hf:deepseek-ai/DeepSeek-R1',
     'hf:deepseek-ai/DeepSeek-R1-0528',
     'hf:deepseek-ai/DeepSeek-V3',
@@ -2587,6 +2607,7 @@ export type ProviderModelsMap = {
     'veo-3.1-fast-generate-preview',
     'veo-3.1-generate-preview',
   ];
+  readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly groq: readonly [
     'allam-2-7b',
     'canopylabs/orpheus-arabic-saudi',
@@ -2605,56 +2626,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3-32b',
     'whisper-large-v3',
     'whisper-large-v3-turbo',
-  ];
-  readonly aihubmix: readonly [
-    'Kimi-K2-0905',
-    'claude-haiku-4-5',
-    'claude-opus-4-1',
-    'claude-opus-4-5',
-    'claude-opus-4-6',
-    'claude-opus-4-6-think',
-    'claude-sonnet-4-5',
-    'claude-sonnet-4-6',
-    'claude-sonnet-4-6-think',
-    'coding-glm-4.7',
-    'coding-glm-4.7-free',
-    'coding-glm-5-free',
-    'coding-minimax-m2.1-free',
-    'deepseek-v3.2',
-    'deepseek-v3.2-fast',
-    'deepseek-v3.2-think',
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-3-pro-preview',
-    'gemini-3-pro-preview-search',
-    'glm-4.6v',
-    'glm-4.7',
-    'glm-5',
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-    'gpt-4o',
-    'gpt-5',
-    'gpt-5-codex',
-    'gpt-5-mini',
-    'gpt-5-nano',
-    'gpt-5-pro',
-    'gpt-5.1',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2',
-    'gpt-5.2-codex',
-    'kimi-k2.5',
-    'minimax-m2.1',
-    'minimax-m2.5',
-    'o4-mini',
-    'qwen3-235b-a22b-instruct-2507',
-    'qwen3-235b-a22b-thinking-2507',
-    'qwen3-coder-480b-a35b-instruct',
-    'qwen3-coder-next',
-    'qwen3-max-2026-01-23',
-    'qwen3.5-plus',
   ];
   readonly 'minimax-cn-coding-plan': readonly [
     'MiniMax-M2',
@@ -2770,6 +2741,7 @@ export type ProviderModelsMap = {
     'mistral-medium-latest',
     'mistral-nemo',
     'mistral-small-2506',
+    'mistral-small-2603',
     'mistral-small-latest',
     'open-mistral-7b',
     'open-mixtral-8x22b',
@@ -2822,17 +2794,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly vultr: readonly [
-    'DeepSeek-R1-Distill-Llama-70B',
-    'DeepSeek-R1-Distill-Qwen-32B',
-    'DeepSeek-V3.2',
-    'GLM-5-FP8',
-    'Kimi-K2.5',
-    'Llama-3_1-Nemotron-Ultra-253B-v1',
-    'MiniMax-M2.5',
-    'NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
-    'gpt-oss-120b',
-  ];
+  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -3407,6 +3369,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7',
     'zai-org/glm-4.7-flash',
     'zai-org/glm-5',
+    'zai-org/glm-5.1',
+    'zai-org/glm-5.1:thinking',
     'zai-org/glm-5:thinking',
   ];
   readonly clarifai: readonly [
@@ -3575,6 +3539,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
@@ -3687,7 +3652,6 @@ export type ProviderModelsMap = {
     'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image',
     'gemini/gemini-2.5-flash-lite',
-    'gemini/gemini-2.5-flash-lite-preview-09-2025',
     'gemini/gemini-2.5-pro',
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3-pro-image-preview',
@@ -3756,6 +3720,7 @@ export type ModelRouterModelId =
   | {
       [P in Provider]: `${P}/${ProviderModelsMap[P][number]}`;
     }[Provider]
+  | `mastra/${ProviderModelsMap['openrouter'][number]}`
   | (string & {});
 
 /**

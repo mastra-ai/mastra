@@ -94,6 +94,7 @@
       "apiKeyEnvVar": "OPENAI_API_KEY",
       "name": "OpenAI",
       "models": [
+        "chatgpt-image-latest",
         "codex-mini-latest",
         "gpt-3.5-turbo",
         "gpt-4",
@@ -121,12 +122,16 @@
         "gpt-5.2-chat-latest",
         "gpt-5.2-codex",
         "gpt-5.2-pro",
+        "gpt-5.3-chat-latest",
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
         "gpt-5.4-mini",
         "gpt-5.4-nano",
         "gpt-5.4-pro",
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
         "o1",
         "o1-mini",
         "o1-preview",
@@ -381,7 +386,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
@@ -566,7 +572,8 @@
         "glm-4.7-flash",
         "glm-4.7-flashx",
         "glm-5",
-        "glm-5-turbo"
+        "glm-5-turbo",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -660,6 +667,7 @@
         "ideogramai/ideogram-v2a",
         "ideogramai/ideogram-v2a-turbo",
         "lumalabs/ray2",
+        "novita/deepseek-v3.2",
         "novita/glm-4.6",
         "novita/glm-4.6v",
         "novita/glm-4.7",
@@ -732,6 +740,7 @@
         "xai/grok-4-fast-reasoning",
         "xai/grok-4.1-fast-non-reasoning",
         "xai/grok-4.1-fast-reasoning",
+        "xai/grok-4.20-multi-agent",
         "xai/grok-code-fast-1"
       ],
       "docUrl": "https://creator.poe.com/docs/external-applications/openai-compatible-api",
@@ -775,7 +784,8 @@
         "mimo-v2-pro-free",
         "minimax-m2.5",
         "minimax-m2.5-free",
-        "nemotron-3-super-free"
+        "nemotron-3-super-free",
+        "qwen3.6-plus-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -822,7 +832,8 @@
         "glm-4.7",
         "glm-4.7-flash",
         "glm-4.7-flashx",
-        "glm-5"
+        "glm-5",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -1013,7 +1024,6 @@
         "gemini-3-1-pro-preview",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
-        "glm-5",
         "gpt-4o",
         "gpt-5-3-codex",
         "gpt-5-4",
@@ -1025,7 +1035,8 @@
         "grok-4-1-fast-reasoning",
         "grok-code-fast-1",
         "kimi-k2.5",
-        "minimax-m2-5"
+        "minimax-m2-5",
+        "zai-glm-5"
       ],
       "docUrl": "https://docs.frogbot.ai",
       "gateway": "models.dev"
@@ -1063,7 +1074,12 @@
         "gemini-flash-latest",
         "gemini-flash-lite-latest",
         "gemini-live-2.5-flash",
-        "gemini-live-2.5-flash-preview-native-audio"
+        "gemini-live-2.5-flash-preview-native-audio",
+        "gemma-3-12b-it",
+        "gemma-3-27b-it",
+        "gemma-3-4b-it",
+        "gemma-3n-e2b-it",
+        "gemma-3n-e4b-it"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev",
@@ -2106,7 +2122,7 @@
         "nousresearch/hermes-4-70b",
         "nvidia/nemotron-3-nano-30b-a3b:free",
         "nvidia/nemotron-3-super-120b-a12b",
-        "nvidia/nemotron-3-super-120b-a12b-free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
         "nvidia/nemotron-nano-12b-v2-vl:free",
         "nvidia/nemotron-nano-9b-v2",
         "nvidia/nemotron-nano-9b-v2:free",
@@ -2161,6 +2177,7 @@
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwen3.5-397b-a17b",
         "qwen/qwen3.5-plus-02-15",
+        "qwen/qwen3.6-plus-preview:free",
         "sourceful/riverflow-v2-fast-preview",
         "sourceful/riverflow-v2-max-preview",
         "sourceful/riverflow-v2-standard-preview",
@@ -2187,14 +2204,15 @@
         "z-ai/glm-4.6:exacto",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash",
-        "z-ai/glm-5"
+        "z-ai/glm-5",
+        "z-ai/glm-5-turbo"
       ],
       "docUrl": "https://openrouter.ai/models",
       "gateway": "models.dev",
       "npm": "@openrouter/ai-sdk-provider"
     },
     "zenmux": {
-      "url": "https://zenmux.ai/api/anthropic/v1",
+      "url": "https://zenmux.ai/api/v1",
       "apiKeyEnvVar": "ZENMUX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "ZenMux",
@@ -2217,7 +2235,6 @@
         "google/gemini-2.5-flash-lite",
         "google/gemini-2.5-pro",
         "google/gemini-3-flash-preview",
-        "google/gemini-3-pro-image-preview",
         "google/gemini-3-pro-preview",
         "google/gemini-3.1-flash-lite-preview",
         "google/gemini-3.1-pro-preview",
@@ -2287,8 +2304,7 @@
         "z-ai/glm-5-turbo"
       ],
       "docUrl": "https://docs.zenmux.ai",
-      "gateway": "models.dev",
-      "npm": "@ai-sdk/anthropic"
+      "gateway": "models.dev"
     },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
@@ -2705,6 +2721,7 @@
         "inception/mercury-2",
         "inception/mercury-coder-small",
         "kwaipilot/kat-coder-pro-v1",
+        "kwaipilot/kat-coder-pro-v2",
         "meituan/longcat-flash-chat",
         "meituan/longcat-flash-thinking",
         "meituan/longcat-flash-thinking-2601",
@@ -2750,6 +2767,7 @@
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
         "nvidia/nemotron-3-nano-30b-a3b",
+        "nvidia/nemotron-3-super-120b-a12b",
         "nvidia/nemotron-nano-12b-v2-vl",
         "nvidia/nemotron-nano-9b-v2",
         "openai/codex-mini",
@@ -2863,6 +2881,7 @@
         "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
         "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
         "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
+        "hf:Qwen/Qwen3.5-397B-A17B",
         "hf:deepseek-ai/DeepSeek-R1",
         "hf:deepseek-ai/DeepSeek-R1-0528",
         "hf:deepseek-ai/DeepSeek-V3",
@@ -3097,6 +3116,15 @@
       "docUrl": "https://llmgateway.io/docs",
       "gateway": "models.dev"
     },
+    "the-grid-ai": {
+      "url": "https://api.thegrid.ai/v1",
+      "apiKeyEnvVar": "THEGRIDAI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "The Grid AI",
+      "models": ["text-max", "text-prime", "text-standard"],
+      "docUrl": "https://thegrid.ai/docs",
+      "gateway": "models.dev"
+    },
     "groq": {
       "url": "https://api.groq.com/openai/v1",
       "apiKeyEnvVar": "GROQ_API_KEY",
@@ -3123,64 +3151,6 @@
       "docUrl": "https://console.groq.com/docs/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/groq"
-    },
-    "aihubmix": {
-      "url": "https://aihubmix.com/v1",
-      "apiKeyEnvVar": "AIHUBMIX_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "AIHubMix",
-      "models": [
-        "Kimi-K2-0905",
-        "claude-haiku-4-5",
-        "claude-opus-4-1",
-        "claude-opus-4-5",
-        "claude-opus-4-6",
-        "claude-opus-4-6-think",
-        "claude-sonnet-4-5",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-6-think",
-        "coding-glm-4.7",
-        "coding-glm-4.7-free",
-        "coding-glm-5-free",
-        "coding-minimax-m2.1-free",
-        "deepseek-v3.2",
-        "deepseek-v3.2-fast",
-        "deepseek-v3.2-think",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-3-pro-preview",
-        "gemini-3-pro-preview-search",
-        "glm-4.6v",
-        "glm-4.7",
-        "glm-5",
-        "gpt-4.1",
-        "gpt-4.1-mini",
-        "gpt-4.1-nano",
-        "gpt-4o",
-        "gpt-5",
-        "gpt-5-codex",
-        "gpt-5-mini",
-        "gpt-5-nano",
-        "gpt-5-pro",
-        "gpt-5.1",
-        "gpt-5.1-codex",
-        "gpt-5.1-codex-max",
-        "gpt-5.1-codex-mini",
-        "gpt-5.2",
-        "gpt-5.2-codex",
-        "kimi-k2.5",
-        "minimax-m2.1",
-        "minimax-m2.5",
-        "o4-mini",
-        "qwen3-235b-a22b-instruct-2507",
-        "qwen3-235b-a22b-thinking-2507",
-        "qwen3-coder-480b-a35b-instruct",
-        "qwen3-coder-next",
-        "qwen3-max-2026-01-23",
-        "qwen3.5-plus"
-      ],
-      "docUrl": "https://docs.aihubmix.com",
-      "gateway": "models.dev"
     },
     "minimax-cn-coding-plan": {
       "url": "https://api.minimaxi.com/anthropic/v1",
@@ -3351,6 +3321,7 @@
         "mistral-medium-latest",
         "mistral-nemo",
         "mistral-small-2506",
+        "mistral-small-2603",
         "mistral-small-latest",
         "open-mistral-7b",
         "open-mixtral-8x22b",
@@ -3436,17 +3407,7 @@
       "apiKeyEnvVar": "VULTR_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Vultr",
-      "models": [
-        "DeepSeek-R1-Distill-Llama-70B",
-        "DeepSeek-R1-Distill-Qwen-32B",
-        "DeepSeek-V3.2",
-        "GLM-5-FP8",
-        "Kimi-K2.5",
-        "Llama-3_1-Nemotron-Ultra-253B-v1",
-        "MiniMax-M2.5",
-        "NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
-        "gpt-oss-120b"
-      ],
+      "models": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
       "docUrl": "https://api.vultrinference.com/",
       "gateway": "models.dev"
     },
@@ -4037,6 +3998,8 @@
         "zai-org/glm-4.7",
         "zai-org/glm-4.7-flash",
         "zai-org/glm-5",
+        "zai-org/glm-5.1",
+        "zai-org/glm-5.1:thinking",
         "zai-org/glm-5:thinking"
       ],
       "docUrl": "https://docs.nano-gpt.com",
@@ -4091,7 +4054,7 @@
     },
     "cloudflare-workers-ai": {
       "url": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-      "apiKeyEnvVar": "CLOUDFLARE_ACCOUNT_ID",
+      "apiKeyEnvVar": "CLOUDFLARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Cloudflare Workers AI",
       "models": [
@@ -4267,7 +4230,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
@@ -4421,7 +4385,6 @@
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-flash-image",
         "gemini/gemini-2.5-flash-lite",
-        "gemini/gemini-2.5-flash-lite-preview-09-2025",
         "gemini/gemini-2.5-pro",
         "gemini/gemini-3-flash-preview",
         "gemini/gemini-3-pro-image-preview",
@@ -4522,6 +4485,7 @@
     ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "openai": [
+      "chatgpt-image-latest",
       "codex-mini-latest",
       "gpt-3.5-turbo",
       "gpt-4",
@@ -4549,12 +4513,16 @@
       "gpt-5.2-chat-latest",
       "gpt-5.2-codex",
       "gpt-5.2-pro",
+      "gpt-5.3-chat-latest",
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
       "gpt-5.4-mini",
       "gpt-5.4-nano",
       "gpt-5.4-pro",
+      "gpt-image-1",
+      "gpt-image-1-mini",
+      "gpt-image-1.5",
       "o1",
       "o1-mini",
       "o1-preview",
@@ -4743,7 +4711,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
@@ -4866,7 +4835,8 @@
       "glm-4.7-flash",
       "glm-4.7-flashx",
       "glm-5",
-      "glm-5-turbo"
+      "glm-5-turbo",
+      "glm-5v-turbo"
     ],
     "xai": [
       "grok-2",
@@ -4945,6 +4915,7 @@
       "ideogramai/ideogram-v2a",
       "ideogramai/ideogram-v2a-turbo",
       "lumalabs/ray2",
+      "novita/deepseek-v3.2",
       "novita/glm-4.6",
       "novita/glm-4.6v",
       "novita/glm-4.7",
@@ -5017,6 +4988,7 @@
       "xai/grok-4-fast-reasoning",
       "xai/grok-4.1-fast-non-reasoning",
       "xai/grok-4.1-fast-reasoning",
+      "xai/grok-4.20-multi-agent",
       "xai/grok-code-fast-1"
     ],
     "opencode": [
@@ -5052,7 +5024,8 @@
       "mimo-v2-pro-free",
       "minimax-m2.5",
       "minimax-m2.5-free",
-      "nemotron-3-super-free"
+      "nemotron-3-super-free",
+      "qwen3.6-plus-free"
     ],
     "berget": [
       "BAAI/bge-reranker-v2-m3",
@@ -5075,7 +5048,8 @@
       "glm-4.7",
       "glm-4.7-flash",
       "glm-4.7-flashx",
-      "glm-5"
+      "glm-5",
+      "glm-5v-turbo"
     ],
     "nvidia": [
       "black-forest-labs/flux.1-dev",
@@ -5235,7 +5209,6 @@
       "gemini-3-1-pro-preview",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
-      "glm-5",
       "gpt-4o",
       "gpt-5-3-codex",
       "gpt-5-4",
@@ -5247,7 +5220,8 @@
       "grok-4-1-fast-reasoning",
       "grok-code-fast-1",
       "kimi-k2.5",
-      "minimax-m2-5"
+      "minimax-m2-5",
+      "zai-glm-5"
     ],
     "google": [
       "gemini-1.5-flash",
@@ -5279,7 +5253,12 @@
       "gemini-flash-latest",
       "gemini-flash-lite-latest",
       "gemini-live-2.5-flash",
-      "gemini-live-2.5-flash-preview-native-audio"
+      "gemini-live-2.5-flash-preview-native-audio",
+      "gemma-3-12b-it",
+      "gemma-3-27b-it",
+      "gemma-3-4b-it",
+      "gemma-3n-e2b-it",
+      "gemma-3n-e4b-it"
     ],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
@@ -6193,7 +6172,7 @@
       "nousresearch/hermes-4-70b",
       "nvidia/nemotron-3-nano-30b-a3b:free",
       "nvidia/nemotron-3-super-120b-a12b",
-      "nvidia/nemotron-3-super-120b-a12b-free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
       "nvidia/nemotron-nano-12b-v2-vl:free",
       "nvidia/nemotron-nano-9b-v2",
       "nvidia/nemotron-nano-9b-v2:free",
@@ -6248,6 +6227,7 @@
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwen3.5-397b-a17b",
       "qwen/qwen3.5-plus-02-15",
+      "qwen/qwen3.6-plus-preview:free",
       "sourceful/riverflow-v2-fast-preview",
       "sourceful/riverflow-v2-max-preview",
       "sourceful/riverflow-v2-standard-preview",
@@ -6274,7 +6254,8 @@
       "z-ai/glm-4.6:exacto",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash",
-      "z-ai/glm-5"
+      "z-ai/glm-5",
+      "z-ai/glm-5-turbo"
     ],
     "zenmux": [
       "anthropic/claude-3.5-haiku",
@@ -6295,7 +6276,6 @@
       "google/gemini-2.5-flash-lite",
       "google/gemini-2.5-pro",
       "google/gemini-3-flash-preview",
-      "google/gemini-3-pro-image-preview",
       "google/gemini-3-pro-preview",
       "google/gemini-3.1-flash-lite-preview",
       "google/gemini-3.1-pro-preview",
@@ -6671,6 +6651,7 @@
       "inception/mercury-2",
       "inception/mercury-coder-small",
       "kwaipilot/kat-coder-pro-v1",
+      "kwaipilot/kat-coder-pro-v2",
       "meituan/longcat-flash-chat",
       "meituan/longcat-flash-thinking",
       "meituan/longcat-flash-thinking-2601",
@@ -6716,6 +6697,7 @@
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
       "nvidia/nemotron-3-nano-30b-a3b",
+      "nvidia/nemotron-3-super-120b-a12b",
       "nvidia/nemotron-nano-12b-v2-vl",
       "nvidia/nemotron-nano-9b-v2",
       "openai/codex-mini",
@@ -6821,6 +6803,7 @@
       "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
       "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
       "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "hf:Qwen/Qwen3.5-397B-A17B",
       "hf:deepseek-ai/DeepSeek-R1",
       "hf:deepseek-ai/DeepSeek-R1-0528",
       "hf:deepseek-ai/DeepSeek-V3",
@@ -7044,6 +7027,7 @@
       "veo-3.1-fast-generate-preview",
       "veo-3.1-generate-preview"
     ],
+    "the-grid-ai": ["text-max", "text-prime", "text-standard"],
     "groq": [
       "allam-2-7b",
       "canopylabs/orpheus-arabic-saudi",
@@ -7062,56 +7046,6 @@
       "qwen/qwen3-32b",
       "whisper-large-v3",
       "whisper-large-v3-turbo"
-    ],
-    "aihubmix": [
-      "Kimi-K2-0905",
-      "claude-haiku-4-5",
-      "claude-opus-4-1",
-      "claude-opus-4-5",
-      "claude-opus-4-6",
-      "claude-opus-4-6-think",
-      "claude-sonnet-4-5",
-      "claude-sonnet-4-6",
-      "claude-sonnet-4-6-think",
-      "coding-glm-4.7",
-      "coding-glm-4.7-free",
-      "coding-glm-5-free",
-      "coding-minimax-m2.1-free",
-      "deepseek-v3.2",
-      "deepseek-v3.2-fast",
-      "deepseek-v3.2-think",
-      "gemini-2.5-flash",
-      "gemini-2.5-pro",
-      "gemini-3-pro-preview",
-      "gemini-3-pro-preview-search",
-      "glm-4.6v",
-      "glm-4.7",
-      "glm-5",
-      "gpt-4.1",
-      "gpt-4.1-mini",
-      "gpt-4.1-nano",
-      "gpt-4o",
-      "gpt-5",
-      "gpt-5-codex",
-      "gpt-5-mini",
-      "gpt-5-nano",
-      "gpt-5-pro",
-      "gpt-5.1",
-      "gpt-5.1-codex",
-      "gpt-5.1-codex-max",
-      "gpt-5.1-codex-mini",
-      "gpt-5.2",
-      "gpt-5.2-codex",
-      "kimi-k2.5",
-      "minimax-m2.1",
-      "minimax-m2.5",
-      "o4-mini",
-      "qwen3-235b-a22b-instruct-2507",
-      "qwen3-235b-a22b-thinking-2507",
-      "qwen3-coder-480b-a35b-instruct",
-      "qwen3-coder-next",
-      "qwen3-max-2026-01-23",
-      "qwen3.5-plus"
     ],
     "minimax-cn-coding-plan": [
       "MiniMax-M2",
@@ -7227,6 +7161,7 @@
       "mistral-medium-latest",
       "mistral-nemo",
       "mistral-small-2506",
+      "mistral-small-2603",
       "mistral-small-latest",
       "open-mistral-7b",
       "open-mixtral-8x22b",
@@ -7279,17 +7214,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "vultr": [
-      "DeepSeek-R1-Distill-Llama-70B",
-      "DeepSeek-R1-Distill-Qwen-32B",
-      "DeepSeek-V3.2",
-      "GLM-5-FP8",
-      "Kimi-K2.5",
-      "Llama-3_1-Nemotron-Ultra-253B-v1",
-      "MiniMax-M2.5",
-      "NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
-      "gpt-oss-120b"
-    ],
+    "vultr": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
     "github-models": [
       "ai21-labs/ai21-jamba-1.5-large",
       "ai21-labs/ai21-jamba-1.5-mini",
@@ -7864,6 +7789,8 @@
       "zai-org/glm-4.7",
       "zai-org/glm-4.7-flash",
       "zai-org/glm-5",
+      "zai-org/glm-5.1",
+      "zai-org/glm-5.1:thinking",
       "zai-org/glm-5:thinking"
     ],
     "clarifai": [
@@ -8031,7 +7958,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "moonshotai-cn": [
       "kimi-k2-0711-preview",
@@ -8144,7 +8072,6 @@
       "gemini/gemini-2.5-flash",
       "gemini/gemini-2.5-flash-image",
       "gemini/gemini-2.5-flash-lite",
-      "gemini/gemini-2.5-flash-lite-preview-09-2025",
       "gemini/gemini-2.5-pro",
       "gemini/gemini-3-flash-preview",
       "gemini/gemini-3-pro-image-preview",

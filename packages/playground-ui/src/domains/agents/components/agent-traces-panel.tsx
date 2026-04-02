@@ -28,6 +28,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useInView } from '@/hooks/use-in-view';
+import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -293,7 +294,7 @@ function AgentTracesToolbar({
                     filters.setScoreThreshold(n);
                   }
                 }}
-                className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-none focus:ring-1 focus:ring-accent1"
+                className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-hidden focus:ring-1 focus:ring-accent1"
               />
             </div>
           )}
@@ -357,13 +358,45 @@ function BulkAddToDatasetBar({
 
 // --- Main component ---
 
-export function AgentTracesPanel({ agentId }: { agentId: string }) {
+type AgentTracesPanelProps = {
+  agentId: string;
+  basePath?: string;
+  initialTraceId?: string;
+  initialSpanId?: string;
+  initialSpanTab?: string;
+  initialScoreId?: string;
+};
+
+export function AgentTracesPanel({
+  agentId,
+  basePath,
+  initialTraceId,
+  initialSpanId,
+  initialSpanTab,
+  initialScoreId,
+}: AgentTracesPanelProps) {
   const client = useMastraClient();
   const filters = useAgentTracesFilters(agentId);
+  const { navigate } = useLinkComponent();
+
+  const buildTraceUrl = useCallback(
+    (traceId?: string, spanId?: string, scoreId?: string, tab?: string) => {
+      const params = new URLSearchParams();
+
+      if (traceId) params.set('traceId', traceId);
+      if (spanId) params.set('spanId', spanId);
+      if (tab) params.set('tab', tab);
+      if (scoreId) params.set('scoreId', scoreId);
+
+      const query = params.toString();
+      return query ? `${basePath ?? `/agents/${agentId}/traces`}?${query}` : (basePath ?? `/agents/${agentId}/traces`);
+    },
+    [agentId, basePath],
+  );
 
   // Selected trace dialog state
-  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [dialogIsOpen, setDialogIsOpen] = useState(false);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>(initialTraceId);
+  const [dialogIsOpen, setDialogIsOpen] = useState(Boolean(initialTraceId));
   const [checkedTraceIds, setCheckedTraceIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortState>(null);
 
@@ -501,6 +534,17 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     });
   }, [displayTraces, checkedTraceIds.size]);
 
+  useEffect(() => {
+    if (initialTraceId) {
+      setSelectedTraceId(initialTraceId);
+      setDialogIsOpen(true);
+      return;
+    }
+
+    setSelectedTraceId(undefined);
+    setDialogIsOpen(false);
+  }, [initialTraceId]);
+
   // Datasets
   const { batchInsertItems } = useDatasetMutations();
 
@@ -512,14 +556,16 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
   const handleTraceClick = useCallback(
     (traceId: string) => {
       if (selectedTraceId === traceId) {
+        navigate(buildTraceUrl());
         setSelectedTraceId(undefined);
         setDialogIsOpen(false);
       } else {
+        navigate(buildTraceUrl(traceId));
         setSelectedTraceId(traceId);
         setDialogIsOpen(true);
       }
     },
-    [selectedTraceId],
+    [buildTraceUrl, navigate, selectedTraceId],
   );
 
   const handleCheckToggle = useCallback((traceId: string, checked: boolean) => {
@@ -564,9 +610,10 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     [displayTraces, checkedTraceIds, batchInsertItems],
   );
 
-  const computeTraceLink = useCallback((traceId: string, spanId?: string) => {
-    return `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`;
-  }, []);
+  const computeTraceLink = useCallback(
+    (traceId: string, spanId?: string, tab?: string) => buildTraceUrl(traceId, spanId, undefined, tab),
+    [buildTraceUrl],
+  );
 
   // Trace navigation in dialog
   const toNextTrace = useMemo(
@@ -575,6 +622,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
         entries: displayTraces.map(t => ({ id: t.traceId })),
         id: selectedTraceId,
         update: (id: string) => {
+          navigate(buildTraceUrl(id));
           setSelectedTraceId(id);
           setDialogIsOpen(true);
         },
@@ -588,6 +636,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
         entries: displayTraces.map(t => ({ id: t.traceId })),
         id: selectedTraceId,
         update: (id: string) => {
+          navigate(buildTraceUrl(id));
           setSelectedTraceId(id);
           setDialogIsOpen(true);
         },
@@ -757,6 +806,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
           traceDetails={selectedTrace?.spans?.find((s: SpanRecord) => s.traceId === selectedTraceId && !s.parentSpanId)}
           isOpen={dialogIsOpen}
           onClose={() => {
+            navigate(buildTraceUrl());
             setDialogIsOpen(false);
             setSelectedTraceId(undefined);
           }}
@@ -764,6 +814,9 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
           onPrevious={toPreviousTrace}
           isLoadingSpans={isSelectedTraceLoading}
           computeTraceLink={computeTraceLink}
+          initialSpanId={initialSpanId}
+          initialSpanTab={initialSpanTab}
+          initialScoreId={initialScoreId}
           scorers={scorersMap}
           isLoadingScorers={isLoadingScorers}
         />

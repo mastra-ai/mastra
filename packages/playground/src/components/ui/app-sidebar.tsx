@@ -24,12 +24,12 @@ import {
   FolderIcon,
   Cpu,
   BarChart3Icon,
+  LogsIcon,
   DatabaseIcon,
   TestTubeDiagonalIcon,
   BeakerIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
-import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui-manager';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
@@ -153,11 +153,20 @@ const mainNavigation: SidebarSection[] = [
         icon: <BarChart3Icon />,
         isOnMastraPlatform: true,
         indent: true,
+        requiredPermission: 'observability:read',
       },
       {
         name: 'Traces',
         url: '/observability',
         icon: <EyeIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'observability:read',
+      },
+      {
+        name: 'Logs',
+        url: '/logs',
+        icon: <LogsIcon />,
         isOnMastraPlatform: true,
         indent: true,
         requiredPermission: 'observability:read',
@@ -269,7 +278,7 @@ export function AppSidebar() {
   };
 
   return (
-    <MainSidebar footerSlot={<ExperimentalUIManager pathname={pathname} />}>
+    <MainSidebar>
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
