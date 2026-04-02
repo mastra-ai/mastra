@@ -84,6 +84,7 @@ export function DatasetPageContent({
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
     data: items = [],
+    total: itemsTotal = 0,
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
@@ -91,7 +92,7 @@ export function DatasetPageContent({
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
   // Unfiltered query (no search) to determine if dataset has any items — avoids
   // incorrectly disabling the experiment button when a search yields no matches.
-  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
+  const { data: unfilteredItems = [], total: unfilteredItemsTotal = 0, isLoading: isUnfilteredLoading } = useDatasetItems(
     datasetId,
     undefined,
     activeDatasetVersion,
@@ -108,6 +109,8 @@ export function DatasetPageContent({
 
   const experiments = experimentsData?.experiments ?? [];
   const allExperiments = allExperimentsData?.experiments ?? [];
+  const experimentsTotal = allExperimentsData?.pagination?.total ?? experiments.length;
+  const itemsTabCount = debouncedSearch ? items.length : unfilteredItemsTotal || itemsTotal;
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
@@ -225,11 +228,11 @@ export function DatasetPageContent({
               >
                 <TabList>
                   <Tab value="items">
-                    Items <Chip color="gray">{items.length}</Chip>
+                    Items <Chip color="gray">{itemsTabCount}</Chip>
                   </Tab>
                   <Tab value="experiments">
                     Experiments
-                    <Chip color="gray">{experiments.length}</Chip>
+                    <Chip color="gray">{experimentsTotal}</Chip>
                   </Tab>
                   <Tab value="review">
                     Review
