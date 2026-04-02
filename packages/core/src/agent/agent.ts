@@ -1395,29 +1395,20 @@ export class Agent<
   /**
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
-   * If a browser toolset is configured, its tools are automatically merged.
+   *
+   * Note: Browser tools are NOT included here. They are added at execution time via `listBrowserTools()`.
    *
    * @example
    * ```typescript
    * const tools = await agent.listTools();
-   * console.log(Object.keys(tools)); // ['calculator', 'weather', 'browser_navigate', ...]
+   * console.log(Object.keys(tools)); // ['calculator', 'weather', ...]
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
-    const mergeBrowserTools = (baseTools: TTools): TTools => {
-      if (!this.#browser) {
-        return baseTools;
-      }
-      // Get browser tools from the provider
-      const browserTools = this.#browser.getTools();
-      return { ...browserTools, ...baseTools } as TTools;
-    };
-
     if (typeof this.#tools !== 'function') {
-      const tools = ensureToolProperties(this.#tools) as TTools;
-      return mergeBrowserTools(tools);
+      return ensureToolProperties(this.#tools) as TTools;
     }
 
     const result = this.#tools({
@@ -1440,7 +1431,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return mergeBrowserTools(ensureToolProperties(tools) as TTools);
+      return ensureToolProperties(tools) as TTools;
     });
   }
 
