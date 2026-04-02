@@ -16,7 +16,6 @@ import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools/tool';
 
 import {
-  ChatChannelProcessor,
   formatArgsSummary,
   formatResult,
   formatToolApproval,
@@ -25,7 +24,8 @@ import {
   formatToolResult,
   formatToolRunning,
   stripToolPrefix,
-} from './processor';
+} from './formatting';
+import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext, ThreadHistoryMessage } from './types';
 
