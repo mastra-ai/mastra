@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.22.0-alpha.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7))
+
+- **Fixed streamed finish metadata being dropped from final model results** ([#13914](https://github.com/mastra-ai/mastra/pull/13914))
+
+  Provider-specific metadata from streamed `finish` events is now preserved consistently across final output results, buffered steps, and `onFinish` callbacks. This improves compatibility with providers like Anthropic and Google/Gemini when they attach cache, reasoning, or other finish-time metadata during streaming.
+
 ## 1.22.0-alpha.0
 
 ### Minor Changes
