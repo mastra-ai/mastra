@@ -146,11 +146,21 @@ export type WaitInput = z.output<typeof waitInputSchema>;
 /**
  * browser_tabs - Manage browser tabs
  */
-export const tabsInputSchema = z.object({
-  action: z.enum(['list', 'new', 'switch', 'close']).describe('Tab action'),
-  index: z.number().optional().describe('Tab index for switch/close'),
-  url: z.string().optional().describe('URL to open in new tab'),
-});
+export const tabsInputSchema = z
+  .object({
+    action: z.enum(['list', 'new', 'switch', 'close']).describe('Tab action'),
+    index: z.number().int().min(0).optional().describe('Tab index for switch/close'),
+    url: z.string().optional().describe('URL to open in new tab'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === 'switch' && value.index === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['index'],
+        message: 'index is required when action is "switch"',
+      });
+    }
+  });
 export type TabsInput = z.output<typeof tabsInputSchema>;
 
 /**

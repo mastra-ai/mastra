@@ -4267,9 +4267,12 @@ export class Agent<
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
+      // Normalize memory.thread which can be a string or { id, ... } object
+      const memoryThread = options.memory?.thread;
+      const memoryThreadId = typeof memoryThread === 'string' ? memoryThread : memoryThread?.id;
       const browserThreadId =
         (requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
-        options.memory?.thread ||
+        memoryThreadId ||
         snapshotMemoryInfo?.threadId;
 
       const browserCtx: BrowserContext = {
