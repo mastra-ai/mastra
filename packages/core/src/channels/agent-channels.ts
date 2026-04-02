@@ -883,7 +883,7 @@ export class AgentChannels {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
-        await sdkThread.post(textBuffer.trim());
+        await sdkThread.post(cleanedText);
         textBuffer = '';
       }
     };

@@ -7,7 +7,7 @@ Added agent-level chat channels via Vercel Chat SDK adapters.
 Agents can now communicate over messaging platforms like Slack, Discord, and Telegram using the `channels` configuration option. Each agent manages its own adapters and automatically handles event routing, thread mapping, tool generation, and streaming responses.
 
 **Key features:**
-- Configure channels directly on agents with `channels: { slack: createSlackAdapter(), discord: createDiscordAdapter() }`
+- Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
 - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
 - Gateway support for platforms with persistent WebSocket connections (e.g., Discord)
 - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
@@ -16,6 +16,6 @@ Agents can now communicate over messaging platforms like Slack, Discord, and Tel
 - `cards: false` option to disable rich cards and auto-approve tools via LLM
 
 **New exports from `@mastra/core/channels`:**
-- `AgentChat` — internal class managing Chat SDK instance and event handlers
+- `AgentChannels` — internal class managing Chat SDK instance and event handlers
 - `ChatChannelProcessor` — input processor injecting channel context into prompts
 - `MastraStateAdapter` — StateAdapter backed by Mastra storage
