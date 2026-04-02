@@ -121,6 +121,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {
