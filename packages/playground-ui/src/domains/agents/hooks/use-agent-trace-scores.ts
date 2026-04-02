@@ -51,6 +51,10 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
     if (!allScores) return map;
 
     for (const score of allScores) {
+      if (!score.traceId) {
+        continue;
+      }
+
       const existing = map.get(score.traceId);
       if (existing) {
         existing.push(score);

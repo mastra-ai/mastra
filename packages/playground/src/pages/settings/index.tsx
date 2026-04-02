@@ -19,7 +19,7 @@ const THEME_OPTIONS = [
 ] as const;
 
 export const StudioSettingsPage = () => {
-  const { baseUrl, headers } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix } = useStudioConfig();
   const { theme, setTheme } = usePlaygroundStore();
   const [selectedTheme, setSelectedTheme] = useState(theme);
   const selectedThemeRef = useRef(theme);
@@ -59,7 +59,7 @@ export const StudioSettingsPage = () => {
           </section>
 
           <StudioConfigForm
-            initialConfig={{ baseUrl, headers }}
+            initialConfig={{ baseUrl, headers, apiPrefix }}
             onSave={() => {
               setTheme(selectedThemeRef.current);
             }}

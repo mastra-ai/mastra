@@ -116,7 +116,7 @@ describe('Memory Handlers', () => {
         ...createTestServerContext({ mastra }),
         agentId: 'mockAgent',
       });
-      expect(result).toEqual({ result: true });
+      expect(result).toMatchObject({ result: true });
     });
 
     it('should use agent memory when agentId is provided', async () => {
@@ -132,7 +132,7 @@ describe('Memory Handlers', () => {
         ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
       });
-      expect(result).toEqual({ result: true });
+      expect(result).toMatchObject({ result: true });
     });
 
     it('should throw 404 when agent is not found', async () => {

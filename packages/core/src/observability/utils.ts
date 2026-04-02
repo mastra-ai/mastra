@@ -1,21 +1,15 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-
-import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
-
 /**
- * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
- * so that infrastructure code (e.g. DualLogger) can resolve the active span without
- * being passed it explicitly.
+ * Browser-safe observability utilities.
+ *
+ * Functions that depend on AsyncLocalStorage (getCurrentSpan, executeWithContext,
+ * executeWithContextSync) are in context-storage.ts and should only be imported
+ * by server-side code.
  */
-const spanContextStorage = new AsyncLocalStorage<AnySpan>();
 
-/**
- * Returns the current span from AsyncLocalStorage, if one is active.
- * Used by DualLogger to forward logs to a span-correlated loggerVNext.
- */
-export function getCurrentSpan(): AnySpan | undefined {
-  return spanContextStorage.getStore();
-}
+import { EntityType, SpanType } from './types';
+import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+
+const entityTypeValues = new Set(Object.values(EntityType));
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -65,70 +59,6 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
 }
 
 /**
- * Execute an async function within the span's tracing context if available.
- * Falls back to direct execution if no span exists.
- *
- * When a bridge is configured, this enables auto-instrumented operations
- * (HTTP requests, database queries, etc.) to be properly nested under the
- * current span in the external tracing system.
- *
- * @param span - The span to use as context (or undefined to execute without context)
- * @param fn - The async function to execute
- * @returns The result of the function execution
- *
- * @example
- * ```typescript
- * const result = await executeWithContext(llmSpan, async () =>
- *   model.generateText(args)
- * );
- * ```
- */
-export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
-  const { span, fn } = params;
-
-  // Wrap fn so the span is available via getCurrentSpan() inside the async context.
-  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
-
-  if (span?.executeInContext) {
-    return span.executeInContext(wrappedFn);
-  }
-
-  return wrappedFn();
-}
-
-/**
- * Execute a synchronous function within the span's tracing context if available.
- * Falls back to direct execution if no span exists.
- *
- * When a bridge is configured, this enables auto-instrumented operations
- * (HTTP requests, database queries, etc.) to be properly nested under the
- * current span in the external tracing system.
- *
- * @param span - The span to use as context (or undefined to execute without context)
- * @param fn - The synchronous function to execute
- * @returns The result of the function execution
- *
- * @example
- * ```typescript
- * const result = executeWithContextSync(llmSpan, () =>
- *   model.streamText(args)
- * );
- * ```
- */
-export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
-  const { span, fn } = params;
-
-  // Wrap fn so the span is available via getCurrentSpan() inside the sync context.
-  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
-
-  if (span?.executeInContextSync) {
-    return span.executeInContextSync(wrappedFn);
-  }
-
-  return wrappedFn();
-}
-
-/**
  * Returns the top-most non-internal span that would appear in exported tracing output.
  *
  * Public API results should use this span for trace/span correlation because internal Mastra
@@ -151,4 +81,38 @@ export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
   }
 
   return rootExportSpan;
+}
+
+/**
+ * Resolves the best available entity type for a span-like record.
+ *
+ * Prefers an explicit `entityType` when present and valid, then falls back to the
+ * span type for common observability entities.
+ */
+export function getEntityTypeForSpan(span: {
+  entityType?: string | null;
+  spanType?: SpanType | string | null;
+}): EntityType | undefined {
+  if (span.entityType && entityTypeValues.has(span.entityType as EntityType)) {
+    return span.entityType as EntityType;
+  }
+
+  switch (span.spanType) {
+    case SpanType.AGENT_RUN:
+      return EntityType.AGENT;
+    case SpanType.SCORER_RUN:
+    case SpanType.SCORER_STEP:
+      return EntityType.SCORER;
+    case SpanType.WORKFLOW_RUN:
+      return EntityType.WORKFLOW_RUN;
+    case SpanType.WORKFLOW_STEP:
+      return EntityType.WORKFLOW_STEP;
+    case SpanType.TOOL_CALL:
+    case SpanType.MCP_TOOL_CALL:
+      return EntityType.TOOL;
+    case SpanType.PROCESSOR_RUN:
+      return EntityType.OUTPUT_PROCESSOR;
+    default:
+      return undefined;
+  }
 }
