@@ -136,6 +136,56 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
     }
   });
 
+  it("stepResult text and reasoning should only contain that step's content, not cumulative", () => {
+    const { bufferedSteps, runId } = simulateMultiStepAgentRun(5);
+    const finalState = bufferedSteps.get(runId);
+
+    for (let i = 0; i < finalState.steps.length; i++) {
+      const stepResult = finalState.steps[i];
+
+      // Each step's text should only contain its own content
+      expect(stepResult.text, `stepResult[${i}].text should contain "Step ${i}" content`).toContain(
+        `Step ${i} response text.`,
+      );
+
+      // And should NOT contain text from other steps
+      for (let j = 0; j < finalState.steps.length; j++) {
+        if (j !== i) {
+          expect(
+            stepResult.text,
+            `stepResult[${i}].text should not contain Step ${j} text — ` +
+              `cumulative text is leaking into per-step results`,
+          ).not.toContain(`Step ${j} response text.`);
+        }
+      }
+    }
+  });
+
+  it('structured object should be preserved after step-finish, not reset to null', () => {
+    const bufferedSteps = new Map<string, any>();
+    const runId = 'test-run';
+
+    transformAgent(makePayload('start', runId, { id: 'agent-1' }), bufferedSteps);
+
+    // Emit a structured object result
+    transformAgent({ type: 'object-result', runId, object: { key: 'value', nested: { a: 1 } } } as any, bufferedSteps);
+
+    // Finish the step
+    transformAgent(
+      makePayload('step-finish', runId, {
+        id: 'step-0',
+        stepResult: { reason: 'tool-calls', warnings: [] },
+        output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+        metadata: { timestamp: new Date(), modelId: 'test-model' },
+      }),
+      bufferedSteps,
+    );
+
+    const state = bufferedSteps.get(runId);
+    // object is last-write-wins and should NOT be cleared on step-finish
+    expect(state.object).toEqual({ key: 'value', nested: { a: 1 } });
+  });
+
   it('data-tool-agent payload size should grow linearly with steps, not super-quadratically', () => {
     const { emissions } = simulateMultiStepAgentRun(10);
 

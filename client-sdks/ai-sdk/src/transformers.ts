@@ -515,13 +515,24 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'step-finish': {
       const stepRun = ensureAgentRunState(bufferedSteps, payload.runId!);
-      // Exclude `steps` from the stepResult to avoid recursive nesting where
-      // each stepResult embeds copies of all prior stepResults (issue #14932).
-      const { steps: _steps, ...stepRunWithoutSteps } = stepRun;
+      // Exclude `steps` and internal offset trackers from the stepResult to
+      // avoid recursive nesting where each stepResult embeds copies of all
+      // prior stepResults (issue #14932).
+      const { steps: _steps, _textOffset, _reasoningOffset, ...stepRunWithoutSteps } = stepRun;
+
+      // Derive per-step text and reasoning using tracked offsets so each
+      // stepResult only contains its own content, not the cumulative run state.
+      const textOffset: number = _textOffset || 0;
+      const reasoningOffset: number = _reasoningOffset || 0;
+      const stepText = stepRun.text.slice(textOffset);
+      const stepReasoning: string[] = stepRun.reasoning.slice(reasoningOffset);
+
       const stepResult = {
         ...stepRunWithoutSteps,
+        text: stepText,
+        reasoning: stepReasoning,
         stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
-        reasoningText: stepRun.reasoning.join(''),
+        reasoningText: stepReasoning.join(''),
         staticToolCalls: stepRun.toolCalls.filter(
           (part: any) => part.type === 'tool-call' && part.payload?.dynamic === false,
         ),
@@ -548,18 +559,21 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
 
       // Reset per-step structural fields so the next step starts fresh instead
       // of carrying forward all prior toolCalls/toolResults (issue #14932).
-      // Text and reasoning are kept cumulative — they are lightweight O(n) strings
-      // that documented consumers read from the top-level `data.text` field.
+      // Text and reasoning stay cumulative at the run level (consumers read
+      // `data.text`); offsets track where the next step's content begins.
+      // `object` is last-write-wins, so it is NOT reset — clearing it would
+      // lose structured output from the completed step.
       bufferedSteps.set(payload.runId!, {
         ...stepRun,
         sources: [],
         files: [],
         toolCalls: [],
         toolResults: [],
-        object: null,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         steps: [...stepRun.steps, stepResult],
+        _textOffset: stepRun.text.length,
+        _reasoningOffset: stepRun.reasoning.length,
       });
       hasChanged = true;
       break;
