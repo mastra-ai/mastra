@@ -8,12 +8,7 @@ import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
-import type {
-  InputProcessor,
-  InputProcessorOrWorkflow,
-  OutputProcessor,
-  OutputProcessorOrWorkflow,
-} from '../processors';
+import type { InputProcessor, InputProcessorOrWorkflow, OutputProcessor } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
@@ -552,7 +547,7 @@ export class AgentChannels {
    * Returns channel output processors.
    * Currently none — all output rendering is handled by `consumeAgentStream`.
    */
-  getOutputProcessors(_configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
+  getOutputProcessors(): OutputProcessor[] {
     return [];
   }
 
