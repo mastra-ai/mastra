@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 21.0.1-alpha.1
+
+### Patch Changes
+
+- Updated scores metrics to use aggregate and time series APIs instead of fetching raw scores. Scores Over Time chart now always shows hourly data points regardless of the selected time range. Avg Score KPI uses weighted averages via the aggregate API. Updated metrics card layout to use flexible row heights and refined chart legend styling. ([#14937](https://github.com/mastra-ai/mastra/pull/14937))
+
+- Fixed deep links for scorer, observability, and agent trace dialogs. ([#14970](https://github.com/mastra-ai/mastra/pull/14970))
+
+  Developers can now share and reload URLs that keep the selected trace, scoring tab, span, and score in Studio.
+
+  **Before**
+  `/observability`
+  `/agents/chef-agent/traces`
+  `/evaluation/scorers/response-quality`
+
+  **After**
+  `/observability?traceId=...&spanId=...&tab=scores&scoreId=...`
+  `/agents/chef-agent/traces?traceId=...&spanId=...&tab=scores&scoreId=...`
+  `/evaluation/scorers/response-quality?entity=...&scoreId=...`
+
+  This makes review links reliable across the scorer page, observability, and the agent traces view.
+
+- Fixed light theme visibility for metrics charts: CartesianGrid lines now adapt to the current theme, and HorizontalBars use reduced opacity in light mode so labels remain readable. Updated MetricsCard minimum height. ([#14975](https://github.com/mastra-ai/mastra/pull/14975))
+
+- Updated dependencies [[`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6)]:
+  - @mastra/core@1.22.0-alpha.1
+  - @mastra/client-js@1.12.1-alpha.1
+  - @mastra/react@0.2.22-alpha.1
+
 ## 21.0.1-alpha.0
 
 ### Patch Changes
