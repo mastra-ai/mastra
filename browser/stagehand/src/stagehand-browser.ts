@@ -48,8 +48,14 @@ export class StagehandBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: StagehandThreadManager;
 
-  /** Active screencast stream for reconnection on tab changes */
-  private activeScreencastStream: ScreencastStreamImpl | null = null;
+  /** Active screencast streams per thread (for reconnection on tab changes) */
+  private activeScreencastStreams = new Map<string, ScreencastStreamImpl>();
+
+  /** Debounce timers per thread for tab change reconnection */
+  private tabChangeDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** Default key for shared scope */
+  private static readonly SHARED_STREAM_KEY = '__shared__';
 
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
@@ -671,8 +677,10 @@ export class StagehandBrowser extends MastraBrowser {
           context.setActivePage(targetPage);
           await this.reconnectScreencast('tab switch via tool');
           // Emit URL directly since we have the target page
-          if (targetUrl && this.activeScreencastStream?.isActive()) {
-            this.activeScreencastStream.emitUrl(targetUrl);
+          const streamKey = this.getStreamKey(this.getCurrentThread());
+          const stream = this.activeScreencastStreams.get(streamKey);
+          if (targetUrl && stream?.isActive()) {
+            stream.emitUrl(targetUrl);
           }
           // Save state after switch (captures activeIndex change)
           this.updateSessionBrowserState();
@@ -889,6 +897,13 @@ export class StagehandBrowser extends MastraBrowser {
   // Uses Stagehand v3's native CDP access
   // ---------------------------------------------------------------------------
 
+  /**
+   * Get the stream key for a thread (or shared key for shared scope).
+   */
+  private getStreamKey(threadId?: string): string {
+    return threadId || StagehandBrowser.SHARED_STREAM_KEY;
+  }
+
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
     const threadId = options?.threadId;
 
@@ -913,8 +928,9 @@ export class StagehandBrowser extends MastraBrowser {
 
     const stream = new ScreencastStreamImpl(provider, options);
 
-    // Store the stream for potential future reconnection
-    this.activeScreencastStream = stream;
+    // Store the stream for potential future reconnection - keyed by thread
+    const streamKey = this.getStreamKey(threadId);
+    this.activeScreencastStreams.set(streamKey, stream);
 
     await stream.start();
 
@@ -923,16 +939,20 @@ export class StagehandBrowser extends MastraBrowser {
 
     // Clean up when screencast stops
     stream.once('stop', () => {
-      if (this.activeScreencastStream === stream) {
-        this.activeScreencastStream = null;
+      // Remove from streams map using captured key
+      if (this.activeScreencastStreams.get(streamKey) === stream) {
+        this.activeScreencastStreams.delete(streamKey);
+      }
+      // Clear debounce timer for this thread
+      const timer = this.tabChangeDebounceTimers.get(streamKey);
+      if (timer) {
+        clearTimeout(timer);
+        this.tabChangeDebounceTimers.delete(streamKey);
       }
     });
 
     return stream as unknown as ScreencastStream;
   }
-
-  /** Debounce timer for tab change reconnection */
-  private tabChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Set up listeners to detect tab changes and reconnect the screencast.
@@ -962,21 +982,28 @@ export class StagehandBrowser extends MastraBrowser {
       return pages.some(p => p.targetId() === targetId);
     };
 
+    // Get the stream key for this thread's debounce timer
+    const streamKey = this.getStreamKey(threadId);
+
     // Listen for new tab creation
     const onTargetCreated = (params: { targetInfo: { type: string; targetId: string; url: string } }) => {
       if (params.targetInfo.type !== 'page') return;
 
-      // Debounce to avoid rapid reconnects
-      if (this.tabChangeDebounceTimer) {
-        clearTimeout(this.tabChangeDebounceTimer);
+      // Debounce to avoid rapid reconnects (per-thread timer)
+      const existingTimer = this.tabChangeDebounceTimers.get(streamKey);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
-      this.tabChangeDebounceTimer = setTimeout(() => {
-        this.tabChangeDebounceTimer = null;
-        void this.reconnectScreencast('new tab');
-        // Re-setup navigation listener for the new active page
-        void setupPageNavigationListener();
-        // Note: State is saved via tool handlers (new/switch/close), not CDP events
-      }, 300);
+      this.tabChangeDebounceTimers.set(
+        streamKey,
+        setTimeout(() => {
+          this.tabChangeDebounceTimers.delete(streamKey);
+          void this.reconnectScreencastForThread(threadId, 'new tab');
+          // Re-setup navigation listener for the new active page
+          void setupPageNavigationListener();
+          // Note: State is saved via tool handlers (new/switch/close), not CDP events
+        }, 300),
+      );
     };
 
     // Listen for target attached (to capture sessionId for later registration)
@@ -1060,17 +1087,22 @@ export class StagehandBrowser extends MastraBrowser {
       // Clean up session tracking
       targetSessions.delete(params.targetId);
 
-      if (this.tabChangeDebounceTimer) {
-        clearTimeout(this.tabChangeDebounceTimer);
+      // Debounce to avoid rapid reconnects (per-thread timer)
+      const existingTimer = this.tabChangeDebounceTimers.get(streamKey);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
-      this.tabChangeDebounceTimer = setTimeout(() => {
-        this.tabChangeDebounceTimer = null;
-        void this.reconnectScreencast('tab closed');
-        // Re-setup navigation listener for the new active page
-        void setupPageNavigationListener();
-        // Note: Don't save state here - races with browser shutdown.
-        // State is saved via tool handlers instead.
-      }, 300);
+      this.tabChangeDebounceTimers.set(
+        streamKey,
+        setTimeout(() => {
+          this.tabChangeDebounceTimers.delete(streamKey);
+          void this.reconnectScreencastForThread(threadId, 'tab closed');
+          // Re-setup navigation listener for the new active page
+          void setupPageNavigationListener();
+          // Note: Don't save state here - races with browser shutdown.
+          // State is saved via tool handlers instead.
+        }, 300),
+      );
     };
 
     // Listen for navigation events (URL changes) on the PAGE-specific CDP session
@@ -1129,9 +1161,11 @@ export class StagehandBrowser extends MastraBrowser {
 
       // Clean up listeners when stream stops
       stream.once('stop', () => {
-        if (this.tabChangeDebounceTimer) {
-          clearTimeout(this.tabChangeDebounceTimer);
-          this.tabChangeDebounceTimer = null;
+        // Clear per-thread debounce timer
+        const timer = this.tabChangeDebounceTimers.get(streamKey);
+        if (timer) {
+          clearTimeout(timer);
+          this.tabChangeDebounceTimers.delete(streamKey);
         }
         if (targetInfoDebounceTimer) {
           clearTimeout(targetInfoDebounceTimer);
@@ -1152,10 +1186,11 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Reconnect the active screencast to pick up tab changes.
+   * Reconnect the active screencast for a specific thread.
    */
-  private async reconnectScreencast(reason: string): Promise<void> {
-    const stream = this.activeScreencastStream;
+  private async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
+    const streamKey = this.getStreamKey(threadId);
+    const stream = this.activeScreencastStreams.get(streamKey);
     if (!stream || !stream.isActive()) {
       return;
     }
@@ -1174,7 +1209,8 @@ export class StagehandBrowser extends MastraBrowser {
       await stream.reconnect();
 
       // Emit the URL of the new active page after reconnecting
-      const activePage = this.stagehand?.context?.activePage();
+      const stagehand = await this.getStagehandForThread(threadId);
+      const activePage = stagehand?.context?.activePage();
       if (activePage) {
         const url = activePage.url();
         if (url) {
@@ -1184,6 +1220,15 @@ export class StagehandBrowser extends MastraBrowser {
     } catch (error) {
       this.logger.debug?.('Screencast reconnect failed', error);
     }
+  }
+
+  /**
+   * Reconnect the active screencast for the current thread.
+   * Wrapper for reconnectScreencastForThread using getCurrentThread().
+   */
+  private async reconnectScreencast(reason: string): Promise<void> {
+    const threadId = this.getCurrentThread();
+    await this.reconnectScreencastForThread(threadId, reason);
   }
 
   // NOTE: Manual tab switching in browser UI is not fully supported.
@@ -1204,12 +1249,17 @@ export class StagehandBrowser extends MastraBrowser {
       throw new Error('No CDP session available');
     }
 
+    // CDP buttons bitmask: left=1, right=2, middle=4
     const buttonMap: Record<string, number> = {
       none: 0,
-      left: 0,
-      middle: 1,
+      left: 1,
+      middle: 4,
       right: 2,
     };
+
+    // clickCount should only default to 1 for press/release events; move and wheel use 0
+    const defaultClickCount =
+      event.type === 'mousePressed' || event.type === 'mouseReleased' ? 1 : 0;
 
     await cdpSession.send('Input.dispatchMouseEvent', {
       type: event.type,
@@ -1217,7 +1267,7 @@ export class StagehandBrowser extends MastraBrowser {
       y: event.y,
       button: event.button ?? 'none',
       buttons: buttonMap[event.button ?? 'none'] ?? 0,
-      clickCount: event.clickCount ?? 1,
+      clickCount: event.clickCount ?? defaultClickCount,
       deltaX: event.deltaX ?? 0,
       deltaY: event.deltaY ?? 0,
       modifiers: event.modifiers ?? 0,

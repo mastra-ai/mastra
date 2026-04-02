@@ -48,8 +48,11 @@ export class AgentBrowser extends MastraBrowser {
   private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
-  /** Active screencast stream for triggering reconnects on tab changes */
-  private activeScreencastStream: ScreencastStreamImpl | null = null;
+  /** Active screencast streams per thread (for triggering reconnects on tab changes) */
+  private activeScreencastStreams = new Map<string, ScreencastStreamImpl>();
+
+  /** Default key for shared scope */
+  private static readonly SHARED_STREAM_KEY = '__shared__';
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -1161,8 +1164,10 @@ export class AgentBrowser extends MastraBrowser {
           const page = browser.getPage();
           const pageUrl = page.url();
           // Emit URL directly after switch
-          if (pageUrl && this.activeScreencastStream?.isActive()) {
-            this.activeScreencastStream.emitUrl(pageUrl);
+          const streamKey = this.getStreamKey(this.getCurrentThread());
+          const stream = this.activeScreencastStreams.get(streamKey);
+          if (pageUrl && stream?.isActive()) {
+            stream.emitUrl(pageUrl);
           }
           // Save state after switch (captures activeIndex change)
           this.updateSessionBrowserState();
@@ -1310,26 +1315,36 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   /**
+   * Get the stream key for a thread (or shared key for shared scope).
+   */
+  private getStreamKey(threadId?: string): string {
+    return threadId || AgentBrowser.SHARED_STREAM_KEY;
+  }
+
+  /**
    * Trigger a screencast reconnect after tab changes.
    * Called internally when tabs are switched or closed.
    */
   private async reconnectScreencast(_reason: string): Promise<void> {
-    if (this.activeScreencastStream?.isActive()) {
+    const threadId = this.getCurrentThread();
+    const streamKey = this.getStreamKey(threadId);
+    const stream = this.activeScreencastStreams.get(streamKey);
+
+    if (stream?.isActive()) {
       // Small delay to let agent-browser update its internal state (activePageIndex, CDP session)
       await new Promise(resolve => setTimeout(resolve, 150));
-      if (this.activeScreencastStream?.isActive()) {
+      if (stream?.isActive()) {
         try {
-          await this.activeScreencastStream.reconnect();
+          await stream.reconnect();
 
           // Emit the URL of the new active page after reconnecting
           // Use thread-specific manager in browser isolation mode
-          const threadId = this.getCurrentThread();
           const manager = this.threadManager.getExistingManagerForThread(threadId) ?? this.browserManager;
           const activePage = manager?.getPage();
           if (activePage) {
             const url = activePage.url();
             if (url) {
-              this.activeScreencastStream.emitUrl(url);
+              stream.emitUrl(url);
             }
           }
         } catch (err) {
@@ -1365,8 +1380,9 @@ export class AgentBrowser extends MastraBrowser {
 
     const stream = new ScreencastStreamImpl(provider, _options);
 
-    // Store reference so tabs() can trigger reconnects
-    this.activeScreencastStream = stream;
+    // Store reference so tabs() can trigger reconnects - keyed by thread
+    const streamKey = this.getStreamKey(threadId);
+    this.activeScreencastStreams.set(streamKey, stream);
 
     // Set up tab change listener to reconnect screencast when a new tab opens
     const context = browserManager.getContext();
@@ -1472,7 +1488,8 @@ export class AgentBrowser extends MastraBrowser {
           page.off('framenavigated', handler);
         }
         frameNavigatedHandlers.clear();
-        this.activeScreencastStream = null;
+        // Remove from streams map using captured key
+        this.activeScreencastStreams.delete(streamKey);
       });
     }
 

@@ -97,6 +97,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
 
       const launchOptions: BrowserLaunchOptions = {
         headless: this.browserConfig.headless ?? true,
+        viewport: this.browserConfig.viewport,
       };
 
       if (this.browserConfig.cdpUrl && this.resolveCdpUrl) {
