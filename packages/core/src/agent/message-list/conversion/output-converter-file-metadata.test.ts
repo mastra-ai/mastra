@@ -156,4 +156,34 @@ describe('aiV5UIMessagesToAIV5ModelMessages — assistant file providerMetadata'
     expect(firstFile.providerOptions).toEqual({ google: { thoughtSignature: 'cat-sig' } });
     expect(secondFile.providerOptions).toEqual({ google: { thoughtSignature: 'dog-sig' } });
   });
+
+  it('aligns metadata correctly when some file parts lack providerMetadata', () => {
+    const messages: AIV5Type.UIMessage[] = [
+      makeUserMessage('draw two images'),
+      makeAssistantMessage([
+        {
+          type: 'file',
+          mediaType: 'image/png',
+          url: 'data:image/png;base64,first...',
+          // No providerMetadata on the first file part
+        },
+        {
+          type: 'file',
+          mediaType: 'image/jpeg',
+          url: 'data:image/jpeg;base64,second...',
+          providerMetadata: { google: { thoughtSignature: 'sig-2' } },
+        },
+      ]),
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, []);
+    const assistantMsg = result.find(m => m.role === 'assistant');
+    const fileParts = (assistantMsg!.content as any[]).filter((p: any) => p.type === 'file');
+
+    expect(fileParts).toHaveLength(2);
+    // First file had no metadata — should remain without providerOptions
+    expect(fileParts[0].providerOptions).toBeUndefined();
+    // Second file's metadata must land on the correct (second) part
+    expect(fileParts[1].providerOptions).toEqual({ google: { thoughtSignature: 'sig-2' } });
+  });
 });

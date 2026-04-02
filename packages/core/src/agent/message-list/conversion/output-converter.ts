@@ -306,18 +306,20 @@ function restoreAssistantFileProviderMetadata(
   modelMessages: AIV5Type.ModelMessage[],
   uiMessages: AIV5Type.UIMessage[],
 ): AIV5Type.ModelMessage[] {
-  // Collect providerMetadata from assistant file UI parts in order
-  const fileMetadata: AIV5Type.ProviderMetadata[] = [];
+  // Collect providerMetadata from ALL assistant file UI parts in order,
+  // using undefined as a placeholder for parts without metadata so that
+  // the indices stay aligned with the model-side file parts.
+  const fileMetadata: (AIV5Type.ProviderMetadata | undefined)[] = [];
   for (const msg of uiMessages) {
     if (msg.role !== 'assistant') continue;
     for (const part of msg.parts) {
-      if (part.type === 'file' && part.providerMetadata) {
-        fileMetadata.push(part.providerMetadata);
+      if (part.type === 'file') {
+        fileMetadata.push(part.providerMetadata ?? undefined);
       }
     }
   }
 
-  if (fileMetadata.length === 0) return modelMessages;
+  if (fileMetadata.length === 0 || fileMetadata.every(m => m == null)) return modelMessages;
 
   // Walk model messages and restore providerOptions on assistant file parts
   let metadataIndex = 0;
@@ -328,7 +330,7 @@ function restoreAssistantFileProviderMetadata(
     const content = msg.content.map(part => {
       if (part.type !== 'file' || metadataIndex >= fileMetadata.length) return part;
       const metadata = fileMetadata[metadataIndex++];
-      if (part.providerOptions) return part; // already has it
+      if (part.providerOptions || !metadata) return part;
       modified = true;
       return { ...part, providerOptions: metadata };
     });
