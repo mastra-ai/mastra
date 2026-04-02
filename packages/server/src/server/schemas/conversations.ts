@@ -6,6 +6,10 @@ export const conversationIdPathParams = z.object({
   conversationId: z.string().describe('Unique identifier for the conversation thread'),
 });
 
+export const conversationAgentQuerySchema = z.object({
+  agent_id: z.string().describe('Mastra agent ID that owns the conversation'),
+});
+
 export const createConversationBodySchema = z.object({
   agent_id: z.string().describe('Mastra agent ID used to create the conversation thread'),
   conversation_id: z.string().optional().describe('Optional conversation ID to use as the raw threadId'),

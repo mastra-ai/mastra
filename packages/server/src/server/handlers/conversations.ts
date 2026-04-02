@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
+  conversationAgentQuerySchema,
   conversationDeletedSchema,
   conversationIdPathParams,
   conversationItemsListSchema,
@@ -13,7 +16,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { mapMastraMessagesToConversationItems } from './responses.adapter';
-import { getResponseMemoryStore } from './responses.storage';
+import { getAgentMemoryStore } from './responses.storage';
 import { getEffectiveResourceId } from './utils';
 
 /**
@@ -27,7 +30,7 @@ async function resolveConversationThread({
   requestContext,
 }: {
   conversationId: string;
-  memoryStore: NonNullable<Awaited<ReturnType<typeof getResponseMemoryStore>>>;
+  memoryStore: MemoryStorage;
   requestContext: RequestContext;
 }) {
   const thread = await memoryStore.getThreadById({ threadId: conversationId });
@@ -41,6 +44,25 @@ async function resolveConversationThread({
   }
 
   return thread;
+}
+
+async function resolveConversationMemoryStore({
+  mastra,
+  agentId,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agentId: string;
+  requestContext: RequestContext;
+}) {
+  const agent = await getAgentFromSystem({ mastra, agentId });
+  const memoryStore = await getAgentMemoryStore({ agent, requestContext });
+
+  if (!memoryStore) {
+    throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+  }
+
+  return { agent, memoryStore };
 }
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
@@ -91,6 +113,9 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });
       }
+      if (!(await getAgentMemoryStore({ agent, requestContext }))) {
+        throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+      }
 
       const threadId = conversation_id ?? randomUUID();
       const resourceId = getEffectiveResourceId(requestContext, resource_id) ?? threadId;
@@ -113,18 +138,23 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   path: '/v1/conversations/:conversationId',
   responseType: 'json',
   pathParamSchema: conversationIdPathParams,
+  queryParamSchema: conversationAgentQuerySchema,
   responseSchema: conversationObjectSchema,
   summary: 'Retrieve a conversation',
   description: 'Returns a conversation object backed by a Mastra memory thread',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, conversationId }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
       }
+      const { memoryStore } = await resolveConversationMemoryStore({
+        mastra,
+        agentId: agent_id,
+        requestContext,
+      });
 
       const thread = await resolveConversationThread({ conversationId, memoryStore, requestContext });
 
@@ -140,18 +170,23 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   path: '/v1/conversations/:conversationId/items',
   responseType: 'json',
   pathParamSchema: conversationIdPathParams,
+  queryParamSchema: conversationAgentQuerySchema,
   responseSchema: conversationItemsListSchema,
   summary: 'List conversation items',
   description: 'Returns OpenAI-style conversation items derived from the stored thread messages',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, conversationId }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
       }
+      const { memoryStore } = await resolveConversationMemoryStore({
+        mastra,
+        agentId: agent_id,
+        requestContext,
+      });
 
       await resolveConversationThread({ conversationId, memoryStore, requestContext });
 
@@ -173,18 +208,23 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   path: '/v1/conversations/:conversationId',
   responseType: 'json',
   pathParamSchema: conversationIdPathParams,
+  queryParamSchema: conversationAgentQuerySchema,
   responseSchema: conversationDeletedSchema,
   summary: 'Delete a conversation',
   description: 'Deletes a thread-backed conversation and its stored items',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:delete',
-  handler: async ({ mastra, requestContext, conversationId }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
       }
+      const { memoryStore } = await resolveConversationMemoryStore({
+        mastra,
+        agentId: agent_id,
+        requestContext,
+      });
 
       await resolveConversationThread({ conversationId, memoryStore, requestContext });
 

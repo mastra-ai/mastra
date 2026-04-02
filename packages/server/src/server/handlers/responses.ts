@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
   deleteResponseSchema,
+  responseAgentQuerySchema,
   responseIdPathParams,
   responseObjectSchema,
 } from '../schemas/responses';
@@ -29,6 +31,7 @@ import {
 import {
   deleteResponseTurnRecord,
   findResponseTurnRecord,
+  getAgentMemoryStore,
   persistResponseTurnRecord,
   resolveResponseTurnMessagesForStorage,
 } from './responses.storage';
@@ -90,6 +93,7 @@ type FinalizedResponse = {
 
 type PreparedCreateResponseRequest = {
   agent: Agent<any, any, any, any>;
+  agentMemoryStore: MemoryStorage | null;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
   didStore: boolean;
@@ -277,17 +281,13 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
 async function resolveResponseAgent({
   mastra,
   agentId,
-  previousResponseTurnRecord,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
-  previousResponseTurnRecord: ResponseTurnRecord | null;
 }): Promise<Agent<any, any, any, any>> {
-  const resolvedAgentId = agentId ?? previousResponseTurnRecord?.metadata.agentId;
-
-  if (!resolvedAgentId) {
+  if (!agentId) {
     throw new HTTPException(400, {
-      message: 'Responses requests require an agent_id, or a previous_response_id from a stored agent-backed response',
+      message: 'Responses requests require an agent_id',
     });
   }
 
@@ -295,7 +295,24 @@ async function resolveResponseAgent({
     throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
   }
 
-  return getAgentFromSystem({ mastra, agentId: resolvedAgentId });
+  return getAgentFromSystem({ mastra, agentId });
+}
+
+async function resolveAgentMemoryStore({
+  agent,
+  requestContext,
+  errorMessage,
+}: {
+  agent: Agent<any, any, any, any>;
+  requestContext: RequestContext;
+  errorMessage: string;
+}): Promise<MemoryStorage> {
+  const agentMemoryStore = await getAgentMemoryStore({ agent, requestContext });
+  if (!agentMemoryStore) {
+    throw new HTTPException(400, { message: errorMessage });
+  }
+
+  return agentMemoryStore;
 }
 
 /**
@@ -469,7 +486,7 @@ async function resolveCompletedResponseState(
  * Stores the completed response when the request opted into memory-backed persistence.
  */
 async function storeCompletedResponse({
-  mastra,
+  agentMemoryStore,
   didStore,
   threadContext,
   responseId,
@@ -477,7 +494,7 @@ async function storeCompletedResponse({
   completedState,
   messages,
 }: {
-  mastra: Mastra | undefined;
+  agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
   responseId: string;
@@ -490,7 +507,7 @@ async function storeCompletedResponse({
   }
 
   await persistResponseTurnRecord({
-    mastra,
+    memoryStore: agentMemoryStore,
     responseId,
     metadata: {
       ...metadata,
@@ -509,7 +526,7 @@ async function storeCompletedResponse({
  * Resolves the final response object and persists the stored response turn when needed.
  */
 async function finalizeResponse({
-  mastra,
+  agentMemoryStore,
   didStore,
   threadContext,
   result,
@@ -523,7 +540,7 @@ async function finalizeResponse({
   responseMetadata,
   fallbackText,
 }: {
-  mastra: Mastra | undefined;
+  agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
   result: ResponseExecutionResult | ResponseStreamResult;
@@ -567,7 +584,7 @@ async function finalizeResponse({
   });
 
   await storeCompletedResponse({
-    mastra,
+    agentMemoryStore,
     didStore,
     threadContext,
     responseId,
@@ -593,27 +610,38 @@ async function prepareCreateResponseRequest({
   mastra: Mastra | undefined;
   requestContext: RequestContext;
 }): Promise<PreparedCreateResponseRequest> {
+  const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
+  const agent = await resolveResponseAgent({
+    mastra,
+    agentId: body.agent_id,
+  });
+  const shouldStore = body.store ?? false;
+  const needsMemoryStore = shouldStore || Boolean(body.conversation_id) || Boolean(body.previous_response_id);
+  const agentMemoryStore = needsMemoryStore
+    ? await resolveAgentMemoryStore({
+        agent,
+        requestContext,
+        errorMessage: body.previous_response_id
+          ? 'previous_response_id requires the target agent to have memory storage configured'
+          : shouldStore
+            ? 'Stored responses require the target agent to have memory storage configured'
+            : 'conversation_id requires the target agent to have memory storage configured',
+      })
+    : null;
   const previousResponseTurnRecord = body.previous_response_id
-    ? await findResponseTurnRecord({ mastra, responseId: body.previous_response_id, requestContext })
+    ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
     : null;
 
   if (body.previous_response_id && !previousResponseTurnRecord) {
     throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
   }
 
-  const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-  const agent = await resolveResponseAgent({
-    mastra,
-    agentId: body.agent_id,
-    previousResponseTurnRecord,
-  });
   const configuredTools = mapMastraToolsToResponseTools(
     (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
   );
 
   const responseId = createMessageId();
   const createdAt = Math.floor(Date.now() / 1000);
-  const shouldStore = body.store ?? false;
   const threadContext = await resolveThreadExecutionContext({
     agent,
     store: shouldStore,
@@ -632,6 +660,7 @@ async function prepareCreateResponseRequest({
 
   return {
     agent,
+    agentMemoryStore,
     configuredTools,
     createdAt,
     didStore,
@@ -657,22 +686,22 @@ async function prepareCreateResponseRequest({
  * the stored response-turn record when the stream finishes.
  */
 function createResponseEventStream({
+  agentMemoryStore,
   body,
   configuredTools,
   createdAt,
   didStore,
-  mastra,
   previousResponseTurnRecord,
   responseId,
   responseMetadata,
   streamResult,
   threadContext,
 }: {
+  agentMemoryStore: MemoryStorage | null;
   body: CreateResponseBody;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
   didStore: boolean;
-  mastra: Mastra | undefined;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   responseId: string;
   responseMetadata: Omit<
@@ -758,7 +787,7 @@ function createResponseEventStream({
         }
 
         const { completedState, response } = await finalizeResponse({
-          mastra,
+          agentMemoryStore,
           didStore,
           threadContext,
           result: streamResult,
@@ -829,6 +858,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
     try {
       const {
         agent,
+        agentMemoryStore,
         configuredTools,
         createdAt,
         didStore,
@@ -853,7 +883,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         });
 
         const { response } = await finalizeResponse({
-          mastra,
+          agentMemoryStore,
           didStore,
           threadContext,
           result,
@@ -884,11 +914,11 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       });
 
       const stream = createResponseEventStream({
+        agentMemoryStore,
         body,
         configuredTools,
         createdAt,
         didStore,
-        mastra,
         previousResponseTurnRecord,
         responseId,
         responseMetadata,
@@ -915,15 +945,17 @@ export const GET_RESPONSE_ROUTE = createRoute({
   path: '/v1/responses/:responseId',
   responseType: 'json',
   pathParamSchema: responseIdPathParams,
+  queryParamSchema: responseAgentQuerySchema,
   responseSchema: responseObjectSchema,
   summary: 'Retrieve a stored response',
   description: 'Returns a previously stored response object',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, responseId }) => {
+  handler: async ({ mastra, requestContext, responseId, agent_id }) => {
     try {
-      const responseTurnRecord = await findResponseTurnRecord({ mastra, responseId, requestContext });
+      const agent = await resolveResponseAgent({ mastra, agentId: agent_id });
+      const responseTurnRecord = await findResponseTurnRecord({ agent, responseId, requestContext });
       if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
@@ -940,18 +972,22 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   path: '/v1/responses/:responseId',
   responseType: 'json',
   pathParamSchema: responseIdPathParams,
+  queryParamSchema: responseAgentQuerySchema,
   responseSchema: deleteResponseSchema,
   summary: 'Delete a stored response',
   description: 'Deletes a stored response so it can no longer be retrieved or chained',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:delete',
-  handler: async ({ mastra, requestContext, responseId }) => {
+  handler: async ({ mastra, requestContext, responseId, agent_id }) => {
     try {
-      const deleted = await deleteResponseTurnRecord({ mastra, responseId, requestContext });
-      if (!deleted) {
+      const agent = await resolveResponseAgent({ mastra, agentId: agent_id });
+      const responseTurnRecord = await findResponseTurnRecord({ agent, responseId, requestContext });
+      if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
+
+      await deleteResponseTurnRecord({ responseTurnRecord });
 
       const response: DeleteResponse = {
         id: responseId,
