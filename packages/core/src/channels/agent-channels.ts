@@ -682,7 +682,12 @@ export class AgentChannels {
       textSegments.push(historyBlock);
     }
 
-    const metadataBlock = `<system-reminder>\nEvent: ${sdkThread.isDM ? 'message' : 'mention'}\nMessage ID: ${message.id}\n</system-reminder>`;
+    const eventType = sdkThread.isDM ? 'message' : 'mention';
+    const reminderLines = [`Event: ${eventType}`, `Message ID: ${message.id}`];
+    if (eventType === 'mention') {
+      reminderLines.push('You were mentioned in this message. Respond to the user.');
+    }
+    const metadataBlock = `<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`;
     textSegments.push(metadataBlock);
 
     // In multi-user threads (not DMs), prefix the message with author info

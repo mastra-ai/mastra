@@ -20,6 +20,8 @@ export class ChatChannelProcessor {
     const ctx = args.requestContext?.get('channel') as ChannelContext | undefined;
     if (!ctx) return undefined;
 
+    // Stable system message — same across all messages for this platform/bot combo.
+    // This is prompt-cacheable since it doesn't change per turn.
     const lines = [`You are communicating via ${ctx.platform}.`];
 
     // Tell the LLM its own identity so it can recognise self-mentions in raw message text
@@ -40,12 +42,11 @@ export class ChatChannelProcessor {
         if (ctx.userId) identity.push(`ID: ${ctx.userId}`);
         lines.push(`You are talking to a user (${identity.join(', ')}).`);
       }
-    } else if (ctx.eventType === 'mention') {
-      lines.push('You were mentioned in this message. Respond to the user.');
     } else {
-      // Subscribed thread — the bot is passively listening
+      // Non-DM: include the stay-silent guidance for subscribed threads.
+      // For mentions, the <system-reminder> on the user message will override this.
       lines.push(
-        'This message is in a public channel or thread you are monitoring.',
+        'You are in a public channel or thread.',
         'Not every message is directed at you. If users appear to be talking to each other, stay silent unless you are explicitly mentioned or your input is clearly needed. To stay silent, respond with an empty message.',
       );
     }
