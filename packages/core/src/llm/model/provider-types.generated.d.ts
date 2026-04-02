@@ -59,6 +59,7 @@ export type ProviderModelsMap = {
   ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly openai: readonly [
+    'chatgpt-image-latest',
     'codex-mini-latest',
     'gpt-3.5-turbo',
     'gpt-4',
@@ -93,6 +94,9 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+    'gpt-image-1.5',
     'o1',
     'o1-mini',
     'o1-preview',
@@ -282,6 +286,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -289,7 +294,6 @@ export type ProviderModelsMap = {
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-7-sonnet-20250219',
-    'claude-3-7-sonnet-latest',
     'claude-3-haiku-20240307',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
@@ -405,6 +409,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5v-turbo',
   ];
   readonly xai: readonly [
     'grok-2',
@@ -617,6 +622,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
     'glm-4.7-flashx',
     'glm-5',
+    'glm-5v-turbo',
   ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
@@ -1795,6 +1801,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
     'qwen/qwen3.6-plus-preview:free',
+    'qwen/qwen3.6-plus:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
@@ -1822,6 +1829,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
+    'z-ai/glm-5-turbo',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -2599,6 +2607,7 @@ export type ProviderModelsMap = {
     'veo-3.1-fast-generate-preview',
     'veo-3.1-generate-preview',
   ];
+  readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly groq: readonly [
     'allam-2-7b',
     'canopylabs/orpheus-arabic-saudi',
@@ -3530,6 +3539,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
     'glm-5.1',
+    'glm-5v-turbo',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
@@ -3555,7 +3565,14 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/minimax-m2p5',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
+  readonly 'opencode-go': readonly [
+    'glm-5',
+    'kimi-k2.5',
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'minimax-m2.5',
+    'minimax-m2.7',
+  ];
   readonly abacus: readonly [
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-72B-Instruct',
@@ -3710,6 +3727,7 @@ export type ModelRouterModelId =
   | {
       [P in Provider]: `${P}/${ProviderModelsMap[P][number]}`;
     }[Provider]
+  | `mastra/${ProviderModelsMap['openrouter'][number]}`
   | (string & {});
 
 /**

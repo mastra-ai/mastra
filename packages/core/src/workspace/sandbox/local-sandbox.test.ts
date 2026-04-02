@@ -229,6 +229,25 @@ describe('LocalSandbox', () => {
       expect(result.stdout).toContain('subfile.txt');
     });
 
+    it('should resolve relative cwd against workingDirectory', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      // Create a subdirectory with a file
+      const subDir = path.join(tempDir, 'subdir');
+      await fs.mkdir(subDir);
+      await fs.writeFile(path.join(subDir, 'subfile.txt'), 'content');
+
+      // "." should resolve to tempDir (the workingDirectory), not process.cwd()
+      const dotResult = await sandbox.executeCommand('pwd', [], { cwd: '.' });
+      expect(dotResult.success).toBe(true);
+      // macOS /var is a symlink to /private/var, so realpath both sides
+      expect(await fs.realpath(dotResult.stdout.trim())).toBe(await fs.realpath(tempDir));
+
+      // "./subdir" should resolve to tempDir/subdir
+      const relResult = await sandbox.executeCommand('ls', ['-1'], { cwd: './subdir' });
+      expect(relResult.success).toBe(true);
+      expect(relResult.stdout).toContain('subfile.txt');
+    });
+
     it('should pass environment variables', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('printenv', ['MY_CMD_VAR'], {

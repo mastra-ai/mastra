@@ -910,7 +910,7 @@ To fix this you have three different options:
     const exists = this.mcpClientsById.has(name);
     const existingClient = this.mcpClientsById.get(name);
 
-    this.logger.debug(`getConnectedClient ${name} exists: ${exists}`);
+    this.logger.debug('Checking connected client', { name, exists });
 
     if (exists) {
       // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
@@ -922,7 +922,7 @@ To fix this you have three different options:
       return existingClient;
     }
 
-    this.logger.debug(`Connecting to ${name} MCP server`);
+    this.logger.debug('Connecting to MCP server', { name });
 
     // Create client with server configuration including log handler
     const mcpClient = new InternalMastraMCPClient({
@@ -955,7 +955,7 @@ To fix this you have three different options:
       this.mcpClientsById.delete(name);
       throw mastraError;
     }
-    this.logger.debug(`Connected to ${name} MCP server`);
+    this.logger.debug('Connected to MCP server', { name });
     return mcpClient;
   }
 

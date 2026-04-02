@@ -114,6 +114,22 @@ export interface ObservabilityContext {
 }
 
 // ============================================================================
+// Shared Scorer Types
+// ============================================================================
+
+/** Where a registered definition came from. */
+export type DefinitionSource = 'code' | 'stored';
+
+/** What kind of scoring flow produced the score. */
+export type ScorerScoreSource = 'live' | 'trace' | 'experiment';
+
+/** How the scorer interpreted the target data. */
+export type ScorerTargetScope = 'span' | 'trajectory';
+
+/** Execution style for a scorer step. */
+export type ScorerStepType = 'function' | 'prompt';
+
+// ============================================================================
 // ObservabilityEventBus
 // ============================================================================
 
@@ -230,6 +246,14 @@ export interface ObservabilityInstance {
    * @param span - Optional span to derive metric tags from
    */
   getMetricsContext?(span?: AnySpan): MetricsContext;
+
+  /**
+   * Register an additional exporter to this instance at runtime.
+   * Duplicate registrations (same instance) are silently ignored.
+   *
+   * @param exporter - The exporter to register
+   */
+  registerExporter?(exporter: ObservabilityExporter): void;
 }
 
 // ============================================================================
@@ -254,14 +278,34 @@ export interface ObservabilityEntrypoint {
   /**
    * Add a score to a persisted trace or span without hydrating a RecordedTrace.
    * Useful for durable executions that persist only identifiers across serialization boundaries.
+   *
+   * `traceId` anchors the scored target when available.
+   * Include `spanId` when the score is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addScore?(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void>;
+  addScore?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void>;
 
   /**
    * Add feedback to a persisted trace or span without hydrating a RecordedTrace.
    * Useful for durable executions that persist only identifiers across serialization boundaries.
+   *
+   * `traceId` anchors the feedback target when available.
+   * Include `spanId` when the feedback is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addFeedback?(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void>;
+  addFeedback?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;

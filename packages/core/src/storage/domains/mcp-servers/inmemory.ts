@@ -38,14 +38,12 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPServerType | null> {
-    this.logger.debug(`InMemoryMCPServersStorage: getById called for ${id}`);
     const config = this.db.mcpServers.get(id);
     return config ? this.deepCopyConfig(config) : null;
   }
 
   async create(input: { mcpServer: StorageCreateMCPServerInput }): Promise<StorageMCPServerType> {
     const { mcpServer } = input;
-    this.logger.debug(`InMemoryMCPServersStorage: create called for ${mcpServer.id}`);
 
     if (this.db.mcpServers.has(mcpServer.id)) {
       throw new Error(`MCP server with id ${mcpServer.id} already exists`);
@@ -84,7 +82,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
 
   async update(input: StorageUpdateMCPServerInput): Promise<StorageMCPServerType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryMCPServersStorage: update called for ${id}`);
 
     const existingConfig = this.db.mcpServers.get(id);
     if (!existingConfig) {
@@ -112,7 +109,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPServersStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.mcpServers.delete(id);
     // Also delete all versions for this server
@@ -122,8 +118,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   async list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryMCPServersStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -181,8 +175,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   // ==========================================================================
 
   async createVersion(input: CreateMCPServerVersionInput): Promise<MCPServerVersion> {
-    this.logger.debug(`InMemoryMCPServersStorage: createVersion called for MCP server ${input.mcpServerId}`);
-
     // Check if version with this ID already exists
     if (this.db.mcpServerVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -206,16 +198,11 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async getVersion(id: string): Promise<MCPServerVersion | null> {
-    this.logger.debug(`InMemoryMCPServersStorage: getVersion called for ${id}`);
     const version = this.db.mcpServerVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(mcpServerId: string, versionNumber: number): Promise<MCPServerVersion | null> {
-    this.logger.debug(
-      `InMemoryMCPServersStorage: getVersionByNumber called for MCP server ${mcpServerId}, v${versionNumber}`,
-    );
-
     for (const version of this.db.mcpServerVersions.values()) {
       if (version.mcpServerId === mcpServerId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -225,8 +212,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async getLatestVersion(mcpServerId: string): Promise<MCPServerVersion | null> {
-    this.logger.debug(`InMemoryMCPServersStorage: getLatestVersion called for MCP server ${mcpServerId}`);
-
     let latest: MCPServerVersion | null = null;
     for (const version of this.db.mcpServerVersions.values()) {
       if (version.mcpServerId === mcpServerId) {
@@ -241,8 +226,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   async listVersions(input: ListMCPServerVersionsInput): Promise<ListMCPServerVersionsOutput> {
     const { mcpServerId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryMCPServersStorage: listVersions called for MCP server ${mcpServerId}`);
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -279,13 +262,10 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPServersStorage: deleteVersion called for ${id}`);
     this.db.mcpServerVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPServersStorage: deleteVersionsByParentId called for MCP server ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.mcpServerVersions.entries()) {
       if (version.mcpServerId === entityId) {
@@ -299,8 +279,6 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async countVersions(mcpServerId: string): Promise<number> {
-    this.logger.debug(`InMemoryMCPServersStorage: countVersions called for MCP server ${mcpServerId}`);
-
     let count = 0;
     for (const version of this.db.mcpServerVersions.values()) {
       if (version.mcpServerId === mcpServerId) {

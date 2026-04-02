@@ -55,7 +55,7 @@ export async function studio(
     try {
       requestContextPresetsJson = await loadAndValidatePresets(options.requestContextPresets);
     } catch (error: any) {
-      logger.error(`Failed to load request context presets: ${error.message}`);
+      logger.error('Failed to load request context presets', { error: error.message });
       process.exit(1);
     }
   }
@@ -64,7 +64,7 @@ export async function studio(
     const distPath = join(__dirname, 'studio');
 
     if (!existsSync(distPath)) {
-      logger.error(`Studio distribution not found at ${distPath}.`);
+      logger.error('Studio distribution not found', { distPath });
       process.exit(1);
     }
 
@@ -75,7 +75,7 @@ export async function studio(
     const server = createServer(distPath, options, requestContextPresetsJson);
 
     server.listen(port, () => {
-      logger.info(`Mastra Studio running on http://localhost:${port}`);
+      logger.info('Mastra Studio running', { url: `http://localhost:${port}` });
     });
 
     process.on('SIGINT', () => {
@@ -90,7 +90,7 @@ export async function studio(
       });
     });
   } catch (error: any) {
-    logger.error(`Failed to start Mastra Studio: ${error.message}`);
+    logger.error('Failed to start Mastra Studio', { error: error.message });
     process.exit(1);
   }
 }
