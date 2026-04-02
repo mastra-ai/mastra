@@ -1,0 +1,205 @@
+---
+title: "Stagehand | Browser"
+description: "Use the Stagehand provider for AI-powered browser automation with natural language selectors."
+packages:
+  - "@mastra/stagehand"
+---
+
+# Stagehand
+
+The `@mastra/stagehand` package provides browser automation using the Stagehand SDK from Browserbase. Stagehand uses AI to understand page context and locate elements, enabling natural language descriptions instead of explicit selectors.
+
+## When to use Stagehand
+
+Use Stagehand when you need:
+
+- Natural language element targeting ("click the login button")
+- AI-powered data extraction from pages
+- Native Browserbase cloud integration
+- Simpler tool interface for common actions
+
+## Quickstart
+
+Install the package:
+
+```bash
+npm install @mastra/stagehand
+```
+
+Create a browser instance and assign it to an agent:
+
+```typescript title="src/mastra/agents/stagehand-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StagehandBrowser } from '@mastra/stagehand'
+
+const browser = new StagehandBrowser({
+  headless: false,
+  model: 'openai/gpt-4o',
+})
+
+export const stagehandAgent = new Agent({
+  id: 'stagehand-agent',
+  model: 'openai/gpt-4o',
+  browser,
+  instructions: `You are a web automation assistant.
+
+Use stagehand tools to interact with pages:
+- stagehand_navigate to go to URLs
+- stagehand_act to perform actions described in natural language
+- stagehand_extract to get structured data from the page
+- stagehand_observe to find available actions on the page`,
+})
+```
+
+## Tools
+
+Stagehand provides 6 tools for browser control:
+
+| Tool | Description |
+| - | - |
+| `stagehand_navigate` | Navigate to a URL |
+| `stagehand_act` | Perform an action described in natural language |
+| `stagehand_extract` | Extract structured data from the page |
+| `stagehand_observe` | Get a list of possible actions on the page |
+| `stagehand_tabs` | List, switch, or close browser tabs |
+| `stagehand_close` | Close the browser |
+
+## Natural language actions
+
+The `stagehand_act` tool accepts natural language descriptions of actions:
+
+```typescript
+// Click a button
+await browser.act({ action: 'Click the Sign In button' })
+
+// Fill a form field
+await browser.act({ action: 'Type "user@example.com" in the email field' })
+
+// Complex interactions
+await browser.act({ action: 'Select "United States" from the country dropdown' })
+```
+
+Stagehand's AI interprets the action and finds the appropriate element on the page.
+
+## Data extraction
+
+The `stagehand_extract` tool pulls structured data from pages:
+
+```typescript
+// Extract product information
+const result = await browser.extract({
+  instruction: 'Extract the product name, price, and availability',
+})
+
+// Returns structured data based on page content
+// { name: "Widget Pro", price: "$29.99", availability: "In Stock" }
+```
+
+## Observing actions
+
+The `stagehand_observe` tool analyzes the current page and returns possible actions:
+
+```typescript
+const actions = await browser.observe({
+  instruction: 'What actions can I take on this login form?',
+})
+
+// Returns a list of available actions
+// [
+//   { action: "Click 'Sign In' button", element: "button" },
+//   { action: "Type in 'Email' field", element: "input" },
+//   { action: "Click 'Forgot Password' link", element: "a" }
+// ]
+```
+
+## Configuration
+
+```typescript
+import { StagehandBrowser } from '@mastra/stagehand'
+
+const browser = new StagehandBrowser({
+  // Environment: 'LOCAL' or 'BROWSERBASE'
+  env: 'LOCAL',
+
+  // AI model for element detection
+  model: 'openai/gpt-4o',
+
+  // Run with visible browser window
+  headless: false,
+
+  // Default timeout for operations (ms)
+  timeout: 30000,
+
+  // Browser viewport size
+  viewport: { width: 1280, height: 720 },
+
+  // Browser instance scope ('thread' or 'shared')
+  scope: 'thread',
+
+  // DOM settle timeout (ms) - wait for dynamic content
+  domSettleTimeout: 3000,
+
+  // Enable self-healing for failed actions
+  selfHeal: true,
+
+  // Verbose logging level (0-2)
+  verbose: 0,
+
+  // Screencast settings
+  screencast: {
+    enabled: true,
+    format: 'jpeg',
+    quality: 80,
+  },
+})
+```
+
+## Cloud browsers
+
+### Browserbase (native)
+
+Stagehand has native Browserbase integration:
+
+```typescript
+const browser = new StagehandBrowser({
+  env: 'BROWSERBASE',
+  apiKey: process.env.BROWSERBASE_API_KEY,
+  projectId: process.env.BROWSERBASE_PROJECT_ID,
+  model: 'openai/gpt-4o',
+})
+```
+
+Browserbase provides:
+
+- Managed browser infrastructure
+- Automatic session handling
+- Per-thread browser isolation
+
+### CDP URL
+
+Connect to other CDP-compatible services:
+
+```typescript
+const browser = new StagehandBrowser({
+  cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN',
+  headless: true,
+  model: 'openai/gpt-4o',
+})
+```
+
+When `cdpUrl` is provided, scope is automatically set to `'shared'`.
+
+## Self-healing
+
+When `selfHeal` is enabled, Stagehand attempts to recover from failed actions by:
+
+1. Re-analyzing the page state
+1. Finding alternative elements that match the intent
+1. Retrying the action with the new target
+
+This helps handle dynamic pages where element positions or attributes change.
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [agent-browser](/docs/browser/agent-browser)

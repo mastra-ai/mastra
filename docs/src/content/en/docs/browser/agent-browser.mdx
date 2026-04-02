@@ -1,0 +1,207 @@
+---
+title: "agent-browser | Browser"
+description: "Use the agent-browser provider for Playwright-based web automation with accessibility-first element targeting."
+packages:
+  - "@mastra/agent-browser"
+---
+
+# agent-browser
+
+The `@mastra/agent-browser` package provides browser automation using Playwright with accessibility-first element targeting. Elements are identified by refs from the page's accessibility tree, making interactions reliable across different page layouts.
+
+## When to use agent-browser
+
+Use agent-browser when you need:
+
+- Reliable element targeting through accessibility refs
+- Fine-grained control over browser actions
+- Playwright's robust automation capabilities
+- Support for keyboard shortcuts and complex interactions
+
+## Quickstart
+
+Install the package:
+
+```bash
+npm install @mastra/agent-browser
+```
+
+Create a browser instance and assign it to an agent:
+
+```typescript title="src/mastra/agents/browser-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  headless: false,
+})
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  model: 'openai/gpt-4o',
+  browser,
+  instructions: `You are a web automation assistant.
+
+When interacting with pages:
+1. Use browser_snapshot to get the current page state and element refs
+2. Use the refs (like @e1, @e2) to target elements for clicks and typing
+3. After actions, take another snapshot to verify the result`,
+})
+```
+
+## Tools
+
+agent-browser provides 15 tools for browser control:
+
+### Navigation
+
+| Tool | Description |
+| - | - |
+| `browser_goto` | Navigate to a URL |
+| `browser_back` | Go back to the previous page |
+| `browser_wait` | Wait for a condition or timeout |
+| `browser_close` | Close the browser |
+
+### Page inspection
+
+| Tool | Description |
+| - | - |
+| `browser_snapshot` | Get an accessibility tree snapshot with element refs |
+
+### Interaction
+
+| Tool | Description |
+| - | - |
+| `browser_click` | Click an element by ref |
+| `browser_type` | Type text into an element |
+| `browser_press` | Press keyboard keys (Enter, Tab, shortcuts) |
+| `browser_select` | Select an option from a dropdown |
+| `browser_hover` | Hover over an element |
+| `browser_scroll` | Scroll the page or an element |
+| `browser_drag` | Drag an element to a target |
+
+### Advanced
+
+| Tool | Description |
+| - | - |
+| `browser_tabs` | List, switch, or close browser tabs |
+| `browser_dialog` | Handle browser dialogs (alerts, confirms, prompts) |
+| `browser_evaluate` | Execute JavaScript in the page context |
+
+## Element refs
+
+agent-browser uses accessibility tree refs to identify elements. When you call `browser_snapshot`, the tool returns a text representation of the page with refs like `@e1`, `@e2`, etc:
+
+```
+@e1: button "Submit"
+@e2: textbox "Email" value=""
+@e3: link "Sign up"
+```
+
+Use these refs in other tools:
+
+```typescript
+// Click the submit button
+await browser.click({ ref: '@e1' })
+
+// Type into the email field
+await browser.type({ ref: '@e2', text: 'user@example.com' })
+```
+
+Refs are stable within a page state but may change after navigation or DOM updates. Take a new snapshot after significant actions.
+
+## Configuration
+
+```typescript
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  // Run with visible browser window
+  headless: false,
+
+  // Default timeout for operations (ms)
+  timeout: 30000,
+
+  // Browser viewport size
+  viewport: { width: 1280, height: 720 },
+
+  // Browser instance scope ('thread' or 'shared')
+  scope: 'thread',
+
+  // Screencast settings
+  screencast: {
+    enabled: true,
+    format: 'jpeg',
+    quality: 80,
+  },
+})
+```
+
+## Cloud browsers
+
+### CDP URL
+
+Connect to any CDP-compatible browser service:
+
+```typescript
+const browser = new AgentBrowser({
+  cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN',
+  headless: true,
+})
+```
+
+The `cdpUrl` option accepts:
+
+- A WebSocket URL (`ws://` or `wss://`)
+- An HTTP endpoint (`http://` or `https://`) that returns the WebSocket URL
+- An async function that returns either format
+
+When `cdpUrl` is provided, scope is automatically set to `'shared'`.
+
+### Supported services
+
+- **Browserless**: `wss://chrome.browserless.io?token=YOUR_TOKEN`
+- **Browser-Use**: `https://YOUR_ID.cdp0.browser-use.com`
+- **Steel.dev**: Use the CDP URL from your Steel session
+
+## Handling dialogs
+
+Browser dialogs (alerts, confirms, prompts) require special handling. The `browser_dialog` tool clicks an element that triggers a dialog and handles it atomically:
+
+```typescript
+// Click a button that shows an alert, then accept it
+await browser.dialog({
+  triggerRef: '@e5',
+  action: 'accept',
+})
+
+// Handle a prompt dialog with input text
+await browser.dialog({
+  triggerRef: '@e6',
+  action: 'accept',
+  text: 'My response',
+})
+```
+
+## Drag and drop
+
+The `browser_drag` tool supports both accessibility refs and CSS selectors:
+
+```typescript
+// Using refs (preferred)
+await browser.drag({
+  sourceRef: '@e10',
+  targetRef: '@e15',
+})
+
+// Using CSS selectors (fallback for elements not in accessibility tree)
+await browser.drag({
+  sourceSelector: '#draggable',
+  targetSelector: '#droppable',
+})
+```
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [Stagehand](/docs/browser/stagehand)
