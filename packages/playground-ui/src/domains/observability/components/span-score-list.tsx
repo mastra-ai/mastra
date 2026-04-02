@@ -49,6 +49,10 @@ export function SpanScoreList({
     const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
     setSelectedScore(score);
     setDialogIsOpen(true);
+
+    if (traceId) {
+      navigate(`${computeTraceLink(traceId, spanId)}&tab=scores&scoreId=${encodeURIComponent(scoreId)}`);
+    }
   };
 
   if (isLoadingScoresData) {
