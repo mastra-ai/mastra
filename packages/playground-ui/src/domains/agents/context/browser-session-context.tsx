@@ -72,6 +72,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentConnectionRef = useRef<{ agentId?: string; threadId?: string } | null>(null);
   const maxReconnectAttempts = 5;
 
   const clearReconnectTimeout = useCallback(() => {
@@ -83,6 +84,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
 
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
+    currentConnectionRef.current = null;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -107,6 +109,15 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
   const connect = useCallback(() => {
     if (!agentId || !threadId) return;
 
+    // Skip if already connected/connecting to the same agent/thread
+    if (
+      currentConnectionRef.current?.agentId === agentId &&
+      currentConnectionRef.current?.threadId === threadId &&
+      wsRef.current?.readyState === WebSocket.OPEN
+    ) {
+      return;
+    }
+
     // Clear any existing connection and timeout
     clearReconnectTimeout();
     if (wsRef.current) {
@@ -114,6 +125,9 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    // Track what we're connecting to
+    currentConnectionRef.current = { agentId, threadId };
 
     setStatusState('connecting');
 
@@ -183,13 +197,8 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
           // Plain text is base64 frame data
           setLatestFrameState(data);
           // Ensure we're in streaming status when receiving frames
-          setStatusState(prev => {
-            if (prev !== 'streaming') {
-              setHasSession(true);
-              return 'streaming';
-            }
-            return prev;
-          });
+          setStatusState(prev => (prev !== 'streaming' ? 'streaming' : prev));
+          setHasSession(true);
         }
       };
 

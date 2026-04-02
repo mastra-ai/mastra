@@ -1,5 +1,5 @@
 import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
@@ -9,8 +9,6 @@ import { StatusBadge } from '@/ds/components/StatusBadge';
 import { cn } from '@/lib/utils';
 
 interface BrowserThumbnailProps {
-  agentId: string;
-  threadId: string;
   agentName?: string;
 }
 
@@ -21,7 +19,7 @@ interface BrowserThumbnailProps {
  * - Collapsed: Small thumbnail bar (click to expand)
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
-export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: BrowserThumbnailProps) {
+export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
   const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
@@ -82,15 +80,14 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
   }
 
   const isLive = status === 'streaming';
-  const displayUrl = currentUrl
-    ? (() => {
-        try {
-          return new URL(currentUrl).hostname;
-        } catch {
-          return currentUrl;
-        }
-      })()
-    : 'Browser';
+  const displayUrl = useMemo(() => {
+    if (!currentUrl) return 'Browser';
+    try {
+      return new URL(currentUrl).hostname;
+    } catch {
+      return currentUrl;
+    }
+  }, [currentUrl]);
 
   return (
     <div
@@ -145,7 +142,7 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
-              <BrowserViewFrame agentId={agentId} threadId={threadId} className="w-full" />
+              <BrowserViewFrame className="w-full" />
               {/* Control buttons overlay */}
               <div className="absolute top-2 right-2 flex gap-1">
                 <IconButton

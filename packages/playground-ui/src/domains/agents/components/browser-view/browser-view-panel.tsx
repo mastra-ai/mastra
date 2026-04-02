@@ -38,11 +38,6 @@ function getStatusBadgeConfig(status: StreamStatus): {
   }
 }
 
-interface BrowserViewPanelProps {
-  agentId: string;
-  threadId: string;
-}
-
 /**
  * Full-screen modal browser view (center view mode).
  *
@@ -54,7 +49,7 @@ interface BrowserViewPanelProps {
  * The panel is always mounted to preserve WebSocket connection.
  * Visibility is controlled via viewMode in browser session context.
  */
-export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
+export function BrowserViewPanel() {
   const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
   const [isVisible, setIsVisible] = useState(false);
 
@@ -80,10 +75,6 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
   const handleOpenSidebar = useCallback(() => {
     setViewMode('sidebar');
   }, [setViewMode]);
-
-  const handleFirstFrame = useCallback(() => {
-    // No-op: isClosing is now managed by context
-  }, []);
 
   const handleOpenExternal = useCallback(() => {
     if (!currentUrl) return;
@@ -177,12 +168,7 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
         <div className="flex-1 overflow-y-auto">
           {/* Screencast */}
           <div className="p-4">
-            <BrowserViewFrame
-              agentId={agentId}
-              threadId={threadId}
-              className="w-full max-h-[60vh]"
-              onFirstFrame={handleFirstFrame}
-            />
+            <BrowserViewFrame className="w-full max-h-[60vh]" />
           </div>
 
           {/* Browser actions history */}

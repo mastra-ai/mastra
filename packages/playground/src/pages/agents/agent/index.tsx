@@ -140,7 +140,7 @@ function Agent() {
                             />
                           )
                         }
-                        browserOverlay={<BrowserViewPanel agentId={agentId!} threadId={actualThreadId!} />}
+                        browserOverlay={<BrowserViewPanel />}
                         rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
                       >
                         <AgentChat

@@ -38,16 +38,11 @@ function getStatusBadgeConfig(status: StreamStatus): {
   }
 }
 
-interface BrowserSidebarTabProps {
-  agentId: string;
-  threadId: string;
-}
-
 /**
  * Browser content for the sidebar tab.
  * Shows the screencast, URL bar, and tool call history in a vertical scrolling layout.
  */
-export function BrowserSidebarTab({ agentId, threadId }: BrowserSidebarTabProps) {
+export function BrowserSidebarTab() {
   const { status, currentUrl, closeBrowser, setViewMode } = useBrowserSession();
 
   const handleClose = useCallback(async () => {
@@ -89,8 +84,6 @@ export function BrowserSidebarTab({ agentId, threadId }: BrowserSidebarTabProps)
         <div className="p-3">
           <div className="relative">
             <BrowserViewFrame
-              agentId={agentId}
-              threadId={threadId}
               className="w-full"
               onFirstFrame={handleFirstFrame}
             />

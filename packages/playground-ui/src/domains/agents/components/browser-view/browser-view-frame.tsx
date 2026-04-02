@@ -11,8 +11,6 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { cn } from '@/lib/utils';
 
 interface BrowserViewFrameProps {
-  agentId: string;
-  threadId: string;
   className?: string;
   onStatusChange?: (status: StreamStatus) => void;
   onUrlChange?: (url: string | null) => void;
@@ -26,8 +24,6 @@ interface BrowserViewFrameProps {
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
 export function BrowserViewFrame({
-  agentId: _agentId,
-  threadId: _threadId,
   className,
   onStatusChange,
   onUrlChange,
@@ -35,6 +31,7 @@ export function BrowserViewFrame({
 }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasFrameRef = useRef(false);
   const [hasFrame, setHasFrame] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
   // Get shared state from context (WebSocket is managed by provider)
@@ -44,8 +41,8 @@ export function BrowserViewFrame({
   useEffect(() => {
     if (latestFrame && imgRef.current) {
       imgRef.current.src = `data:image/jpeg;base64,${latestFrame}`;
-      if (!imgRef.current.dataset.loaded) {
-        imgRef.current.dataset.loaded = '1';
+      if (!hasFrameRef.current) {
+        hasFrameRef.current = true;
         setHasFrame(true);
       }
     }

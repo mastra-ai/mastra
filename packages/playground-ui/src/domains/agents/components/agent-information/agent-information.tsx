@@ -35,7 +35,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
         {/* Browser sidebar overlay - takes over when in sidebar mode */}
         {hasSession && isInSidebar && (
           <div className="absolute inset-0 z-10 bg-surface1">
-            <BrowserSidebarTab agentId={agentId} threadId={threadId} />
+            <BrowserSidebarTab />
           </div>
         )}
 

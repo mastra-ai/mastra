@@ -1,4 +1,4 @@
-import { ChevronUp } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
@@ -34,8 +34,8 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         aria-expanded={isExpanded}
         className="flex items-center gap-2 w-full px-3 py-1 text-left hover:bg-surface3 transition-colors shrink-0"
       >
-        <ChevronUp
-          className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : 'rotate-90')}
+        <ChevronDown
+          className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : '')}
         />
         <span className="text-xs font-medium text-neutral4">Browser Actions ({toolCalls.length})</span>
       </button>
