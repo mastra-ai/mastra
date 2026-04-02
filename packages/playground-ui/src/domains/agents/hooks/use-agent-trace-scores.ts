@@ -24,7 +24,6 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
       let page = 0;
       const scores: ScoreRecord[] = [];
 
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const res = await client.listScores({
           filters: {
@@ -52,6 +51,10 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
     if (!allScores) return map;
 
     for (const score of allScores) {
+      if (!score.traceId) {
+        continue;
+      }
+
       const existing = map.get(score.traceId);
       if (existing) {
         existing.push(score);

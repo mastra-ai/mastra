@@ -9,6 +9,7 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -1371,6 +1372,20 @@ export class Harness<TState = {}> {
           requestContext: requestContextInput,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
+      } else if (
+        error instanceof Error &&
+        /does not support assistant message prefill|must end with a user message/i.test(error.message)
+      ) {
+        this.emit({
+          type: 'error',
+          error: new Error('Model does not support assistant message prefill. Retrying with a user message.'),
+          retryable: true,
+        });
+        this.followUpQueue.push({
+          content: '<system-reminder>There was an API error, please continue.</system-reminder>',
+          requestContext: requestContextInput,
+        });
+        this.emit({ type: 'agent_end', reason: 'error' });
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
         this.emit({ type: 'error', error: err });
@@ -2532,7 +2547,7 @@ export class Harness<TState = {}> {
         const tool = ds.activeTools.get(event.toolCallId);
         if (tool) {
           tool.partialResult =
-            typeof event.partialResult === 'string' ? event.partialResult : JSON.stringify(event.partialResult);
+            typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
         }
         break;
       }

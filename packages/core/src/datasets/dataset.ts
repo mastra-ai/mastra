@@ -125,6 +125,7 @@ export class Dataset {
     tags?: string[] | null;
     targetType?: TargetType | null;
     targetIds?: string[] | null;
+    scorerIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -342,11 +343,12 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Fire-and-forget — update experiment to failed on unexpected errors
+    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
       ...config,
+      version: targetVersion,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({

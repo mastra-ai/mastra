@@ -1005,7 +1005,7 @@ const selector = new ModelByInputTokens({
 
 #### Behavior
 
-- Thresholds are sorted internally, so the order in the config object does not matter.
+- Thresholds are sorted internally, so the order in the config object doesn't matter.
 - `inputTokens ≤ smallest threshold` → uses that threshold's model
 - `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
 - OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly

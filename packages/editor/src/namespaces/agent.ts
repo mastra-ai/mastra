@@ -92,6 +92,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
 
           if (!version) return null;
+          if (version.agentId !== id) {
+            throw new Error(`Version "${version.id}" does not belong to agent "${id}"`);
+          }
 
           const {
             id: versionId,
@@ -180,6 +183,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * they may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
+  private clearResolvedVersionId(agent: Agent): void {
+    const raw = agent.toRawConfig();
+    if (!raw || !('resolvedVersionId' in raw)) return;
+    const { resolvedVersionId: _removed, ...rest } = raw;
+    agent.__setRawConfig(rest);
+  }
+
   async applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
@@ -193,15 +203,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ? { versionId: options.versionId }
           : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
-    } catch {
+    } catch (error) {
+      // If a specific versionId was requested, don't fail open — propagate the error
+      if (options && 'versionId' in options) {
+        throw error;
+      }
       // Editor not registered, storage not available, or agent not found — restore and return unchanged
       this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
       return agent;
     }
 
     if (!storedConfig) {
       // No stored config — restore code defaults if previously overridden
       this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
+      return agent;
+    }
+
+    // If requesting published status but no version has been published, don't override the code-defined agent
+    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    if (requestedPublished && !storedConfig.activeVersionId) {
+      this.restoreCodeDefaults(agent);
+      this.clearResolvedVersionId(agent);
       return agent;
     }
 
@@ -284,6 +308,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         agent.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }
+    }
+
+    // Persist the resolved version ID so it can be read by span attributes / handlers
+    if (storedConfig.resolvedVersionId) {
+      const existing = agent.toRawConfig() ?? {};
+      agent.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+    } else {
+      this.clearResolvedVersionId(agent);
     }
 
     return agent;

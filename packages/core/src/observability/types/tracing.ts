@@ -12,7 +12,15 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
+import type {
+  CustomSamplerOptions,
+  ObservabilityInstance,
+  CorrelationContext,
+  DefinitionSource,
+  ScorerScoreSource,
+  ScorerStepType,
+  ScorerTargetScope,
+} from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -26,6 +34,10 @@ import type { ScoreInput } from './scores';
 export enum SpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
+  /** Scorer execution */
+  SCORER_RUN = 'scorer_run',
+  /** Individual scorer pipeline step */
+  SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
   GENERIC = 'generic',
   /** Model generation with model calls, token usage, prompts, completions */
@@ -83,6 +95,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** The resolved agent version ID used for this execution */
+  resolvedVersionId?: string;
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -94,6 +108,28 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+}
+
+/**
+ * Scorer Run attributes
+ */
+export interface ScorerRunAttributes extends AIBaseAttributes {
+  scorerId?: string;
+  scorerName?: string;
+  scoreSource?: ScorerScoreSource;
+  targetScope?: ScorerTargetScope;
+  targetEntityType?: EntityType;
+  scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Scorer Step attributes
+ */
+export interface ScorerStepAttributes extends AIBaseAttributes {
+  step?: string;
+  stepType?: ScorerStepType;
+  prompt?: string;
+  judgeModel?: string;
 }
 
 /**
@@ -357,6 +393,8 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
  */
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
+  [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
   [SpanType.MODEL_STEP]: ModelStepAttributes;
@@ -387,6 +425,10 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 export interface SpanErrorInfo {
   message: string;
   id?: string;
+  /** Error class name (e.g. "TypeError", "ValidationError") */
+  name?: string;
+  /** Stack trace string */
+  stack?: string;
   domain?: string;
   category?: string;
   details?: Record<string, any>;
@@ -647,6 +689,10 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * - Spans loaded from storage for evaluation
  * - Spans from completed traces being annotated
  * - Post-hoc quality scoring and user feedback
+ *
+ * RecordedSpan objects are hydrated runtime wrappers and should not be treated as
+ * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
+ * top-level observability annotation APIs after resume.
  */
 export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
@@ -659,13 +705,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -678,7 +724,10 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
+ * RecordedTrace objects are hydrated runtime wrappers and should not be stored
+ * across durable workflow serialization boundaries. Persist identifiers instead
+ * and rehydrate, or use top-level observability annotation APIs after resume.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -701,13 +750,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
