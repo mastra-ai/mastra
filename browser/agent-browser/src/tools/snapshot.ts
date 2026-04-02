@@ -12,9 +12,10 @@ export function createSnapshotTool(browser: AgentBrowser) {
       'Get accessibility tree snapshot of the page. Returns text-based representation with element refs like [ref=e1], [ref=e2] for targeting.',
     inputSchema: snapshotInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.snapshot(input);
+      return browser.snapshot(input, threadId);
     },
   });
 }

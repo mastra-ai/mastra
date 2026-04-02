@@ -92,6 +92,8 @@ export interface ActResult {
   success: boolean;
   message?: string;
   action?: string;
+  url?: string;
+  hint?: string;
 }
 
 /**
@@ -101,6 +103,8 @@ export interface ExtractResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  url?: string;
+  hint?: string;
 }
 
 /**
@@ -109,4 +113,6 @@ export interface ExtractResult<T = unknown> {
 export interface ObserveResult {
   success: boolean;
   actions: StagehandAction[];
+  url?: string;
+  hint?: string;
 }

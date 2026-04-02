@@ -571,7 +571,7 @@ describe('StagehandBrowser', () => {
           x: 100,
           y: 200,
           button: 'left',
-          buttons: 0,
+          buttons: 1, // left button bitmask
           clickCount: 1,
           deltaX: 0,
           deltaY: 0,
@@ -592,7 +592,7 @@ describe('StagehandBrowser', () => {
           y: 250,
           button: 'none',
           buttons: 0,
-          clickCount: 1,
+          clickCount: 0, // move events use 0
           deltaX: 0,
           deltaY: 0,
           modifiers: 0,
@@ -614,7 +614,7 @@ describe('StagehandBrowser', () => {
           y: 100,
           button: 'none',
           buttons: 0,
-          clickCount: 1,
+          clickCount: 0, // wheel events use 0
           deltaX: 0,
           deltaY: -100,
           modifiers: 0,

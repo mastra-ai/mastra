@@ -78,18 +78,30 @@ export type CloseInput = z.output<typeof closeInputSchema>;
 /**
  * stagehand_tabs - Manage browser tabs
  */
-export const tabsInputSchema = z.object({
-  action: z
-    .enum(['list', 'new', 'switch', 'close'])
-    .describe('Action to perform: list all tabs, open new tab, switch to tab, or close tab'),
-  index: z
-    .number()
-    .optional()
-    .describe(
-      'Tab index for switch/close actions (0-based). Required for switch, optional for close (defaults to current).',
-    ),
-  url: z.string().optional().describe('URL to navigate to after opening new tab (optional, for "new" action only)'),
-});
+export const tabsInputSchema = z
+  .object({
+    action: z
+      .enum(['list', 'new', 'switch', 'close'])
+      .describe('Action to perform: list all tabs, open new tab, switch to tab, or close tab'),
+    index: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        'Tab index for switch/close actions (0-based). Required for switch, optional for close (defaults to current).',
+      ),
+    url: z.string().optional().describe('URL to navigate to after opening new tab (optional, for "new" action only)'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === 'switch' && value.index === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['index'],
+        message: 'index is required when action is "switch"',
+      });
+    }
+  });
 export type TabsInput = z.output<typeof tabsInputSchema>;
 
 // =============================================================================

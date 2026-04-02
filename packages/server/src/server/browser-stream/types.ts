@@ -70,18 +70,10 @@ export interface KeyboardInputMessage {
 }
 
 /**
- * Relaunch request message from client to server.
- * Client sends this when user clicks the "Browser Closed" overlay to restart the browser.
- */
-export interface RelaunchInputMessage {
-  type: 'relaunch';
-}
-
-/**
  * Union type for all client-to-server input messages.
  * Discriminated by the `type` field.
  */
-export type ClientInputMessage = MouseInputMessage | KeyboardInputMessage | RelaunchInputMessage;
+export type ClientInputMessage = MouseInputMessage | KeyboardInputMessage;
 
 /**
  * Viewport metadata message sent from server to client.
@@ -129,5 +121,5 @@ export interface ViewerRegistryLike {
     threadId?: string,
   ): Promise<void>;
   removeViewer(viewerKey: string, ws: BrowserStreamWebSocket): Promise<void>;
-  closeBrowserSession(agentId: string): Promise<void>;
+  closeBrowserSession(viewerKey: string): Promise<void>;
 }

@@ -206,6 +206,14 @@ export abstract class MastraBrowser extends MastraBase {
   /** Error message when status is 'error' */
   error?: string;
 
+  /**
+   * Whether the browser is running in headless mode.
+   * Returns true by default if not explicitly configured.
+   */
+  get headless(): boolean {
+    return this.config.headless ?? true;
+  }
+
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
 
@@ -316,6 +324,19 @@ export abstract class MastraBrowser extends MastraBase {
     // Already closing - wait for existing promise
     if (this.status === 'closing' && this._closePromise) {
       return this._closePromise;
+    }
+
+    // Wait for in-flight launch to complete before closing
+    // This prevents race conditions where close() executes against a half-initialized provider
+    if (this.status === 'launching' && this._launchPromise) {
+      try {
+        await this._launchPromise;
+      } catch {
+        // Launch failed - status is now 'error', nothing to close
+        // Ensure we're in a clean closed state and return early
+        this.status = 'closed';
+        return;
+      }
     }
 
     // Fire onClose hook before closing
@@ -440,20 +461,34 @@ export abstract class MastraBrowser extends MastraBase {
 
       this.logger.debug?.(`Resolving WebSocket URL from ${versionUrl}`);
 
-      const response = await fetch(versionUrl);
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
-        );
-      }
+      // Add timeout to prevent hanging on dead endpoints
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const data = (await response.json()) as { webSocketDebuggerUrl?: string };
-      if (!data.webSocketDebuggerUrl) {
-        throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
-      }
+      try {
+        const response = await fetch(versionUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-      this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
-      return data.webSocketDebuggerUrl;
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+        if (!data.webSocketDebuggerUrl) {
+          throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
+        }
+
+        this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
+        return data.webSocketDebuggerUrl;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Timeout resolving WebSocket URL from ${versionUrl} (10s)`);
+        }
+        throw error;
+      }
     }
 
     // Unknown protocol - return as-is and let the caller handle it
@@ -551,22 +586,49 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Browser Ready Callbacks
+  // Browser Ready/Closed Callbacks
   // ---------------------------------------------------------------------------
 
   private _onReadyCallbacks: Set<() => void> = new Set();
   private _onClosedCallbacks: Set<() => void> = new Set();
+  /** Thread-specific ready callbacks. Key is threadId. */
+  private _onThreadReadyCallbacks: Map<string, Set<() => void>> = new Map();
+  /** Thread-specific closed callbacks. Key is threadId. */
+  private _onThreadClosedCallbacks: Map<string, Set<() => void>> = new Map();
 
   /**
    * Register a callback to be invoked when the browser becomes ready.
    * If browser is already running, callback is invoked immediately.
    * The callback is ALWAYS registered (even if invoked immediately) so it will
    * also fire on future "ready" events (e.g., session creation for thread isolation).
+   * @param callback - Function to call when browser is ready
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserReady(callback: () => void): () => void {
-    // Always register the callback so it fires on future ready events
-    // (e.g., when a new thread session is created)
+  onBrowserReady(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadReadyCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+
+      // Check if this specific thread has a session ready
+      if (this.hasThreadSession(threadId)) {
+        callback();
+      }
+
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadReadyCallbacks.delete(threadId);
+        }
+      };
+    }
+
+    // Global callback (for shared scope or when thread not specified)
     this._onReadyCallbacks.add(callback);
 
     if (this.isBrowserRunning()) {
@@ -582,9 +644,27 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Register a callback to be invoked when the browser closes.
    * Useful for screencast to broadcast browser_closed status.
+   * @param callback - Function to call when browser closes
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserClosed(callback: () => void): () => void {
+  onBrowserClosed(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadClosedCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadClosedCallbacks.delete(threadId);
+        }
+      };
+    }
+    // Global callback (for shared scope or when thread not specified)
     this._onClosedCallbacks.add(callback);
     return () => {
       this._onClosedCallbacks.delete(callback);
@@ -592,17 +672,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser is ready.
-   * Called internally after launch completes.
-   * Note: Callbacks remain registered and will fire again on subsequent launches.
-   * This supports browser restart scenarios (e.g., external close + re-launch).
+   * Notify registered callbacks that browser is ready.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserReady(): void {
-    for (const callback of this._onReadyCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserReady(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onReadyCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is ready - shared scenario)
+      for (const [, threadCallbacks] of this._onThreadReadyCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
       }
     }
     // Do NOT clear callbacks - they should persist across browser restarts
@@ -610,15 +713,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser has closed.
-   * Called by handleBrowserDisconnected() and close().
+   * Notify registered callbacks that browser has closed.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserClosed(): void {
-    for (const callback of this._onClosedCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserClosed(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onClosedCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is closing)
+      for (const [, threadCallbacks] of this._onThreadClosedCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
       }
     }
   }
@@ -764,6 +892,27 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Get a session identifier for a specific thread.
+   * In thread scope, returns a composite ID (browser:threadId).
+   * In shared scope or without thread manager, returns the browser instance ID.
+   */
+  getSessionId(threadId?: string): string {
+    if (!threadId || !this.threadManager) {
+      return this.id;
+    }
+
+    const scope = this.threadManager.getScope();
+
+    // Shared scope - all threads share the same session
+    if (scope === 'shared') {
+      return this.id;
+    }
+
+    // Thread scope - return composite ID
+    return `${this.id}:${threadId}`;
+  }
+
+  /**
    * Start screencast only if browser is already running.
    * Does NOT launch the browser.
    * Uses config.screencast options as defaults if no options provided.
@@ -776,8 +925,8 @@ export abstract class MastraBrowser extends MastraBase {
       return null;
     }
 
-    // Merge provided options with config screencast options
-    const mergedOptions = options ?? this.config.screencast;
+    // Merge config screencast defaults with call-site overrides
+    const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
     const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';

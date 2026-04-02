@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.11.0-alpha.1
+
+### Patch Changes
+
+- Mask sensitive input fields (API keys, credentials, connection strings) in settings and login dialogs so they display as asterisks instead of plaintext ([#14936](https://github.com/mastra-ai/mastra/pull/14936))
+
+- Updated dependencies [[`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6)]:
+  - @mastra/core@1.22.0-alpha.1
+
 ## 0.11.0-alpha.0
 
 ### Minor Changes

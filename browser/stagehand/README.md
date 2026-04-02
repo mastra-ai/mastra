@@ -51,13 +51,7 @@ const browser = new StagehandBrowser({
   headless: true,
 
   // CDP URL for connecting to existing browser
-  // Can be a string or async function
   cdpUrl: 'ws://localhost:9222',
-  // Or dynamic:
-  cdpUrl: async () => {
-    const session = await browserbase.createSession();
-    return session.connectUrl;
-  },
 
   // Browserbase config (when env: 'BROWSERBASE')
   apiKey: process.env.BROWSERBASE_API_KEY,

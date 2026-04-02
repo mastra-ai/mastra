@@ -35,7 +35,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
         {/* Browser sidebar overlay - takes over when in sidebar mode */}
         {hasSession && isInSidebar && (
           <div className="absolute inset-0 z-10 bg-surface1">
-            <BrowserSidebarTab agentId={agentId} threadId={threadId} />
+            <BrowserSidebarTab />
           </div>
         )}
 
@@ -85,16 +85,22 @@ export interface UseAgentInformationTabArgs {
   hasMemory: boolean;
 }
 
+// Valid tab values that can be persisted
+const VALID_TABS = new Set(['overview', 'model-settings', 'memory', 'request-context', 'tracing-options']);
+
 export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
     const stored = sessionStorage.getItem(STORAGE_KEY) || 'overview';
-    // Validate stored tab is still valid
-    if (stored === 'browser') return 'overview'; // browser tab removed
+    // Validate stored tab is a known valid tab
+    if (!VALID_TABS.has(stored)) return 'overview';
     return stored;
   });
 
   // Compute effective tab - handle unavailable tabs
   const effectiveTab = (() => {
+    // Unknown tab values fall back to overview
+    if (!VALID_TABS.has(selectedTab)) return 'overview';
+    // Memory tab requires memory to be available
     if (selectedTab === 'memory' && !isMemoryLoading && !hasMemory) {
       return 'overview';
     }

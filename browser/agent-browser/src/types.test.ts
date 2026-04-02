@@ -162,6 +162,11 @@ describe('selectInputSchema', () => {
     const result = selectInputSchema.safeParse({ value: 'option1' });
     expect(result.success).toBe(false);
   });
+
+  it('requires at least one selection criterion', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('scrollInputSchema', () => {
@@ -323,10 +328,19 @@ describe('dragInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts empty object (validation happens in implementation)', () => {
-    // Schema allows empty, but implementation will return error
+  it('rejects empty object (requires source and target)', () => {
     const result = dragInputSchema.safeParse({});
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing target', () => {
+    const result = dragInputSchema.safeParse({ sourceRef: '@e5' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing source', () => {
+    const result = dragInputSchema.safeParse({ targetRef: '@e10' });
+    expect(result.success).toBe(false);
   });
 });
 

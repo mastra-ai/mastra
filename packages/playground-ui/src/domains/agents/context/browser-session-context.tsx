@@ -1,6 +1,11 @@
 import { createContext, useContext, useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
+import { useCloseBrowser } from '../hooks/use-close-browser';
+
+// TODO: Consider splitting high-frequency frame data into a separate context or ref-based store
+// to prevent consumers that only need low-frequency state (hasSession, viewMode) from rerendering
+// on every screencast frame update. See: https://react.dev/reference/react/useSyncExternalStore
 
 /** View modes for the browser UI */
 export type BrowserViewMode = 'collapsed' | 'expanded' | 'modal' | 'sidebar';
@@ -21,14 +26,18 @@ interface BrowserSessionContextValue {
   latestFrame: string | null;
   /** Viewport dimensions from the browser */
   viewport: { width: number; height: number } | null;
+  /** Whether a close operation is in progress */
+  isClosing: boolean;
   /** Set the view mode */
   setViewMode: (mode: BrowserViewMode) => void;
   /** Open the browser panel modal (sets viewMode to 'modal') */
   show: () => void;
   /** Close overlays (sets viewMode to 'collapsed') */
   hide: () => void;
-  /** End the browser session completely */
+  /** End the browser session completely (local state only) */
   endSession: () => void;
+  /** Close the browser via API and end session (waits for success before updating state) */
+  closeBrowser: () => Promise<void>;
   /** Send a message to the browser (for input injection) */
   sendMessage: (data: string) => void;
   /** Connect to the browser stream */
@@ -68,6 +77,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentConnectionRef = useRef<{ agentId?: string; threadId?: string } | null>(null);
   const maxReconnectAttempts = 5;
 
   const clearReconnectTimeout = useCallback(() => {
@@ -79,11 +89,16 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
 
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
+    currentConnectionRef.current = null;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Clear all state to prevent stale data from showing on next thread
+    setHasSession(false);
     setStatusState('idle');
+    setCurrentUrlState(null);
+    setLatestFrameState(null);
     setViewport(null);
   }, [clearReconnectTimeout]);
 
@@ -93,15 +108,31 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     }
   }, []);
 
+  // Track intentional closes to avoid reconnecting after replacing a socket
+  const intentionalCloseRef = useRef(false);
+
   const connect = useCallback(() => {
     if (!agentId || !threadId) return;
+
+    // Skip if already connected/connecting to the same agent/thread
+    if (
+      currentConnectionRef.current?.agentId === agentId &&
+      currentConnectionRef.current?.threadId === threadId &&
+      wsRef.current?.readyState === WebSocket.OPEN
+    ) {
+      return;
+    }
 
     // Clear any existing connection and timeout
     clearReconnectTimeout();
     if (wsRef.current) {
+      intentionalCloseRef.current = true;
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    // Track what we're connecting to
+    currentConnectionRef.current = { agentId, threadId };
 
     setStatusState('connecting');
 
@@ -111,6 +142,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
 
     try {
       const ws = new WebSocket(wsUrl);
+      intentionalCloseRef.current = false;
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -148,6 +180,10 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
                 case 'stopped':
                   setStatusState('disconnected');
                   break;
+                case 'error':
+                  setStatusState('error');
+                  setHasSession(false);
+                  break;
               }
             }
 
@@ -166,13 +202,8 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
           // Plain text is base64 frame data
           setLatestFrameState(data);
           // Ensure we're in streaming status when receiving frames
-          setStatusState(prev => {
-            if (prev !== 'streaming') {
-              setHasSession(true);
-              return 'streaming';
-            }
-            return prev;
-          });
+          setStatusState(prev => (prev !== 'streaming' ? 'streaming' : prev));
+          setHasSession(true);
         }
       };
 
@@ -181,10 +212,13 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       };
 
       ws.onclose = event => {
+        // Ignore close events from superseded sockets
+        if (wsRef.current !== ws) return;
+
         wsRef.current = null;
 
         // Don't reconnect if intentionally closed or max attempts reached
-        if (!event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
+        if (!intentionalCloseRef.current && !event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
           reconnectAttemptRef.current += 1;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 10000);
 
@@ -245,21 +279,41 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     setLatestFrameState(null);
   }, []);
 
+  // Close browser via TanStack Query mutation
+  const closeBrowserMutation = useCloseBrowser();
+
+  const closeBrowser = useCallback(async () => {
+    if (closeBrowserMutation.isPending || !agentId) return;
+
+    try {
+      await closeBrowserMutation.mutateAsync({ agentId, threadId });
+      // Only end session after successful API call
+      endSession();
+    } catch {
+      // Error already logged by mutation hook
+      // Don't end session on failure - browser may still be running
+    }
+  }, [agentId, threadId, closeBrowserMutation, endSession]);
+
+  const isClosing = closeBrowserMutation.isPending;
+
   const value = useMemo(
     () => ({
       hasSession,
       viewMode,
       isPanelOpen: viewMode === 'modal',
       isInSidebar: viewMode === 'sidebar',
-      isActive: viewMode === 'modal', // backward compat
+      isActive: hasSession, // backward compat - reflects session activity, not view mode
       status,
       currentUrl,
       latestFrame,
       viewport,
+      isClosing,
       setViewMode,
       show,
       hide,
       endSession,
+      closeBrowser,
       sendMessage,
       connect,
       disconnect,
@@ -271,10 +325,12 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       currentUrl,
       latestFrame,
       viewport,
+      isClosing,
       setViewMode,
       show,
       hide,
       endSession,
+      closeBrowser,
       sendMessage,
       connect,
       disconnect,

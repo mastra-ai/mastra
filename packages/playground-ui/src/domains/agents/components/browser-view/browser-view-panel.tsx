@@ -1,5 +1,5 @@
 import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
@@ -38,11 +38,6 @@ function getStatusBadgeConfig(status: StreamStatus): {
   }
 }
 
-interface BrowserViewPanelProps {
-  agentId: string;
-  threadId: string;
-}
-
 /**
  * Full-screen modal browser view (center view mode).
  *
@@ -54,10 +49,11 @@ interface BrowserViewPanelProps {
  * The panel is always mounted to preserve WebSocket connection.
  * Visibility is controlled via viewMode in browser session context.
  */
-export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
-  const { viewMode, status, currentUrl, hide, endSession, setViewMode } = useBrowserSession();
-  const [isClosing, setIsClosing] = useState(false);
+export function BrowserViewPanel() {
+  const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
   const [isVisible, setIsVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const isPanelOpen = viewMode === 'modal';
 
@@ -70,24 +66,23 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
     }
   }, [isPanelOpen]);
 
-  const handleClose = useCallback(async () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    endSession();
-
-    try {
-      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('[BrowserViewPanel] Failed to close browser:', response.statusText);
-      }
-    } catch (error) {
-      console.error('[BrowserViewPanel] Error closing browser:', error);
-    } finally {
-      setIsClosing(false);
+  // Focus management: trap focus in dialog and restore on close
+  useEffect(() => {
+    if (isPanelOpen) {
+      // Store the previously focused element
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      // Focus the dialog
+      dialogRef.current?.focus();
+    } else if (previousFocusRef.current) {
+      // Restore focus when closing
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
     }
-  }, [agentId, isClosing, endSession]);
+  }, [isPanelOpen]);
+
+  const handleClose = useCallback(async () => {
+    await closeBrowser();
+  }, [closeBrowser]);
 
   const handleMinimize = useCallback(() => {
     hide();
@@ -97,13 +92,17 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
     setViewMode('sidebar');
   }, [setViewMode]);
 
-  const handleFirstFrame = useCallback(() => {
-    setIsClosing(false);
-  }, []);
-
   const handleOpenExternal = useCallback(() => {
-    if (currentUrl) {
-      window.open(currentUrl, '_blank', 'noopener,noreferrer');
+    if (!currentUrl) return;
+
+    // Validate URL to prevent javascript:/data: scheme attacks
+    try {
+      const url = new URL(currentUrl);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        window.open(url.href, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      // Invalid URL, ignore
     }
   }, [currentUrl]);
 
@@ -142,12 +141,18 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
         isPanelOpen && isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}
       onClick={handleBackdropClick}
+      aria-hidden={!isPanelOpen}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Browser view"
+        tabIndex={-1}
         className={cn(
           'flex flex-col w-full max-w-5xl max-h-full',
           'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
-          'transition-transform duration-200',
+          'transition-transform duration-200 outline-none',
           isPanelOpen && isVisible ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}
@@ -185,12 +190,7 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
         <div className="flex-1 overflow-y-auto">
           {/* Screencast */}
           <div className="p-4">
-            <BrowserViewFrame
-              agentId={agentId}
-              threadId={threadId}
-              className="w-full max-h-[60vh]"
-              onFirstFrame={handleFirstFrame}
-            />
+            <BrowserViewFrame className="w-full max-h-[60vh]" />
           </div>
 
           {/* Browser actions history */}

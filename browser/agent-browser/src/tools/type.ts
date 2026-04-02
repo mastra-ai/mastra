@@ -11,9 +11,10 @@ export function createTypeTool(browser: AgentBrowser) {
     description: 'Type text into an input element. Use clear: true to replace existing content.',
     inputSchema: typeInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.type(input);
+      return browser.type(input, threadId);
     },
   });
 }

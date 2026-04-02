@@ -13,9 +13,10 @@ export function createGotoTool(browser: AgentBrowser) {
     description: 'Navigate the browser to a URL.',
     inputSchema: gotoInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.goto(input);
+      return browser.goto(input, threadId);
     },
   });
 }

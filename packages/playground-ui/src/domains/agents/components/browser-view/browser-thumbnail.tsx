@@ -1,5 +1,5 @@
 import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
@@ -9,8 +9,6 @@ import { StatusBadge } from '@/ds/components/StatusBadge';
 import { cn } from '@/lib/utils';
 
 interface BrowserThumbnailProps {
-  agentId: string;
-  threadId: string;
   agentName?: string;
 }
 
@@ -21,8 +19,8 @@ interface BrowserThumbnailProps {
  * - Collapsed: Small thumbnail bar (click to expand)
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
-export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: BrowserThumbnailProps) {
-  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, endSession } = useBrowserSession();
+export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
+  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
@@ -73,13 +71,17 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
   }, [setViewMode]);
 
   const handleClose = useCallback(async () => {
-    endSession();
+    await closeBrowser();
+  }, [closeBrowser]);
+
+  const displayUrl = useMemo(() => {
+    if (!currentUrl) return 'Browser';
     try {
-      await fetch(`/api/agents/${agentId}/browser/close`, { method: 'POST' });
-    } catch (error) {
-      console.error('[BrowserThumbnail] Error closing browser:', error);
+      return new URL(currentUrl).hostname;
+    } catch {
+      return currentUrl;
     }
-  }, [agentId, endSession]);
+  }, [currentUrl]);
 
   // Don't render if no browser session or if showing in other modes
   if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
@@ -87,15 +89,6 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
   }
 
   const isLive = status === 'streaming';
-  const displayUrl = currentUrl
-    ? (() => {
-        try {
-          return new URL(currentUrl).hostname;
-        } catch {
-          return currentUrl;
-        }
-      })()
-    : 'Browser';
 
   return (
     <div
@@ -150,7 +143,7 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
-              <BrowserViewFrame agentId={agentId} threadId={threadId} className="w-full" />
+              <BrowserViewFrame className="w-full" />
               {/* Control buttons overlay */}
               <div className="absolute top-2 right-2 flex gap-1">
                 <IconButton
@@ -190,8 +183,8 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
               <div className="px-3 py-2">
                 <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
                 <div className="space-y-1">
-                  {toolCalls.slice(-5).map((entry, index) => (
-                    <BrowserToolCallItem key={entry.toolCallId || index} entry={entry} />
+                  {toolCalls.slice(-5).map(entry => (
+                    <BrowserToolCallItem key={entry.toolCallId} entry={entry} />
                   ))}
                 </div>
               </div>

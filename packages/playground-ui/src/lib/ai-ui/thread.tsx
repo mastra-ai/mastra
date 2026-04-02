@@ -69,7 +69,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
       {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
       {showThumbnailInChat && agentId && threadId && (
         <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
-          <BrowserThumbnail agentId={agentId} threadId={threadId} agentName={agentName} />
+          <BrowserThumbnail agentName={agentName} />
         </div>
       )}
 

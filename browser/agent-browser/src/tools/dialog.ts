@@ -13,9 +13,10 @@ export function createDialogTool(browser: AgentBrowser) {
       'Use this instead of browser_click when you expect a dialog to appear.',
     inputSchema: dialogInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.dialog(input);
+      return browser.dialog(input, threadId);
     },
   });
 }

@@ -48,8 +48,11 @@ export class AgentBrowser extends MastraBrowser {
   private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
-  /** Active screencast stream for triggering reconnects on tab changes */
-  private activeScreencastStream: ScreencastStreamImpl | null = null;
+  /** Active screencast streams per thread (for triggering reconnects on tab changes) */
+  private activeScreencastStreams = new Map<string, ScreencastStreamImpl>();
+
+  /** Default key for shared scope */
+  private static readonly SHARED_STREAM_KEY = '__shared__';
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -80,10 +83,10 @@ export class AgentBrowser extends MastraBrowser {
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
-      onSessionCreated: () => {
-        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
-        // for threads that just started using the browser
-        this.notifyBrowserReady();
+      onSessionCreated: session => {
+        // Trigger onBrowserReady callbacks for this specific thread
+        // This allows ViewerRegistry to start screencast for just this thread
+        this.notifyBrowserReady(session.threadId);
       },
       // When a new browser is created for a thread, set up close listener
       onBrowserCreated: (manager, threadId) => {
@@ -156,10 +159,12 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Close a specific thread's browser session.
-   * Delegates to ThreadManager.
+   * Delegates to ThreadManager and notifies registered callbacks.
    */
   async closeThreadSession(threadId: string): Promise<void> {
     await this.threadManager.destroySession(threadId);
+    // Notify callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -307,10 +312,12 @@ export class AgentBrowser extends MastraBrowser {
   /**
    * Get the page for the current thread.
    * Uses thread scope if enabled, otherwise returns the shared page.
+   * @param explicitThreadId - Optional thread ID to use instead of getCurrentThread()
+   *                           Use this to avoid race conditions in concurrent tool calls.
    */
-  private async getPage(): Promise<Page> {
+  private async getPage(explicitThreadId?: string): Promise<Page> {
     const scope = this.getScope();
-    const threadId = this.getCurrentThread();
+    const threadId = explicitThreadId ?? this.getCurrentThread();
     // For thread scope, always use getPageForThread even for default thread
     // For shared scope with non-default thread, also use getPageForThread
     if (scope === 'thread' || (scope !== 'shared' && threadId !== DEFAULT_THREAD_ID)) {
@@ -321,8 +328,9 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
-   * Handle browser disconnection by clearing internal state and calling base class.
-   * For 'browser' isolation, only clears the current thread's session (not all threads).
+   * Handle browser disconnection by clearing internal state.
+   * For 'thread' scope, only notifies the specific thread's callbacks.
+   * For 'shared' scope, notifies all callbacks.
    */
   override handleBrowserDisconnected(): void {
     const scope = this.threadManager.getScope();
@@ -332,15 +340,18 @@ export class AgentBrowser extends MastraBrowser {
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager.clearSession(threadId);
       this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+      // Notify only this thread's callbacks - do NOT set global status to 'closed'
+      // since other threads may still have active browsers
+      this.notifyBrowserClosed(threadId);
     } else {
-      // For 'none' isolation or default thread, the shared browser is gone
+      // For 'shared' scope or default thread, the shared browser is gone
       this.browserManager = null;
       // Also clear the shared manager in the thread manager so getManagerForThread
       // doesn't return the dead manager
       this.threadManager.clearSharedManager();
+      // Call base class which notifies all callbacks
+      super.handleBrowserDisconnected();
     }
-
-    super.handleBrowserDisconnected();
   }
 
   /**
@@ -384,8 +395,8 @@ export class AgentBrowser extends MastraBrowser {
   private handleThreadBrowserDisconnected(threadId: string): void {
     this.threadManager.clearSession(threadId);
     this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
-    // Notify base class - this will trigger notifyBrowserClosed()
-    super.handleBrowserDisconnected();
+    // Notify only the callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   /**
@@ -417,13 +428,13 @@ export class AgentBrowser extends MastraBrowser {
     return super.createErrorFromException(error, context);
   }
 
-  private async requireLocator(ref: string): Promise<Locator | null> {
-    const manager = await this.getManagerForThread();
+  private async requireLocator(ref: string, threadId?: string): Promise<Locator | null> {
+    const manager = await this.getManagerForThread(threadId);
     // Use the built-in getLocatorFromRef method which properly converts refs to locators
     return manager.getLocatorFromRef(ref);
   }
 
-  private async getScrollInfo(): Promise<{
+  private async getScrollInfo(threadId?: string): Promise<{
     scrollY: number;
     scrollHeight: number;
     viewportHeight: number;
@@ -431,7 +442,7 @@ export class AgentBrowser extends MastraBrowser {
     atBottom: boolean;
     percentDown: number;
   }> {
-    const page = await this.getPage();
+    const page = await this.getPage(threadId);
     const info = (await page.evaluate(`({
       scrollY: Math.round(window.scrollY),
       scrollHeight: document.documentElement.scrollHeight,
@@ -620,9 +631,10 @@ export class AgentBrowser extends MastraBrowser {
 
   async goto(
     input: GotoInput,
+    threadId?: string,
   ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       await page.goto(input.url, {
         timeout: input.timeout ?? this.defaultTimeout,
@@ -644,7 +656,10 @@ export class AgentBrowser extends MastraBrowser {
   // 2. browser_snapshot - Capture accessibility tree
   // ---------------------------------------------------------------------------
 
-  async snapshot(input: SnapshotInput): Promise<
+  async snapshot(
+    input: SnapshotInput,
+    threadId?: string,
+  ): Promise<
     | {
         success: true;
         snapshot: string;
@@ -657,8 +672,8 @@ export class AgentBrowser extends MastraBrowser {
     | BrowserToolError
   > {
     try {
-      const manager = await this.getManagerForThread();
-      const page = await this.getPage();
+      const manager = await this.getManagerForThread(threadId);
+      const page = await this.getPage(threadId);
       const rawSnapshot = await manager.getSnapshot({
         interactive: input.interactiveOnly ?? true,
         compact: true,
@@ -668,7 +683,7 @@ export class AgentBrowser extends MastraBrowser {
       const snapshot = (rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
 
       // Get scroll position info
-      const scrollInfo = await this.getScrollInfo();
+      const scrollInfo = await this.getScrollInfo(threadId);
       let scrollText: string;
       if (scrollInfo.atTop && !scrollInfo.atBottom) {
         scrollText = 'TOP - more content below';
@@ -703,10 +718,13 @@ export class AgentBrowser extends MastraBrowser {
   // 3. browser_click - Click on element
   // ---------------------------------------------------------------------------
 
-  async click(input: ClickInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async click(
+    input: ClickInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.ref);
+      const page = await this.getPage(threadId);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -749,10 +767,11 @@ export class AgentBrowser extends MastraBrowser {
 
   async type(
     input: TypeInput,
+    threadId?: string,
   ): Promise<{ success: true; value: string; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.ref);
+      const page = await this.getPage(threadId);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -809,9 +828,12 @@ export class AgentBrowser extends MastraBrowser {
   // 5. browser_press - Press keyboard key(s)
   // ---------------------------------------------------------------------------
 
-  async press(input: PressInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async press(
+    input: PressInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       await page.keyboard.press(input.key);
 
       return {
@@ -830,10 +852,11 @@ export class AgentBrowser extends MastraBrowser {
 
   async select(
     input: SelectInput,
+    threadId?: string,
   ): Promise<{ success: true; selected: string[]; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.ref);
+      const page = await this.getPage(threadId);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -869,12 +892,13 @@ export class AgentBrowser extends MastraBrowser {
 
   async scroll(
     input: ScrollInput,
+    threadId?: string,
   ): Promise<{ success: true; position: { x: number; y: number }; scroll: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       if (input.ref) {
-        const locator = await this.requireLocator(input.ref);
+        const locator = await this.requireLocator(input.ref, threadId);
         if (locator) {
           await locator.scrollIntoViewIfNeeded({ timeout: this.defaultTimeout });
         }
@@ -909,7 +933,7 @@ export class AgentBrowser extends MastraBrowser {
       }
 
       // Get new scroll position
-      const scrollInfo = await this.getScrollInfo();
+      const scrollInfo = await this.getScrollInfo(threadId);
       let scrollText: string;
       if (scrollInfo.atTop && !scrollInfo.atBottom) {
         scrollText = 'TOP - more content below';
@@ -934,10 +958,13 @@ export class AgentBrowser extends MastraBrowser {
   // 8. browser_hover - Hover over element
   // ---------------------------------------------------------------------------
 
-  async hover(input: HoverInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async hover(
+    input: HoverInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.ref);
+      const page = await this.getPage(threadId);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -963,9 +990,11 @@ export class AgentBrowser extends MastraBrowser {
   // 10. browser_back - Navigate back
   // ---------------------------------------------------------------------------
 
-  async back(): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
+  async back(
+    threadId?: string,
+  ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       await page.goBack({ timeout: this.defaultTimeout });
 
       return {
@@ -985,13 +1014,14 @@ export class AgentBrowser extends MastraBrowser {
 
   async dialog(
     input: DialogInput,
+    threadId?: string,
   ): Promise<
     | { success: true; action: 'accept' | 'dismiss'; dialogType: string; message: string; hint: string }
     | BrowserToolError
   > {
     try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.triggerRef);
+      const page = await this.getPage(threadId);
+      const locator = await this.requireLocator(input.triggerRef, threadId);
 
       if (!locator) {
         return this.createError(
@@ -1051,12 +1081,12 @@ export class AgentBrowser extends MastraBrowser {
   // 13. browser_wait - Wait for element or condition
   // ---------------------------------------------------------------------------
 
-  async wait(input: WaitInput): Promise<{ success: true; hint: string } | BrowserToolError> {
+  async wait(input: WaitInput, threadId?: string): Promise<{ success: true; hint: string } | BrowserToolError> {
     try {
       const timeout = input.timeout ?? this.defaultTimeout;
 
       if (input.ref) {
-        const locator = await this.requireLocator(input.ref);
+        const locator = await this.requireLocator(input.ref, threadId);
         if (!locator) {
           return this.createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
         }
@@ -1069,7 +1099,7 @@ export class AgentBrowser extends MastraBrowser {
           hint: `Element is now ${state}. Take a snapshot to continue.`,
         };
       } else {
-        const page = await this.getPage();
+        const page = await this.getPage(threadId);
         await page.waitForTimeout(timeout);
         return {
           success: true,
@@ -1085,7 +1115,10 @@ export class AgentBrowser extends MastraBrowser {
   // 14. browser_tabs - Manage browser tabs
   // ---------------------------------------------------------------------------
 
-  async tabs(input: TabsInput): Promise<
+  async tabs(
+    input: TabsInput,
+    threadId?: string,
+  ): Promise<
     | {
         success: true;
         tabs?: unknown[];
@@ -1098,7 +1131,7 @@ export class AgentBrowser extends MastraBrowser {
     | BrowserToolError
   > {
     try {
-      const browser = await this.getManagerForThread();
+      const browser = await this.getManagerForThread(threadId);
       if (!browser) {
         return this.createError(
           'browser_closed',
@@ -1135,11 +1168,11 @@ export class AgentBrowser extends MastraBrowser {
           const result = await browser.newTab();
           // If URL provided, navigate to it after creating the tab
           if (input.url) {
-            const page = await this.getPage();
+            const page = await this.getPage(threadId);
             await page.goto(input.url);
           }
           // Save state after new tab
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           return {
             success: true,
             ...result,
@@ -1161,11 +1194,13 @@ export class AgentBrowser extends MastraBrowser {
           const page = browser.getPage();
           const pageUrl = page.url();
           // Emit URL directly after switch
-          if (pageUrl && this.activeScreencastStream?.isActive()) {
-            this.activeScreencastStream.emitUrl(pageUrl);
+          const streamKey = this.getStreamKey(this.getCurrentThread());
+          const stream = this.activeScreencastStreams.get(streamKey);
+          if (pageUrl && stream?.isActive()) {
+            stream.emitUrl(pageUrl);
           }
           // Save state after switch (captures activeIndex change)
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           return {
             success: true,
             index: input.index,
@@ -1187,7 +1222,7 @@ export class AgentBrowser extends MastraBrowser {
           // Reconnect screencast - it may now be pointing to a different tab
           await this.reconnectScreencast('tab close');
           // Save state AFTER close (remaining tabs)
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           const tabsList = (await browser.listTabs?.()) ?? [];
           return {
             success: true,
@@ -1212,14 +1247,17 @@ export class AgentBrowser extends MastraBrowser {
   // 15. browser_drag - Drag element to target
   // ---------------------------------------------------------------------------
 
-  async drag(input: DragInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async drag(
+    input: DragInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       // Resolve source locator (prefer ref, fallback to selector)
       let sourceLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
       if (input.sourceRef) {
-        sourceLocator = await this.requireLocator(input.sourceRef);
+        sourceLocator = await this.requireLocator(input.sourceRef, threadId);
       } else if (input.sourceSelector) {
         sourceLocator = page.locator(input.sourceSelector);
       }
@@ -1239,7 +1277,7 @@ export class AgentBrowser extends MastraBrowser {
       // Resolve target locator (prefer ref, fallback to selector)
       let targetLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
       if (input.targetRef) {
-        targetLocator = await this.requireLocator(input.targetRef);
+        targetLocator = await this.requireLocator(input.targetRef, threadId);
       } else if (input.targetSelector) {
         targetLocator = page.locator(input.targetSelector);
       }
@@ -1272,9 +1310,12 @@ export class AgentBrowser extends MastraBrowser {
   // 16. browser_evaluate - Execute JavaScript
   // ---------------------------------------------------------------------------
 
-  async evaluate(input: EvaluateInput): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
+  async evaluate(
+    input: EvaluateInput,
+    threadId?: string,
+  ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       // Wrap script in an async function to allow return statements
       const wrappedScript = `(async () => { ${input.script} })()`;
       const result = await page.evaluate(wrappedScript);
@@ -1310,26 +1351,36 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   /**
+   * Get the stream key for a thread (or shared key for shared scope).
+   */
+  private getStreamKey(threadId?: string): string {
+    return threadId || AgentBrowser.SHARED_STREAM_KEY;
+  }
+
+  /**
    * Trigger a screencast reconnect after tab changes.
    * Called internally when tabs are switched or closed.
    */
   private async reconnectScreencast(_reason: string): Promise<void> {
-    if (this.activeScreencastStream?.isActive()) {
+    const threadId = this.getCurrentThread();
+    const streamKey = this.getStreamKey(threadId);
+    const stream = this.activeScreencastStreams.get(streamKey);
+
+    if (stream?.isActive()) {
       // Small delay to let agent-browser update its internal state (activePageIndex, CDP session)
       await new Promise(resolve => setTimeout(resolve, 150));
-      if (this.activeScreencastStream?.isActive()) {
+      if (stream?.isActive()) {
         try {
-          await this.activeScreencastStream.reconnect();
+          await stream.reconnect();
 
           // Emit the URL of the new active page after reconnecting
           // Use thread-specific manager in browser isolation mode
-          const threadId = this.getCurrentThread();
           const manager = this.threadManager.getExistingManagerForThread(threadId) ?? this.browserManager;
           const activePage = manager?.getPage();
           if (activePage) {
             const url = activePage.url();
             if (url) {
-              this.activeScreencastStream.emitUrl(url);
+              stream.emitUrl(url);
             }
           }
         } catch (err) {
@@ -1340,13 +1391,17 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
-    if (!this.browserManager) throw new Error('Browser not launched');
-
     const threadId = _options?.threadId;
 
-    // For 'browser' isolation, each thread has its own BrowserManager
-    // For 'none', we use the shared manager
-    const browserManager = threadId ? await this.getManagerForThread(threadId) : this.browserManager;
+    // For 'thread' scope, each thread has its own BrowserManager
+    // For 'shared' scope, we use the shared manager
+    let browserManager: BrowserManager;
+    if (this.getScope() === 'thread' && threadId) {
+      browserManager = await this.getManagerForThread(threadId);
+    } else {
+      if (!this.browserManager) throw new Error('Browser not launched');
+      browserManager = this.browserManager;
+    }
 
     // Create CDP session provider adapter
     // The provider always gets a fresh CDP session for the current active page
@@ -1365,8 +1420,9 @@ export class AgentBrowser extends MastraBrowser {
 
     const stream = new ScreencastStreamImpl(provider, _options);
 
-    // Store reference so tabs() can trigger reconnects
-    this.activeScreencastStream = stream;
+    // Store reference so tabs() can trigger reconnects - keyed by thread
+    const streamKey = this.getStreamKey(threadId);
+    this.activeScreencastStreams.set(streamKey, stream);
 
     // Set up tab change listener to reconnect screencast when a new tab opens
     const context = browserManager.getContext();
@@ -1472,7 +1528,8 @@ export class AgentBrowser extends MastraBrowser {
           page.off('framenavigated', handler);
         }
         frameNavigatedHandlers.clear();
-        this.activeScreencastStream = null;
+        // Remove from streams map using captured key
+        this.activeScreencastStreams.delete(streamKey);
       });
     }
 
