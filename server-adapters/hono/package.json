@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@hono/node-ws": "^1.2.3",
+    "@hono/node-ws": "^1.3.0",
     "@mastra/server": "workspace:*",
     "fetch-to-node": "^2.1.0",
     "ws": "^8.18.0"

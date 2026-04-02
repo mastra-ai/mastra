@@ -318,6 +318,16 @@ export abstract class MastraBrowser extends MastraBase {
       return this._closePromise;
     }
 
+    // Wait for in-flight launch to complete before closing
+    // This prevents race conditions where close() executes against a half-initialized provider
+    if (this.status === 'launching' && this._launchPromise) {
+      try {
+        await this._launchPromise;
+      } catch {
+        // Launch failed, but we still want to ensure clean state
+      }
+    }
+
     // Fire onClose hook before closing
     if (this.config.onClose && this.status === 'ready') {
       await this.config.onClose({ browser: this });

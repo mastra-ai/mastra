@@ -11,6 +11,7 @@ interface ScreencastStreamLike {
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): void;
   on(event: 'stop', handler: (reason: string) => void): void;
   on(event: 'error', handler: (error: Error) => void): void;
+  on(event: 'url', handler: (url: string) => void): void;
   stop(): Promise<void>;
 }
 
