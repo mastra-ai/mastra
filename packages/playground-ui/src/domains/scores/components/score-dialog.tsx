@@ -126,7 +126,11 @@ export function ScoreDialog({
                   ? [
                       {
                         label: 'Scorer',
-                        value: scorerDetailHref ? <Link href={scorerDetailHref}>{(score?.scorer?.name as string) || '-'}</Link> : (score?.scorer?.name as string) || '-',
+                        value: scorerDetailHref ? (
+                          <Link href={scorerDetailHref}>{(score?.scorer?.name as string) || '-'}</Link>
+                        ) : (
+                          (score?.scorer?.name as string) || '-'
+                        ),
                         key: 'scorer-name',
                       },
                     ]
