@@ -679,23 +679,7 @@ export class AgentChannels {
       }
     }
 
-    // Build request context with channel info
-    const requestContext = new RequestContext();
-    requestContext.set('channel', {
-      platform,
-      eventType: sdkThread.isDM ? 'message' : 'mention',
-      isDM: sdkThread.isDM,
-      threadId: sdkThread.id,
-      channelId: sdkThread.channelId,
-      messageId: message.id,
-      userId: message.author.userId,
-      userName: message.author.fullName || message.author.userName,
-      threadHistory,
-    } satisfies ChannelContext);
-
-    // Build the message text with author prefix and metadata reminder.
-    // The author prefix helps the agent distinguish speakers in multi-user threads.
-    // The metadata reminder provides context about the event type.
+    // Build the author prefix (helps the agent distinguish speakers in multi-user threads)
     const authorName = message.author.fullName || message.author.userName;
     const authorId = message.author.userId;
     let authorPrefix = '';
@@ -709,32 +693,28 @@ export class AgentChannels {
       authorPrefix += ' (bot)';
     }
 
-    // Build metadata reminder (event type, message ID for reference)
-    const eventType = sdkThread.isDM ? 'message' : 'mention';
-    const metadataParts = [`Event: ${eventType}`];
-    if (message.id) metadataParts.push(`Message ID: ${message.id}`);
-
-    // Include the bot's last message ID for self-reference (e.g., "delete my last message")
+    // Build request context with channel info.
+    // Metadata like messageId, lastBotMessageId, and threadHistory are injected
+    // as ephemeral system messages by ChatChannelProcessor.processInputStep.
     const lastBotMessageId = this.lastBotMessageIds.get(sdkThread.id);
-    if (lastBotMessageId) {
-      metadataParts.push(`Your last message ID: ${lastBotMessageId}`);
-    }
+    const requestContext = new RequestContext();
+    requestContext.set('channel', {
+      platform,
+      eventType: sdkThread.isDM ? 'message' : 'mention',
+      isDM: sdkThread.isDM,
+      threadId: sdkThread.id,
+      channelId: sdkThread.channelId,
+      messageId: message.id,
+      userId: message.author.userId,
+      userName: authorName,
+      threadHistory,
+      lastBotMessageId,
+    } satisfies ChannelContext);
 
-    // Include thread history inline when available (for mid-conversation mentions)
-    let historyBlock = '';
-    if (threadHistory && threadHistory.length > 0) {
-      const historyLines = ['Recent messages in this thread (for context):'];
-      for (const msg of threadHistory) {
-        const prefix = msg.isBot ? `${msg.author} (bot)` : msg.author;
-        historyLines.push(`[${prefix}]: ${msg.text}`);
-      }
-      historyBlock = historyLines.join('\n') + '\n\n';
-    }
-
-    const metadataReminder = `<system-reminder>${metadataParts.join(' | ')}</system-reminder>\n\n`;
-
-    const messageBody = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
-    const rawText = metadataReminder + historyBlock + messageBody;
+    // Build clean message text with author prefix only.
+    // Metadata (message IDs, thread history) is injected as ephemeral system messages
+    // by ChatChannelProcessor so it's visible to the LLM but NOT persisted to memory.
+    const rawText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
 
     // Build multimodal content if the message has image/file attachments,
     // otherwise pass a plain string. Use fetchData() when available (e.g. Slack

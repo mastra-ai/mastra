@@ -1,7 +1,13 @@
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CardElement } from 'chat';
 import { Actions, Button, Card, CardText } from 'chat';
 
-import type { ProcessInputArgs, ProcessInputResult } from '../processors/index';
+import type {
+  ProcessInputArgs,
+  ProcessInputResult,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+} from '../processors/index';
 import type { ChannelContext } from './types';
 
 // ---------------------------------------------------------------------------
@@ -184,8 +190,8 @@ export function buildToolResultCard(
  * Input processor that injects channel context into agent prompts.
  *
  * - `processInput`: Adds a system message with stable context (platform, isDM, userName).
- * - `processInputStep`: At step 0, prepends a `<system-reminder>` to the user's message
- *   with per-request data (messageId, eventType).
+ * - `processInputStep`: At step 0, injects ephemeral context (message IDs, thread history)
+ *   as a tagged system message. This data is visible to the LLM but NOT persisted to memory.
  *
  * All output rendering (tool cards, text messages, approval prompts) is handled by
  * `AgentChannels.consumeAgentStream` which iterates the outer `fullStream`.
@@ -221,5 +227,43 @@ export class ChatChannelProcessor {
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];
 
     return { messages: args.messages, systemMessages };
+  }
+
+  /**
+   * Per-step injection of ephemeral channel metadata.
+   * Only runs on step 0 (first LLM call). Injects metadata as a tagged system message
+   * so it's visible to the LLM but NOT persisted to memory.
+   */
+  processInputStep(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {
+    // Only inject on the first step — subsequent steps don't need the reminder
+    if (args.stepNumber !== 0) return undefined;
+
+    const ctx = args.requestContext?.get('channel') as ChannelContext | undefined;
+    if (!ctx) return undefined;
+
+    const lines: string[] = [];
+
+    // Event metadata
+    lines.push(`Event: ${ctx.eventType}`);
+    if (ctx.messageId) lines.push(`Message ID: ${ctx.messageId}`);
+    if (ctx.lastBotMessageId) lines.push(`Your last message ID: ${ctx.lastBotMessageId}`);
+
+    // Thread history (for mid-conversation mentions)
+    if (ctx.threadHistory && ctx.threadHistory.length > 0) {
+      lines.push('', 'Recent messages in this thread (for context):');
+      for (const msg of ctx.threadHistory) {
+        const prefix = msg.isBot ? `${msg.author} (bot)` : msg.author;
+        lines.push(`[${prefix}]: ${msg.text}`);
+      }
+    }
+
+    // Wrap in <system-reminder> for clarity
+    const reminderContent = `<system-reminder>\n${lines.join('\n')}\n</system-reminder>`;
+
+    // Add as a tagged system message (ephemeral — not persisted)
+    const newSystemMessage: CoreMessageV4 = { role: 'system', content: reminderContent };
+    const systemMessages = [...args.systemMessages, newSystemMessage];
+
+    return { systemMessages };
   }
 }

@@ -42,4 +42,9 @@ export type ChannelContext = {
    * Ordered oldest-first (chronological).
    */
   threadHistory?: ThreadHistoryMessage[];
+  /**
+   * Platform message ID of the bot's most recent message in this thread.
+   * Useful for self-referential commands like "delete my last message".
+   */
+  lastBotMessageId?: string;
 };
