@@ -735,7 +735,6 @@ export class Workspace<
       cdpUrl,
       screencast: config.screencast,
       headless: config.headless,
-      autoReconnect: false, // Let user control reconnection
       // Prefer processManager for spawning (enables PID tracking and thread isolation)
       processManager: this._sandbox?.processes,
       // Fallback to executeCommand for one-shot commands

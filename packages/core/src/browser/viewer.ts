@@ -174,18 +174,6 @@ export interface BrowserViewerConfig extends BrowserConfig {
    * enabling proper CDP port discovery and thread isolation.
    */
   processManager?: SandboxProcessManager;
-
-  /**
-   * Whether to automatically reconnect when the browser disconnects.
-   * @default false
-   */
-  autoReconnect?: boolean;
-
-  /**
-   * Delay in milliseconds before attempting to reconnect.
-   * @default 1000
-   */
-  reconnectDelay?: number;
 }
 
 export interface BrowserViewerEvents {
@@ -377,7 +365,6 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   // ---------------------------------------------------------------------------
 
   private viewerConfig: BrowserViewerConfig;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private browserPollTimer: ReturnType<typeof setTimeout> | null = null;
   private _isPollingForBrowser = false;
 
@@ -1614,7 +1601,6 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    * Disconnect from the browser.
    */
   async disconnect(): Promise<void> {
-    this.clearReconnectTimer();
     this.stopPollingForBrowser();
 
     if (this._screencastStream) {
@@ -1631,27 +1617,6 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   private handleDisconnect(): void {
     this.setCdpClient(null);
     this.notifyBrowserClosed();
-
-    if (this.viewerConfig.autoReconnect) {
-      this.scheduleReconnect();
-    }
-  }
-
-  private scheduleReconnect(): void {
-    this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
-      this.connect().catch(error => {
-        this.logger.error('Failed to reconnect to browser', error);
-        this.scheduleReconnect();
-      });
-    }, this.viewerConfig.reconnectDelay ?? 1000);
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
   }
 
   // ---------------------------------------------------------------------------
