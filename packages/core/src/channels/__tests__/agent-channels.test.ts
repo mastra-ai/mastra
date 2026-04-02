@@ -76,18 +76,21 @@ describe('AgentChannels', () => {
   });
 
   describe('getTools', () => {
-    it('generates generic channel tools', () => {
+    it('generates reaction tools', () => {
       const tools = agentChannels.getTools();
       const toolNames = Object.keys(tools);
 
-      expect(toolNames).toContain('send_message');
       expect(toolNames).toContain('add_reaction');
       expect(toolNames).toContain('remove_reaction');
+      expect(toolNames).toHaveLength(2);
     });
 
-    it('generates exactly 3 tools regardless of adapter count', () => {
-      const tools = agentChannels.getTools();
-      expect(Object.keys(tools)).toHaveLength(3);
+    it('returns no tools when tools: false', () => {
+      const disabled = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        tools: false,
+      });
+      expect(Object.keys(disabled.getTools())).toHaveLength(0);
     });
   });
 

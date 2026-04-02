@@ -2214,10 +2214,6 @@ export class Agent<
     const channelTools = this.#agentChannels.getTools();
 
     if (Object.keys(channelTools).length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding channel tools: ${Object.keys(channelTools).join(', ')}`, {
-        runId,
-      });
-
       const memory = await this.getMemory({ requestContext });
 
       for (const [toolName, tool] of Object.entries(channelTools)) {

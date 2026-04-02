@@ -141,6 +141,27 @@ export interface ChannelConfig {
    */
   handlers?: ChannelHandlers;
 
+  /**
+   * Which media types to send inline to the model (as file parts).
+   * Everything else is described as text metadata so the agent knows about the
+   * file without crashing models that reject unsupported types.
+   *
+   * - **Array of globs** — e.g. `['image/*']` (default), `['image/*', 'video/*']`
+   * - **Function** — `(mimeType: string) => boolean`
+   *
+   * @default `['image/*']`
+   *
+   * @example
+   * ```ts
+   * // Gemini supports video/audio natively
+   * inlineMedia: ['image/*', 'video/*', 'audio/*']
+   *
+   * // Send everything inline
+   * inlineMedia: () => true
+   * ```
+   */
+  inlineMedia?: string[] | ((mimeType: string) => boolean);
+
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
 
@@ -168,6 +189,14 @@ export interface ChannelConfig {
   };
 
   /**
+   * Whether to include channel tools (add_reaction, remove_reaction).
+   * Set to `false` for models that don't support function calling.
+   *
+   * @default true
+   */
+  tools?: boolean;
+
+  /**
    * Additional options passed directly to the Chat SDK.
    * Use this for advanced configuration not exposed by Mastra.
    *
@@ -181,6 +210,25 @@ export interface ChannelConfig {
    * ```
    */
   chatOptions?: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
+}
+
+/**
+ * Build a predicate from the `inlineMedia` config option.
+ * Supports glob patterns (e.g. `'image/*'`) and custom functions.
+ * Default: only `image/*` is sent inline.
+ */
+function buildInlineMediaCheck(config?: string[] | ((mimeType: string) => boolean)): (mimeType: string) => boolean {
+  if (typeof config === 'function') return config;
+  const patterns = config ?? ['image/*'];
+  return (mimeType: string) => {
+    return patterns.some(pattern => {
+      if (pattern === '*' || pattern === '*/*') return true;
+      if (pattern.endsWith('/*')) {
+        return mimeType.startsWith(pattern.slice(0, -1));
+      }
+      return mimeType === pattern;
+    });
+  };
 }
 
 /**
@@ -207,6 +255,10 @@ export class AgentChannels {
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
   /** Thread context config for fetching prior messages. */
   private threadContext: { maxMessages?: number };
+  /** Determines whether a mime type should be sent inline to the model. */
+  private shouldInline: (mimeType: string) => boolean;
+  /** Whether channel tools (reactions, etc.) are enabled. */
+  private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
 
@@ -233,6 +285,8 @@ export class AgentChannels {
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
     this.threadContext = config.threadContext ?? {};
+    this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
+    this.toolsEnabled = config.tools !== false;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
 
@@ -554,6 +608,7 @@ export class AgentChannels {
    * that resolve the target adapter from the current request context.
    */
   getTools(): Record<string, unknown> {
+    if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
   }
 
@@ -711,31 +766,39 @@ export class AgentChannels {
     // We construct a MastraDBMessage to preserve the platform message ID in metadata.
     const usableAttachments = message.attachments.filter(a => a.url || a.fetchData);
 
-    type MastraPart =
-      | { type: 'text'; text: string }
-      | { type: 'image'; image: URL | Uint8Array; mimeType?: string }
-      | { type: 'file'; data: URL | Uint8Array; mimeType: string };
+    type MastraPart = { type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string };
     const parts: MastraPart[] = [{ type: 'text', text: rawText }];
 
-    // Add attachments (images, files) as additional parts.
-    // Images are fetched as binary for inline embedding; other file types use
-    // URLs to avoid passing raw Uint8Array through the adapter pipeline.
+    // Route attachments based on `inlineMedia` config (default: only image/*).
+    // Inline types are sent as file parts (the LLM adapter converts image/* to
+    // image content automatically). Non-inline types are described as text
+    // metadata so the agent is aware of them without crashing models that
+    // reject unsupported media (e.g. OpenAI rejects video/mp4).
+    this.logger?.debug('[CHANNEL] Attachments', {
+      count: usableAttachments.length,
+      attachments: usableAttachments.map(a => ({
+        type: a.type,
+        mimeType: a.mimeType,
+        url: a.url,
+        hasData: !!a.fetchData,
+      })),
+    });
     for (const att of usableAttachments) {
-      if (att.type === 'image') {
-        const data = att.fetchData ? await att.fetchData() : undefined;
-        parts.push({
-          type: 'image',
-          image: data ?? new URL(att.url!),
-          ...(att.mimeType && { mimeType: att.mimeType }),
-        });
-      } else if (att.url && att.mimeType) {
+      if (!att.url && !att.fetchData) continue;
+      const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
+      if (!mimeType) continue;
+
+      if (this.shouldInline(mimeType)) {
         parts.push({
           type: 'file',
-          data: new URL(att.url),
-          mimeType: att.mimeType,
+          data: att.url || '',
+          mimeType,
         });
+      } else {
+        const filename = att.name || att.url?.split('/').pop() || 'file';
+        const description = `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`;
+        parts.push({ type: 'text', text: `\n${description}` });
       }
-      // Skip non-image attachments without a mimeType — FilePart requires it
     }
 
     // Build a MastraDBMessage with channel metadata so the platform message ID and author are tracked.
@@ -883,7 +946,11 @@ export class AgentChannels {
     const ensureTyping = async () => {
       if (!typingStarted) {
         typingStarted = true;
-        await sdkThread.startTyping();
+        try {
+          await sdkThread.startTyping();
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+        }
       }
     };
 
@@ -906,6 +973,31 @@ export class AgentChannels {
 
       if (chunk.type === 'reasoning-delta') {
         await ensureTyping();
+        continue;
+      }
+
+      // --- File (e.g. model-generated image): post as attachment ---
+      if (chunk.type === 'file') {
+        await flushText();
+        const { data, mimeType } = chunk.payload;
+        this.logger?.debug('[CHANNEL] Received file chunk', {
+          mimeType,
+          dataType: typeof data,
+          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
+        });
+        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+        const filename = `generated.${ext}`;
+        const binary =
+          typeof data === 'string'
+            ? Buffer.from(data, 'base64')
+            : data instanceof Uint8Array
+              ? Buffer.from(data)
+              : data;
+        try {
+          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+        }
         continue;
       }
 
@@ -1060,19 +1152,6 @@ export class AgentChannels {
    */
   private makeChannelTools() {
     return {
-      send_message: createTool({
-        id: 'send_message',
-        description: 'Send a message in the current conversation.',
-        inputSchema: z.object({
-          text: z.string().describe('The message text to send'),
-        }),
-        execute: async ({ text }, context) => {
-          const { adapter, threadId } = this.getAdapterFromContext(context);
-          const result = await adapter.postMessage(threadId, { markdown: text });
-          return { ok: true, messageId: result.id };
-        },
-      }),
-
       add_reaction: createTool({
         id: 'add_reaction',
         description: 'Add an emoji reaction to a message.',
