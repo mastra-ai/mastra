@@ -7,6 +7,8 @@ packages:
 
 # Channels
 
+**Added in:** `@mastra/core@1.22.0`
+
 Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
 
 ## Usage example
@@ -23,34 +25,14 @@ export const supportAgent = new Agent({
   model: 'openai/gpt-5.4',
   channels: {
     adapters: {
-      slack: createSlackAdapter({
-        botToken: process.env.SLACK_BOT_TOKEN,
-        signingSecret: process.env.SLACK_SIGNING_SECRET,
-      }),
-      discord: {
-        adapter: createDiscordAdapter({
-          botToken: process.env.DISCORD_BOT_TOKEN,
-          publicKey: process.env.DISCORD_PUBLIC_KEY,
-        }),
-        gateway: true,
-        cards: false,
-      },
+      slack: createSlackAdapter(),
+      discord: createDiscordAdapter(),
     },
-    handlers: {
-      onDirectMessage: false,
-    },
-    inlineMedia: ['image/*', 'video/*'],
-    inlineLinks: [
-      { match: 'youtube.com', mimeType: 'video/*' },
-      { match: 'youtu.be', mimeType: 'video/*' },
-    ],
-    threadContext: { maxMessages: 15 },
-    tools: true,
   },
 })
 ```
 
-## `ChannelConfig` parameters
+## Parameters
 
 <PropertiesTable
   content={[
@@ -119,12 +101,12 @@ export const supportAgent = new Agent({
     type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
     isOptional: true,
     description:
-      'Additional options passed directly to the Chat SDK. Use for advanced configuration not exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
   },
 ]}
 />
 
-## `ChannelAdapterConfig`
+## Per-adapter options
 
 Wrap an adapter in a `ChannelAdapterConfig` object to set per-adapter options:
 
@@ -140,17 +122,11 @@ const agent = new Agent({
   channels: {
     adapters: {
       discord: {
-        adapter: createDiscordAdapter({
-          botToken: process.env.DISCORD_BOT_TOKEN!,
-          publicKey: process.env.DISCORD_PUBLIC_KEY!,
-        }),
-        gateway: true,
+        adapter: createDiscordAdapter(),
         cards: false,
+        gateway: false,
       },
-      slack: createSlackAdapter({
-        botToken: process.env.SLACK_BOT_TOKEN!,
-        signingSecret: process.env.SLACK_SIGNING_SECRET!,
-      }),
+      slack: createSlackAdapter(), // Plain adapter uses defaults
     },
   },
 })
@@ -170,7 +146,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Start a persistent Gateway WebSocket listener. Required for receiving DMs, @mentions, and reactions on platforms that support it (e.g. Discord). Set to `false` for serverless deployments that only need slash commands via HTTP.',
+      'Start a persistent Gateway WebSocket listener for receiving DMs, @mentions, and reactions. Set to `false` for serverless deployments that only need webhook-based interactions.',
   },
   {
     name: 'cards',
@@ -198,7 +174,7 @@ const agent = new Agent({
 ]}
 />
 
-## `ChannelHandlers`
+## Handlers
 
 Override built-in event handlers. Each handler can be:
 
@@ -216,10 +192,7 @@ const agent = new Agent({
   model: 'openai/gpt-5.4',
   channels: {
     adapters: {
-      slack: createSlackAdapter({
-        botToken: process.env.SLACK_BOT_TOKEN!,
-        signingSecret: process.env.SLACK_SIGNING_SECRET!,
-      }),
+      slack: createSlackAdapter(),
     },
     handlers: {
       onMention: async (thread, message, defaultHandler) => {
@@ -265,11 +238,11 @@ type ChannelHandler = (
 ) => Promise<void>
 ```
 
-## `inlineMedia`
+## Inline media
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that do not match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
-Glob patterns support:
+Supported glob patterns:
 
 | Pattern | Matches |
 | - | - |
@@ -280,19 +253,13 @@ Glob patterns support:
 
 For platforms with private CDNs (e.g. Slack), attachments are fetched with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the URL is passed directly to the model.
 
-## `inlineLinks`
+## Inline links
 
 Promotes URLs found in message text to file parts so the model can process linked content instead of seeing raw URL text. Each entry can be a string (domain pattern) or an object with a forced mime type.
 
-### String entries
+**String entries** match a domain and perform a HEAD request to detect the Content-Type. The resolved type is checked against `inlineMedia` and only matching types become file parts.
 
-Match a domain and perform a HEAD request to detect the Content-Type. The resolved type is checked against `inlineMedia`. Only matching types become file parts.
-
-### Object entries
-
-Match a domain and force a specific mime type. Skips the HEAD request and bypasses the `inlineMedia` check. This is useful for sites like YouTube where a HEAD request returns `text/html`, but the model treats the URL as video content.
-
-### `InlineLinkEntry` type
+**Object entries** match a domain and force a specific mime type, skipping the HEAD request and bypassing the `inlineMedia` check. This is useful for sites like YouTube where a HEAD request returns `text/html`, but the model treats the URL as video content.
 
 ```typescript
 type InlineLinkEntry =
@@ -300,33 +267,8 @@ type InlineLinkEntry =
   | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
 
-## `threadContext`
-
-Fetches recent messages from the platform when the agent is first mentioned in a thread, providing conversation context the agent would otherwise lack.
-
-<PropertiesTable
-  content={[
-  {
-    name: 'maxMessages',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '10',
-    description:
-      'Maximum number of recent platform messages to fetch. Set to `0` to disable. Only applies to non-DM threads where the agent is not already subscribed.',
-  },
-]}
-/>
-
-After the first mention, the agent subscribes to the thread and receives messages via Mastra memory. Subsequent messages do not re-fetch from the platform.
-
-## `chatOptions`
-
-Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). These control advanced behavior not exposed by Mastra's `ChannelConfig`.
-
-The `adapters`, `state`, and `userName` fields are managed by Mastra and excluded from this passthrough.
-
 ## Related
 
 - [Channels guide](/docs/agents/channels) — concepts, quickstart, and platform setup
 - [Agent class](/reference/agents/agent) — constructor parameters and methods
-- [Chat SDK documentation](https://chat-sdk.dev) — adapter configuration and platform setup
+- [Chat SDK adapters](https://chat-sdk.dev/adapters) — adapter configuration and platform setup
