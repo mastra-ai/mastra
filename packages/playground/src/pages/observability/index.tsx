@@ -25,7 +25,7 @@ import {
 } from '@mastra/playground-ui';
 
 import { BookIcon, EyeIcon } from 'lucide-react';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
@@ -203,11 +203,23 @@ export default function Observability() {
     return result;
   }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
 
-  // Sync URL traceId to state
-  if (traceId && traceId !== selectedTraceId) {
-    setSelectedTraceId(traceId);
-    setDialogIsOpen(true);
-  }
+  useEffect(() => {
+    if (traceId) {
+      if (traceId !== selectedTraceId) {
+        setSelectedTraceId(traceId);
+      }
+      setDialogIsOpen(true);
+      return;
+    }
+
+    if (selectedTraceId) {
+      setSelectedTraceId(undefined);
+    }
+
+    if (dialogIsOpen) {
+      setDialogIsOpen(false);
+    }
+  }, [dialogIsOpen, selectedTraceId, traceId]);
 
   const agentOptions: EntityOptions[] = useMemo(
     () =>
@@ -274,10 +286,11 @@ export default function Observability() {
 
   const handleTraceClick = (id: string) => {
     if (id === selectedTraceId) {
-      return setSelectedTraceId(undefined);
+      void navigate('/observability');
+      return;
     }
-    setSelectedTraceId(id);
-    setDialogIsOpen(true);
+
+    void navigate(`/observability?traceId=${encodeURIComponent(id)}`);
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
