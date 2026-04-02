@@ -206,7 +206,7 @@ export abstract class ThreadManager<TManager = unknown> {
 
     const filteredState: BrowserState = {
       tabs: filteredTabs,
-      activeTabIndex: Math.min(state.activeTabIndex, filteredTabs.length - 1),
+      activeTabIndex: Math.max(0, Math.min(state.activeTabIndex, filteredTabs.length - 1)),
     };
 
     const session = this.sessions.get(threadId);

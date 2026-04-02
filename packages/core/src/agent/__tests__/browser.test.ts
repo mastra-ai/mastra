@@ -73,58 +73,7 @@ describe('Agent browser integration', () => {
   });
 
   describe('listTools', () => {
-    it('includes browser tools when browser is configured', () => {
-      const browser = createMockBrowser(['browser_navigate', 'browser_snapshot']);
-      const agent = new Agent({
-        id: 'test-agent' as const,
-        name: 'test-agent',
-        instructions: 'test',
-        model: createMockModel(),
-        browser,
-      });
-
-      const tools = agent.listTools() as Record<string, any>;
-      expect(tools).toHaveProperty('browser_navigate');
-      expect(tools).toHaveProperty('browser_snapshot');
-    });
-
-    it('does not include browser tools when no browser configured', () => {
-      const agent = new Agent({
-        id: 'test-agent' as const,
-        name: 'test-agent',
-        instructions: 'test',
-        model: createMockModel(),
-      });
-
-      const tools = agent.listTools() as Record<string, any>;
-      expect(tools).not.toHaveProperty('browser_navigate');
-    });
-
-    it('agent tools take precedence over browser tools', () => {
-      const agentTool = createTool({
-        id: 'browser_navigate',
-        description: 'Agent override of navigate',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ overridden: z.boolean() }),
-        execute: async () => ({ overridden: true }),
-      });
-
-      const browser = createMockBrowser(['browser_navigate']);
-      const agent = new Agent({
-        id: 'test-agent' as const,
-        name: 'test-agent',
-        instructions: 'test',
-        model: createMockModel(),
-        tools: { browser_navigate: agentTool },
-        browser,
-      });
-
-      const tools = agent.listTools() as Record<string, any>;
-      // Agent tool should win over browser tool (spread order: { ...browser.tools, ...baseTools })
-      expect(tools.browser_navigate.description).toBe('Agent override of navigate');
-    });
-
-    it('merges browser tools with agent tools', () => {
+    it('does not include browser tools (they are added at execution time)', () => {
       const agentTool = createTool({
         id: 'my_tool',
         description: 'Custom tool',
@@ -144,9 +93,11 @@ describe('Agent browser integration', () => {
       });
 
       const tools = agent.listTools() as Record<string, any>;
+      // listTools only returns agent-configured tools
       expect(Object.keys(tools)).toContain('my_tool');
-      expect(Object.keys(tools)).toContain('browser_navigate');
-      expect(Object.keys(tools)).toContain('browser_click');
+      // Browser tools are NOT included in listTools - they're added at execution time
+      expect(Object.keys(tools)).not.toContain('browser_navigate');
+      expect(Object.keys(tools)).not.toContain('browser_click');
     });
   });
 });

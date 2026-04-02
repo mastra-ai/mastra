@@ -1379,18 +1379,8 @@ export class Agent<
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
-    const mergeBrowserTools = (baseTools: TTools): TTools => {
-      if (!this.#browser) {
-        return baseTools;
-      }
-      // Get browser tools from the provider
-      const browserTools = this.#browser.getTools();
-      return { ...browserTools, ...baseTools } as TTools;
-    };
-
     if (typeof this.#tools !== 'function') {
-      const tools = ensureToolProperties(this.#tools) as TTools;
-      return mergeBrowserTools(tools);
+      return ensureToolProperties(this.#tools) as TTools;
     }
 
     const result = this.#tools({
@@ -1413,7 +1403,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return mergeBrowserTools(ensureToolProperties(tools) as TTools);
+      return ensureToolProperties(tools) as TTools;
     });
   }
 
