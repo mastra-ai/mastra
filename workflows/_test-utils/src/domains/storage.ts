@@ -413,7 +413,6 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         const runId = `storage-resourceid-loop-test-${Date.now()}`;
         const resourceId = 'user-loop-456';
 
-        // Spy on persistWorkflowSnapshot to capture every intermediate call
         const storage = ctx.getStorage?.();
         const workflowsStore = storage ? await (storage as any).getStore('workflows') : undefined;
         const persistSpy = workflowsStore
@@ -423,9 +422,6 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         await execute(workflow, { value: 0 }, { runId, resourceId });
 
         if (persistSpy) {
-          // Every call to persistWorkflowSnapshot must include the correct resourceId.
-          // Before the fix, calls originating from executeLoop passed resourceId as undefined
-          // because executeEntry didn't forward it, which caused PG to overwrite it to NULL.
           const calls = persistSpy.mock.calls;
           expect(calls.length).toBeGreaterThan(0);
           for (const [args] of calls) {
