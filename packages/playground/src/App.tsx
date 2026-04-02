@@ -16,7 +16,6 @@ declare global {
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
-    MASTRA_THEME_TOGGLE?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
@@ -65,6 +64,7 @@ import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versio
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import { Login } from './pages/login';
+import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
@@ -205,6 +205,7 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
+      { path: '/logs', element: <Logs /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
@@ -340,12 +341,11 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

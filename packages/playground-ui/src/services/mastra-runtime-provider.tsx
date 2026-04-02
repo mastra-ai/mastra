@@ -377,6 +377,7 @@ export function MastraRuntimeProvider({
   settings,
   requestContext,
   modelVersion,
+  agentVersionId,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -388,6 +389,13 @@ export function MastraRuntimeProvider({
   useEffect(() => {
     setLegacyMessages(initializeMessageState(initialLegacyMessages || []));
   }, [initialLegacyMessages]);
+
+  const chatRequestContext = useMemo(() => {
+    if (!agentVersionId) return undefined;
+    const ctx = new RequestContext();
+    ctx.set('agentVersionId', agentVersionId);
+    return ctx;
+  }, [agentVersionId]);
 
   const {
     messages,
@@ -406,6 +414,7 @@ export function MastraRuntimeProvider({
   } = useChat({
     agentId,
     initialMessages,
+    requestContext: chatRequestContext,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -688,6 +697,9 @@ export function MastraRuntimeProvider({
     Object.entries(requestContext ?? {}).forEach(([key, value]) => {
       requestContextInstance.set(key, value);
     });
+    if (agentVersionId) {
+      requestContextInstance.set('agentVersionId', agentVersionId);
+    }
 
     try {
       if (isSupportedModel) {

@@ -101,7 +101,11 @@ export function TraceDialog({
     if (initialSpanId) {
       setSelectedSpanId(initialSpanId);
       setDialogIsOpen(true);
+      return;
     }
+
+    setSelectedSpanId(undefined);
+    setDialogIsOpen(false);
   }, [initialSpanId]);
 
   useEffect(() => {
@@ -141,11 +145,19 @@ export function TraceDialog({
 
   const handleSpanClick = (id: string) => {
     if (selectedSpanId === id) {
+      if (traceId) {
+        navigate(computeTraceLink(traceId));
+      }
       setSelectedSpanId(undefined);
-    } else {
-      setSelectedSpanId(id);
-      setSpanDialogDefaultTab('details');
-      setDialogIsOpen(true);
+      return;
+    }
+
+    setSelectedSpanId(id);
+    setSpanDialogDefaultTab('details');
+    setDialogIsOpen(true);
+
+    if (traceId) {
+      navigate(computeTraceLink(traceId, id));
     }
   };
 
