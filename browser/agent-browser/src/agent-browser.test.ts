@@ -170,6 +170,29 @@ describe('AgentBrowser', () => {
       const custom = new AgentBrowser({ headless: false, timeout: 5000 });
       expect(custom.status).toBe('pending');
     });
+
+    it('forces threadIsolation to "none" when cdpUrl is provided', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create browser with cdpUrl and browser isolation (should be forced to 'none')
+      const browserWithCdp = new AgentBrowser({
+        cdpUrl: 'ws://localhost:9222',
+        threadIsolation: 'browser',
+      });
+
+      // The thread manager should have 'none' isolation, not 'browser'
+      expect(browserWithCdp['threadManager'].getIsolationMode()).toBe('none');
+
+      warnSpy.mockRestore();
+    });
+
+    it('respects threadIsolation when no cdpUrl is provided', () => {
+      const browserWithIsolation = new AgentBrowser({
+        threadIsolation: 'browser',
+      });
+
+      expect(browserWithIsolation['threadManager'].getIsolationMode()).toBe('browser');
+    });
   });
 
   describe('status lifecycle', () => {

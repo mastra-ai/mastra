@@ -121,6 +121,25 @@ describe('StagehandBrowser', () => {
       });
       expect(customBrowser.name).toBe('StagehandBrowser');
     });
+
+    it('forces threadIsolation to "none" when cdpUrl is provided', () => {
+      // Create browser with cdpUrl and browser isolation (should be forced to 'none')
+      const browserWithCdp = new StagehandBrowser({
+        cdpUrl: 'ws://localhost:9222',
+        threadIsolation: 'browser',
+      });
+
+      // The thread manager should have 'none' isolation, not 'browser'
+      expect(browserWithCdp['threadManager'].getIsolationMode()).toBe('none');
+    });
+
+    it('respects threadIsolation when no cdpUrl is provided', () => {
+      const browserWithIsolation = new StagehandBrowser({
+        threadIsolation: 'browser',
+      });
+
+      expect(browserWithIsolation['threadManager'].getIsolationMode()).toBe('browser');
+    });
   });
 
   describe('lifecycle', () => {

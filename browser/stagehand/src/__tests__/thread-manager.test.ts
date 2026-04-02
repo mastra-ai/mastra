@@ -153,8 +153,7 @@ describe('StagehandThreadManager', () => {
         isolation: 'browser',
       });
 
-      await expect(threadManager.getManagerForThread('thread-1'))
-        .rejects.toThrow('createStagehand factory not set');
+      await expect(threadManager.getManagerForThread('thread-1')).rejects.toThrow('createStagehand factory not set');
     });
 
     it('setCreateStagehand allows setting factory later', async () => {

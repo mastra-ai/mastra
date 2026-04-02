@@ -56,10 +56,21 @@ export class StagehandBrowser extends MastraBrowser {
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
 
+    // Determine thread isolation mode
+    // When connecting to an external browser via cdpUrl, 'browser' isolation doesn't make sense
+    // because we can't spawn new browser instances - we're connecting to an existing one
+    let effectiveIsolation = config.threadIsolation ?? 'browser';
+    if (config.cdpUrl && effectiveIsolation === 'browser') {
+      this.logger.warn?.(
+        'Thread isolation mode "browser" is not supported when connecting via cdpUrl. ' +
+          'Falling back to "none" (shared browser connection).',
+      );
+      effectiveIsolation = 'none';
+    }
+
     // Initialize thread manager
-    // Default to 'browser' isolation so each thread gets its own browser instance
     this.threadManager = new StagehandThreadManager({
-      isolation: config.threadIsolation ?? 'browser',
+      isolation: effectiveIsolation,
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
       onSessionCreated: () => {
@@ -126,9 +137,12 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // Handle CDP URL for local browser with custom endpoint
+    // Stagehand requires a WebSocket URL, so resolve HTTP URLs to WebSocket URLs
     if (config.cdpUrl && config.env !== 'BROWSERBASE') {
+      const resolvedUrl = await this.resolveCdpUrl(config.cdpUrl);
+      const wsUrl = await this.resolveWebSocketUrl(resolvedUrl);
       stagehandOptions.localBrowserLaunchOptions = {
-        cdpUrl: await this.resolveCdpUrl(config.cdpUrl),
+        cdpUrl: wsUrl,
         headless: config.headless,
       };
     } else if (config.headless !== undefined && config.env !== 'BROWSERBASE') {

@@ -6,12 +6,15 @@ import { Memory } from '@mastra/memory';
 
 const memory = new Memory();
 
+// Browser-Use CDP URL for testing external browser connections
+const CDP_URL = process.env.BROWSER_CDP_URL;
+
 export const stagehandBrowserToolset = new StagehandBrowser({
   env: 'LOCAL',
+  cdpUrl: CDP_URL,
   model: 'openai/gpt-5.2',
-  headless: false,
+  headless: !CDP_URL, // Use headed mode when connecting to external browser
   verbose: 1,
-  threadIsolation: 'none',
 });
 
 export const stagehandAgent = new Agent({

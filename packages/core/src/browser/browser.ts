@@ -420,6 +420,51 @@ export abstract class MastraBrowser extends MastraBase {
     return typeof cdpUrl === 'function' ? await cdpUrl() : cdpUrl;
   }
 
+  /**
+   * Resolve an HTTP CDP endpoint to a WebSocket URL by fetching /json/version.
+   *
+   * Cloud browser providers (Browser-Use, Browserless, etc.) often expose HTTP
+   * endpoints that need to be resolved to WebSocket URLs for direct CDP connections.
+   *
+   * - If the URL starts with `ws://` or `wss://`, returns it as-is
+   * - If the URL starts with `http://` or `https://`, fetches /json/version to get webSocketDebuggerUrl
+   *
+   * @param url - CDP URL (HTTP or WebSocket)
+   * @returns WebSocket URL for CDP connection
+   */
+  protected async resolveWebSocketUrl(url: string): Promise<string> {
+    // Already a WebSocket URL
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      return url;
+    }
+
+    // HTTP URL - fetch /json/version to get the WebSocket URL
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const baseUrl = url.replace(/\/$/, ''); // Remove trailing slash
+      const versionUrl = `${baseUrl}/json/version`;
+
+      this.logger.debug?.(`Resolving WebSocket URL from ${versionUrl}`);
+
+      const response = await fetch(versionUrl);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+      if (!data.webSocketDebuggerUrl) {
+        throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
+      }
+
+      this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
+      return data.webSocketDebuggerUrl;
+    }
+
+    // Unknown protocol - return as-is and let the caller handle it
+    return url;
+  }
+
   // ---------------------------------------------------------------------------
   // Disconnection Detection & Error Handling
   // ---------------------------------------------------------------------------

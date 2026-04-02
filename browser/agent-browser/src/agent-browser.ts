@@ -61,10 +61,21 @@ export class AgentBrowser extends MastraBrowser {
       this.defaultTimeout = config.timeout;
     }
 
+    // Determine thread isolation mode
+    // When connecting to an external browser via cdpUrl, 'browser' isolation doesn't make sense
+    // because we can't spawn new browser instances - we're connecting to an existing one
+    let effectiveIsolation = config.threadIsolation ?? 'browser';
+    if (config.cdpUrl && effectiveIsolation === 'browser') {
+      this.logger.warn?.(
+        'Thread isolation mode "browser" is not supported when connecting via cdpUrl. ' +
+          'Falling back to "none" (shared browser connection).',
+      );
+      effectiveIsolation = 'none';
+    }
+
     // Initialize thread manager
-    // Default to 'browser' isolation so each thread gets its own browser instance
     this.threadManager = new AgentBrowserThreadManager({
-      isolation: config.threadIsolation ?? 'browser',
+      isolation: effectiveIsolation,
       browserConfig: config,
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,

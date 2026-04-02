@@ -5,8 +5,12 @@ import { Memory } from '@mastra/memory';
 
 const memory = new Memory();
 
+// Browser-Use CDP URL for testing external browser connections
+const CDP_URL = process.env.BROWSER_CDP_URL;
+
 export const agentBrowserToolset = new AgentBrowser({
-  headless: false, // Changed to true for testing screencast in headless mode
+  cdpUrl: CDP_URL,
+  headless: !CDP_URL, // Use headed mode when connecting to external browser
   timeout: 15_000,
 });
 
