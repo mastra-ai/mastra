@@ -31,6 +31,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
+        aria-expanded={isExpanded}
         className="flex items-center gap-2 w-full px-3 py-1 text-left hover:bg-surface3 transition-colors shrink-0"
       >
         <ChevronUp

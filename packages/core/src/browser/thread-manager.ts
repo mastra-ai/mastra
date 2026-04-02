@@ -128,8 +128,8 @@ export abstract class ThreadManager<TManager = unknown> {
   /**
    * Get or create a session for a thread, and return the browser manager for that thread.
    *
-   * For 'none' mode, returns the shared manager.
-   * For 'browser' mode, creates/returns a dedicated manager for the thread.
+   * For 'shared' scope, returns the shared manager.
+   * For 'thread' scope, creates/returns a dedicated manager for the thread.
    *
    * @param threadId - Thread identifier (uses DEFAULT_THREAD_ID if not provided)
    * @returns The browser manager for the thread
@@ -235,7 +235,7 @@ export abstract class ThreadManager<TManager = unknown> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get the shared browser manager (used for 'none' mode and default thread).
+   * Get the shared browser manager (used for 'shared' scope and default thread).
    */
   protected abstract getSharedManager(): TManager;
 

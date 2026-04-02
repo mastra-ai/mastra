@@ -132,18 +132,21 @@ describe('AgentBrowserThreadManager', () => {
 
     it('destroyAllSessions clears all sessions', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        scope: 'shared',
-        browserConfig: {},
+        scope: 'thread',
+        browserConfig: { headless: true },
       });
-      threadManager.setSharedManager({ fake: true } as any);
 
       await threadManager.getManagerForThread('thread-1');
       await threadManager.getManagerForThread('thread-2');
+
+      expect(threadManager.hasSession('thread-1')).toBe(true);
+      expect(threadManager.hasSession('thread-2')).toBe(true);
 
       await threadManager.destroyAllSessions();
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
       expect(threadManager.hasSession('thread-2')).toBe(false);
+      expect(threadManager.hasActiveThreadBrowsers()).toBe(false);
     });
   });
 
