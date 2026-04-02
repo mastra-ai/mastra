@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
+import { useCloseBrowser } from '../hooks/use-close-browser';
 
 // TODO: Consider splitting high-frequency frame data into a separate context or ref-based store
 // to prevent consumers that only need low-frequency state (hasSession, viewMode) from rerendering
@@ -278,33 +279,23 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     setLatestFrameState(null);
   }, []);
 
-  // Close browser state
-  const [isClosing, setIsClosing] = useState(false);
+  // Close browser via TanStack Query mutation
+  const closeBrowserMutation = useCloseBrowser();
 
-  // TODO: Move this to a TanStack Query mutation hook for consistency with the codebase.
-  // Currently using raw fetch because this is a browser-specific endpoint not exposed via MastraClient.
   const closeBrowser = useCallback(async () => {
-    if (isClosing || !agentId) return;
-    setIsClosing(true);
+    if (closeBrowserMutation.isPending || !agentId) return;
 
     try {
-      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId }),
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to close browser: ${response.status}`);
-      }
+      await closeBrowserMutation.mutateAsync({ agentId, threadId });
       // Only end session after successful API call
       endSession();
-    } catch (error) {
-      console.error('[BrowserSession] Error closing browser:', error);
+    } catch {
+      // Error already logged by mutation hook
       // Don't end session on failure - browser may still be running
-    } finally {
-      setIsClosing(false);
     }
-  }, [agentId, threadId, isClosing, endSession]);
+  }, [agentId, threadId, closeBrowserMutation, endSession]);
+
+  const isClosing = closeBrowserMutation.isPending;
 
   const value = useMemo(
     () => ({
@@ -312,7 +303,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       viewMode,
       isPanelOpen: viewMode === 'modal',
       isInSidebar: viewMode === 'sidebar',
-      isActive: viewMode === 'modal', // backward compat
+      isActive: hasSession, // backward compat - reflects session activity, not view mode
       status,
       currentUrl,
       latestFrame,

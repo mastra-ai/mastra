@@ -1,6 +1,27 @@
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from './types.js';
 
+// Valid CDP mouse event types
+const VALID_MOUSE_EVENTS = new Set(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel']);
+
+// Valid CDP keyboard event types
+const VALID_KEYBOARD_EVENTS = new Set(['keyDown', 'keyUp', 'char']);
+
+// Input dispatch queue per agent+thread to serialize input events
+const inputQueues = new Map<string, Promise<void>>();
+
+/**
+ * Serialize input dispatch to maintain event ordering.
+ * Input events must be processed in order to avoid race conditions.
+ */
+function enqueueInput(key: string, fn: () => Promise<void>): void {
+  const current = inputQueues.get(key) ?? Promise.resolve();
+  const next = current.then(fn).catch(() => {
+    // Errors are handled inside fn, just ensure chain continues
+  });
+  inputQueues.set(key, next);
+}
+
 /**
  * Map of key names to Windows virtual key codes.
  * Required for non-printable keys (Enter, Tab, Arrow keys, etc.)
@@ -101,22 +122,33 @@ export function handleInputMessage(
     return;
   }
 
+  // Serialize input dispatch per agent+thread to maintain event ordering
+  const queueKey = `${agentId}:${threadId ?? 'default'}`;
+
   switch (message.type) {
     case 'mouse':
-      void injectMouse(toolset, message, threadId).catch(err => {
-        if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset, threadId);
-        } else if (!isExpectedInjectionError(err)) {
-          console.warn('[InputHandler] Mouse injection error:', err);
+      enqueueInput(queueKey, async () => {
+        try {
+          await injectMouse(toolset, message, threadId);
+        } catch (err) {
+          if (isDisconnectionError(err)) {
+            notifyBrowserClosed(toolset, threadId);
+          } else if (!isExpectedInjectionError(err)) {
+            console.warn('[InputHandler] Mouse injection error:', err);
+          }
         }
       });
       break;
     case 'keyboard':
-      void injectKeyboard(toolset, message, threadId).catch(err => {
-        if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset, threadId);
-        } else if (!isExpectedInjectionError(err)) {
-          console.warn('[InputHandler] Keyboard injection error:', err);
+      enqueueInput(queueKey, async () => {
+        try {
+          await injectKeyboard(toolset, message, threadId);
+        } catch (err) {
+          if (isDisconnectionError(err)) {
+            notifyBrowserClosed(toolset, threadId);
+          } else if (!isExpectedInjectionError(err)) {
+            console.warn('[InputHandler] Keyboard injection error:', err);
+          }
         }
       });
       break;
@@ -228,6 +260,7 @@ async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage,
 
 /**
  * Type guard to validate incoming messages.
+ * Validates structure and rejects invalid event types at the boundary.
  */
 function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
   if (typeof msg !== 'object' || msg === null) {
@@ -237,11 +270,43 @@ function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
   const typed = msg as Record<string, unknown>;
 
   if (typed.type === 'mouse') {
-    return typeof typed.eventType === 'string' && typeof typed.x === 'number' && typeof typed.y === 'number';
+    // Validate mouse message structure
+    if (typeof typed.eventType !== 'string' || !VALID_MOUSE_EVENTS.has(typed.eventType)) {
+      return false;
+    }
+    if (typeof typed.x !== 'number' || typeof typed.y !== 'number') {
+      return false;
+    }
+    // Optional fields validation
+    if (typed.button !== undefined && typeof typed.button !== 'string') {
+      return false;
+    }
+    if (typed.deltaX !== undefined && typeof typed.deltaX !== 'number') {
+      return false;
+    }
+    if (typed.deltaY !== undefined && typeof typed.deltaY !== 'number') {
+      return false;
+    }
+    return true;
   }
 
   if (typed.type === 'keyboard') {
-    return typeof typed.eventType === 'string';
+    // Validate keyboard message structure
+    if (typeof typed.eventType !== 'string' || !VALID_KEYBOARD_EVENTS.has(typed.eventType)) {
+      return false;
+    }
+    // At least one of key, code, or text should be present for meaningful input
+    const hasKey = typeof typed.key === 'string';
+    const hasCode = typeof typed.code === 'string';
+    const hasText = typeof typed.text === 'string';
+    if (!hasKey && !hasCode && !hasText) {
+      return false;
+    }
+    // Optional modifiers validation
+    if (typed.modifiers !== undefined && typeof typed.modifiers !== 'number') {
+      return false;
+    }
+    return true;
   }
 
   return false;
