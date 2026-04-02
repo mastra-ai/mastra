@@ -297,6 +297,11 @@ describe('AISDKV5InputStream', () => {
             },
           },
         },
+        providerMetadata: {
+          testProvider: {
+            testKey: 'testValue',
+          },
+        },
         type: 'finish',
       },
     });

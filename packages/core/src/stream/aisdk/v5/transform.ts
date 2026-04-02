@@ -323,7 +323,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           metadata: {
             providerMetadata: value.providerMetadata,
           },
-          messages,
+          ...(messages !== undefined && { messages }),
           ...rest,
         },
       };
