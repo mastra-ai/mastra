@@ -47,7 +47,7 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
     const data = (await response.json()) as CohereRerankingResponse;
     const relevanceScore = data.results[0]?.relevance_score;
 
-    if (!relevanceScore) {
+    if (relevanceScore == null) {
       throw new Error('No relevance score found on Cohere response');
     }
 

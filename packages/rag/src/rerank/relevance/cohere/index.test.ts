@@ -131,6 +131,25 @@ describe('CohereRelevanceScorer', () => {
     await expect(scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT)).rejects.toThrowError();
   });
 
+  it('should return 0 when the API returns a relevance_score of 0', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        results: [{ index: 0, relevance_score: 0 }],
+      }),
+      text: vi.fn().mockResolvedValue(''),
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue(mockResponse);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const score = await scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT);
+
+    // A relevance score of 0 is valid — it means the document is irrelevant,
+    // not that the score is missing.
+    expect(score).toBe(0);
+  });
+
   it.each(invalidResponseCases)('should throw error for malformed response data: $name', async ({ responseData }) => {
     // Arrange: Create CohereRelevanceScorer instance with test model
     const scorer = new CohereRelevanceScorer('test-model', 'test-api-key');
