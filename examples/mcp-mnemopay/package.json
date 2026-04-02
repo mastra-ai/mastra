@@ -1,0 +1,37 @@
+{
+  "name": "examples-mcp-mnemopay",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "npx bun src/index.ts",
+    "demo:memory": "npx bun src/scenarios/memory-demo.ts",
+    "demo:economic": "npx bun src/scenarios/economic-agent.ts",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "AI agent with economic memory powered by MnemoPay via MCP",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "chalk": "^5.4.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "mastra": "latest",
+    "tsx": "^4.21.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/mcp": "link:../../packages/mcp",
+      "mastra": "link:../../packages/cli",
+      "qs": "^6.14.1"
+    }
+  },
+  "version": "0.0.1"
+}
