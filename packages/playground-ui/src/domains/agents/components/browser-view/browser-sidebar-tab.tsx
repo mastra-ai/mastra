@@ -1,5 +1,5 @@
 import { Globe, Maximize2, Minimize2, X } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
@@ -48,27 +48,11 @@ interface BrowserSidebarTabProps {
  * Shows the screencast, URL bar, and tool call history in a vertical scrolling layout.
  */
 export function BrowserSidebarTab({ agentId, threadId }: BrowserSidebarTabProps) {
-  const { status, currentUrl, endSession, setViewMode } = useBrowserSession();
-  const [isClosing, setIsClosing] = useState(false);
+  const { status, currentUrl, closeBrowser, setViewMode } = useBrowserSession();
 
   const handleClose = useCallback(async () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    endSession();
-
-    try {
-      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('[BrowserSidebarTab] Failed to close browser:', response.statusText);
-      }
-    } catch (error) {
-      console.error('[BrowserSidebarTab] Error closing browser:', error);
-    } finally {
-      setIsClosing(false);
-    }
-  }, [agentId, isClosing, endSession]);
+    await closeBrowser();
+  }, [closeBrowser]);
 
   const handleCenterView = useCallback(() => {
     setViewMode('modal');
@@ -79,7 +63,7 @@ export function BrowserSidebarTab({ agentId, threadId }: BrowserSidebarTabProps)
   }, [setViewMode]);
 
   const handleFirstFrame = useCallback(() => {
-    setIsClosing(false);
+    // No-op: isClosing is now managed by context
   }, []);
 
   const statusConfig = getStatusBadgeConfig(status);

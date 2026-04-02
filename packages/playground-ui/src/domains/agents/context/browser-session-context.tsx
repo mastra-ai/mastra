@@ -21,14 +21,18 @@ interface BrowserSessionContextValue {
   latestFrame: string | null;
   /** Viewport dimensions from the browser */
   viewport: { width: number; height: number } | null;
+  /** Whether a close operation is in progress */
+  isClosing: boolean;
   /** Set the view mode */
   setViewMode: (mode: BrowserViewMode) => void;
   /** Open the browser panel modal (sets viewMode to 'modal') */
   show: () => void;
   /** Close overlays (sets viewMode to 'collapsed') */
   hide: () => void;
-  /** End the browser session completely */
+  /** End the browser session completely (local state only) */
   endSession: () => void;
+  /** Close the browser via API and end session (waits for success before updating state) */
+  closeBrowser: () => Promise<void>;
   /** Send a message to the browser (for input injection) */
   sendMessage: (data: string) => void;
   /** Connect to the browser stream */
@@ -245,6 +249,30 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     setLatestFrameState(null);
   }, []);
 
+  // Close browser state
+  const [isClosing, setIsClosing] = useState(false);
+
+  const closeBrowser = useCallback(async () => {
+    if (isClosing || !agentId) return;
+    setIsClosing(true);
+
+    try {
+      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to close browser: ${response.status}`);
+      }
+      // Only end session after successful API call
+      endSession();
+    } catch (error) {
+      console.error('[BrowserSession] Error closing browser:', error);
+      // Don't end session on failure - browser may still be running
+    } finally {
+      setIsClosing(false);
+    }
+  }, [agentId, isClosing, endSession]);
+
   const value = useMemo(
     () => ({
       hasSession,
@@ -256,10 +284,12 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       currentUrl,
       latestFrame,
       viewport,
+      isClosing,
       setViewMode,
       show,
       hide,
       endSession,
+      closeBrowser,
       sendMessage,
       connect,
       disconnect,
@@ -271,10 +301,12 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       currentUrl,
       latestFrame,
       viewport,
+      isClosing,
       setViewMode,
       show,
       hide,
       endSession,
+      closeBrowser,
       sendMessage,
       connect,
       disconnect,

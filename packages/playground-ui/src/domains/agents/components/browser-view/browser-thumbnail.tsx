@@ -22,7 +22,7 @@ interface BrowserThumbnailProps {
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
 export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: BrowserThumbnailProps) {
-  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, endSession } = useBrowserSession();
+  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
@@ -73,13 +73,8 @@ export function BrowserThumbnail({ agentId, threadId, agentName = 'Agent' }: Bro
   }, [setViewMode]);
 
   const handleClose = useCallback(async () => {
-    endSession();
-    try {
-      await fetch(`/api/agents/${agentId}/browser/close`, { method: 'POST' });
-    } catch (error) {
-      console.error('[BrowserThumbnail] Error closing browser:', error);
-    }
-  }, [agentId, endSession]);
+    await closeBrowser();
+  }, [closeBrowser]);
 
   // Don't render if no browser session or if showing in other modes
   if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {

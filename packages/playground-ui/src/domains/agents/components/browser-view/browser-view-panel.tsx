@@ -55,8 +55,7 @@ interface BrowserViewPanelProps {
  * Visibility is controlled via viewMode in browser session context.
  */
 export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
-  const { viewMode, status, currentUrl, hide, endSession, setViewMode } = useBrowserSession();
-  const [isClosing, setIsClosing] = useState(false);
+  const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
   const [isVisible, setIsVisible] = useState(false);
 
   const isPanelOpen = viewMode === 'modal';
@@ -71,23 +70,8 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
   }, [isPanelOpen]);
 
   const handleClose = useCallback(async () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    endSession();
-
-    try {
-      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('[BrowserViewPanel] Failed to close browser:', response.statusText);
-      }
-    } catch (error) {
-      console.error('[BrowserViewPanel] Error closing browser:', error);
-    } finally {
-      setIsClosing(false);
-    }
-  }, [agentId, isClosing, endSession]);
+    await closeBrowser();
+  }, [closeBrowser]);
 
   const handleMinimize = useCallback(() => {
     hide();
@@ -98,7 +82,7 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
   }, [setViewMode]);
 
   const handleFirstFrame = useCallback(() => {
-    setIsClosing(false);
+    // No-op: isClosing is now managed by context
   }, []);
 
   const handleOpenExternal = useCallback(() => {
