@@ -11,7 +11,7 @@ import { createWorkspaceTools } from '../tools';
 describe('workspace_lsp_inspect', () => {
   let tempDir: string;
   let workspace: Workspace;
-  let tools: ReturnType<typeof createWorkspaceTools>;
+  let tools: Awaited<ReturnType<typeof createWorkspaceTools>>;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lsp-inspect-test-'));
@@ -20,7 +20,7 @@ describe('workspace_lsp_inspect', () => {
       name: 'Test',
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    tools = createWorkspaceTools(workspace);
+    tools = await createWorkspaceTools(workspace);
   });
 
   afterEach(async () => {
