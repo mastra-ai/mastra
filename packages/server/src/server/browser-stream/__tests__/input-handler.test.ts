@@ -183,16 +183,4 @@ describe('handleInputMessage', () => {
       });
     });
   });
-
-  describe('relaunch input', () => {
-    it('should call ensureReady and restore URL on relaunch', async () => {
-      const message = JSON.stringify({ type: 'relaunch' });
-
-      handleInputMessage(message, getToolset, 'agent-1');
-
-      await vi.waitFor(() => {
-        expect(mockToolset.ensureReady).toHaveBeenCalled();
-      });
-    });
-  });
 });

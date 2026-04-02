@@ -120,11 +120,6 @@ export function handleInputMessage(
         }
       });
       break;
-    case 'relaunch':
-      void relaunchBrowser(toolset, threadId).catch(err => {
-        console.warn('[InputHandler] Browser relaunch error:', err);
-      });
-      break;
   }
 }
 
@@ -173,30 +168,6 @@ function notifyBrowserClosed(toolset: MastraBrowser): void {
   const browser = toolset as unknown as { handleBrowserDisconnected?: () => void };
   if (typeof browser.handleBrowserDisconnected === 'function') {
     browser.handleBrowserDisconnected();
-  }
-}
-
-/**
- * Relaunch the browser by calling ensureReady().
- * This is triggered when the user clicks the "Browser Closed" overlay.
- * If there was a previous URL, navigate back to it.
- */
-async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promise<void> {
-  const lastState = toolset.getLastBrowserState(threadId);
-  const firstUrl = lastState?.tabs[0]?.url;
-  console.info('[InputHandler] Relaunching browser', { hasRestoreTarget: Boolean(firstUrl) });
-
-  // Set the current thread before ensuring ready so the session is created for this thread
-  if (threadId) {
-    toolset.setCurrentThread(threadId);
-  }
-
-  await toolset.ensureReady();
-
-  // Note: Full state restoration (multiple tabs) happens in createSession.
-  // This is a fallback for providers that don't support full restoration.
-  if (firstUrl && !lastState?.tabs.slice(1).length) {
-    await toolset.navigateTo(firstUrl);
   }
 }
 
@@ -258,10 +229,6 @@ function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
 
   if (typed.type === 'keyboard') {
     return typeof typed.eventType === 'string';
-  }
-
-  if (typed.type === 'relaunch') {
-    return true;
   }
 
   return false;
