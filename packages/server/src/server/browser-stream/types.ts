@@ -129,5 +129,5 @@ export interface ViewerRegistryLike {
     threadId?: string,
   ): Promise<void>;
   removeViewer(viewerKey: string, ws: BrowserStreamWebSocket): Promise<void>;
-  closeBrowserSession(agentId: string): Promise<void>;
+  closeBrowserSession(viewerKey: string): Promise<void>;
 }

@@ -440,20 +440,34 @@ export abstract class MastraBrowser extends MastraBase {
 
       this.logger.debug?.(`Resolving WebSocket URL from ${versionUrl}`);
 
-      const response = await fetch(versionUrl);
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
-        );
-      }
+      // Add timeout to prevent hanging on dead endpoints
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const data = (await response.json()) as { webSocketDebuggerUrl?: string };
-      if (!data.webSocketDebuggerUrl) {
-        throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
-      }
+      try {
+        const response = await fetch(versionUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-      this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
-      return data.webSocketDebuggerUrl;
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+        if (!data.webSocketDebuggerUrl) {
+          throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
+        }
+
+        this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
+        return data.webSocketDebuggerUrl;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Timeout resolving WebSocket URL from ${versionUrl} (10s)`);
+        }
+        throw error;
+      }
     }
 
     // Unknown protocol - return as-is and let the caller handle it
@@ -776,8 +790,8 @@ export abstract class MastraBrowser extends MastraBase {
       return null;
     }
 
-    // Merge provided options with config screencast options
-    const mergedOptions = options ?? this.config.screencast;
+    // Merge config screencast defaults with call-site overrides
+    const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
     const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
