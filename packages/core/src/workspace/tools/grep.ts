@@ -245,7 +245,7 @@ Usage:
         workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
         'end',
       );
-      span.end({ resultCount: totalMatchCount });
+      span.end({ success: true, resultCount: totalMatchCount });
       return output;
     } catch (err) {
       span.error(err, { filePath: inputPath });

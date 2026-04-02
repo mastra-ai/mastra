@@ -33,7 +33,7 @@ export const mkdirTool = createTool({
       }
 
       await filesystem.mkdir(path, { recursive });
-      span.end();
+      span.end({ success: true });
       return `Created directory ${path}`;
     } catch (err) {
       span.error(err, { filePath: path });

@@ -29,11 +29,6 @@ Use this after starting a background command with execute_command (background: t
   }),
   execute: async ({ pid, tail, wait: shouldWait }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
-
-    if (!sandbox.processes) {
-      throw new SandboxFeatureNotSupportedError('processes');
-    }
-
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
 
     const span = startWorkspaceSpan(context, workspace, {
@@ -46,6 +41,9 @@ Use this after starting a background command with execute_command (background: t
     const toolCallId = context?.agent?.toolCallId;
 
     try {
+      if (!sandbox.processes) {
+        throw new SandboxFeatureNotSupportedError('processes');
+      }
       const handle = await sandbox.processes.get(pid);
       if (!handle) {
         span.end({ success: false });
@@ -101,7 +99,7 @@ Use this after starting a background command with execute_command (background: t
       const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
       if (!stdout && !stderr) {
-        span.end({ exitCode: handle.exitCode });
+        span.end({ success: true, exitCode: handle.exitCode });
         return '(no output yet)';
       }
 
@@ -120,7 +118,7 @@ Use this after starting a background command with execute_command (background: t
         parts.push('', `Exit code: ${handle.exitCode}`);
       }
 
-      span.end({ exitCode: handle.exitCode });
+      span.end({ success: true, exitCode: handle.exitCode });
       return parts.join('\n');
     } catch (err) {
       span.error(err);

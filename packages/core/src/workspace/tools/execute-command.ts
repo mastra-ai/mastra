@@ -129,7 +129,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       });
     }
 
-    span.end({ pid: Number(handle.pid) || undefined });
+    span.end({ success: true, pid: Number(handle.pid) || undefined });
     return `Started background process (PID: ${handle.pid})`;
   }
 
@@ -202,7 +202,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         toolCallId,
       },
     });
-    span.error(error, { command, exitCode: -1, durationMs: Date.now() - startedAt });
+    span.end({ success: false, command, exitCode: -1, durationMs: Date.now() - startedAt });
     const parts = [
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),

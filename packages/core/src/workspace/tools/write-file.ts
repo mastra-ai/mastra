@@ -37,7 +37,7 @@ export const writeFileTool = createTool({
       const size = Buffer.byteLength(content, 'utf-8');
       let output = `Wrote ${size} bytes to ${path}`;
       output += await getEditDiagnosticsText(workspace, path, content);
-      span.end({ bytesTransferred: size });
+      span.end({ success: true, bytesTransferred: size });
       return output;
     } catch (err) {
       span.error(err, { filePath: path });

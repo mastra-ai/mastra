@@ -25,7 +25,7 @@ export const indexContentTool = createTool({
 
     try {
       await workspace.index(path, content, { metadata });
-      span.end({ bytesTransferred: Buffer.byteLength(content, 'utf-8') });
+      span.end({ success: true, bytesTransferred: Buffer.byteLength(content, 'utf-8') });
       return `Indexed ${path}`;
     } catch (err) {
       span.error(err, { filePath: path });

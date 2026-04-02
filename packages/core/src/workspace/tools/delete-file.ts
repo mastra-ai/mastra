@@ -39,7 +39,7 @@ export const deleteFileTool = createTool({
         await filesystem.deleteFile(path);
       }
 
-      span.end();
+      span.end({ success: true });
       return `Deleted ${path}`;
     } catch (err) {
       span.error(err, { filePath: path });

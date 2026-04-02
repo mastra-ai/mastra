@@ -116,7 +116,7 @@ describe('startWorkspaceSpan', () => {
     handle.error(new Error('test'));
   });
 
-  it('end() sets success=true and records durationMs', async () => {
+  it('end() records durationMs and passes through attributes without implicit success', async () => {
     const { mockParentSpan, childSpans } = createMockSpan();
 
     const handle = startWorkspaceSpan({ tracing: { currentSpan: mockParentSpan } } as any, undefined, {
@@ -126,12 +126,27 @@ describe('startWorkspaceSpan', () => {
 
     // Small delay to ensure durationMs > 0
     await new Promise(r => setTimeout(r, 5));
-    handle.end({ resultCount: 3 });
+    handle.end({ success: true, resultCount: 3 });
 
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBe(true);
     expect(childSpans[0]!.endAttributes?.durationMs).toBeGreaterThanOrEqual(0);
     expect(childSpans[0]!.endAttributes?.resultCount).toBe(3);
+  });
+
+  it('end() does not set success when caller omits it', () => {
+    const { mockParentSpan, childSpans } = createMockSpan();
+
+    const handle = startWorkspaceSpan({ tracing: { currentSpan: mockParentSpan } } as any, undefined, {
+      category: 'filesystem',
+      operation: 'readFile',
+    });
+
+    handle.end({ bytesTransferred: 100 });
+
+    expect(childSpans[0]!.ended).toBe(true);
+    expect(childSpans[0]!.endAttributes?.success).toBeUndefined();
+    expect(childSpans[0]!.endAttributes?.bytesTransferred).toBe(100);
   });
 
   it('error() sets success=false and records the error', () => {

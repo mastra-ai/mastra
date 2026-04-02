@@ -83,7 +83,7 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
         workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
         'end',
       );
-      span.end({ resultCount: result.fileCount });
+      span.end({ success: true, resultCount: result.fileCount });
       return output;
     } catch (err) {
       span.error(err, { filePath: path });

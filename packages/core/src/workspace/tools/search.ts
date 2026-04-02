@@ -45,7 +45,7 @@ export const searchTool = createTool({
       lines.push('---');
       lines.push(`${results.length} result${results.length !== 1 ? 's' : ''} (${effectiveMode} search)`);
 
-      span.end({ resultCount: results.length });
+      span.end({ success: true, resultCount: results.length });
       return lines.join('\n');
     } catch (err) {
       span.error(err, { query });

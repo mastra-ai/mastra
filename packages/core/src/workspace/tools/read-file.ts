@@ -53,7 +53,7 @@ export const readFileTool = createTool({
           tokenLimit,
           'end',
         );
-        span.end({ bytesTransferred: stat.size }, output);
+        span.end({ success: true, bytesTransferred: stat.size });
         return output;
       }
 
@@ -63,7 +63,7 @@ export const readFileTool = createTool({
           tokenLimit,
           'end',
         );
-        span.end({ bytesTransferred: stat.size }, output);
+        span.end({ success: true, bytesTransferred: stat.size });
         return output;
       }
 
@@ -83,7 +83,7 @@ export const readFileTool = createTool({
       }
 
       const output = await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
-      span.end({ bytesTransferred: stat.size });
+      span.end({ success: true, bytesTransferred: stat.size });
       return output;
     } catch (err) {
       span.error(err, { filePath: path });

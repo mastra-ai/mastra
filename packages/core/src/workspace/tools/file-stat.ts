@@ -30,7 +30,7 @@ export const fileStatTool = createTool({
       const parts = [`${path}`, `Type: ${stat.type}`];
       if (stat.size !== undefined) parts.push(`Size: ${stat.size} bytes`);
       parts.push(`Modified: ${modifiedAt}`);
-      span.end({ bytesTransferred: stat.size });
+      span.end({ success: true, bytesTransferred: stat.size });
       return parts.join(' ');
     } catch (error) {
       if (error instanceof FileNotFoundError) {

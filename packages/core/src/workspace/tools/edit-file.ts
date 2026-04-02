@@ -56,7 +56,7 @@ Usage:
 
       let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
       output += await getEditDiagnosticsText(workspace, path, result.content);
-      span.end({ bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
+      span.end({ success: true, bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
       return output;
     } catch (error) {
       if (error instanceof StringNotFoundError) {

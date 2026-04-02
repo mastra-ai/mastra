@@ -53,7 +53,7 @@ export interface WorkspaceSpanHandle {
  * });
  * try {
  *   const result = await filesystem.readFile(path);
- *   span.end({ success: true, bytesTransferred: result.length });
+ *   span.end({ success: true, bytesTransferred: result.length }); // success must be explicit
  *   return result;
  * } catch (err) {
  *   span.error(err, { filePath: path });
@@ -94,7 +94,6 @@ export function startWorkspaceSpan(
       span?.end({
         output,
         attributes: {
-          success: true,
           durationMs: Date.now() - startTime,
           ...attrs,
         },

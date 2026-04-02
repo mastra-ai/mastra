@@ -19,11 +19,6 @@ Use this to stop a long-running background process that was started with execute
   }),
   execute: async ({ pid }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
-
-    if (!sandbox.processes) {
-      throw new SandboxFeatureNotSupportedError('processes');
-    }
-
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
 
     const span = startWorkspaceSpan(context, workspace, {
@@ -36,6 +31,9 @@ Use this to stop a long-running background process that was started with execute
     const toolCallId = context?.agent?.toolCallId;
 
     try {
+      if (!sandbox.processes) {
+        throw new SandboxFeatureNotSupportedError('processes');
+      }
       // Snapshot output before kill
       const handle = await sandbox.processes.get(pid);
 
@@ -82,7 +80,7 @@ Use this to stop a long-running background process that was started with execute
         }
       }
 
-      span.end({ exitCode: handle?.exitCode ?? 137 });
+      span.end({ success: true, exitCode: handle?.exitCode ?? 137 });
       return parts.join('\n');
     } catch (err) {
       span.error(err);
