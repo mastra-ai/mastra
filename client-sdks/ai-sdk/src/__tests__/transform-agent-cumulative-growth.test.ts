@@ -32,47 +32,75 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
 
     const emissions: any[] = [];
 
+    function collect(result: any) {
+      if (result) emissions.push(result);
+    }
+
     for (let step = 0; step < numSteps; step++) {
-      // Each step: emit a text delta + a tool call + a tool result
-      transformAgent(
-        makePayload('text-delta', runId, { text: `Step ${step} response text. `.repeat(10) }),
-        bufferedSteps,
+      // Each step: text delta + reasoning + source + file + tool call + tool result
+      collect(
+        transformAgent(
+          makePayload('text-delta', runId, { text: `Step ${step} response text. `.repeat(10) }),
+          bufferedSteps,
+        ),
       );
 
-      transformAgent(
-        makePayload('tool-call', runId, {
-          type: 'tool-call',
-          toolCallId: `call-${step}`,
-          toolName: `tool_${step}`,
-          args: { input: `data for step ${step}`.repeat(20) },
-          payload: { dynamic: false },
-        }),
-        bufferedSteps,
+      collect(
+        transformAgent(makePayload('reasoning-delta', runId, { text: `Reasoning for step ${step}. ` }), bufferedSteps),
       );
 
-      transformAgent(
-        makePayload('tool-result', runId, {
-          type: 'tool-result',
-          toolCallId: `call-${step}`,
-          toolName: `tool_${step}`,
-          result: { output: `Result from step ${step}. `.repeat(50) },
-          payload: { dynamic: false },
-        }),
-        bufferedSteps,
+      collect(
+        transformAgent(
+          makePayload('source', runId, { id: `src-${step}`, url: `https://example.com/${step}` }),
+          bufferedSteps,
+        ),
+      );
+
+      collect(
+        transformAgent(
+          makePayload('file', runId, { name: `file-${step}.txt`, content: `content-${step}` }),
+          bufferedSteps,
+        ),
+      );
+
+      collect(
+        transformAgent(
+          makePayload('tool-call', runId, {
+            type: 'tool-call',
+            toolCallId: `call-${step}`,
+            toolName: `tool_${step}`,
+            args: { input: `data for step ${step}`.repeat(20) },
+            payload: { dynamic: false },
+          }),
+          bufferedSteps,
+        ),
+      );
+
+      collect(
+        transformAgent(
+          makePayload('tool-result', runId, {
+            type: 'tool-result',
+            toolCallId: `call-${step}`,
+            toolName: `tool_${step}`,
+            result: { output: `Result from step ${step}. `.repeat(50) },
+            payload: { dynamic: false },
+          }),
+          bufferedSteps,
+        ),
       );
 
       // Emit step-finish
-      const result = transformAgent(
-        makePayload('step-finish', runId, {
-          id: `step-${step}`,
-          stepResult: { reason: 'tool-calls', warnings: [] },
-          output: { usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200 } },
-          metadata: { timestamp: new Date(), modelId: 'test-model' },
-        }),
-        bufferedSteps,
+      collect(
+        transformAgent(
+          makePayload('step-finish', runId, {
+            id: `step-${step}`,
+            stepResult: { reason: 'tool-calls', warnings: [] },
+            output: { usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200 } },
+            metadata: { timestamp: new Date(), modelId: 'test-model' },
+          }),
+          bufferedSteps,
+        ),
       );
-
-      emissions.push(result);
     }
 
     return { emissions, bufferedSteps, runId };
@@ -133,6 +161,49 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
     // It should contain text from all 3 steps.
     for (let i = 0; i < 3; i++) {
       expect(finalState.text).toContain(`Step ${i} response text.`);
+    }
+  });
+
+  it('stepResult sources and files should only contain data from that step, not cumulative', () => {
+    const { bufferedSteps, runId } = simulateMultiStepAgentRun(5);
+    const finalState = bufferedSteps.get(runId);
+
+    for (let i = 0; i < finalState.steps.length; i++) {
+      const stepResult = finalState.steps[i];
+
+      // Each step added exactly 1 source and 1 file.
+      expect(
+        stepResult.sources.length,
+        `stepResult[${i}] has ${stepResult.sources.length} sources but should have 1.`,
+      ).toBe(1);
+      expect(stepResult.sources[0].id).toBe(`src-${i}`);
+
+      expect(stepResult.files.length, `stepResult[${i}] has ${stepResult.files.length} files but should have 1.`).toBe(
+        1,
+      );
+      expect(stepResult.files[0].name).toBe(`file-${i}.txt`);
+    }
+  });
+
+  it('stepResult reasoning should be per-step while top-level reasoning stays cumulative', () => {
+    const { bufferedSteps, runId } = simulateMultiStepAgentRun(5);
+    const finalState = bufferedSteps.get(runId);
+
+    // Top-level reasoning should contain entries from all steps
+    expect(finalState.reasoning).toHaveLength(5);
+    for (let i = 0; i < 5; i++) {
+      expect(finalState.reasoning[i]).toBe(`Reasoning for step ${i}. `);
+    }
+
+    // Each stepResult should contain only its own reasoning
+    for (let i = 0; i < finalState.steps.length; i++) {
+      const stepResult = finalState.steps[i];
+      expect(
+        stepResult.reasoning,
+        `stepResult[${i}].reasoning should have 1 entry, got ${stepResult.reasoning.length}`,
+      ).toHaveLength(1);
+      expect(stepResult.reasoning[0]).toBe(`Reasoning for step ${i}. `);
+      expect(stepResult.reasoningText).toBe(`Reasoning for step ${i}. `);
     }
   });
 
