@@ -166,13 +166,14 @@ const agent = new Agent({
       /* ... */
     },
     userName: 'Support Bot', // Defaults to agent's name if omitted
-    state: createRedisState(), // Use Redis for persistent state
     chatOptions: {
       dedupeTtlMs: 600000, // 10 minute deduplication window
     },
   },
 })
 ```
+
+When Mastra storage is configured, channel state (subscriptions, deduplication) is persisted automatically via `MastraStateAdapter`. You can override this by passing a Chat SDK state adapter (e.g. `createRedisState()` from `@chat-adapter/state-redis`) to the `state` option.
 
 The `chatOptions` object accepts any [Chat SDK configuration](https://github.com/vercel/chat) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
 
@@ -213,10 +214,8 @@ const agent = new Agent({
     adapters: {
       /* ... */
     },
-    // Default: only images are sent inline
-    inlineMedia: ['image/*'],
-
-    // Gemini supports video and audio natively
+    // Default: ['image/*'] — only images are sent inline
+    // For Gemini (supports video and audio natively):
     inlineMedia: ['image/*', 'video/*', 'audio/*'],
   },
 })
