@@ -359,8 +359,9 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Handle browser disconnection by clearing internal state and calling base class.
-   * For 'browser' isolation, only clears the current thread's session (not all threads).
+   * Handle browser disconnection by clearing internal state.
+   * For 'thread' scope, only notifies the specific thread's callbacks.
+   * For 'shared' scope, notifies all callbacks.
    */
   override handleBrowserDisconnected(): void {
     const scope = this.threadManager.getScope();
@@ -370,13 +371,18 @@ export class StagehandBrowser extends MastraBrowser {
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager.clearSession(threadId);
       this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
+      // Update status and notify only this thread's callbacks
+      if (this.status !== 'closed') {
+        this.status = 'closed';
+        this.notifyBrowserClosed(threadId);
+      }
     } else {
-      // For 'none' isolation or default thread, the shared stagehand is gone
+      // For 'shared' scope or default thread, the shared stagehand is gone
       this.stagehand = null;
       this.threadManager.clearStagehand();
+      // Call base class which notifies all callbacks
+      super.handleBrowserDisconnected();
     }
-
-    super.handleBrowserDisconnected();
   }
 
   /**
