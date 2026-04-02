@@ -787,15 +787,34 @@ export class AgentChannels {
       const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
       if (!mimeType) continue;
 
-      if (this.shouldInline(mimeType)) {
+      const inline = this.shouldInline(mimeType);
+      if (inline) {
+        let data: string;
+        if (att.fetchData) {
+          // Prefer authenticated fetch (e.g. Slack CDN requires auth)
+          try {
+            const buf = await att.fetchData();
+            const base64 = Buffer.from(buf).toString('base64');
+            data = `data:${mimeType};base64,${base64}`;
+            this.logger?.debug('[CHANNEL] Inlining attachment via fetchData', { mimeType });
+          } catch (err) {
+            this.logger?.warn('[CHANNEL] fetchData failed, falling back to URL', { mimeType, error: String(err) });
+            data = att.url || '';
+          }
+        } else {
+          // Public URL (e.g. Discord CDN) — let the provider fetch directly
+          data = att.url || '';
+          this.logger?.debug('[CHANNEL] Inlining attachment as URL', { mimeType, url: att.url });
+        }
         parts.push({
           type: 'file',
-          data: att.url || '',
+          data,
           mimeType,
         });
       } else {
         const filename = att.name || att.url?.split('/').pop() || 'file';
         const description = `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`;
+        this.logger?.debug('[CHANNEL] Attachment as text description', { mimeType, filename });
         parts.push({ type: 'text', text: `\n${description}` });
       }
     }
