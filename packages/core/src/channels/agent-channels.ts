@@ -1,5 +1,4 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
-import { Chat } from 'chat';
+import type { Adapter, CardElement, Chat, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -447,7 +446,10 @@ export class AgentChannels {
       this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
     }
 
-    const chat = new Chat({
+    // Dynamic import to keep the ESM-only `chat` package out of the CJS bundle.
+    // Only loaded when channels are actually initialized.
+    const { Chat: ChatImpl } = await import('chat');
+    const chat = new ChatImpl({
       adapters: this.adapters,
       state: this.stateAdapter,
       userName: this.userName,
