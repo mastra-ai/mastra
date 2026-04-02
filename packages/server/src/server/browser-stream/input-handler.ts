@@ -137,8 +137,9 @@ export function handleInputMessage(
 function isDisconnectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
+  // Note: 'no cdp session' is handled by isExpectedInjectionError (startup race)
+  // and should not trigger browser closed state
   return (
-    msg.includes('no cdp session') ||
     msg.includes('target closed') ||
     msg.includes('browser has been closed') ||
     msg.includes('page has been closed') ||
@@ -183,7 +184,7 @@ function notifyBrowserClosed(toolset: MastraBrowser): void {
 async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promise<void> {
   const lastState = toolset.getLastBrowserState(threadId);
   const firstUrl = lastState?.tabs[0]?.url;
-  console.info(`[InputHandler] Relaunching browser...${firstUrl ? ` (restoring: ${firstUrl})` : ''}`);
+  console.info('[InputHandler] Relaunching browser', { hasRestoreTarget: Boolean(firstUrl) });
 
   // Set the current thread before ensuring ready so the session is created for this thread
   if (threadId) {

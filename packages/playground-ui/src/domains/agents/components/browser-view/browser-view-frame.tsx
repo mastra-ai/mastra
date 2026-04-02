@@ -80,7 +80,7 @@ export function BrowserViewFrame({
 
   useKeyboardInteraction({
     sendMessage,
-    enabled: isInteractive,
+    enabled: isInteractive && status === 'streaming' && hasFrame && !isAgentBusy,
     onEscape: exitInteractive,
   });
 

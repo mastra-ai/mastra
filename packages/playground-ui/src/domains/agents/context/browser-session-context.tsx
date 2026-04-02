@@ -87,7 +87,11 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Clear all state to prevent stale data from showing on next thread
+    setHasSession(false);
     setStatusState('idle');
+    setCurrentUrlState(null);
+    setLatestFrameState(null);
     setViewport(null);
   }, [clearReconnectTimeout]);
 
