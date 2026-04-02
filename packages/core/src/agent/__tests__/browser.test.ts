@@ -50,7 +50,9 @@ function createMockBrowser(
     getTools: () => tools,
     isBrowserRunning: vi.fn().mockReturnValue(true),
     hasThreadSession: vi.fn().mockReturnValue(true),
-    getSessionId: vi.fn().mockImplementation((threadId?: string) => (threadId ? `${browserId}:${threadId}` : browserId)),
+    getSessionId: vi
+      .fn()
+      .mockImplementation((threadId?: string) => (threadId ? `${browserId}:${threadId}` : browserId)),
     getCurrentUrl: vi.fn().mockResolvedValue('https://example.com'),
     startScreencast: vi.fn().mockResolvedValue({ on: vi.fn(), stop: vi.fn() }),
     startScreencastIfBrowserActive: vi.fn().mockResolvedValue(null),

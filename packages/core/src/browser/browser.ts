@@ -683,8 +683,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch (err) {
-            console.debug('[MastraBrowser] Callback error in notifyBrowserReady (thread):', err);
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
           }
         }
       }
@@ -693,8 +693,8 @@ export abstract class MastraBrowser extends MastraBase {
       for (const callback of this._onReadyCallbacks) {
         try {
           callback();
-        } catch (err) {
-          console.debug('[MastraBrowser] Callback error in notifyBrowserReady (global):', err);
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
         }
       }
       // Also notify ALL thread callbacks (entire browser is ready - shared scenario)
@@ -702,8 +702,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch (err) {
-            console.debug('[MastraBrowser] Callback error in notifyBrowserReady (shared thread):', err);
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
           }
         }
       }
@@ -724,8 +724,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch (err) {
-            console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (thread):', err);
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
           }
         }
       }
@@ -734,8 +734,8 @@ export abstract class MastraBrowser extends MastraBase {
       for (const callback of this._onClosedCallbacks) {
         try {
           callback();
-        } catch (err) {
-          console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (global):', err);
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
         }
       }
       // Also notify ALL thread callbacks (entire browser is closing)
@@ -743,8 +743,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch (err) {
-            console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (shared thread):', err);
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
           }
         }
       }
