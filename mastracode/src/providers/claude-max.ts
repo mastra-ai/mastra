@@ -10,6 +10,7 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
+import type { ThinkingLevel } from './openai-codex.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -130,19 +131,65 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
   },
 };
 
+// Map ThinkingLevel to Anthropic thinking configuration.
+// undefined means omit the parameter (no extended thinking).
+export const THINKING_LEVEL_TO_ANTHROPIC_THINKING: Record<
+  ThinkingLevel,
+  { type: 'enabled'; budgetTokens?: number } | undefined
+> = {
+  off: undefined,
+  low: { type: 'enabled', budgetTokens: 4096 },
+  medium: { type: 'enabled', budgetTokens: 16384 },
+  high: { type: 'enabled', budgetTokens: 65536 },
+  xhigh: { type: 'enabled' }, // No budget limit — maximum thinking depth
+};
+
+/**
+ * Create middleware that configures Anthropic extended thinking.
+ * Returns undefined when thinkingLevel is 'off' (no thinking).
+ */
+export function createAnthropicThinkingMiddleware(thinkingLevel: ThinkingLevel): LanguageModelMiddleware | undefined {
+  const thinking = THINKING_LEVEL_TO_ANTHROPIC_THINKING[thinkingLevel];
+  if (!thinking) return undefined;
+
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      return {
+        ...params,
+        providerOptions: {
+          ...params.providerOptions,
+          anthropic: {
+            ...((params.providerOptions?.anthropic as Record<string, unknown>) ?? {}),
+            thinking,
+          },
+        },
+      };
+    },
+  };
+}
+
 /**
  * Creates an Anthropic model using Claude Max OAuth authentication
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
-export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
+export function opencodeClaudeMaxProvider(
+  modelId: string = 'claude-sonnet-4-20250514',
+  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string> },
+): MastraModelConfig {
+  const thinkingMiddleware = options?.thinkingLevel
+    ? createAnthropicThinkingMiddleware(options.thinkingLevel)
+    : undefined;
+
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
       apiKey: 'test-api-key',
+      headers: options?.headers,
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
-      middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+      middleware: [claudeCodeMiddleware, promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
     });
   }
 
@@ -167,10 +214,11 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
       throw new Error('Not logged in to Anthropic. Run /login first.');
     }
 
-    // Make request with OAuth headers
+    // Make request with OAuth headers, merging in any harness headers
     return fetch(url, {
       ...init,
       headers: {
+        ...options?.headers,
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':
           'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
@@ -189,6 +237,6 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
   // Wrap with middleware to inject Claude Code identity and enable prompt caching
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+    middleware: [claudeCodeMiddleware, promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
