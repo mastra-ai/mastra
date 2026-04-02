@@ -20,7 +20,7 @@ Use channels when you want your agent to:
 
 ## Quickstart
 
-Configure channels directly on your agent using adapters from the [Chat SDK](https://github.com/vercel/chat):
+Configure channels directly on your agent using adapters from the [Chat SDK](https://chat-sdk.dev):
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -175,7 +175,7 @@ const agent = new Agent({
 
 When Mastra storage is configured, channel state (subscriptions, deduplication) is persisted automatically via `MastraStateAdapter`. You can override this by passing a Chat SDK state adapter (e.g. `createRedisState()` from `@chat-adapter/state-redis`) to the `state` option.
 
-The `chatOptions` object accepts any [Chat SDK configuration](https://github.com/vercel/chat) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
+The `chatOptions` object accepts any [Chat SDK configuration](https://chat-sdk.dev/docs/usage) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
 
 ## Thread context
 
@@ -332,9 +332,9 @@ For example, in a Slack thread with multiple users, the agent sees messages like
 
 Each platform requires specific configuration. See the Chat SDK documentation for detailed setup instructions:
 
-- [Slack adapter](https://github.com/vercel/chat/tree/main/packages/adapter-slack)
-- [Discord adapter](https://github.com/vercel/chat/tree/main/packages/adapter-discord)
-- [Telegram adapter](https://github.com/vercel/chat/tree/main/packages/adapter-telegram)
+- [Slack adapter](https://chat-sdk.dev/adapters/slack)
+- [Discord adapter](https://chat-sdk.dev/adapters/discord)
+- [Telegram adapter](https://chat-sdk.dev/adapters/telegram)
 
 ### Slack
 
@@ -381,4 +381,4 @@ export const mastra = new Mastra({
 
 - [Agent overview](/docs/agents/overview)
 - [Tool approval](/docs/agents/agent-approval)
-- [Chat SDK documentation](https://github.com/vercel/chat)
+- [Chat SDK documentation](https://chat-sdk.dev)
