@@ -575,11 +575,13 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Browser Ready Callbacks
+  // Browser Ready/Closed Callbacks
   // ---------------------------------------------------------------------------
 
   private _onReadyCallbacks: Set<() => void> = new Set();
   private _onClosedCallbacks: Set<() => void> = new Set();
+  /** Thread-specific closed callbacks. Key is threadId. */
+  private _onThreadClosedCallbacks: Map<string, Set<() => void>> = new Map();
 
   /**
    * Register a callback to be invoked when the browser becomes ready.
@@ -606,9 +608,27 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Register a callback to be invoked when the browser closes.
    * Useful for screencast to broadcast browser_closed status.
+   * @param callback - Function to call when browser closes
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserClosed(callback: () => void): () => void {
+  onBrowserClosed(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadClosedCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadClosedCallbacks.delete(threadId);
+        }
+      };
+    }
+    // Global callback (for shared scope or when thread not specified)
     this._onClosedCallbacks.add(callback);
     return () => {
       this._onClosedCallbacks.delete(callback);
@@ -634,15 +654,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser has closed.
-   * Called by handleBrowserDisconnected() and close().
+   * Notify registered callbacks that browser has closed.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserClosed(): void {
-    for (const callback of this._onClosedCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserClosed(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Ignore callback errors
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onClosedCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Ignore callback errors
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is closing)
+      for (const [, threadCallbacks] of this._onThreadClosedCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Ignore callback errors
+          }
+        }
       }
     }
   }

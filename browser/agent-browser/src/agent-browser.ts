@@ -389,8 +389,8 @@ export class AgentBrowser extends MastraBrowser {
   private handleThreadBrowserDisconnected(threadId: string): void {
     this.threadManager.clearSession(threadId);
     this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
-    // Notify base class - this will trigger notifyBrowserClosed()
-    super.handleBrowserDisconnected();
+    // Notify only the callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   /**

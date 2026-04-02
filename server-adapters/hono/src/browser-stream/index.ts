@@ -107,11 +107,32 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     }
 
     try {
-      // First, close the session in the registry (stops screencast, notifies viewers)
-      await registry.closeBrowserSession(agentId);
+      // Parse threadId from request body
+      let threadId: string | undefined;
+      try {
+        const body = await c.req.json();
+        threadId = body?.threadId;
+      } catch {
+        // No body or invalid JSON - proceed without threadId
+      }
 
-      // Then close the browser toolset
-      await toolset.close();
+      const scope = toolset.getScope();
+      const viewerKey = threadId ? `${agentId}:${threadId}` : agentId;
+
+      // For thread scope with a threadId, close only that thread's session
+      if (scope === 'thread' && threadId) {
+        // Close the session in the registry (stops screencast for this thread)
+        await registry.closeBrowserSession(viewerKey);
+
+        // Close just this thread's browser session
+        if ('closeThreadSession' in toolset && typeof toolset.closeThreadSession === 'function') {
+          await toolset.closeThreadSession(threadId);
+        }
+      } else {
+        // For shared scope or no threadId, close the entire browser
+        await registry.closeBrowserSession(viewerKey);
+        await toolset.close();
+      }
 
       return c.json({ success: true });
     } catch (error) {

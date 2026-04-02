@@ -275,6 +275,8 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     try {
       const response = await fetch(`/api/agents/${agentId}/browser/close`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId }),
       });
       if (!response.ok) {
         throw new Error(`Failed to close browser: ${response.status}`);
@@ -287,7 +289,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     } finally {
       setIsClosing(false);
     }
-  }, [agentId, isClosing, endSession]);
+  }, [agentId, threadId, isClosing, endSession]);
 
   const value = useMemo(
     () => ({

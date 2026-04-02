@@ -92,6 +92,15 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Close a specific thread's browser session.
+   * For 'thread' scope, this closes only that thread's Stagehand instance.
+   * For 'shared' scope, this is a no-op (use close() to close the shared browser).
+   */
+  async closeThreadSession(threadId: string): Promise<void> {
+    await this.threadManager.destroySession(threadId);
+  }
+
+  /**
    * Ensure browser is ready and thread session exists.
    * For 'thread' scope, this creates a dedicated Stagehand instance for the thread.
    */
@@ -199,13 +208,41 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Set up close event listener for a Stagehand instance.
+   * Listens to both context and page close events for robust detection.
    */
   private setupCloseListener(stagehand: Stagehand): void {
-    const context = stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
-    if (context?.on) {
-      context.on('close', () => {
-        this.handleBrowserDisconnected();
-      });
+    let disconnectHandled = false;
+    const handleDisconnect = () => {
+      if (disconnectHandled) return;
+      disconnectHandled = true;
+      this.handleBrowserDisconnected();
+    };
+
+    try {
+      const context = stagehand.context;
+      if (!context) return;
+
+      // Listen for context close (fires when browser window is closed)
+      const contextWithEvents = context as unknown as { on?: (event: string, cb: () => void) => void };
+      if (contextWithEvents?.on) {
+        contextWithEvents.on('close', handleDisconnect);
+      }
+
+      // Listen for last page closing (primary detection method)
+      const pages = context.pages?.() ?? [];
+      for (const page of pages) {
+        const pageWithEvents = page as unknown as { on?: (event: string, cb: () => void) => void };
+        if (pageWithEvents?.on) {
+          pageWithEvents.on('close', () => {
+            const remainingPages = context.pages?.() ?? [];
+            if (remainingPages.length === 0) {
+              handleDisconnect();
+            }
+          });
+        }
+      }
+    } catch {
+      // Ignore errors setting up close listener
     }
   }
 
@@ -214,12 +251,39 @@ export class StagehandBrowser extends MastraBrowser {
    * This handles the case where a thread's browser is closed externally.
    */
   private setupCloseListenerForThread(stagehand: Stagehand, threadId: string): void {
-    const context = stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
-    if (context?.on) {
-      context.on('close', () => {
-        this.logger.debug?.(`Browser context closed for thread: ${threadId}`);
-        this.handleThreadBrowserDisconnected(threadId);
-      });
+    let disconnectHandled = false;
+    const handleDisconnect = () => {
+      if (disconnectHandled) return;
+      disconnectHandled = true;
+      this.logger.debug?.(`Browser closed for thread: ${threadId}`);
+      this.handleThreadBrowserDisconnected(threadId);
+    };
+
+    try {
+      const context = stagehand.context;
+      if (!context) return;
+
+      // Listen for context close
+      const contextWithEvents = context as unknown as { on?: (event: string, cb: () => void) => void };
+      if (contextWithEvents?.on) {
+        contextWithEvents.on('close', handleDisconnect);
+      }
+
+      // Listen for last page closing
+      const pages = context.pages?.() ?? [];
+      for (const page of pages) {
+        const pageWithEvents = page as unknown as { on?: (event: string, cb: () => void) => void };
+        if (pageWithEvents?.on) {
+          pageWithEvents.on('close', () => {
+            const remainingPages = context.pages?.() ?? [];
+            if (remainingPages.length === 0) {
+              handleDisconnect();
+            }
+          });
+        }
+      }
+    } catch {
+      // Ignore errors setting up close listener
     }
   }
 
@@ -230,8 +294,8 @@ export class StagehandBrowser extends MastraBrowser {
   private handleThreadBrowserDisconnected(threadId: string): void {
     this.threadManager.clearSession(threadId);
     this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
-    // Notify base class - this will trigger notifyBrowserClosed()
-    super.handleBrowserDisconnected();
+    // Notify only the callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   protected override async doClose(): Promise<void> {
@@ -1276,8 +1340,7 @@ export class StagehandBrowser extends MastraBrowser {
     };
 
     // clickCount should only default to 1 for press/release events; move and wheel use 0
-    const defaultClickCount =
-      event.type === 'mousePressed' || event.type === 'mouseReleased' ? 1 : 0;
+    const defaultClickCount = event.type === 'mousePressed' || event.type === 'mouseReleased' ? 1 : 0;
 
     await cdpSession.send('Input.dispatchMouseEvent', {
       type: event.type,

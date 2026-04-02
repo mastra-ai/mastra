@@ -310,6 +310,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
     // Register callback for browser closed (external close detection)
     // This ensures UI shows "browser closed" overlay immediately
+    // Pass threadId so callback only fires when that specific thread's browser closes
     if (!this.browserClosedCleanups.has(viewerKey)) {
       const cleanup = toolset.onBrowserClosed(() => {
         console.info(`[ViewerRegistry] Browser closed for ${viewerKey}, notifying viewers...`);
@@ -317,7 +318,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.screencasts.delete(viewerKey);
         // Broadcast browser_closed status to UI
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
-      });
+      }, threadId);
       this.browserClosedCleanups.set(viewerKey, cleanup);
     }
 
