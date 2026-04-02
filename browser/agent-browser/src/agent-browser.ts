@@ -340,11 +340,9 @@ export class AgentBrowser extends MastraBrowser {
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager.clearSession(threadId);
       this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
-      // Update status and notify only this thread's callbacks
-      if (this.status !== 'closed') {
-        this.status = 'closed';
-        this.notifyBrowserClosed(threadId);
-      }
+      // Notify only this thread's callbacks - do NOT set global status to 'closed'
+      // since other threads may still have active browsers
+      this.notifyBrowserClosed(threadId);
     } else {
       // For 'shared' scope or default thread, the shared browser is gone
       this.browserManager = null;
@@ -430,13 +428,13 @@ export class AgentBrowser extends MastraBrowser {
     return super.createErrorFromException(error, context);
   }
 
-  private async requireLocator(ref: string): Promise<Locator | null> {
-    const manager = await this.getManagerForThread();
+  private async requireLocator(ref: string, threadId?: string): Promise<Locator | null> {
+    const manager = await this.getManagerForThread(threadId);
     // Use the built-in getLocatorFromRef method which properly converts refs to locators
     return manager.getLocatorFromRef(ref);
   }
 
-  private async getScrollInfo(): Promise<{
+  private async getScrollInfo(threadId?: string): Promise<{
     scrollY: number;
     scrollHeight: number;
     viewportHeight: number;
@@ -444,7 +442,7 @@ export class AgentBrowser extends MastraBrowser {
     atBottom: boolean;
     percentDown: number;
   }> {
-    const page = await this.getPage();
+    const page = await this.getPage(threadId);
     const info = (await page.evaluate(`({
       scrollY: Math.round(window.scrollY),
       scrollHeight: document.documentElement.scrollHeight,
@@ -685,7 +683,7 @@ export class AgentBrowser extends MastraBrowser {
       const snapshot = (rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
 
       // Get scroll position info
-      const scrollInfo = await this.getScrollInfo();
+      const scrollInfo = await this.getScrollInfo(threadId);
       let scrollText: string;
       if (scrollInfo.atTop && !scrollInfo.atBottom) {
         scrollText = 'TOP - more content below';
@@ -726,7 +724,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      const locator = await this.requireLocator(input.ref);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -773,7 +771,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; value: string; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      const locator = await this.requireLocator(input.ref);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -858,7 +856,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; selected: string[]; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      const locator = await this.requireLocator(input.ref);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -900,7 +898,7 @@ export class AgentBrowser extends MastraBrowser {
       const page = await this.getPage(threadId);
 
       if (input.ref) {
-        const locator = await this.requireLocator(input.ref);
+        const locator = await this.requireLocator(input.ref, threadId);
         if (locator) {
           await locator.scrollIntoViewIfNeeded({ timeout: this.defaultTimeout });
         }
@@ -935,7 +933,7 @@ export class AgentBrowser extends MastraBrowser {
       }
 
       // Get new scroll position
-      const scrollInfo = await this.getScrollInfo();
+      const scrollInfo = await this.getScrollInfo(threadId);
       let scrollText: string;
       if (scrollInfo.atTop && !scrollInfo.atBottom) {
         scrollText = 'TOP - more content below';
@@ -966,7 +964,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      const locator = await this.requireLocator(input.ref);
+      const locator = await this.requireLocator(input.ref, threadId);
 
       if (!locator) {
         return this.createError(
@@ -1023,7 +1021,7 @@ export class AgentBrowser extends MastraBrowser {
   > {
     try {
       const page = await this.getPage(threadId);
-      const locator = await this.requireLocator(input.triggerRef);
+      const locator = await this.requireLocator(input.triggerRef, threadId);
 
       if (!locator) {
         return this.createError(
@@ -1088,7 +1086,7 @@ export class AgentBrowser extends MastraBrowser {
       const timeout = input.timeout ?? this.defaultTimeout;
 
       if (input.ref) {
-        const locator = await this.requireLocator(input.ref);
+        const locator = await this.requireLocator(input.ref, threadId);
         if (!locator) {
           return this.createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
         }
@@ -1259,7 +1257,7 @@ export class AgentBrowser extends MastraBrowser {
       // Resolve source locator (prefer ref, fallback to selector)
       let sourceLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
       if (input.sourceRef) {
-        sourceLocator = await this.requireLocator(input.sourceRef);
+        sourceLocator = await this.requireLocator(input.sourceRef, threadId);
       } else if (input.sourceSelector) {
         sourceLocator = page.locator(input.sourceSelector);
       }
@@ -1279,7 +1277,7 @@ export class AgentBrowser extends MastraBrowser {
       // Resolve target locator (prefer ref, fallback to selector)
       let targetLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
       if (input.targetRef) {
-        targetLocator = await this.requireLocator(input.targetRef);
+        targetLocator = await this.requireLocator(input.targetRef, threadId);
       } else if (input.targetSelector) {
         targetLocator = page.locator(input.targetSelector);
       }

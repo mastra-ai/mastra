@@ -206,6 +206,14 @@ export abstract class MastraBrowser extends MastraBase {
   /** Error message when status is 'error' */
   error?: string;
 
+  /**
+   * Whether the browser is running in headless mode.
+   * Returns true by default if not explicitly configured.
+   */
+  get headless(): boolean {
+    return this.config.headless ?? true;
+  }
+
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
 

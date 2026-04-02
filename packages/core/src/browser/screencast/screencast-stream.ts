@@ -115,13 +115,27 @@ export class ScreencastStream extends EventEmitter {
       this.cdpSession.on('Page.screencastFrame', this.frameHandler);
 
       // Start screencast via CDP
-      await this.cdpSession.send('Page.startScreencast', {
-        format: this.options.format,
-        quality: this.options.quality,
-        maxWidth: this.options.maxWidth,
-        maxHeight: this.options.maxHeight,
-        everyNthFrame: this.options.everyNthFrame,
-      });
+      try {
+        await this.cdpSession.send('Page.startScreencast', {
+          format: this.options.format,
+          quality: this.options.quality,
+          maxWidth: this.options.maxWidth,
+          maxHeight: this.options.maxHeight,
+          everyNthFrame: this.options.everyNthFrame,
+        });
+      } catch (startError) {
+        // Clean up handler before re-throwing to prevent resource leak
+        if (this.cdpSession?.off) {
+          try {
+            this.cdpSession.off('Page.screencastFrame', this.frameHandler);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+        this.frameHandler = null;
+        this.cdpSession = null;
+        throw startError;
+      }
 
       this.active = true;
     } catch (error) {

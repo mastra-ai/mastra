@@ -74,12 +74,6 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
     await closeBrowser();
   }, [closeBrowser]);
 
-  // Don't render if no browser session or if showing in other modes
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
-    return null;
-  }
-
-  const isLive = status === 'streaming';
   const displayUrl = useMemo(() => {
     if (!currentUrl) return 'Browser';
     try {
@@ -88,6 +82,13 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
       return currentUrl;
     }
   }, [currentUrl]);
+
+  // Don't render if no browser session or if showing in other modes
+  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
+    return null;
+  }
+
+  const isLive = status === 'streaming';
 
   return (
     <div
@@ -183,7 +184,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                 <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map((entry, index) => (
-                    <BrowserToolCallItem key={entry.toolCallId || index} entry={entry} />
+                    <BrowserToolCallItem key={entry.toolCallId || `tool-${index}`} entry={entry} />
                   ))}
                 </div>
               </div>

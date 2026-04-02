@@ -83,10 +83,7 @@ export function BrowserSidebarTab() {
         {/* Screencast */}
         <div className="p-3">
           <div className="relative">
-            <BrowserViewFrame
-              className="w-full"
-              onFirstFrame={handleFirstFrame}
-            />
+            <BrowserViewFrame className="w-full" onFirstFrame={handleFirstFrame} />
             {/* Control buttons overlay */}
             <div className="absolute top-2 right-2 flex gap-1">
               <IconButton

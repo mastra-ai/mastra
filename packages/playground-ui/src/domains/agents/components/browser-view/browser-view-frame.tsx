@@ -23,12 +23,7 @@ interface BrowserViewFrameProps {
  * Consumes the shared WebSocket connection from BrowserSessionContext.
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
-export function BrowserViewFrame({
-  className,
-  onStatusChange,
-  onUrlChange,
-  onFirstFrame,
-}: BrowserViewFrameProps) {
+export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFirstFrame }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasFrameRef = useRef(false);
@@ -145,6 +140,14 @@ export function BrowserViewFrame({
         ref={imgRef}
         alt="Browser screencast"
         onClick={handleFrameClick}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleFrameClick();
+          }
+        }}
+        tabIndex={status === 'streaming' ? 0 : -1}
+        role="button"
         className={cn(
           'absolute inset-0 w-full h-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',

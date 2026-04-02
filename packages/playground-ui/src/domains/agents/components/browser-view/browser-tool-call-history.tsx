@@ -34,9 +34,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         aria-expanded={isExpanded}
         className="flex items-center gap-2 w-full px-3 py-1 text-left hover:bg-surface3 transition-colors shrink-0"
       >
-        <ChevronDown
-          className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : '')}
-        />
+        <ChevronDown className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : '')} />
         <span className="text-xs font-medium text-neutral4">Browser Actions ({toolCalls.length})</span>
       </button>
 

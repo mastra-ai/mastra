@@ -105,7 +105,7 @@ export function handleInputMessage(
     case 'mouse':
       void injectMouse(toolset, message, threadId).catch(err => {
         if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset);
+          notifyBrowserClosed(toolset, threadId);
         } else if (!isExpectedInjectionError(err)) {
           console.warn('[InputHandler] Mouse injection error:', err);
         }
@@ -114,7 +114,7 @@ export function handleInputMessage(
     case 'keyboard':
       void injectKeyboard(toolset, message, threadId).catch(err => {
         if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset);
+          notifyBrowserClosed(toolset, threadId);
         } else if (!isExpectedInjectionError(err)) {
           console.warn('[InputHandler] Keyboard injection error:', err);
         }
@@ -162,13 +162,26 @@ function isExpectedInjectionError(err: unknown): boolean {
 /**
  * Notify the browser that it was closed externally.
  * This triggers the onBrowserClosed callbacks to update the UI.
+ * If threadId is provided and the browser supports thread-specific closing,
+ * only that thread's session is closed.
  */
-function notifyBrowserClosed(toolset: MastraBrowser): void {
-  // Call handleBrowserDisconnected if available (it's public on the implementations)
-  const browser = toolset as unknown as { handleBrowserDisconnected?: () => void };
-  if (typeof browser.handleBrowserDisconnected === 'function') {
-    browser.handleBrowserDisconnected();
+function notifyBrowserClosed(toolset: MastraBrowser, threadId?: string): void {
+  const browser = toolset as unknown as {
+    closeThreadSession?: (threadId: string) => Promise<void>;
+    handleBrowserDisconnected?: () => void;
+  };
+
+  // For thread-scoped browsers, close only the specific thread's session
+  if (threadId && typeof browser.closeThreadSession === 'function') {
+    void browser.closeThreadSession(threadId).catch(() => {
+      // Fall back to global disconnect if thread-specific close fails
+      browser.handleBrowserDisconnected?.();
+    });
+    return;
   }
+
+  // Fall back to global disconnect handling
+  browser.handleBrowserDisconnected?.();
 }
 
 // --- Input injection ---

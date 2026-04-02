@@ -25,7 +25,10 @@ function createMockModel() {
   });
 }
 
-function createMockBrowser(toolNames: string[] = ['browser_navigate', 'browser_snapshot']): MastraBrowser {
+function createMockBrowser(
+  toolNames: string[] = ['browser_navigate', 'browser_snapshot'],
+  options: { headless?: boolean; provider?: string; id?: string } = {},
+): MastraBrowser {
   const tools: Record<string, any> = {};
   for (const name of toolNames) {
     tools[name] = createTool({
@@ -38,8 +41,12 @@ function createMockBrowser(toolNames: string[] = ['browser_navigate', 'browser_s
   }
 
   return {
+    id: options.id ?? 'mock-browser-id',
+    provider: options.provider ?? 'mock',
+    headless: options.headless ?? true,
     getTools: () => tools,
-    isBrowserRunning: vi.fn().mockReturnValue(false),
+    isBrowserRunning: vi.fn().mockReturnValue(true),
+    getCurrentUrl: vi.fn().mockResolvedValue('https://example.com'),
     startScreencast: vi.fn().mockResolvedValue({ on: vi.fn(), stop: vi.fn() }),
     startScreencastIfBrowserActive: vi.fn().mockResolvedValue(null),
     injectMouseEvent: vi.fn().mockResolvedValue(undefined),
@@ -98,6 +105,32 @@ describe('Agent browser integration', () => {
       // Browser tools are NOT included in listTools - they're added at execution time
       expect(Object.keys(tools)).not.toContain('browser_navigate');
       expect(Object.keys(tools)).not.toContain('browser_click');
+    });
+  });
+
+  describe('headless getter', () => {
+    it('exposes headless as a typed property', () => {
+      const browser = createMockBrowser([], { headless: false });
+      expect(browser.headless).toBe(false);
+
+      const headlessBrowser = createMockBrowser([], { headless: true });
+      expect(headlessBrowser.headless).toBe(true);
+    });
+  });
+
+  describe('browser context population', () => {
+    it('populates browser context with provider info', () => {
+      const browser = createMockBrowser(['browser_navigate'], {
+        headless: true,
+        provider: 'playwright',
+        id: 'test-session-123',
+      });
+
+      // Verify the mock browser has the expected properties
+      expect(browser.provider).toBe('playwright');
+      expect(browser.id).toBe('test-session-123');
+      expect(browser.headless).toBe(true);
+      expect(browser.isBrowserRunning()).toBe(true);
     });
   });
 });

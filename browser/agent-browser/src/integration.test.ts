@@ -113,6 +113,11 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
       });
 
       expect(result.success).toBe(true);
+
+      // Verify the text was actually typed by checking the input value
+      if (result.success) {
+        expect(result.value).toBe('Hello World');
+      }
     }
   }, 30_000);
 
@@ -197,6 +202,11 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
       // Type using keyboard press
       const result = await browser.press({ key: 'a' });
       expect(result.success).toBe(true);
+
+      // Verify the character was typed by getting the input value
+      const page = await (browser as any).getPage();
+      const inputValue = await page.locator('#test').inputValue();
+      expect(inputValue).toBe('a');
     }
   }, 30_000);
 
