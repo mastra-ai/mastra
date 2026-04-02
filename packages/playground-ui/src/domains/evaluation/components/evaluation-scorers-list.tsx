@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Chip } from '@/ds/components/Chip';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
@@ -155,10 +156,20 @@ export function EvaluationScorersList({ scorers, isLoading, error }: EvaluationS
           const description = scorer.scorer.config?.description || '';
           const agentCount = scorer.agentIds?.length ?? 0;
           const workflowCount = scorer.workflowIds?.length ?? 0;
+          const isTrajectory = scorer.scorer.config?.type === 'trajectory';
 
           return (
             <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
+              <EntityList.NameCell>
+                <span className="flex items-center gap-1.5">
+                  {name}
+                  {isTrajectory && (
+                    <Chip size="small" color="purple">
+                      trajectory
+                    </Chip>
+                  )}
+                </span>
+              </EntityList.NameCell>
               <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
               <EntityList.Cell>
                 <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>

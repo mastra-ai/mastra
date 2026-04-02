@@ -19,6 +19,9 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() =
 
   const mockContext = {
     pages: vi.fn().mockReturnValue([mockPage]),
+    activePage: vi.fn().mockReturnValue(mockPage),
+    on: vi.fn(),
+    off: vi.fn(),
   };
 
   const mockStagehand = {
@@ -64,7 +67,8 @@ describe('StagehandBrowser', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    browser = new StagehandBrowser();
+    // Use 'shared' scope to get simpler shared browser behavior for unit tests
+    browser = new StagehandBrowser({ scope: 'shared' });
   });
 
   afterEach(async () => {
@@ -116,6 +120,25 @@ describe('StagehandBrowser', () => {
         projectId: 'test-project-id',
       });
       expect(customBrowser.name).toBe('StagehandBrowser');
+    });
+
+    it('forces scope to "shared" when cdpUrl is provided', () => {
+      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
+      const browserWithCdp = new StagehandBrowser({
+        cdpUrl: 'ws://localhost:9222',
+        scope: 'thread',
+      });
+
+      // The thread manager should have 'shared' scope, not 'thread'
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
+    });
+
+    it('respects scope when no cdpUrl is provided', () => {
+      const browserWithIsolation = new StagehandBrowser({
+        scope: 'thread',
+      });
+
+      expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
     });
   });
 
@@ -189,7 +212,9 @@ describe('StagehandBrowser', () => {
       expect(tools[STAGEHAND_TOOLS.EXTRACT]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.OBSERVE]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
-      expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
+      // Screenshot tool is currently disabled (see COR-761)
+      // expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
     });
   });
@@ -459,48 +484,12 @@ describe('StagehandBrowser', () => {
     });
 
     it('should handle no page available', async () => {
+      mockContext.activePage.mockReturnValueOnce(null);
       mockContext.pages.mockReturnValueOnce([]);
 
       const result = await browser.navigate({
         url: 'https://example.com',
       });
-
-      expect(result.success).toBe(false);
-      expect((result as any).message).toContain('page not available');
-    });
-  });
-
-  describe('screenshot', () => {
-    beforeEach(async () => {
-      await browser.launch();
-    });
-
-    it('should take screenshot successfully', async () => {
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(true);
-      expect(result.base64).toBe(Buffer.from('fake-png').toString('base64'));
-    });
-
-    it('should take full page screenshot', async () => {
-      await browser.screenshot({ fullPage: true });
-
-      expect(mockPage.screenshot).toHaveBeenCalledWith({ fullPage: true });
-    });
-
-    it('should handle screenshot failure', async () => {
-      mockPage.screenshot.mockRejectedValueOnce(new Error('Screenshot failed'));
-
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Screenshot failed');
-    });
-
-    it('should handle no page available', async () => {
-      mockContext.pages.mockReturnValueOnce([]);
-
-      const result = await browser.screenshot({});
 
       expect(result.success).toBe(false);
       expect((result as any).message).toContain('page not available');
@@ -559,7 +548,7 @@ describe('StagehandBrowser', () => {
     it('should throw if no CDP session available', async () => {
       mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
-      await expect(browser.startScreencast()).rejects.toThrow('No CDP session available for screencast');
+      await expect(browser.startScreencast()).rejects.toThrow('No CDP session available');
     });
   });
 
@@ -582,7 +571,7 @@ describe('StagehandBrowser', () => {
           x: 100,
           y: 200,
           button: 'left',
-          buttons: 0,
+          buttons: 1, // left button bitmask
           clickCount: 1,
           deltaX: 0,
           deltaY: 0,
@@ -603,7 +592,7 @@ describe('StagehandBrowser', () => {
           y: 250,
           button: 'none',
           buttons: 0,
-          clickCount: 1,
+          clickCount: 0, // move events use 0
           deltaX: 0,
           deltaY: 0,
           modifiers: 0,
@@ -625,7 +614,7 @@ describe('StagehandBrowser', () => {
           y: 100,
           button: 'none',
           buttons: 0,
-          clickCount: 1,
+          clickCount: 0, // wheel events use 0
           deltaX: 0,
           deltaY: -100,
           modifiers: 0,
@@ -708,12 +697,13 @@ describe('createStagehandTools', () => {
     const browser = new StagehandBrowser();
     const tools = createStagehandTools(browser);
 
+    // Screenshot tool is currently disabled (see COR-761)
     expect(Object.keys(tools)).toHaveLength(6);
     expect(tools[STAGEHAND_TOOLS.ACT].id).toBe('stagehand_act');
     expect(tools[STAGEHAND_TOOLS.EXTRACT].id).toBe('stagehand_extract');
     expect(tools[STAGEHAND_TOOLS.OBSERVE].id).toBe('stagehand_observe');
     expect(tools[STAGEHAND_TOOLS.NAVIGATE].id).toBe('stagehand_navigate');
-    expect(tools[STAGEHAND_TOOLS.SCREENSHOT].id).toBe('stagehand_screenshot');
+    expect(tools[STAGEHAND_TOOLS.TABS].id).toBe('stagehand_tabs');
     expect(tools[STAGEHAND_TOOLS.CLOSE].id).toBe('stagehand_close');
   });
 });
@@ -724,7 +714,8 @@ describe('STAGEHAND_TOOLS', () => {
     expect(STAGEHAND_TOOLS.EXTRACT).toBe('stagehand_extract');
     expect(STAGEHAND_TOOLS.OBSERVE).toBe('stagehand_observe');
     expect(STAGEHAND_TOOLS.NAVIGATE).toBe('stagehand_navigate');
-    expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
+    // Screenshot tool is currently disabled (see COR-761)
+    // expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
     expect(STAGEHAND_TOOLS.CLOSE).toBe('stagehand_close');
   });
 });

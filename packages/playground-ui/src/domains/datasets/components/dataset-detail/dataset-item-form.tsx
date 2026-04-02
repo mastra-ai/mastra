@@ -40,6 +40,8 @@ export interface EditModeContentProps {
   setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  trajectoryValue: string;
+  setTrajectoryValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
   onSave: () => void;
   onCancel: () => void;
@@ -53,6 +55,8 @@ export function EditModeContent({
   setGroundTruthValue,
   metadataValue,
   setMetadataValue,
+  trajectoryValue,
+  setTrajectoryValue,
   validationErrors,
   onSave,
   onCancel,
@@ -84,6 +88,16 @@ export function EditModeContent({
           {validationErrors?.field === 'groundTruth' && (
             <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Expected Trajectory (JSON, optional)</Label>
+          <CodeEditor
+            value={trajectoryValue}
+            onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
         </div>
 
         <div className="space-y-2">

@@ -28,7 +28,7 @@ import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
-import type { BrowserState, BrowserTabState, ThreadIsolationMode, ThreadManager } from './thread-manager';
+import type { BrowserState, BrowserTabState, BrowserScope, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
@@ -64,7 +64,6 @@ export type CdpUrlProvider = string | (() => string | Promise<string>);
  * Base configuration shared by all browser providers.
  * Provider packages extend this with their own options.
  */
-// ThreadIsolationMode is imported from ./thread-manager
 
 export interface BrowserConfig {
   /**
@@ -72,6 +71,15 @@ export interface BrowserConfig {
    * @default true
    */
   headless?: boolean;
+
+  /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
 
   /**
    * Default timeout in milliseconds for browser operations.
@@ -87,11 +95,12 @@ export interface BrowserConfig {
   cdpUrl?: CdpUrlProvider;
 
   /**
-   * How to isolate browser sessions across threads.
-   * @see ThreadIsolationMode for details on each mode.
-   * @default 'none'
+   * Browser instance scope across threads.
+   * - 'shared': All threads share a single browser instance
+   * - 'thread': Each thread gets its own browser instance (full isolation)
+   * @default 'thread'
    */
-  threadIsolation?: ThreadIsolationMode;
+  scope?: BrowserScope;
 
   /**
    * Called after the browser reaches 'ready' status.
@@ -108,20 +117,6 @@ export interface BrowserConfig {
    * Controls image format, quality, and dimensions.
    */
   screencast?: ScreencastOptions;
-
-  /**
-   * Auto-reconnect to the browser on disconnect.
-   * Useful for cloud CDP connections that may drop.
-   * @default false
-   */
-  autoReconnect?: boolean;
-
-  /**
-   * Delay in milliseconds before attempting to reconnect.
-   * Only used when autoReconnect is true.
-   * @default 1000
-   */
-  reconnectDelay?: number;
 }
 
 // =============================================================================
@@ -210,6 +205,14 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Error message when status is 'error' */
   error?: string;
+
+  /**
+   * Whether the browser is running in headless mode.
+   * Returns true by default if not explicitly configured.
+   */
+  get headless(): boolean {
+    return this.config.headless ?? true;
+  }
 
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
@@ -323,6 +326,19 @@ export abstract class MastraBrowser extends MastraBase {
       return this._closePromise;
     }
 
+    // Wait for in-flight launch to complete before closing
+    // This prevents race conditions where close() executes against a half-initialized provider
+    if (this.status === 'launching' && this._launchPromise) {
+      try {
+        await this._launchPromise;
+      } catch {
+        // Launch failed - status is now 'error', nothing to close
+        // Ensure we're in a clean closed state and return early
+        this.status = 'closed';
+        return;
+      }
+    }
+
     // Fire onClose hook before closing
     if (this.config.onClose && this.status === 'ready') {
       await this.config.onClose({ browser: this });
@@ -420,6 +436,65 @@ export abstract class MastraBrowser extends MastraBase {
     return typeof cdpUrl === 'function' ? await cdpUrl() : cdpUrl;
   }
 
+  /**
+   * Resolve an HTTP CDP endpoint to a WebSocket URL by fetching /json/version.
+   *
+   * Cloud browser providers (Browser-Use, Browserless, etc.) often expose HTTP
+   * endpoints that need to be resolved to WebSocket URLs for direct CDP connections.
+   *
+   * - If the URL starts with `ws://` or `wss://`, returns it as-is
+   * - If the URL starts with `http://` or `https://`, fetches /json/version to get webSocketDebuggerUrl
+   *
+   * @param url - CDP URL (HTTP or WebSocket)
+   * @returns WebSocket URL for CDP connection
+   */
+  protected async resolveWebSocketUrl(url: string): Promise<string> {
+    // Already a WebSocket URL
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      return url;
+    }
+
+    // HTTP URL - fetch /json/version to get the WebSocket URL
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const baseUrl = url.replace(/\/$/, ''); // Remove trailing slash
+      const versionUrl = `${baseUrl}/json/version`;
+
+      this.logger.debug?.(`Resolving WebSocket URL from ${versionUrl}`);
+
+      // Add timeout to prevent hanging on dead endpoints
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(versionUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch CDP version info from ${versionUrl}: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+        if (!data.webSocketDebuggerUrl) {
+          throw new Error(`No webSocketDebuggerUrl found in CDP version response from ${versionUrl}`);
+        }
+
+        this.logger.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
+        return data.webSocketDebuggerUrl;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Timeout resolving WebSocket URL from ${versionUrl} (10s)`);
+        }
+        throw error;
+      }
+    }
+
+    // Unknown protocol - return as-is and let the caller handle it
+    return url;
+  }
+
   // ---------------------------------------------------------------------------
   // Disconnection Detection & Error Handling
   // ---------------------------------------------------------------------------
@@ -511,22 +586,49 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Browser Ready Callbacks
+  // Browser Ready/Closed Callbacks
   // ---------------------------------------------------------------------------
 
   private _onReadyCallbacks: Set<() => void> = new Set();
   private _onClosedCallbacks: Set<() => void> = new Set();
+  /** Thread-specific ready callbacks. Key is threadId. */
+  private _onThreadReadyCallbacks: Map<string, Set<() => void>> = new Map();
+  /** Thread-specific closed callbacks. Key is threadId. */
+  private _onThreadClosedCallbacks: Map<string, Set<() => void>> = new Map();
 
   /**
    * Register a callback to be invoked when the browser becomes ready.
    * If browser is already running, callback is invoked immediately.
    * The callback is ALWAYS registered (even if invoked immediately) so it will
    * also fire on future "ready" events (e.g., session creation for thread isolation).
+   * @param callback - Function to call when browser is ready
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserReady(callback: () => void): () => void {
-    // Always register the callback so it fires on future ready events
-    // (e.g., when a new thread session is created)
+  onBrowserReady(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadReadyCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+
+      // Check if this specific thread has a session ready
+      if (this.hasThreadSession(threadId)) {
+        callback();
+      }
+
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadReadyCallbacks.delete(threadId);
+        }
+      };
+    }
+
+    // Global callback (for shared scope or when thread not specified)
     this._onReadyCallbacks.add(callback);
 
     if (this.isBrowserRunning()) {
@@ -542,9 +644,27 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Register a callback to be invoked when the browser closes.
    * Useful for screencast to broadcast browser_closed status.
+   * @param callback - Function to call when browser closes
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserClosed(callback: () => void): () => void {
+  onBrowserClosed(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadClosedCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadClosedCallbacks.delete(threadId);
+        }
+      };
+    }
+    // Global callback (for shared scope or when thread not specified)
     this._onClosedCallbacks.add(callback);
     return () => {
       this._onClosedCallbacks.delete(callback);
@@ -552,17 +672,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser is ready.
-   * Called internally after launch completes.
-   * Note: Callbacks remain registered and will fire again on subsequent launches.
-   * This supports browser restart scenarios (e.g., external close + re-launch).
+   * Notify registered callbacks that browser is ready.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserReady(): void {
-    for (const callback of this._onReadyCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserReady(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onReadyCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is ready - shared scenario)
+      for (const [, threadCallbacks] of this._onThreadReadyCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
       }
     }
     // Do NOT clear callbacks - they should persist across browser restarts
@@ -570,15 +713,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser has closed.
-   * Called by handleBrowserDisconnected() and close().
+   * Notify registered callbacks that browser has closed.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserClosed(): void {
-    for (const callback of this._onClosedCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserClosed(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadClosedCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onClosedCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Intentionally swallowed - callbacks should not crash the browser
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is closing)
+      for (const [, threadCallbacks] of this._onThreadClosedCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Intentionally swallowed - callbacks should not crash the browser
+          }
+        }
       }
     }
   }
@@ -679,11 +847,11 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Get the thread isolation mode.
-   * @returns The isolation mode from threadManager or config, or 'none' if not set
+   * Get the browser scope mode.
+   * @returns The scope from threadManager or config, defaults to 'shared'
    */
-  getThreadIsolationMode(): ThreadIsolationMode {
-    return this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
+  getScope(): BrowserScope {
+    return this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
   }
 
   // ---------------------------------------------------------------------------
@@ -712,15 +880,36 @@ export abstract class MastraBrowser extends MastraBase {
       return true;
     }
 
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    // No isolation - all threads share the same session
-    if (isolation === 'none') {
+    // Shared scope - all threads share the same session
+    if (scope === 'shared') {
       return true;
     }
 
     // Check if this thread has an actual session
     return this.threadManager.hasSession(threadId);
+  }
+
+  /**
+   * Get a session identifier for a specific thread.
+   * In thread scope, returns a composite ID (browser:threadId).
+   * In shared scope or without thread manager, returns the browser instance ID.
+   */
+  getSessionId(threadId?: string): string {
+    if (!threadId || !this.threadManager) {
+      return this.id;
+    }
+
+    const scope = this.threadManager.getScope();
+
+    // Shared scope - all threads share the same session
+    if (scope === 'shared') {
+      return this.id;
+    }
+
+    // Thread scope - return composite ID
+    return `${this.id}:${threadId}`;
   }
 
   /**
@@ -736,18 +925,18 @@ export abstract class MastraBrowser extends MastraBase {
       return null;
     }
 
-    // Merge provided options with config screencast options
-    const mergedOptions = options ?? this.config.screencast;
+    // Merge config screencast defaults with call-site overrides
+    const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
-    const isolation = this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
+    const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
 
-    // No isolation - just start the screencast
-    if (isolation === 'none') {
+    // Shared scope - just start the screencast
+    if (scope === 'shared') {
       return this.startScreencast(mergedOptions);
     }
 
-    // For 'browser' isolation, only start if the thread has an existing session
+    // For 'thread' scope, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
       return null;
     }

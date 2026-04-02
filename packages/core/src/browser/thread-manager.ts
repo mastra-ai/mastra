@@ -4,15 +4,15 @@
  * Similar to ProcessManager for workspaces, this centralizes thread lifecycle logic
  * and makes thread isolation reusable across browser providers.
  *
- * Thread isolation modes:
- * - 'none': All threads share a single browser session (no isolation)
- * - 'browser': Each thread gets its own browser instance (full isolation)
+ * Browser scope modes:
+ * - 'shared': All threads share a single browser instance
+ * - 'thread': Each thread gets its own browser instance (full isolation)
  */
 
 import type { IMastraLogger } from '../logger';
 
-/** Thread isolation mode */
-export type ThreadIsolationMode = 'none' | 'browser';
+/** Browser scope mode - determines how browser instances are shared across threads */
+export type BrowserScope = 'shared' | 'thread';
 
 /** Default thread ID used when no thread is specified */
 export const DEFAULT_THREAD_ID = '__default__';
@@ -49,8 +49,8 @@ export interface ThreadSession {
  * Configuration for ThreadManager.
  */
 export interface ThreadManagerConfig {
-  /** Thread isolation mode */
-  isolation: ThreadIsolationMode;
+  /** Browser scope mode */
+  scope: BrowserScope;
   /** Logger instance */
   logger?: IMastraLogger;
   /** Callback when a new session is created */
@@ -65,7 +65,7 @@ export interface ThreadManagerConfig {
  * @typeParam TManager - The browser manager type (e.g., BrowserManagerLike, Stagehand)
  */
 export abstract class ThreadManager<TManager = unknown> {
-  protected readonly isolation: ThreadIsolationMode;
+  protected readonly scope: BrowserScope;
   protected readonly logger?: IMastraLogger;
   protected readonly sessions = new Map<string, ThreadSession>();
   protected activeThreadId: string = DEFAULT_THREAD_ID;
@@ -77,17 +77,17 @@ export abstract class ThreadManager<TManager = unknown> {
   private readonly onSessionDestroyed?: (threadId: string) => void;
 
   constructor(config: ThreadManagerConfig) {
-    this.isolation = config.isolation;
+    this.scope = config.scope;
     this.logger = config.logger;
     this.onSessionCreated = config.onSessionCreated;
     this.onSessionDestroyed = config.onSessionDestroyed;
   }
 
   /**
-   * Get the current isolation mode.
+   * Get the current browser scope mode.
    */
-  getIsolationMode(): ThreadIsolationMode {
-    return this.isolation;
+  getScope(): BrowserScope {
+    return this.scope;
   }
 
   /**
@@ -128,8 +128,8 @@ export abstract class ThreadManager<TManager = unknown> {
   /**
    * Get or create a session for a thread, and return the browser manager for that thread.
    *
-   * For 'none' mode, returns the shared manager.
-   * For 'browser' mode, creates/returns a dedicated manager for the thread.
+   * For 'shared' scope, returns the shared manager.
+   * For 'thread' scope, creates/returns a dedicated manager for the thread.
    *
    * @param threadId - Thread identifier (uses DEFAULT_THREAD_ID if not provided)
    * @returns The browser manager for the thread
@@ -137,8 +137,8 @@ export abstract class ThreadManager<TManager = unknown> {
   async getManagerForThread(threadId?: string): Promise<TManager> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
 
-    // No isolation - always use shared manager
-    if (this.isolation === 'none' || effectiveThreadId === DEFAULT_THREAD_ID) {
+    // Shared scope - always use shared manager
+    if (this.scope === 'shared' || effectiveThreadId === DEFAULT_THREAD_ID) {
       return this.getSharedManager();
     }
 
@@ -206,7 +206,7 @@ export abstract class ThreadManager<TManager = unknown> {
 
     const filteredState: BrowserState = {
       tabs: filteredTabs,
-      activeTabIndex: Math.min(state.activeTabIndex, filteredTabs.length - 1),
+      activeTabIndex: Math.max(0, Math.min(state.activeTabIndex, filteredTabs.length - 1)),
     };
 
     const session = this.sessions.get(threadId);
@@ -235,7 +235,7 @@ export abstract class ThreadManager<TManager = unknown> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get the shared browser manager (used for 'none' mode and default thread).
+   * Get the shared browser manager (used for 'shared' scope and default thread).
    */
   protected abstract getSharedManager(): TManager;
 

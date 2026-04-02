@@ -6,38 +6,51 @@ import { cn } from '@/lib/utils';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
-  browser_navigate: 'Navigate',
-  browser_goto: 'goto',
+  browser_goto: 'Go to',
   browser_click: 'Click',
   browser_type: 'Type',
   browser_scroll: 'Scroll',
-  browser_screenshot: 'Screenshot',
   browser_snapshot: 'Snapshot',
   browser_close: 'Close',
   browser_select: 'Select',
+  browser_press: 'Press',
+  browser_hover: 'Hover',
+  browser_back: 'Back',
+  browser_dialog: 'Dialog',
+  browser_wait: 'Wait',
+  browser_tabs: 'Tabs',
+  browser_drag: 'Drag',
+  browser_evaluate: 'Evaluate',
   // StagehandBrowser tools
   stagehand_navigate: 'Navigate',
   stagehand_act: 'Act',
   stagehand_extract: 'Extract',
   stagehand_observe: 'Observe',
-  stagehand_screenshot: 'Screenshot',
   stagehand_close: 'Close',
+  stagehand_tabs: 'Tabs',
 };
 
 const KEY_ARG_MAP: Record<string, string> = {
   // AgentBrowser tools
-  browser_navigate: 'url',
   browser_goto: 'url',
   browser_click: 'ref',
   browser_type: 'text',
   browser_scroll: 'direction',
   browser_close: 'reason',
   browser_select: 'value',
+  browser_press: 'key',
+  browser_hover: 'ref',
+  browser_dialog: 'action',
+  browser_wait: 'time',
+  browser_tabs: 'action',
+  browser_drag: 'sourceRef',
+  browser_evaluate: 'expression',
   // StagehandBrowser tools
   stagehand_navigate: 'url',
   stagehand_act: 'action',
   stagehand_extract: 'instruction',
   stagehand_observe: 'instruction',
+  stagehand_tabs: 'action',
 };
 
 function getDisplayName(toolName: string): string {
@@ -76,6 +89,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
+        aria-expanded={isExpanded}
         className="flex items-center gap-2 w-full px-3 py-0.5 text-left hover:bg-surface3 transition-colors"
       >
         <ChevronRight

@@ -14,9 +14,10 @@ export function createActTool(browser: StagehandBrowser) {
       'Perform an action on the page using natural language. Examples: "click the login button", "type hello into the search box", "scroll down".',
     inputSchema: actInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return await browser.act(input);
+      return await browser.act(input, threadId);
     },
   });
 }

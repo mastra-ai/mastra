@@ -351,6 +351,7 @@ export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
  */
 export const memoryStatusResponseSchema = z.object({
   result: z.boolean(),
+  memoryType: z.enum(['local', 'gateway']).optional(),
   observationalMemory: z
     .object({
       enabled: z.boolean(),
@@ -392,6 +393,7 @@ const observationalMemoryConfigSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
+  memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),

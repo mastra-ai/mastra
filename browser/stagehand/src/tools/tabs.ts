@@ -14,9 +14,10 @@ export function createTabsTool(browser: StagehandBrowser) {
       'Manage browser tabs. Actions: "list" shows all tabs, "new" opens a tab (optionally with URL), "switch" changes to tab by index, "close" closes a tab.',
     inputSchema: tabsInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return await browser.tabs(input);
+      return await browser.tabs(input, threadId);
     },
   });
 }

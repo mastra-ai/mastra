@@ -5,8 +5,19 @@ import { Memory } from '@mastra/memory';
 
 const memory = new Memory();
 
+// Cloud provider CDP URLs
+// Priority: BROWSERLESS > BROWSER_CDP_URL > Local
+const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
+const CDP_URL = process.env.BROWSER_CDP_URL;
+
+// Build CDP URL based on available credentials
+const cdpUrl = BROWSERLESS_TOKEN
+  ? `wss://production-sfo.browserless.io?token=${BROWSERLESS_TOKEN}&stealth=true`
+  : CDP_URL;
+
 export const agentBrowserToolset = new AgentBrowser({
-  headless: false, // Changed to true for testing screencast in headless mode
+  cdpUrl,
+  headless: !cdpUrl, // Use headed mode when connecting to external browser
   timeout: 15_000,
 });
 

@@ -6,27 +6,49 @@
  *
  * Skip when Playwright/Chromium is not available (CI without browsers).
  */
-import { BrowserManager } from 'agent-browser';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentBrowser } from './agent-browser';
 
-// Check if we can actually launch a browser
+// Check if we can actually launch a browser with AgentBrowser
+// Only skip for known environment/setup failures, not regressions
 let canLaunchBrowser = true;
+const testBrowser = new AgentBrowser({ headless: true, scope: 'shared' });
 try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
-  const mgr = new BrowserManager();
-  await mgr.launch({ headless: true });
-  await mgr.close();
-} catch {
-  canLaunchBrowser = false;
+  await testBrowser.ensureReady();
+  await testBrowser.close();
+} catch (error) {
+  // Always try to clean up the probe browser, even if ensureReady() threw
+  try {
+    await testBrowser.close();
+  } catch {
+    // Ignore cleanup errors
+  }
+
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  // Only skip for known environment issues (missing browser, playwright not installed)
+  const isEnvironmentError =
+    errorMessage.includes("Executable doesn't exist") ||
+    errorMessage.includes('browserType.launch') ||
+    errorMessage.includes('Cannot find module') ||
+    errorMessage.includes('ENOENT');
+
+  if (isEnvironmentError) {
+    canLaunchBrowser = false;
+    // skipReason available for debugging: errorMessage
+  } else {
+    // Re-throw actual regressions so tests fail properly
+    throw error;
+  }
 }
 
 describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   let browser: AgentBrowser;
 
   beforeAll(async () => {
-    browser = new AgentBrowser({ headless: true, timeout: 15_000 });
+    // Use 'none' isolation for simpler shared browser behavior in integration tests
+    browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared' });
     await browser.ensureReady();
   });
 
@@ -65,29 +87,14 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(result.snapshot).toContain('Click me');
   }, 30_000);
 
-  it('takes a screenshot', async () => {
-    await browser.goto({
-      url: 'data:text/html,<html><body style="background:blue"><h1 style="color:white">Screenshot Test</h1></body></html>',
-      waitUntil: 'load',
-    });
-
-    const result = await browser.screenshot({
-      fullPage: false,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.base64).toBeDefined();
-    expect(result.base64.length).toBeGreaterThan(0);
-  }, 30_000);
-
   it('types text into an input field', async () => {
-    // Use a page with multiple interactive elements to ensure refs are generated
+    // Use a page with a single input to avoid ref ordering issues
     await browser.goto({
-      url: 'data:text/html,<html><body><form><input id="name" type="text" /><button type="submit">Submit</button></form></body></html>',
+      url: 'data:text/html,<html><body><input id="name" type="text" placeholder="Enter name" /></body></html>',
       waitUntil: 'load',
     });
 
-    // Get refs via snapshot - use interactiveOnly: false to get all elements
+    // Get refs via snapshot
     const snapshotResult = await browser.snapshot({});
 
     // Ensure we got a snapshot
@@ -95,19 +102,29 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(snapshotResult.snapshot).toBeDefined();
     expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
 
-    // Find any ref - handle both [ref=e1] and @e1 formats
-    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
-    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
-    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    // Find the input ref by looking for "Enter name" placeholder context
+    // Handle both [ref=e1] and @e1 formats
+    const snapshot = snapshotResult.snapshot;
+    const inputMatch =
+      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?(?:Enter name|textbox)/i) ||
+      snapshot.match(/(?:Enter name|textbox).*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
+      snapshot.match(/\[ref=(e\d+)\]/) ||
+      snapshot.match(/@(e\d+)/);
+    const ref = inputMatch ? inputMatch[1] || inputMatch[2] || inputMatch[3] || inputMatch[4] : null;
     expect(ref).not.toBeNull();
 
     if (ref) {
       const result = await browser.type({
-        ref: ref,
+        ref: ref.startsWith('@') ? ref : `@${ref}`,
         text: 'Hello World',
       });
 
       expect(result.success).toBe(true);
+
+      // Verify the text was actually typed by checking the input value
+      if (result.success) {
+        expect(result.value).toBe('Hello World');
+      }
     }
   }, 30_000);
 
@@ -126,9 +143,9 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   }, 30_000);
 
   it('clicks a button', async () => {
-    // Multiple interactive elements for better ref generation
+    // Single button to avoid ref ordering issues
     await browser.goto({
-      url: 'data:text/html,<html><body><button id="btn" onclick="document.title=\'Clicked\'">Press</button><a href="#">Link</a></body></html>',
+      url: 'data:text/html,<html><body><button id="btn" onclick="document.title=\'Clicked\'">Press Me</button></body></html>',
       waitUntil: 'load',
     });
 
@@ -138,15 +155,19 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(snapshotResult.snapshot).toBeDefined();
     expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
 
-    // Find any ref - handle both [ref=e1] and @e1 formats
-    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
-    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
-    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    // Find the button ref by looking for "Press Me" text context
+    const snapshot = snapshotResult.snapshot;
+    const buttonMatch =
+      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?Press Me/i) ||
+      snapshot.match(/Press Me.*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
+      snapshot.match(/\[ref=(e\d+)\]/) ||
+      snapshot.match(/@(e\d+)/);
+    const ref = buttonMatch ? buttonMatch[1] || buttonMatch[2] || buttonMatch[3] || buttonMatch[4] : null;
     expect(ref).not.toBeNull();
 
     if (ref) {
       const result = await browser.click({
-        ref: ref,
+        ref: ref.startsWith('@') ? ref : `@${ref}`,
         button: 'left',
       });
 
@@ -159,9 +180,9 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   }, 30_000);
 
   it('supports keyboard actions', async () => {
-    // Multiple interactive elements
+    // Single input to avoid ref ordering issues
     await browser.goto({
-      url: 'data:text/html,<html><body><input id="test" type="text" /><button>Submit</button></body></html>',
+      url: 'data:text/html,<html><body><input id="test" type="text" placeholder="Type here" /></body></html>',
       waitUntil: 'load',
     });
 
@@ -171,19 +192,28 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(snapshotResult.snapshot).toBeDefined();
     expect(snapshotResult.snapshot.length).toBeGreaterThan(0);
 
-    // Find any ref - handle both [ref=e1] and @e1 formats
-    const refMatch = snapshotResult.snapshot.match(/\[ref=(e\d+)\]/);
-    const atMatch = snapshotResult.snapshot.match(/@(e\d+)/);
-    const ref = refMatch ? refMatch[1] : atMatch ? atMatch[0] : null;
+    // Find the input ref by looking for placeholder context
+    const snapshot = snapshotResult.snapshot;
+    const inputMatch =
+      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?Type here/i) ||
+      snapshot.match(/Type here.*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
+      snapshot.match(/\[ref=(e\d+)\]/) ||
+      snapshot.match(/@(e\d+)/);
+    const ref = inputMatch ? inputMatch[1] || inputMatch[2] || inputMatch[3] || inputMatch[4] : null;
     expect(ref).not.toBeNull();
 
     if (ref) {
       // Focus the input by clicking
-      await browser.click({ ref: ref });
+      await browser.click({ ref: ref.startsWith('@') ? ref : `@${ref}` });
 
       // Type using keyboard press
       const result = await browser.press({ key: 'a' });
       expect(result.success).toBe(true);
+
+      // Verify the character was typed by getting the input value
+      const page = await (browser as any).getPage();
+      const inputValue = await page.locator('#test').inputValue();
+      expect(inputValue).toBe('a');
     }
   }, 30_000);
 
