@@ -4286,7 +4286,7 @@ export class Agent<
 
       const browserCtx: BrowserContext = {
         provider: this.#browser.provider,
-        sessionId: this.#browser.id,
+        sessionId: this.#browser.getSessionId(browserThreadId),
         headless: this.#browser.headless,
         currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
         isRunning: isThreadRunning,

@@ -15,7 +15,7 @@ import type { BrowserConfig } from './types';
  * Extended session info for AgentBrowser.
  */
 interface AgentBrowserSession extends ThreadSession {
-  /** For 'browser' mode: dedicated browser manager instance */
+  /** For 'thread' scope: dedicated browser manager instance */
   manager?: BrowserManager;
 }
 
@@ -44,7 +44,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   private readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
 
-  /** Map of thread ID to dedicated browser manager (for 'browser' mode) */
+  /** Map of thread ID to dedicated browser manager (for 'thread' scope) */
   private readonly threadBrowsers = new Map<string, BrowserManager>();
 
   constructor(config: AgentBrowserThreadManagerConfig) {
@@ -119,15 +119,27 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       session.manager = manager;
       this.threadBrowsers.set(threadId, manager);
 
-      // Restore browser state if available (before notifying parent to avoid screencast race)
-      if (savedState && savedState.tabs.length > 0) {
-        this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
-        await this.restoreBrowserState(manager, savedState);
-      }
+      try {
+        // Restore browser state if available (before notifying parent to avoid screencast race)
+        if (savedState && savedState.tabs.length > 0) {
+          this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
+          await this.restoreBrowserState(manager, savedState);
+        }
 
-      // Notify parent browser so it can set up close listeners
-      // This is done after restoration so the screencast starts on the correct active page
-      this.onBrowserCreated?.(manager, threadId);
+        // Notify parent browser so it can set up close listeners
+        // This is done after restoration so the screencast starts on the correct active page
+        this.onBrowserCreated?.(manager, threadId);
+      } catch (error) {
+        // Roll back: remove from tracking and close the manager
+        this.threadBrowsers.delete(threadId);
+        session.manager = undefined;
+        try {
+          await manager.close();
+        } catch {
+          // Ignore close errors during rollback
+        }
+        throw error;
+      }
     }
     // For 'shared' scope, no session setup needed - all threads share the manager
 
@@ -172,11 +184,11 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
 
   /**
    * Switch to an existing session.
-   * For 'browser' mode, no switching needed - each thread has its own manager.
-   * For 'none' mode, nothing to switch.
+   * For 'thread' scope, no switching needed - each thread has its own manager.
+   * For 'shared' scope, nothing to switch.
    */
   protected async switchToSession(_session: AgentBrowserSession): Promise<void> {
-    // No-op for both modes - 'browser' has separate managers, 'none' shares everything
+    // No-op for both scopes - 'thread' has separate managers, 'shared' shares everything
   }
 
   /**
@@ -198,7 +210,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       await session.manager.close();
       this.threadBrowsers.delete(session.threadId);
     }
-    // For 'none' mode, nothing to clean up - all threads share the manager
+    // For 'shared' scope, nothing to clean up - all threads share the manager
   }
 
   /**

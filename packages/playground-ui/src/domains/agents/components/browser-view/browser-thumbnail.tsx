@@ -183,8 +183,8 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
               <div className="px-3 py-2">
                 <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
                 <div className="space-y-1">
-                  {toolCalls.slice(-5).map((entry, index) => (
-                    <BrowserToolCallItem key={entry.toolCallId || `tool-${index}`} entry={entry} />
+                  {toolCalls.slice(-5).map(entry => (
+                    <BrowserToolCallItem key={entry.toolCallId} entry={entry} />
                   ))}
                 </div>
               </div>

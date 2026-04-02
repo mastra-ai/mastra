@@ -1,5 +1,5 @@
 import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
@@ -52,6 +52,8 @@ function getStatusBadgeConfig(status: StreamStatus): {
 export function BrowserViewPanel() {
   const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
   const [isVisible, setIsVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const isPanelOpen = viewMode === 'modal';
 
@@ -61,6 +63,20 @@ export function BrowserViewPanel() {
       requestAnimationFrame(() => setIsVisible(true));
     } else {
       setIsVisible(false);
+    }
+  }, [isPanelOpen]);
+
+  // Focus management: trap focus in dialog and restore on close
+  useEffect(() => {
+    if (isPanelOpen) {
+      // Store the previously focused element
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      // Focus the dialog
+      dialogRef.current?.focus();
+    } else if (previousFocusRef.current) {
+      // Restore focus when closing
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
     }
   }, [isPanelOpen]);
 
@@ -125,12 +141,18 @@ export function BrowserViewPanel() {
         isPanelOpen && isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}
       onClick={handleBackdropClick}
+      aria-hidden={!isPanelOpen}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Browser view"
+        tabIndex={-1}
         className={cn(
           'flex flex-col w-full max-w-5xl max-h-full',
           'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
-          'transition-transform duration-200',
+          'transition-transform duration-200 outline-none',
           isPanelOpen && isVisible ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}

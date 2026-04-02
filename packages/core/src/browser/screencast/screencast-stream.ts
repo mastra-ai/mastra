@@ -244,7 +244,7 @@ export class ScreencastStream extends EventEmitter {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('[ScreencastStream.reconnect] Failed to reconnect:', err);
-      this.emit('error', err);
+      // Don't emit 'error' here - start() already emits it before rejecting
       throw err;
     }
   }

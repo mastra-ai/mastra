@@ -332,7 +332,10 @@ export abstract class MastraBrowser extends MastraBase {
       try {
         await this._launchPromise;
       } catch {
-        // Launch failed, but we still want to ensure clean state
+        // Launch failed - status is now 'error', nothing to close
+        // Ensure we're in a clean closed state and return early
+        this.status = 'closed';
+        return;
       }
     }
 
@@ -680,8 +683,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch {
-            // Ignore callback errors
+          } catch (err) {
+            console.debug('[MastraBrowser] Callback error in notifyBrowserReady (thread):', err);
           }
         }
       }
@@ -690,8 +693,8 @@ export abstract class MastraBrowser extends MastraBase {
       for (const callback of this._onReadyCallbacks) {
         try {
           callback();
-        } catch {
-          // Ignore callback errors
+        } catch (err) {
+          console.debug('[MastraBrowser] Callback error in notifyBrowserReady (global):', err);
         }
       }
       // Also notify ALL thread callbacks (entire browser is ready - shared scenario)
@@ -699,8 +702,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch {
-            // Ignore callback errors
+          } catch (err) {
+            console.debug('[MastraBrowser] Callback error in notifyBrowserReady (shared thread):', err);
           }
         }
       }
@@ -721,8 +724,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch {
-            // Ignore callback errors
+          } catch (err) {
+            console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (thread):', err);
           }
         }
       }
@@ -731,8 +734,8 @@ export abstract class MastraBrowser extends MastraBase {
       for (const callback of this._onClosedCallbacks) {
         try {
           callback();
-        } catch {
-          // Ignore callback errors
+        } catch (err) {
+          console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (global):', err);
         }
       }
       // Also notify ALL thread callbacks (entire browser is closing)
@@ -740,8 +743,8 @@ export abstract class MastraBrowser extends MastraBase {
         for (const callback of threadCallbacks) {
           try {
             callback();
-          } catch {
-            // Ignore callback errors
+          } catch (err) {
+            console.debug('[MastraBrowser] Callback error in notifyBrowserClosed (shared thread):', err);
           }
         }
       }
@@ -886,6 +889,27 @@ export abstract class MastraBrowser extends MastraBase {
 
     // Check if this thread has an actual session
     return this.threadManager.hasSession(threadId);
+  }
+
+  /**
+   * Get a session identifier for a specific thread.
+   * In thread scope, returns a composite ID (browser:threadId).
+   * In shared scope or without thread manager, returns the browser instance ID.
+   */
+  getSessionId(threadId?: string): string {
+    if (!threadId || !this.threadManager) {
+      return this.id;
+    }
+
+    const scope = this.threadManager.getScope();
+
+    // Shared scope - all threads share the same session
+    if (scope === 'shared') {
+      return this.id;
+    }
+
+    // Thread scope - return composite ID
+    return `${this.id}:${threadId}`;
   }
 
   /**

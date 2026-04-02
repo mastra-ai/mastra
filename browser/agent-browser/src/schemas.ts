@@ -83,7 +83,7 @@ export const selectInputSchema = z
     ref: z.string().describe('Select element ref from snapshot'),
     value: z.string().optional().describe('Option value to select'),
     label: z.string().optional().describe('Option label to select'),
-    index: z.number().optional().describe('Option index to select (0-based)'),
+    index: z.number().int().min(0).optional().describe('Option index to select (0-based)'),
   })
   .superRefine((data, ctx) => {
     if (data.value === undefined && data.label === undefined && data.index === undefined) {

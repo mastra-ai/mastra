@@ -1168,11 +1168,11 @@ export class AgentBrowser extends MastraBrowser {
           const result = await browser.newTab();
           // If URL provided, navigate to it after creating the tab
           if (input.url) {
-            const page = await this.getPage();
+            const page = await this.getPage(threadId);
             await page.goto(input.url);
           }
           // Save state after new tab
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           return {
             success: true,
             ...result,
@@ -1200,7 +1200,7 @@ export class AgentBrowser extends MastraBrowser {
             stream.emitUrl(pageUrl);
           }
           // Save state after switch (captures activeIndex change)
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           return {
             success: true,
             index: input.index,
@@ -1222,7 +1222,7 @@ export class AgentBrowser extends MastraBrowser {
           // Reconnect screencast - it may now be pointing to a different tab
           await this.reconnectScreencast('tab close');
           // Save state AFTER close (remaining tabs)
-          this.updateSessionBrowserState();
+          this.updateSessionBrowserState(threadId);
           const tabsList = (await browser.listTabs?.()) ?? [];
           return {
             success: true,
@@ -1391,13 +1391,17 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
-    if (!this.browserManager) throw new Error('Browser not launched');
-
     const threadId = _options?.threadId;
 
-    // For 'browser' isolation, each thread has its own BrowserManager
-    // For 'none', we use the shared manager
-    const browserManager = threadId ? await this.getManagerForThread(threadId) : this.browserManager;
+    // For 'thread' scope, each thread has its own BrowserManager
+    // For 'shared' scope, we use the shared manager
+    let browserManager: BrowserManager;
+    if (this.getScope() === 'thread' && threadId) {
+      browserManager = await this.getManagerForThread(threadId);
+    } else {
+      if (!this.browserManager) throw new Error('Browser not launched');
+      browserManager = this.browserManager;
+    }
 
     // Create CDP session provider adapter
     // The provider always gets a fresh CDP session for the current active page

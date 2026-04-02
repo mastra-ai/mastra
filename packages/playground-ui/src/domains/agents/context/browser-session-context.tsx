@@ -2,6 +2,10 @@ import { createContext, useContext, useCallback, useState, useMemo, useEffect, u
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 
+// TODO: Consider splitting high-frequency frame data into a separate context or ref-based store
+// to prevent consumers that only need low-frequency state (hasSession, viewMode) from rerendering
+// on every screencast frame update. See: https://react.dev/reference/react/useSyncExternalStore
+
 /** View modes for the browser UI */
 export type BrowserViewMode = 'collapsed' | 'expanded' | 'modal' | 'sidebar';
 
@@ -277,6 +281,8 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
   // Close browser state
   const [isClosing, setIsClosing] = useState(false);
 
+  // TODO: Move this to a TanStack Query mutation hook for consistency with the codebase.
+  // Currently using raw fetch because this is a browser-specific endpoint not exposed via MastraClient.
   const closeBrowser = useCallback(async () => {
     if (isClosing || !agentId) return;
     setIsClosing(true);

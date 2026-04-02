@@ -13,12 +13,19 @@ import { AgentBrowser } from './agent-browser';
 // Check if we can actually launch a browser with AgentBrowser
 // Only skip for known environment/setup failures, not regressions
 let canLaunchBrowser = true;
+const testBrowser = new AgentBrowser({ headless: true, scope: 'shared' });
 try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
-  const testBrowser = new AgentBrowser({ headless: true, scope: 'shared' });
   await testBrowser.ensureReady();
   await testBrowser.close();
 } catch (error) {
+  // Always try to clean up the probe browser, even if ensureReady() threw
+  try {
+    await testBrowser.close();
+  } catch {
+    // Ignore cleanup errors
+  }
+
   const errorMessage = error instanceof Error ? error.message : String(error);
   // Only skip for known environment issues (missing browser, playwright not installed)
   const isEnvironmentError =
