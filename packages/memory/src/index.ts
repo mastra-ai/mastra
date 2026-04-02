@@ -297,7 +297,7 @@ export class Memory extends MastraMemory {
       }[] = [];
 
       // Log memory recall parameters, excluding potentially large schema objects
-      this.logger.debug(`Memory recall() with:`, {
+      this.logger.debug('Memory recall', {
         threadId,
         perPage,
         page,

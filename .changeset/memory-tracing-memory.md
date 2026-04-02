@@ -2,7 +2,7 @@
 '@mastra/memory': minor
 ---
 
-Added tracing support to Memory operations (recall, save, delete, update working memory). When a `tracingContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, thread/resource IDs, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `tracingContext` is unaffected.
+Added tracing support to Memory operations (recall, save, delete, update working memory). When an `observabilityContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `observabilityContext` is unaffected.
 
 **Example usage:**
 
@@ -12,14 +12,14 @@ import { InMemoryStore } from '@mastra/core/storage';
 
 const memory = new Memory({ storage: new InMemoryStore() });
 
-// Pass tracingContext to create observable spans
+// Pass observabilityContext to create observable spans
 await memory.recall({
   threadId: 'thread-1',
-  tracingContext: { currentSpan: parentSpan },
+  observabilityContext: { tracingContext: { currentSpan: parentSpan } },
 });
 
 await memory.saveMessages({
   messages: [userMessage, assistantMessage],
-  tracingContext: { currentSpan: parentSpan },
+  observabilityContext: { tracingContext: { currentSpan: parentSpan } },
 });
 ```
