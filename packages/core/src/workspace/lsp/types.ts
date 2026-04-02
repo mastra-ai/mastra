@@ -102,7 +102,8 @@ export interface LSPConfig {
   /**
    * Custom language server definitions for languages not built in.
    *
-   * Keys are server IDs; values define the server, its supported extensions, and its command.
+   * Values define the server, its supported extensions, and its command.
+   * The record key is for readability only — the server's `id` field is used internally.
    * Custom servers are merged with built-in servers — custom definitions take precedence
    * when IDs collide, allowing you to replace a built-in server entirely.
    *

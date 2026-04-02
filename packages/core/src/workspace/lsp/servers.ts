@@ -168,6 +168,10 @@ export async function findProjectRootAsync(
 /**
  * Build an extension → language ID map from custom server definitions.
  * Each extension is mapped to the first language ID of the server that declares it.
+ *
+ * When multiple servers declare the same extension, the last server wins
+ * (iteration order of `Object.values`). A warning is emitted on collision
+ * so the user can spot misconfiguration.
  */
 export function buildCustomExtensions(servers?: Record<string, CustomLSPServer>): Record<string, string> {
   if (!servers) return {};
@@ -176,6 +180,12 @@ export function buildCustomExtensions(servers?: Record<string, CustomLSPServer>)
     const languageId = server.languageIds[0];
     if (!languageId) continue;
     for (const ext of server.extensions) {
+      const existing = extensions[ext];
+      if (existing && existing !== languageId) {
+        console.warn(
+          `[LSP] Extension "${ext}" is claimed by language "${existing}" and "${languageId}" (server "${server.id}") — using "${languageId}"`,
+        );
+      }
       extensions[ext] = languageId;
     }
   }
