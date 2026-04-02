@@ -146,7 +146,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     };
 
     // Resolve gateway once using the normalized ID
-    this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
+    // Merge custom gateways with defaults, deduplicating by gateway id (custom takes precedence)
+    const allGateways = customGateways?.length
+      ? [...customGateways, ...defaultGateways.filter(dg => !customGateways.some(cg => cg.id === dg.id))]
+      : defaultGateways;
+    this.gateway = findGatewayForModel(normalizedConfig.id, allGateways);
     this.gatewayId = this.gateway.id;
     // Extract provider from id if present
     // Gateway ID is used as prefix (except for models.dev which is a provider registry)

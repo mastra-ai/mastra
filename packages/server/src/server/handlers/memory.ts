@@ -541,10 +541,8 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
             history: historyResult.records?.length > 0 ? historyResult.records.map(toLocalOMRecord) : undefined,
           };
         }
-        if (gwClient && resourceId) {
-          // No threadId — return empty
-          return { record: null, history: undefined };
-        }
+        // No threadId or resourceId yet (e.g. /chat/new) — return empty
+        return { record: null, history: undefined };
       }
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);

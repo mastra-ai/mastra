@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, defaultGateways, parseModelString } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -1201,27 +1201,16 @@ export const GET_PROVIDERS_ROUTE = createRoute({
         allProviders[id] = provider;
       }
 
-      // Include default gateways (e.g., Mastra Gateway, Netlify)
-      for (const gateway of defaultGateways) {
-        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-        if (gateway.id === 'models.dev') continue;
-        try {
-          const gatewayProviders = await gateway.fetchProviders();
-          for (const [providerId, config] of Object.entries(gatewayProviders)) {
-            allProviders[providerId] = config;
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
-        }
-      }
-
+      // Include gateway providers (defaults + user-registered)
       if (mastra) {
-        const customGateways = mastra.listGateways();
-        if (customGateways) {
-          for (const gateway of Object.values(customGateways)) {
+        const allGateways = mastra.listGateways();
+        if (allGateways) {
+          for (const gateway of Object.values(allGateways)) {
+            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+            if (gateway.id === 'models.dev') continue;
             try {
-              const customProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(customProviders)) {
+              const gatewayProviders = await gateway.fetchProviders();
+              for (const [providerId, config] of Object.entries(gatewayProviders)) {
                 allProviders[providerId] = config;
               }
             } catch (error) {
