@@ -580,6 +580,8 @@ export abstract class MastraBrowser extends MastraBase {
 
   private _onReadyCallbacks: Set<() => void> = new Set();
   private _onClosedCallbacks: Set<() => void> = new Set();
+  /** Thread-specific ready callbacks. Key is threadId. */
+  private _onThreadReadyCallbacks: Map<string, Set<() => void>> = new Map();
   /** Thread-specific closed callbacks. Key is threadId. */
   private _onThreadClosedCallbacks: Map<string, Set<() => void>> = new Map();
 
@@ -588,11 +590,34 @@ export abstract class MastraBrowser extends MastraBase {
    * If browser is already running, callback is invoked immediately.
    * The callback is ALWAYS registered (even if invoked immediately) so it will
    * also fire on future "ready" events (e.g., session creation for thread isolation).
+   * @param callback - Function to call when browser is ready
+   * @param threadId - Optional thread ID to scope the callback to a specific thread
    * @returns Cleanup function to unregister the callback
    */
-  onBrowserReady(callback: () => void): () => void {
-    // Always register the callback so it fires on future ready events
-    // (e.g., when a new thread session is created)
+  onBrowserReady(callback: () => void, threadId?: string): () => void {
+    if (threadId) {
+      // Thread-specific callback
+      let threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (!threadCallbacks) {
+        threadCallbacks = new Set();
+        this._onThreadReadyCallbacks.set(threadId, threadCallbacks);
+      }
+      threadCallbacks.add(callback);
+
+      // Check if this specific thread has a session ready
+      if (this.hasThreadSession(threadId)) {
+        callback();
+      }
+
+      return () => {
+        threadCallbacks!.delete(callback);
+        if (threadCallbacks!.size === 0) {
+          this._onThreadReadyCallbacks.delete(threadId);
+        }
+      };
+    }
+
+    // Global callback (for shared scope or when thread not specified)
     this._onReadyCallbacks.add(callback);
 
     if (this.isBrowserRunning()) {
@@ -636,17 +661,40 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Notify all registered callbacks that browser is ready.
-   * Called internally after launch completes.
-   * Note: Callbacks remain registered and will fire again on subsequent launches.
-   * This supports browser restart scenarios (e.g., external close + re-launch).
+   * Notify registered callbacks that browser is ready.
+   * @param threadId - If provided, only notify callbacks for that thread (for thread scope)
    */
-  protected notifyBrowserReady(): void {
-    for (const callback of this._onReadyCallbacks) {
-      try {
-        callback();
-      } catch {
-        // Ignore callback errors
+  protected notifyBrowserReady(threadId?: string): void {
+    if (threadId) {
+      // Notify thread-specific callbacks only
+      const threadCallbacks = this._onThreadReadyCallbacks.get(threadId);
+      if (threadCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Ignore callback errors
+          }
+        }
+      }
+    } else {
+      // Notify global callbacks (for shared scope)
+      for (const callback of this._onReadyCallbacks) {
+        try {
+          callback();
+        } catch {
+          // Ignore callback errors
+        }
+      }
+      // Also notify ALL thread callbacks (entire browser is ready - shared scenario)
+      for (const [, threadCallbacks] of this._onThreadReadyCallbacks) {
+        for (const callback of threadCallbacks) {
+          try {
+            callback();
+          } catch {
+            // Ignore callback errors
+          }
+        }
       }
     }
     // Do NOT clear callbacks - they should persist across browser restarts

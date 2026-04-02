@@ -79,10 +79,10 @@ export class StagehandBrowser extends MastraBrowser {
       scope: effectiveScope,
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
-      onSessionCreated: () => {
-        // Trigger onBrowserReady callbacks - this allows ViewerRegistry to start screencast
-        // for threads that just started using the browser
-        this.notifyBrowserReady();
+      onSessionCreated: session => {
+        // Trigger onBrowserReady callbacks for this specific thread
+        // This allows ViewerRegistry to start screencast for just this thread
+        this.notifyBrowserReady(session.threadId);
       },
       // When a new browser is created for a thread, set up close listener
       onBrowserCreated: (stagehand, threadId) => {
@@ -98,6 +98,8 @@ export class StagehandBrowser extends MastraBrowser {
    */
   async closeThreadSession(threadId: string): Promise<void> {
     await this.threadManager.destroySession(threadId);
+    // Notify callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   /**

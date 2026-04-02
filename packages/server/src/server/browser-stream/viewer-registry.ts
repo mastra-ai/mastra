@@ -284,6 +284,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
     // Register callback for browser restarts (external close + re-launch)
     // This ensures screencast reconnects after browser is externally closed
+    // Pass threadId so callback only fires when that specific thread's browser is ready
     if (!this.browserReadyCleanups.has(viewerKey)) {
       const cleanup = toolset.onBrowserReady(() => {
         // Only start if we still have viewers
@@ -304,7 +305,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.doStartScreencast(viewerKey, toolset, threadId).catch(error => {
           console.error(`[ViewerRegistry] Failed to start screencast on browser ready for ${viewerKey}:`, error);
         });
-      });
+      }, threadId);
       this.browserReadyCleanups.set(viewerKey, cleanup);
     }
 
