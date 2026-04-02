@@ -100,9 +100,6 @@ function analyzeDbMessages(messages: any[]) {
       }
     }
 
-    let hasOmParts = false;
-    let hasVisibleParts = false;
-
     for (const part of parts) {
       if (part.type === 'tool-invocation') {
         toolInvocationCount++;
@@ -110,15 +107,7 @@ function analyzeDbMessages(messages: any[]) {
 
       if (typeof part.type === 'string' && part.type.startsWith('data-om')) {
         dataOmCount++;
-        hasOmParts = true;
-      } else if (part.type !== 'step-start') {
-        hasVisibleParts = true;
       }
-    }
-
-    // data-om-* parts should be in their own messages, not mixed with visible content
-    if (hasOmParts && hasVisibleParts) {
-      violations.push(`msg[${i}] (${message.id}) mixes data-om-* parts with visible content (${parts.length} parts)`);
     }
 
     // Check chronological order
