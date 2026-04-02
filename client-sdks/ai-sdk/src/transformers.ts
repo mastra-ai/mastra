@@ -515,8 +515,11 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'step-finish': {
       const stepRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      // Exclude `steps` from the stepResult to avoid recursive nesting where
+      // each stepResult embeds copies of all prior stepResults (issue #14932).
+      const { steps: _steps, ...stepRunWithoutSteps } = stepRun;
       const stepResult = {
-        ...stepRun,
+        ...stepRunWithoutSteps,
         stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
         reasoningText: stepRun.reasoning.join(''),
         staticToolCalls: stepRun.toolCalls.filter(
@@ -543,8 +546,17 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         },
       };
 
+      // Reset per-step structural fields so the next step starts fresh instead
+      // of carrying forward all prior toolCalls/toolResults (issue #14932).
+      // Text and reasoning are kept cumulative — they are lightweight O(n) strings
+      // that documented consumers read from the top-level `data.text` field.
       bufferedSteps.set(payload.runId!, {
         ...stepRun,
+        sources: [],
+        files: [],
+        toolCalls: [],
+        toolResults: [],
+        object: null,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         steps: [...stepRun.steps, stepResult],
