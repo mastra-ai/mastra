@@ -12,8 +12,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
-import { runHeadless  } from './headless.js';
-import type {PackContext} from './headless.js';
+import { runHeadless } from './headless.js';
+import type { PackContext } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -438,6 +438,13 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
+
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
@@ -448,10 +455,12 @@ describe('headless mode — --model flag', () => {
       model: 'nonexistent/model-xyz',
     });
 
-    expect(exitCode).toBe(1);
+    stderrSpy.mockRestore();
 
-    // Agent should never have started
+    expect(exitCode).toBe(1);
     expect(events.find(e => e.type === 'agent_start')).toBeUndefined();
+    expect(stderrCalls.join('')).toContain('Unknown model');
+    expect(stderrCalls.join('')).toContain('nonexistent/model-xyz');
   });
 
   it('returns exit code 1 when model has no API key', async () => {
@@ -471,6 +480,13 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
+
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
@@ -481,10 +497,12 @@ describe('headless mode — --model flag', () => {
       model: 'openai/gpt-4o',
     });
 
-    expect(exitCode).toBe(1);
+    stderrSpy.mockRestore();
 
-    // Agent should never have started
+    expect(exitCode).toBe(1);
     expect(events.find(e => e.type === 'agent_start')).toBeUndefined();
+    expect(stderrCalls.join('')).toContain('no API key configured');
+    expect(stderrCalls.join('')).toContain('OPENAI_API_KEY');
   });
 
   it('emits JSON error for unknown model in json format', async () => {
