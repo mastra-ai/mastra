@@ -63,10 +63,7 @@ export function useScoresMetrics() {
 
       const avgScore = Math.round((summaryData.reduce((s, d) => s + d.avg, 0) / summaryData.length) * 100) / 100;
 
-      // Pick interval based on time range
-      const rangeMs = timestamp.end.getTime() - timestamp.start.getTime();
-      const rangeHours = rangeMs / 3_600_000;
-      const interval = rangeHours <= 24 ? '1h' : '1d';
+      const interval = '1h';
 
       // Fetch time series only for active scorers
       const timeSeriesResults = await Promise.all(
