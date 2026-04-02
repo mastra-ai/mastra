@@ -3,6 +3,7 @@
  */
 
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { mapVariable, cloneStep, cloneWorkflow } from '@mastra/core/workflows';
 import type { WorkflowTestConfig, WorkflowTestContext, WorkflowRegistry } from './types';
 
 // Import domain workflow creators and test creators
@@ -58,7 +59,7 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
   describe(name, () => {
     // Create workflow factory - this runs at test collection time
     const factory = getWorkflowFactory();
-    const { mapVariable, cloneStep, cloneWorkflow } = require('@mastra/core/workflows');
+
 
     // Create all workflows upfront
     // Domains that support the new pattern will have workflow creators

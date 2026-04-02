@@ -1,6 +1,11 @@
-import { Actions, Button, Card, CardText } from 'chat';
-
 import type { PostableMessage } from './agent-channels';
+import { chatModule } from './chat-lazy';
+
+// ---------------------------------------------------------------------------
+// Lazy accessors for Chat SDK card primitives (loaded after initialize())
+// ---------------------------------------------------------------------------
+
+const ui = () => chatModule();
 
 // ---------------------------------------------------------------------------
 // Constants & helpers
@@ -73,7 +78,7 @@ export function formatToolHeader(toolName: string, argsSummary: string): string 
 export function formatToolRunning(toolName: string, argsSummary: string, useCards: boolean): PostableMessage {
   const header = formatToolHeader(toolName, argsSummary);
   if (useCards) {
-    return Card({ children: [CardText(`${header} ⋯`)] });
+    return ui().Card({ children: [ui().CardText(`${header} ⋯`)] });
   }
   return `${header} ⋯`;
 }
@@ -93,8 +98,8 @@ export function formatToolResult(
   if (useCards) {
     const headerWithStatus = `${header} · ${status}`;
     const resultBody = isError ? resultText : `\`\`\`\n${resultText}\n\`\`\``;
-    return Card({
-      children: [CardText(headerWithStatus), CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
+    return ui().Card({
+      children: [ui().CardText(headerWithStatus), ui().CardText(resultBody, { style: isError ? 'bold' : 'plain' })],
     });
   }
 
@@ -113,13 +118,13 @@ export function formatToolApproval(
   const header = formatToolHeader(toolName, argsSummary);
 
   if (useCards) {
-    return Card({
+    return ui().Card({
       children: [
-        CardText(header),
-        CardText('Requires approval to run.'),
-        Actions([
-          Button({ id: `tool_approve:${toolCallId}`, label: 'Approve', style: 'primary' }),
-          Button({ id: `tool_deny:${toolCallId}`, label: 'Deny', style: 'danger' }),
+        ui().CardText(header),
+        ui().CardText('Requires approval to run.'),
+        ui().Actions([
+          ui().Button({ id: `tool_approve:${toolCallId}`, label: 'Approve', style: 'primary' }),
+          ui().Button({ id: `tool_deny:${toolCallId}`, label: 'Deny', style: 'danger' }),
         ]),
       ],
     });
@@ -134,7 +139,7 @@ export function formatToolApproved(toolName: string, argsSummary: string, useCar
   const header = formatToolHeader(toolName, argsSummary);
 
   if (useCards) {
-    return Card({ children: [CardText(`${header} ⋯`), CardText('✓ Approved')] });
+    return ui().Card({ children: [ui().CardText(`${header} ⋯`), ui().CardText('✓ Approved')] });
   }
 
   return `${header} ⋯\n✓ Approved`;
@@ -151,7 +156,7 @@ export function formatToolDenied(
   const suffix = byUser ? ` by ${byUser}` : '';
 
   if (useCards) {
-    return Card({ children: [CardText(`${header} ✗`), CardText(`✗ Denied${suffix}`)] });
+    return ui().Card({ children: [ui().CardText(`${header} ✗`), ui().CardText(`✗ Denied${suffix}`)] });
   }
 
   return `${header} ✗\n✗ Denied${suffix}`;

@@ -1,4 +1,4 @@
-import type { Adapter, CardElement, Chat, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -12,6 +12,7 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools/tool';
+import { getChatModule } from './chat-lazy';
 
 import {
   formatArgsSummary,
@@ -446,10 +447,8 @@ export class AgentChannels {
       this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
     }
 
-    // Dynamic import to keep the ESM-only `chat` package out of the CJS bundle.
-    // Only loaded when channels are actually initialized.
-    const { Chat: ChatImpl } = await import('chat');
-    const chat = new ChatImpl({
+    const { Chat } = await getChatModule();
+    const chat = new Chat({
       adapters: this.adapters,
       state: this.stateAdapter,
       userName: this.userName,
@@ -746,7 +745,11 @@ export class AgentChannels {
       await this.processChatMessage(sdkThread, message, mastra);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      this.log('error', `[${sdkThread.adapter.name}] Error handling message`, JSON.stringify(message, null, 2), err);
+      this.log('error', `[${sdkThread.adapter.name}] Error handling message`, {
+        messageId: message.id,
+        authorId: message.author?.userId,
+        error: String(err),
+      });
       try {
         const adapterConfig = this.adapterConfigs[sdkThread.adapter.name];
         const errorMessage = adapterConfig?.formatError
@@ -895,7 +898,7 @@ export class AgentChannels {
 
       const inline = this.shouldInline(mimeType);
       if (inline) {
-        let data: string;
+        let data: string | undefined;
         if (att.fetchData) {
           // Prefer authenticated fetch (e.g. Slack CDN requires auth)
           try {
@@ -904,17 +907,19 @@ export class AgentChannels {
             data = `data:${mimeType};base64,${base64}`;
           } catch (err) {
             this.logger?.warn('[CHANNEL] fetchData failed, falling back to URL', { mimeType, error: String(err) });
-            data = att.url || '';
+            data = att.url;
           }
         } else {
           // Public URL (e.g. Discord CDN) — let the provider fetch directly
-          data = att.url || '';
+          data = att.url;
         }
-        parts.push({
-          type: 'file',
-          data,
-          mimeType,
-        });
+        if (data) {
+          parts.push({
+            type: 'file',
+            data,
+            mimeType,
+          });
+        }
       } else {
         const filename = att.name || att.url?.split('/').pop() || 'file';
         const description = `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`;
@@ -1136,134 +1141,136 @@ export class AgentChannels {
       }
     }, 3_000);
 
-    for await (const chunk of stream.fullStream) {
-      // --- Text accumulation ---
-      if (chunk.type === 'text-delta') {
-        if (chunk.payload.text) {
+    try {
+      for await (const chunk of stream.fullStream) {
+        // --- Text accumulation ---
+        if (chunk.type === 'text-delta') {
+          if (chunk.payload.text) {
+            await ensureTyping();
+            startTypingKeepalive();
+          }
+          textBuffer += chunk.payload.text;
+          continue;
+        }
+
+        if (chunk.type === 'reasoning-delta') {
           await ensureTyping();
           startTypingKeepalive();
-        }
-        textBuffer += chunk.payload.text;
-        continue;
-      }
-
-      if (chunk.type === 'reasoning-delta') {
-        await ensureTyping();
-        startTypingKeepalive();
-        continue;
-      }
-
-      // --- File (e.g. model-generated image): post as attachment ---
-      if (chunk.type === 'file') {
-        await flushText();
-        const { data, mimeType } = chunk.payload;
-        this.logger?.debug('[CHANNEL] Received file chunk', {
-          mimeType,
-          dataType: typeof data,
-          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
-        });
-        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-        const filename = `generated.${ext}`;
-        const binary =
-          typeof data === 'string'
-            ? Buffer.from(data, 'base64')
-            : data instanceof Uint8Array
-              ? Buffer.from(data)
-              : data;
-        try {
-          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
-        }
-        continue;
-      }
-
-      // --- Text flush triggers ---
-      if (chunk.type === 'step-finish' || chunk.type === 'finish') {
-        await flushText();
-        continue;
-      }
-
-      // --- Tool call: post eager "Running…" card ---
-      if (chunk.type === 'tool-call') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        await ensureTyping();
-        startTypingKeepalive();
-        await flushText();
-
-        const displayName = stripToolPrefix(chunk.payload.toolName);
-        const rawArgs = (
-          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
-        ) as Record<string, unknown>;
-        const argsSummary = formatArgsSummary(rawArgs);
-
-        let messageId: string | undefined;
-        if (!adapterConfig?.formatToolCall) {
-          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
-          messageId = sentMessage?.id;
+          continue;
         }
 
-        toolCalls.set(chunk.payload.toolCallId, {
-          displayName,
-          argsSummary,
-          startedAt: Date.now(),
-          messageId,
-        });
-        continue;
-      }
-
-      // --- Tool result: edit the "Running…" card with the outcome ---
-      if (chunk.type === 'tool-result') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-        const tracked = toolCalls.get(chunk.payload.toolCallId);
-        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
-        const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-        const channelMsgId = tracked?.messageId;
-        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
-
-        if (adapterConfig?.formatToolCall) {
-          const custom = adapterConfig.formatToolCall({
-            toolName: displayName,
-            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-            result: chunk.payload.result,
-            isError: chunk.payload.isError,
+        // --- File (e.g. model-generated image): post as attachment ---
+        if (chunk.type === 'file') {
+          await flushText();
+          const { data, mimeType } = chunk.payload;
+          this.logger?.debug('[CHANNEL] Received file chunk', {
+            mimeType,
+            dataType: typeof data,
+            size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
           });
-          if (custom != null) {
-            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+          const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+          const filename = `generated.${ext}`;
+          const binary =
+            typeof data === 'string'
+              ? Buffer.from(data, 'base64')
+              : data instanceof Uint8Array
+                ? Buffer.from(data)
+                : data;
+          try {
+            await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+          } catch (e) {
+            this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
           }
-        } else {
-          const resultMessage = formatToolResult(
+          continue;
+        }
+
+        // --- Text flush triggers ---
+        if (chunk.type === 'step-finish' || chunk.type === 'finish') {
+          await flushText();
+          continue;
+        }
+
+        // --- Tool call: post eager "Running…" card ---
+        if (chunk.type === 'tool-call') {
+          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+          await ensureTyping();
+          startTypingKeepalive();
+          await flushText();
+
+          const displayName = stripToolPrefix(chunk.payload.toolName);
+          const rawArgs = (
+            typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
+          ) as Record<string, unknown>;
+          const argsSummary = formatArgsSummary(rawArgs);
+
+          let messageId: string | undefined;
+          if (!adapterConfig?.formatToolCall) {
+            const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
+            messageId = sentMessage?.id;
+          }
+
+          toolCalls.set(chunk.payload.toolCallId, {
             displayName,
             argsSummary,
-            resultText,
-            !!chunk.payload.isError,
-            durationMs,
-            useCards,
-          );
-          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+            startedAt: Date.now(),
+            messageId,
+          });
+          continue;
         }
-        continue;
+
+        // --- Tool result: edit the "Running…" card with the outcome ---
+        if (chunk.type === 'tool-result') {
+          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+
+          const tracked = toolCalls.get(chunk.payload.toolCallId);
+          const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
+          const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+          const channelMsgId = tracked?.messageId;
+          const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
+
+          if (adapterConfig?.formatToolCall) {
+            const custom = adapterConfig.formatToolCall({
+              toolName: displayName,
+              args: (chunk.payload.args ?? {}) as Record<string, unknown>,
+              result: chunk.payload.result,
+              isError: chunk.payload.isError,
+            });
+            if (custom != null) {
+              await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+            }
+          } else {
+            const resultMessage = formatToolResult(
+              displayName,
+              argsSummary,
+              resultText,
+              !!chunk.payload.isError,
+              durationMs,
+              useCards,
+            );
+            await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+          }
+          continue;
+        }
+
+        // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
+        if (chunk.type === 'tool-call-approval') {
+          const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+          const tracked = toolCalls.get(toolCallId);
+          const displayName = tracked?.displayName || stripToolPrefix(toolName);
+          const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
+          const channelMsgId = tracked?.messageId;
+
+          const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
+
+          await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+          continue;
+        }
       }
-
-      // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
-      if (chunk.type === 'tool-call-approval') {
-        const { toolCallId, toolName, args: toolArgs } = chunk.payload;
-        const tracked = toolCalls.get(toolCallId);
-        const displayName = tracked?.displayName || stripToolPrefix(toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
-        const channelMsgId = tracked?.messageId;
-
-        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
-
-        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
-        continue;
-      }
+    } finally {
+      clearTimeout(typingFallbackTimer);
+      stopTypingKeepalive();
     }
-
-    clearTimeout(typingFallbackTimer);
-    stopTypingKeepalive();
 
     // Check for errors that occurred during streaming
     if (stream.error) {
