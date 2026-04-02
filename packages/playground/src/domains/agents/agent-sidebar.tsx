@@ -1,12 +1,10 @@
 import {
   AgentMemory,
-  Button,
   ChatThreads,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Tabs,
+  TabList,
+  Tab,
+  TabContent,
   useCloneThread,
   useDeleteThread,
   useLinkComponent,
@@ -28,7 +26,6 @@ export function AgentSidebar({
   const { mutateAsync } = useDeleteThread();
   const { mutateAsync: cloneThread } = useCloneThread();
   const { paths, navigate } = useLinkComponent();
-  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [isCloningThreadId, setIsCloningThreadId] = useState<string | null>(null);
 
   const handleDelete = async (deleteId: string) => {
@@ -52,34 +49,32 @@ export function AgentSidebar({
   };
 
   return (
-    <div className="h-full">
-      <div className="px-3 py-2 border-b border-border1 bg-surface2">
-        <Button variant="outline" className="w-full" onClick={() => setIsMemoryOpen(true)}>
+    <Tabs defaultTab="conversations" className="flex flex-col h-full overflow-hidden">
+      <TabList className="shrink-0 border-b border-border1 bg-surface2 px-2">
+        <Tab value="conversations" className="!text-ui-sm !px-3 !py-2.5">
+          Conversations
+        </Tab>
+        <Tab value="memory" className="!text-ui-sm !px-3 !py-2.5">
           Memory
-        </Button>
-      </div>
+        </Tab>
+      </TabList>
 
-      <ChatThreads
-        resourceId={agentId}
-        resourceType={'agent'}
-        threads={threads || []}
-        isLoading={isLoading}
-        threadId={threadId}
-        onDelete={handleDelete}
-        onClone={handleClone}
-        isCloningThreadId={isCloningThreadId}
-      />
+      <TabContent value="conversations" className="flex-1 overflow-y-auto py-0">
+        <ChatThreads
+          resourceId={agentId}
+          resourceType={'agent'}
+          threads={threads || []}
+          isLoading={isLoading}
+          threadId={threadId}
+          onDelete={handleDelete}
+          onClone={handleClone}
+          isCloningThreadId={isCloningThreadId}
+        />
+      </TabContent>
 
-      <Dialog open={isMemoryOpen} onOpenChange={setIsMemoryOpen}>
-        <DialogContent className="max-w-[860px] max-h-[85vh]">
-          <DialogHeader>
-            <DialogTitle>Memory</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="p-0 max-h-[70vh] overflow-y-auto">
-            <AgentMemory agentId={agentId} threadId={threadId} />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <TabContent value="memory" className="flex-1 overflow-y-auto py-0">
+        <AgentMemory agentId={agentId} threadId={threadId} />
+      </TabContent>
+    </Tabs>
   );
 }

@@ -2,7 +2,6 @@ import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
@@ -16,7 +15,6 @@ import { GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
-import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
@@ -25,7 +23,6 @@ import { extractPrompt } from '../../utils/extractPrompt';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { useMemory } from '@/domains/memory/hooks';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 
 export interface AgentMetadataProps {
@@ -60,13 +57,11 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 
 export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const codemirrorTheme = useCodemirrorTheme();
-  const hasMemoryEnabled = Boolean(memory?.result);
 
-  if (isLoading || isMemoryLoading) {
+  if (isLoading) {
     return <Skeleton className="h-full" />;
   }
 
@@ -105,37 +100,6 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           />
         </AgentMetadataSection>
       )}
-
-      <AgentMetadataSection
-        title="Memory"
-        hint={{
-          link: 'https://mastra.ai/en/docs/agents/agent-memory',
-          title: 'Agent Memory documentation',
-        }}
-      >
-        {hasMemoryEnabled ? (
-          <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
-            <span className="sr-only">Memory is enabled</span>
-            <span aria-hidden="true">On</span>
-          </Badge>
-        ) : (
-          <Alert variant="warning">
-            <AlertTitle as="h5">Memory not enabled</AlertTitle>
-            <AlertDescription as="p">
-              Thread messages will not be stored. To activate memory, see the{' '}
-              <a
-                href="https://mastra.ai/en/docs/agents/agent-memory"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                documentation
-              </a>
-              .
-            </AlertDescription>
-          </Alert>
-        )}
-      </AgentMetadataSection>
 
       {networkAgents.length > 0 && (
         <AgentMetadataSection

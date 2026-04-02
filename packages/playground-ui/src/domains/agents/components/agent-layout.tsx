@@ -3,6 +3,7 @@ import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel, CollapsiblePanelTriggerProps } from '@/lib/resize/collapsible-panel';
 import { Button } from '@/ds/components/Button/Button';
+import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -60,9 +61,9 @@ export const AgentLayout = ({
           <CollapsiblePanel
             direction="left"
             id="left-slot"
-            minSize={200}
-            maxSize={'30%'}
-            defaultSize={200}
+            minSize={240}
+            maxSize={'35%'}
+            defaultSize={280}
             collapsedSize={0}
             collapsible={true}
             panelRef={leftPanelRef}
@@ -81,7 +82,10 @@ export const AgentLayout = ({
         {leftSlot && isLeftCollapsed && (
           <div className="absolute left-4 top-4 z-10">
             <Button data-testid="open-conversations-button" size="sm" variant="outline" onClick={handleOpenConversations}>
-              Open conversations
+              <span className="inline-flex items-center gap-2">
+                <MemoryIcon className="h-4 w-4" />
+                Memory
+              </span>
             </Button>
           </div>
         )}

@@ -1,17 +1,24 @@
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons/Icon';
+import { useLinkComponent } from '@/lib/framework';
+import { ChevronRight, ChevronDown, InfoIcon } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { SemanticRecall } from '@mastra/core/memory';
 
+interface MemoryConfigItem {
+  label: string;
+  value: string | number | boolean | undefined;
+  badge?: 'success' | 'info' | 'warning';
+  hint?: { link: string; title: string };
+  children?: Array<{ label: string; value: string | number }>;
+}
+
 interface MemoryConfigSection {
   title: string;
-  items: Array<{
-    label: string;
-    value: string | number | boolean | undefined;
-    badge?: 'success' | 'info' | 'warning';
-  }>;
+  items: MemoryConfigItem[];
 }
 
 interface AgentMemoryConfigProps {
@@ -19,60 +26,71 @@ interface AgentMemoryConfigProps {
 }
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
+  const { Link } = useLinkComponent();
   const { data, isLoading } = useMemoryConfig(agentId);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['General', 'Semantic Recall']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(['Memory Configuration']),
+  );
 
   const config = data?.config;
   const configSections: MemoryConfigSection[] = useMemo(() => {
     if (!config) return [];
 
-    // Memory is enabled if we have a config
-    const memoryEnabled = !!config;
+    const isSemanticRecallEnabled = Boolean(config.semanticRecall);
+    const isWorkingMemoryEnabled = Boolean(config.workingMemory?.enabled);
+    const isOMEnabled =
+      typeof config.observationalMemory === 'object' && Boolean(config.observationalMemory?.enabled);
 
     const sections: MemoryConfigSection[] = [
       {
-        title: 'General',
+        title: 'Memory Configuration',
         items: [
-          { label: 'Memory Enabled', value: memoryEnabled, badge: memoryEnabled ? 'success' : undefined },
           { label: 'Last Messages', value: config.lastMessages || 0 },
           {
             label: 'Auto-generate Titles',
             value: !!config.generateTitle,
             badge: config.generateTitle ? 'info' : undefined,
           },
+          {
+            label: 'Semantic Recall',
+            value: isSemanticRecallEnabled,
+            badge: isSemanticRecallEnabled ? 'success' : undefined,
+            hint: { link: 'https://mastra.ai/en/docs/memory/semantic-recall', title: 'Learn about semantic recall' },
+            ...(isSemanticRecallEnabled
+              ? {
+                  children: (() => {
+                    const sr =
+                      typeof config.semanticRecall === 'object' ? config.semanticRecall : ({} as SemanticRecall);
+                    const messageRange =
+                      typeof sr.messageRange === 'object'
+                        ? `${sr.messageRange.before || 1} before, ${sr.messageRange.after || 1} after`
+                        : sr.messageRange !== undefined
+                          ? `${sr.messageRange} before, ${sr.messageRange} after`
+                          : '1 before, 1 after';
+                    return [
+                      { label: 'Scope', value: sr.scope || 'resource' },
+                      { label: 'Top K Results', value: sr.topK || 4 },
+                      { label: 'Message Range', value: messageRange },
+                    ];
+                  })(),
+                }
+              : {}),
+          },
+          {
+            label: 'Working Memory',
+            value: isWorkingMemoryEnabled,
+            badge: isWorkingMemoryEnabled ? 'success' : undefined,
+            hint: { link: 'https://mastra.ai/en/docs/memory/working-memory', title: 'Learn about working memory' },
+          },
+          {
+            label: 'Observational Memory',
+            value: isOMEnabled,
+            badge: isOMEnabled ? 'success' : undefined,
+          },
         ],
       },
     ];
 
-    // Semantic Recall section
-    if (config.semanticRecall) {
-      const enabled = Boolean(config.semanticRecall);
-      const semanticRecall = typeof config.semanticRecall === 'object' ? config.semanticRecall : ({} as SemanticRecall);
-
-      sections.push({
-        title: 'Semantic Recall',
-        items: [
-          { label: 'Enabled', value: enabled, badge: enabled ? 'success' : undefined },
-          ...(enabled
-            ? [
-                { label: 'Scope', value: semanticRecall.scope || 'resource' },
-                { label: 'Top K Results', value: semanticRecall.topK || 4 },
-                {
-                  label: 'Message Range',
-                  value:
-                    typeof semanticRecall.messageRange === 'object'
-                      ? `${semanticRecall.messageRange.before || 1} before, ${semanticRecall.messageRange.after || 1} after`
-                      : semanticRecall.messageRange !== undefined
-                        ? `${semanticRecall.messageRange} before, ${semanticRecall.messageRange} after`
-                        : '1 before, 1 after',
-                },
-              ]
-            : []),
-        ],
-      });
-    }
-
-    // Observational Memory section
     const omConfig = config.observationalMemory;
     if (typeof omConfig === 'object' && omConfig?.enabled) {
       const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
@@ -120,10 +138,10 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
               ? badge === 'info'
                 ? 'bg-blue-500/20 text-blue-400'
                 : 'bg-green-500/20 text-green-400'
-              : 'bg-red-500/20 text-red-400',
+              : 'text-neutral3',
           )}
         >
-          {value ? 'Yes' : 'No'}
+          {value ? 'On' : 'Off'}
         </span>
       );
     }
@@ -151,7 +169,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   if (!config || configSections.length === 0) {
     return (
       <div className="p-4">
-        <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
         <p className="text-xs text-neutral3">No memory configuration available</p>
       </div>
     );
@@ -159,7 +176,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
   return (
     <div className="p-4">
-      <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
       <div className="space-y-2">
         {configSections.map(section => (
           <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
@@ -177,9 +193,40 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
             {expandedSections.has(section.title) && (
               <div className="px-3 pb-2 space-y-1">
                 {section.items.map(item => (
-                  <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
-                    <span className="text-xs text-neutral3">{item.label}</span>
-                    {renderValue(item.value ?? '', item.badge)}
+                  <div key={`${section.title}-${item.label}`}>
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs text-neutral3 flex items-center gap-1">
+                        {item.label}
+                        {item.hint && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link href={item.hint.link} target="_blank" rel="noopener noreferrer">
+                                  <Icon className="text-neutral3" size="sm">
+                                    <InfoIcon />
+                                  </Icon>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>{item.hint.title}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </span>
+                      {renderValue(item.value ?? '', item.badge)}
+                    </div>
+                    {item.children && (
+                      <div className="ml-3 pl-2 border-l border-border1 space-y-0.5 mb-1">
+                        {item.children.map(child => (
+                          <div
+                            key={`${item.label}-${child.label}`}
+                            className="flex items-center justify-between py-0.5"
+                          >
+                            <span className="text-xs text-neutral3">{child.label}</span>
+                            <span className="text-xs text-neutral3">{child.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

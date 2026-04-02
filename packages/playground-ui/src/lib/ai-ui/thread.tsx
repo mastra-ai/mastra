@@ -4,6 +4,7 @@ import {
   ThreadPrimitive,
   ToolCallMessagePartComponent,
   useComposerRuntime,
+  useThreadRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
@@ -12,7 +13,7 @@ import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
@@ -118,8 +119,30 @@ interface ComposerProps {
 const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher, controls }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRuntime = useComposerRuntime();
+  const threadRuntime = useThreadRuntime();
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key !== 'ArrowUp') return;
+      if (composerRuntime.getState().text.trim() !== '') return;
+
+      const messages = threadRuntime.getState().messages;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role !== 'user') continue;
+        const textPart = msg.content.find(p => p.type === 'text');
+        if (textPart && 'text' in textPart) {
+          composerRuntime.setText(textPart.text);
+          e.preventDefault();
+        }
+        return;
+      }
+    },
+    [composerRuntime, threadRuntime],
+  );
 
   return (
     <div className="mx-4">
@@ -138,6 +161,7 @@ const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher, control
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>

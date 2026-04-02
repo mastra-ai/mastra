@@ -20,13 +20,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   const { threadExists, workingMemoryData, workingMemorySource, isLoading, isUpdating, updateWorkingMemory } =
     useWorkingMemory();
 
-  // Get memory config to check if working memory is enabled
   const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
   const config = data?.config;
-  // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
-  // All hooks must be called before any early returns
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',
     copyMessage: 'Working memory copied!',
@@ -108,7 +105,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </>
               ) : (
                 <div className="text-sm text-neutral3 font-mono">
-                  No working memory content yet. Click "Edit Working Memory" to add content.
+                  No working memory content yet. Click &quot;Edit Working Memory&quot; to add content.
                 </div>
               )}
             </>
