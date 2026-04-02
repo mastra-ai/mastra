@@ -2,6 +2,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
@@ -217,32 +218,51 @@ export class AIV5Adapter {
             }
             parts.push(v5UIPart);
           } else {
-            let filePartData: string;
             let extractedMimeType = part.mimeType;
+            let dataUri: string;
 
-            if (typeof part.data === 'string') {
-              const parsed = parseDataUri(part.data);
+            // part.data is typed as string but may be a Uint8Array/ArrayBuffer at
+            // runtime (e.g. from channel attachment fetches). Handle defensively.
+            const rawData: unknown = part.data;
+
+            if (typeof rawData === 'string') {
+              const parsed = parseDataUri(rawData);
 
               if (parsed.isDataUri) {
-                filePartData = parsed.base64Content;
                 if (parsed.mimeType) {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
                 }
+                const finalMimeType = extractedMimeType || 'image/png';
+                dataUri = parsed.base64Content.startsWith('data:')
+                  ? parsed.base64Content
+                  : createDataUri(parsed.base64Content, finalMimeType);
+              } else if (rawData.startsWith('data:')) {
+                dataUri = rawData;
               } else {
-                filePartData = part.data;
+                dataUri = createDataUri(rawData, extractedMimeType || 'image/png');
               }
+            } else if (rawData instanceof Uint8Array || rawData instanceof ArrayBuffer) {
+              // Binary data — convert to base64 data URI
+              const base64 = convertDataContentToBase64String(rawData);
+              dataUri = createDataUri(base64, extractedMimeType || 'application/octet-stream');
+            } else if (rawData instanceof URL) {
+              // URL object — use directly
+              const v5UIPart: AIV5Type.FileUIPart = {
+                type: 'file' as const,
+                url: rawData.toString(),
+                mediaType: extractedMimeType || 'application/octet-stream',
+              };
+              if (part.providerMetadata) {
+                v5UIPart.providerMetadata = part.providerMetadata;
+              }
+              parts.push(v5UIPart);
+              continue;
             } else {
-              filePartData = part.data;
+              // Unknown data type — skip to avoid crashes
+              continue;
             }
 
             const finalMimeType = extractedMimeType || 'image/png';
-
-            let dataUri: string;
-            if (typeof filePartData === 'string' && filePartData.startsWith('data:')) {
-              dataUri = filePartData;
-            } else {
-              dataUri = createDataUri(filePartData, finalMimeType);
-            }
 
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,

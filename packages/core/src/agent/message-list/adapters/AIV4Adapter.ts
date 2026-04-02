@@ -86,20 +86,25 @@ export class AIV4Adapter {
     if (sourceParts.length) {
       for (const part of sourceParts) {
         if (part.type === `file`) {
-          // Normalize part.data to ensure it's a valid URL or data URI
+          // Normalize part.data to ensure it's a valid URL or data URI.
+          // part.data is typed as string but may be Uint8Array/URL at runtime.
+          const rawData: unknown = part.data;
           let normalizedUrl: string;
-          if (typeof part.data === 'string') {
-            const categorized = categorizeFileData(part.data, part.mimeType);
+
+          if (typeof rawData === 'string') {
+            const categorized = categorizeFileData(rawData, part.mimeType);
             if (categorized.type === 'raw') {
-              // Raw base64 - convert to data URI
-              normalizedUrl = createDataUri(part.data, part.mimeType || 'application/octet-stream');
+              normalizedUrl = createDataUri(rawData, part.mimeType || 'application/octet-stream');
             } else {
-              // Already a URL or data URI
-              normalizedUrl = part.data;
+              normalizedUrl = rawData;
             }
+          } else if (rawData instanceof Uint8Array || rawData instanceof ArrayBuffer) {
+            const base64 = convertDataContentToBase64String(rawData);
+            normalizedUrl = createDataUri(base64, part.mimeType || 'application/octet-stream');
+          } else if (rawData instanceof URL) {
+            normalizedUrl = rawData.toString();
           } else {
-            // It's a non-string (shouldn't happen in practice for file parts, but handle it)
-            normalizedUrl = part.data;
+            continue; // Unknown data type — skip
           }
 
           experimentalAttachments.push({
