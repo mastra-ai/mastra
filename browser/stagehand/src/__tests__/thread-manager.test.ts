@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockStagehand, mockPage, mockContext } = vi.hoisted(() => {
+const { mockStagehand, mockPage } = vi.hoisted(() => {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(undefined),
     url: vi.fn().mockReturnValue('https://example.com'),
@@ -21,7 +21,7 @@ const { mockStagehand, mockPage, mockContext } = vi.hoisted(() => {
     context: mockContext,
   };
 
-  return { mockStagehand, mockPage, mockContext };
+  return { mockStagehand, mockPage };
 });
 
 vi.mock('@browserbasehq/stagehand', () => ({
