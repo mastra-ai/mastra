@@ -430,6 +430,9 @@ export class AgentChannels {
         }
 
         // Build request context for the resumed stream
+        const actionAdapter = this.adapters[platform]!;
+        const actionBotUserId = actionAdapter.botUserId;
+        const actionBotMention = actionBotUserId ? sdkThread.mentionUser(actionBotUserId) : undefined;
         const requestContext = new RequestContext();
         requestContext.set('channel', {
           platform,
@@ -440,6 +443,9 @@ export class AgentChannels {
           messageId,
           userId: event.user.userId,
           userName: event.user.fullName || event.user.userName,
+          botUserId: actionBotUserId,
+          botUserName: actionAdapter.userName,
+          botMention: actionBotMention,
         } satisfies ChannelContext);
         // Resume the agent stream BEFORE editing the card —
         // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
@@ -646,6 +652,11 @@ export class AgentChannels {
     const authorId = message.author.userId;
     const authorMention = authorId ? sdkThread.mentionUser(authorId) : undefined;
 
+    // Bot identity — so the LLM can recognise self-mentions in raw message text
+    const adapter = this.adapters[platform]!;
+    const botUserId = adapter.botUserId;
+    const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
+
     // Build request context with channel info.
     const requestContext = new RequestContext();
     requestContext.set('channel', {
@@ -657,6 +668,9 @@ export class AgentChannels {
       messageId: message.id,
       userId: authorId,
       userName: authorName,
+      botUserId,
+      botUserName: adapter.userName,
+      botMention,
     } satisfies ChannelContext);
 
     // Build message text.

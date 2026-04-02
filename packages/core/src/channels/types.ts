@@ -40,4 +40,10 @@ export type ChannelContext = {
   userId: string;
   /** Display name of the sender, if available. */
   userName?: string;
+  /** The bot's own user ID on this platform. */
+  botUserId?: string;
+  /** The bot's display name on this platform. */
+  botUserName?: string;
+  /** The bot's mention string (e.g. '<@U123>' on Slack/Discord). */
+  botMention?: string;
 };

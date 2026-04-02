@@ -22,6 +22,16 @@ export class ChatChannelProcessor {
 
     const lines = [`You are communicating via ${ctx.platform}.`];
 
+    // Tell the LLM its own identity so it can recognise self-mentions in raw message text
+    if (ctx.botUserName || ctx.botMention) {
+      const parts: string[] = [];
+      if (ctx.botUserName) parts.push(`"${ctx.botUserName}"`);
+      if (ctx.botMention) parts.push(ctx.botMention);
+      lines.push(
+        `Your identity on this platform is ${parts.join(' / ')}. Messages containing these references are directed at you.`,
+      );
+    }
+
     if (ctx.isDM) {
       lines.push('This is a direct message (DM) conversation.');
       if (ctx.userName || ctx.userId) {
@@ -30,9 +40,12 @@ export class ChatChannelProcessor {
         if (ctx.userId) identity.push(`ID: ${ctx.userId}`);
         lines.push(`You are talking to a user (${identity.join(', ')}).`);
       }
+    } else if (ctx.eventType === 'mention') {
+      lines.push('You were mentioned in this message. Respond to the user.');
     } else {
+      // Subscribed thread — the bot is passively listening
       lines.push(
-        'This message is in a public channel or thread.',
+        'This message is in a public channel or thread you are monitoring.',
         'Not every message is directed at you. If users appear to be talking to each other, stay silent unless you are explicitly mentioned or your input is clearly needed. To stay silent, respond with an empty message.',
       );
     }

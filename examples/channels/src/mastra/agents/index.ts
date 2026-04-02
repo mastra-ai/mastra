@@ -8,7 +8,7 @@ import { Memory } from '@mastra/memory';
 
 export const exampleAgent = new Agent({
   id: 'example-agent',
-  name: 'Example Agent',
+  name: 'ExampleAgent',
   instructions: `You are a helpful assistant. If the user only asks you to run a tool and nothing else, you don't need to repeat the tool call output if you have nothing else to add since the tool call result is already shown to the user right after its called.`,
   model: 'openai/gpt-5.4',
   memory: new Memory({
