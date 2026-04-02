@@ -717,19 +717,21 @@ export class AgentChannels {
       | { type: 'file'; data: URL | Uint8Array; mimeType: string };
     const parts: MastraPart[] = [{ type: 'text', text: rawText }];
 
-    // Add attachments (images, files) as additional parts
+    // Add attachments (images, files) as additional parts.
+    // Images are fetched as binary for inline embedding; other file types use
+    // URLs to avoid passing raw Uint8Array through the adapter pipeline.
     for (const att of usableAttachments) {
-      const data = att.fetchData ? await att.fetchData() : undefined;
       if (att.type === 'image') {
+        const data = att.fetchData ? await att.fetchData() : undefined;
         parts.push({
           type: 'image',
           image: data ?? new URL(att.url!),
           ...(att.mimeType && { mimeType: att.mimeType }),
         });
-      } else if (att.mimeType) {
+      } else if (att.url && att.mimeType) {
         parts.push({
           type: 'file',
-          data: data ?? new URL(att.url!),
+          data: new URL(att.url),
           mimeType: att.mimeType,
         });
       }
