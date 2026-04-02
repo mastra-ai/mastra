@@ -1,4 +1,5 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -180,7 +181,7 @@ export async function findResponseTurnRecord({
   }
 
   const metadata = readResponseTurnRecordMetadata(message);
-  if (!metadata) {
+  if (!metadata || metadata.agentId !== agent.id) {
     return null;
   }
 
@@ -198,6 +199,69 @@ export async function findResponseTurnRecord({
     .filter((storedMessage): storedMessage is MastraDBMessage => Boolean(storedMessage));
 
   return { metadata, message, messages: orderedMessages, thread, memoryStore };
+}
+
+export async function findResponseTurnRecordAcrossAgents({
+  mastra,
+  responseId,
+  requestContext,
+}: {
+  mastra: Mastra | undefined;
+  responseId: string;
+  requestContext: RequestContext;
+}): Promise<ResponseTurnRecord | null> {
+  if (!mastra) {
+    return null;
+  }
+
+  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+  for (const agent of agents) {
+    const match = await findResponseTurnRecord({ agent, responseId, requestContext });
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+export type ConversationThreadRecord = {
+  thread: StorageThreadType;
+  memoryStore: MemoryStorage;
+};
+
+export async function findConversationThreadAcrossAgents({
+  mastra,
+  conversationId,
+  requestContext,
+}: {
+  mastra: Mastra | undefined;
+  conversationId: string;
+  requestContext: RequestContext;
+}): Promise<ConversationThreadRecord | null> {
+  if (!mastra) {
+    return null;
+  }
+
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+
+  for (const agent of agents) {
+    const memoryStore = await getAgentMemoryStore({ agent, requestContext });
+    if (!memoryStore) {
+      continue;
+    }
+
+    const thread = await memoryStore.getThreadById({ threadId: conversationId });
+    if (!thread) {
+      continue;
+    }
+
+    await validateThreadOwnership(thread, effectiveResourceId);
+    return { thread, memoryStore };
+  }
+
+  return null;
 }
 
 /**
@@ -343,5 +407,10 @@ export async function deleteResponseTurnRecord({
 }: {
   responseTurnRecord: ResponseTurnRecord;
 }): Promise<void> {
-  await responseTurnRecord.memoryStore.deleteMessages(responseTurnRecord.metadata.messageIds);
+  const messageIds =
+    responseTurnRecord.messages.length > 0
+      ? responseTurnRecord.messages.map(message => message.id)
+      : [responseTurnRecord.message.id];
+
+  await responseTurnRecord.memoryStore.deleteMessages(messageIds);
 }

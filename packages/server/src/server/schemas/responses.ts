@@ -4,10 +4,6 @@ export const responseIdPathParams = z.object({
   responseId: z.string().describe('Unique identifier for the stored response'),
 });
 
-export const responseAgentQuerySchema = z.object({
-  agent_id: z.string().describe('Mastra agent ID that owns the stored response'),
-});
-
 export const responseInputTextPartSchema = z.object({
   type: z.enum(['input_text', 'text', 'output_text']),
   text: z.string(),

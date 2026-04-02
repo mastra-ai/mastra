@@ -140,7 +140,6 @@ describe('Conversation Handlers', () => {
 
     const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       conversationId: thread.id,
     });
 
@@ -240,7 +239,6 @@ describe('Conversation Handlers', () => {
 
     const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       conversationId: thread.id,
     });
 
@@ -263,7 +261,6 @@ describe('Conversation Handlers', () => {
 
     const conversation = await GET_CONVERSATION_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       conversationId: thread.id,
     });
 
@@ -285,7 +282,6 @@ describe('Conversation Handlers', () => {
 
     const deleted = await DELETE_CONVERSATION_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       conversationId: thread.id,
     });
 
@@ -298,7 +294,6 @@ describe('Conversation Handlers', () => {
     await expect(
       GET_CONVERSATION_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        agent_id: 'test-agent',
         conversationId: thread.id,
       }),
     ).rejects.toMatchObject({
@@ -338,7 +333,6 @@ describe('Conversation Handlers', () => {
 
     const retrieved = await GET_CONVERSATION_ROUTE.handler({
       ...createTestServerContext({ mastra: dedicated.mastra }),
-      agent_id: 'dedicated-agent',
       conversationId: 'conv_dedicated',
     });
     expect(retrieved).toMatchObject({
@@ -352,7 +346,6 @@ describe('Conversation Handlers', () => {
 
     const items = await GET_CONVERSATION_ITEMS_ROUTE.handler({
       ...createTestServerContext({ mastra: dedicated.mastra }),
-      agent_id: 'dedicated-agent',
       conversationId: 'conv_dedicated',
     });
     expect(items).toMatchObject({
@@ -368,7 +361,6 @@ describe('Conversation Handlers', () => {
 
     const deleted = await DELETE_CONVERSATION_ROUTE.handler({
       ...createTestServerContext({ mastra: dedicated.mastra }),
-      agent_id: 'dedicated-agent',
       conversationId: 'conv_dedicated',
     });
     expect(deleted).toEqual({
@@ -380,7 +372,6 @@ describe('Conversation Handlers', () => {
     await expect(
       GET_CONVERSATION_ROUTE.handler({
         ...createTestServerContext({ mastra: dedicated.mastra }),
-        agent_id: 'dedicated-agent',
         conversationId: 'conv_dedicated',
       }),
     ).rejects.toMatchObject({
@@ -406,7 +397,6 @@ describe('Conversation Handlers', () => {
 
     const retrieved = await GET_CONVERSATION_ROUTE.handler({
       ...createTestServerContext({ mastra: rootBacked.mastra }),
-      agent_id: 'root-backed-agent',
       conversationId: 'conv_root_backed',
     });
 

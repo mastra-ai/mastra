@@ -373,7 +373,6 @@ describe('Responses Handlers', () => {
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       responseId: created.id,
     });
 
@@ -446,7 +445,6 @@ describe('Responses Handlers', () => {
     const created = await readJson(response);
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       responseId: created.id,
     });
 
@@ -553,7 +551,6 @@ describe('Responses Handlers', () => {
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       responseId: created.id,
     });
 
@@ -1091,7 +1088,6 @@ describe('Responses Handlers', () => {
     const completedPayload = JSON.parse(completedLine!.slice('data: '.length)) as { response: { id: string } };
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       responseId: completedPayload.response.id,
     });
 
@@ -1251,7 +1247,6 @@ describe('Responses Handlers', () => {
 
     const deleted = await DELETE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'test-agent',
       responseId: created.id,
     });
 
@@ -1264,7 +1259,6 @@ describe('Responses Handlers', () => {
     await expect(
       GET_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        agent_id: 'test-agent',
         responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);
@@ -1390,7 +1384,6 @@ describe('Responses Handlers', () => {
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'tool-agent',
       responseId: created.id,
     });
 
@@ -1466,7 +1459,6 @@ describe('Responses Handlers', () => {
     const created = await readJson(response);
     const deleted = await DELETE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      agent_id: 'tool-agent',
       responseId: created.id,
     });
 
@@ -1479,7 +1471,6 @@ describe('Responses Handlers', () => {
     await expect(
       GET_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        agent_id: 'tool-agent',
         responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);
@@ -1543,7 +1534,6 @@ describe('Responses Handlers', () => {
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra: dedicated.mastra }),
-      agent_id: 'dedicated-agent',
       responseId: created.id,
     });
     expect(retrieved).toMatchObject({
@@ -1554,7 +1544,6 @@ describe('Responses Handlers', () => {
 
     const deleted = await DELETE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra: dedicated.mastra }),
-      agent_id: 'dedicated-agent',
       responseId: created.id,
     });
     expect(deleted).toEqual({
@@ -1566,7 +1555,6 @@ describe('Responses Handlers', () => {
     await expect(
       GET_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra: dedicated.mastra }),
-        agent_id: 'dedicated-agent',
         responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);

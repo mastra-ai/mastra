@@ -7,7 +7,6 @@ import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
   deleteResponseSchema,
-  responseAgentQuerySchema,
   responseIdPathParams,
   responseObjectSchema,
 } from '../schemas/responses';
@@ -31,6 +30,7 @@ import {
 import {
   deleteResponseTurnRecord,
   findResponseTurnRecord,
+  findResponseTurnRecordAcrossAgents,
   getAgentMemoryStore,
   persistResponseTurnRecord,
   resolveResponseTurnMessagesForStorage,
@@ -945,17 +945,15 @@ export const GET_RESPONSE_ROUTE = createRoute({
   path: '/v1/responses/:responseId',
   responseType: 'json',
   pathParamSchema: responseIdPathParams,
-  queryParamSchema: responseAgentQuerySchema,
   responseSchema: responseObjectSchema,
   summary: 'Retrieve a stored response',
   description: 'Returns a previously stored response object',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, responseId, agent_id }) => {
+  handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const agent = await resolveResponseAgent({ mastra, agentId: agent_id });
-      const responseTurnRecord = await findResponseTurnRecord({ agent, responseId, requestContext });
+      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
@@ -972,17 +970,15 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   path: '/v1/responses/:responseId',
   responseType: 'json',
   pathParamSchema: responseIdPathParams,
-  queryParamSchema: responseAgentQuerySchema,
   responseSchema: deleteResponseSchema,
   summary: 'Delete a stored response',
   description: 'Deletes a stored response so it can no longer be retrieved or chained',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:delete',
-  handler: async ({ mastra, requestContext, responseId, agent_id }) => {
+  handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const agent = await resolveResponseAgent({ mastra, agentId: agent_id });
-      const responseTurnRecord = await findResponseTurnRecord({ agent, responseId, requestContext });
+      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
