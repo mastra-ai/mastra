@@ -140,7 +140,9 @@ export function createSettleTool(agent: MnemoPayLite) {
       return {
         settled: true,
         transactionId: input.transactionId,
-        reputationDelta: agent.reputationStep ?? 0.05,
+        reputationDelta: 'reputationStep' in agent && typeof agent.reputationStep === 'number'
+          ? agent.reputationStep
+          : 0.05,
       };
     },
   });
@@ -168,7 +170,9 @@ export function createRefundTool(agent: MnemoPayLite) {
       return {
         refunded: true,
         transactionId: input.transactionId,
-        reputationDelta: -(agent.reputationStep ?? 0.05),
+        reputationDelta: -('reputationStep' in agent && typeof agent.reputationStep === 'number'
+          ? agent.reputationStep
+          : 0.05),
       };
     },
   });
@@ -209,11 +213,16 @@ export function createProfileTool(agent: MnemoPayLite) {
     }),
     execute: async () => {
       const bal = agent.balance();
+      const agentId = 'agentId' in agent && typeof agent.agentId === 'string'
+        ? agent.agentId
+        : 'unknown';
       return {
-        agentId: (agent as any).agentId ?? 'unknown',
+        agentId,
         wallet: bal.wallet,
         reputation: bal.reputation,
-        reputationStep: agent.reputationStep ?? 0.05,
+        reputationStep: 'reputationStep' in agent && typeof agent.reputationStep === 'number'
+          ? agent.reputationStep
+          : 0.05,
       };
     },
   });
