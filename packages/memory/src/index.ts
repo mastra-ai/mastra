@@ -22,7 +22,7 @@ import type {
   MemoryConfig,
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -211,10 +211,10 @@ export class Memory extends MastraMemory {
   }
 
   private createMemorySpan(
-    operationType: 'recall' | 'save' | 'delete' | 'update',
+    operationType: MemoryOperationAttributes['operationType'],
     observabilityContext?: Partial<ObservabilityContext>,
     input?: any,
-    attributes?: Record<string, any>,
+    attributes?: Partial<MemoryOperationAttributes>,
   ) {
     const currentSpan = observabilityContext?.tracingContext?.currentSpan;
     if (!currentSpan) return undefined;
@@ -343,7 +343,7 @@ export class Memory extends MastraMemory {
           usage: undefined,
           total: 0,
           page: page ?? 0,
-          perPage: 0 as const,
+          perPage: 0,
           hasMore: false,
         };
         span?.end({ attributes: { success: true, messageCount: 0 } });
@@ -955,14 +955,9 @@ ${workingMemory}`;
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    const span = this.createMemorySpan(
-      'save',
-      observabilityContext,
-      { messageCount: messages.length },
-      {
-        messageCount: messages.length,
-      },
-    );
+    const span = this.createMemorySpan('save', observabilityContext, undefined, {
+      messageCount: messages.length,
+    });
 
     try {
       // Then strip working memory tags from all messages
@@ -2114,12 +2109,9 @@ Notes:
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    const span = this.createMemorySpan(
-      'delete',
-      observabilityContext,
-      { messageCount: messageIds.length },
-      { messageCount: messageIds.length },
-    );
+    const span = this.createMemorySpan('delete', observabilityContext, undefined, {
+      messageCount: messageIds.length,
+    });
 
     try {
       const memoryStore = await this.getMemoryStore();
