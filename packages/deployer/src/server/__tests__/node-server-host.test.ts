@@ -80,7 +80,8 @@ describe('createNodeServer host binding', () => {
 
     serveMock.mockImplementation((options: any, callback?: () => void) => {
       callback?.();
-      return { close: vi.fn(), options };
+      // Mock server needs `on` method for @hono/node-ws injectWebSocket
+      return { close: vi.fn(), on: vi.fn(), options };
     });
 
     mockMastra = {
