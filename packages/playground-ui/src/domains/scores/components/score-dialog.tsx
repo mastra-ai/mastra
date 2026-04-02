@@ -56,8 +56,12 @@ export function ScoreDialog({
   usageContext = 'scorerPage',
 }: ScoreDialogProps) {
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
   const isCodeBased = isCodeBasedScorer(score);
+  const scorerDetailHref =
+    score?.scorerId && score?.entityId
+      ? `${paths.scorerLink(score.scorerId)}?entity=${encodeURIComponent(score.entityId)}&scoreId=${encodeURIComponent(score.id)}`
+      : undefined;
 
   return (
     <>
@@ -122,7 +126,11 @@ export function ScoreDialog({
                   ? [
                       {
                         label: 'Scorer',
-                        value: (score?.scorer?.name as string) || '-',
+                        value: scorerDetailHref ? (
+                          <Link href={scorerDetailHref}>{(score?.scorer?.name as string) || '-'}</Link>
+                        ) : (
+                          (score?.scorer?.name as string) || '-'
+                        ),
                         key: 'scorer-name',
                       },
                     ]
