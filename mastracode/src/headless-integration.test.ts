@@ -13,7 +13,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
-import type { PackContext } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -663,127 +662,8 @@ describe('headless mode — --model flag', () => {
   });
 });
 
-describe('headless mode — config file', () => {
-  it('loads config file via --config and switches model', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
-      }),
-    );
-
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-    });
-
-    expect(exitCode).toBe(0);
-    const modelChanged = events.find(e => e.type === 'model_changed') as any;
-    expect(modelChanged).toBeDefined();
-    expect(modelChanged.modelId).toBe('anthropic/claude-sonnet-4-5');
-  });
-
-  it('applies all modeDefaults and wires subagent models', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: {
-          modeDefaults: {
-            build: 'anthropic/claude-sonnet-4-5',
-            fast: 'anthropic/claude-haiku-4-5',
-          },
-        },
-      }),
-    );
-
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-    });
-
-    expect(exitCode).toBe(0);
-    // Current mode (build) model should be switched
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-sonnet-4-5');
-    // Subagent models should be wired (explore→fast, execute→build)
-    expect(harness.getSubagentModelId({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');
-    expect(harness.getSubagentModelId({ agentType: 'execute' })).toBe('anthropic/claude-sonnet-4-5');
-  });
-
-  it('--model flag overrides config file model', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
-      }),
-    );
-
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      model: 'anthropic/claude-haiku-4-5',
-      config: configPath,
-    });
-
-    expect(exitCode).toBe(0);
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
-  });
-
-  it('--mode selects model from config modeDefaults', async () => {
+describe('headless mode — --mode with effectiveDefaults', () => {
+  it('--mode fast switches to effectiveDefaults.fast', async () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [{ id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true }],
@@ -792,599 +672,35 @@ describe('headless mode — config file', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { fast: 'cerebras/zai-glm-4.7' } },
-      }),
-    );
-
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      mode: 'fast',
-      config: configPath,
-    });
+    const exitCode = await runHeadless(
+      harness,
+      {
+        prompt: 'Hello',
+        format: 'default',
+        continue_: false,
+        mode: 'fast',
+      },
+      { build: 'anthropic/claude-opus-4-6', fast: 'cerebras/zai-glm-4.7', plan: 'openai/gpt-5.2-codex' },
+    );
 
     expect(exitCode).toBe(0);
     expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
   });
 
-  it('returns exit code 1 for missing --config path', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: '/nonexistent/headless.json',
-    });
-
-    expect(exitCode).toBe(1);
-  });
-
-  it('--profile selects named profile model', async () => {
+  it('--model still overrides effectiveDefaults', async () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
+        { id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true },
       ],
     });
 
     await harness.init();
     await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
-        profiles: {
-          ci: {
-            models: { modeDefaults: { build: 'anthropic/claude-haiku-4-5' } },
-          },
-        },
-      }),
-    );
-
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-      profile: 'ci',
-    });
-
-    expect(exitCode).toBe(0);
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
-  });
-
-  it('--profile + --thinking-level flag overrides profile thinking level', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        profiles: {
-          ci: {
-            preferences: { thinkingLevel: 'off' },
-          },
-        },
-      }),
-    );
-
-    const stderrCalls: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
-      stderrCalls.push(String(args[0]));
-      return origWrite(...(args as Parameters<typeof origWrite>));
-    });
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-      profile: 'ci',
-      thinkingLevel: 'high',
-    });
-
-    stderrSpy.mockRestore();
-
-    expect(exitCode).toBe(0);
-    // --thinking-level flag should win over profile's thinkingLevel
-    const stderrOutput = stderrCalls.join('');
-    expect(stderrOutput).toContain('[thinking] high');
-  });
-
-  it('unknown --profile returns exit code 1', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        profiles: {
-          ci: { preferences: { yolo: true } },
-        },
-      }),
-    );
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-      profile: 'staging',
-    });
-
-    expect(exitCode).toBe(1);
-  });
-
-  it('--profile fails gracefully when config has no profiles section', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { build: 'anthropic/claude-sonnet-4-5' } },
-      }),
-    );
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-      profile: 'ci',
-    });
-
-    expect(exitCode).toBe(1);
-  });
-
-  it('returns exit code 1 when config references unknown model', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { modeDefaults: { build: 'nonexistent/model' } },
-      }),
-    );
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      config: configPath,
-    });
-
-    expect(exitCode).toBe(1);
-  });
-});
-
-describe('headless mode — pack resolution', () => {
-  const testPackContext: PackContext = {
-    builtinPacks: [
-      {
-        id: 'test-pack',
-        models: {
-          build: 'anthropic/claude-sonnet-4-5',
-          fast: 'anthropic/claude-haiku-4-5',
-          plan: 'anthropic/claude-sonnet-4-5',
-        },
-      },
-    ],
-    builtinOmPacks: [{ id: 'test-om-pack', modelId: 'anthropic/claude-haiku-4-5' }],
-  };
-
-  it('activeModelPackId resolves correct models via packContext', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeModelPackId: 'test-pack' },
-      }),
-    );
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    expect(exitCode).toBe(0);
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-sonnet-4-5');
-    expect(harness.getSubagentModelId({ agentType: 'explore' })).toBe('anthropic/claude-haiku-4-5');
-  });
-
-  it('modeDefaults overrides activeModelPackId when both present', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: {
-          activeModelPackId: 'test-pack',
-          modeDefaults: { build: 'anthropic/claude-haiku-4-5' },
-        },
-      }),
-    );
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    expect(exitCode).toBe(0);
-    // modeDefaults should win over activeModelPackId
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
-  });
-
-  it('subagentModels overrides pack-derived subagent wiring', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-        { id: 'openai/gpt-4o', provider: 'openai', modelName: 'gpt-4o', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: {
-          activeModelPackId: 'test-pack',
-          subagentModels: { explore: 'openai/gpt-4o' },
-        },
-      }),
-    );
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    expect(exitCode).toBe(0);
-    // subagentModels should override the pack-derived explore model
-    expect(harness.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-4o');
-  });
-
-  it('activeOmPackId resolves to correct OM model', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeOmPackId: 'test-om-pack' },
-      }),
-    );
-
-    const stderrCalls: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
-      stderrCalls.push(String(args[0]));
-      return origWrite(...(args as Parameters<typeof origWrite>));
-    });
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    stderrSpy.mockRestore();
-
-    expect(exitCode).toBe(0);
-    expect(stderrCalls.join('')).toContain('[om-model] anthropic/claude-haiku-4-5');
-  });
-
-  it('omModelOverride applies to observer and reflector', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [{ id: 'openai/gpt-4o', provider: 'openai', modelName: 'gpt-4o', hasApiKey: true }],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { omModelOverride: 'openai/gpt-4o' },
-      }),
-    );
-
-    const stderrCalls: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
-      stderrCalls.push(String(args[0]));
-      return origWrite(...(args as Parameters<typeof origWrite>));
-    });
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    stderrSpy.mockRestore();
-
-    expect(exitCode).toBe(0);
-    expect(stderrCalls.join('')).toContain('[om-model] openai/gpt-4o');
-  });
-
-  it('OM thresholds are applied to harness state', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: {
-          omObservationThreshold: 0.7,
-          omReflectionThreshold: 0.3,
-        },
-      }),
-    );
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    expect(exitCode).toBe(0);
-    const state = harness.getState() as any;
-    expect(state.observationThreshold).toBe(0.7);
-    expect(state.reflectionThreshold).toBe(0.3);
-  });
-
-  it('unknown activeModelPackId falls through gracefully', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeModelPackId: 'nonexistent-pack' },
-      }),
-    );
-
-    const stderrCalls: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
-      stderrCalls.push(String(args[0]));
-      return origWrite(...(args as Parameters<typeof origWrite>));
-    });
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    stderrSpy.mockRestore();
-
-    expect(exitCode).toBe(0);
-    expect(stderrCalls.join('')).toContain('Unknown model pack "nonexistent-pack"');
-  });
-
-  it('custom: pack ID warns and is ignored', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeModelPackId: 'custom:my-pack' },
-      }),
-    );
-
-    const stderrCalls: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
-      stderrCalls.push(String(args[0]));
-      return origWrite(...(args as Parameters<typeof origWrite>));
-    });
-
-    const exitCode = await runHeadless(
-      harness,
-      {
-        prompt: 'Hello',
-        format: 'default',
-        continue_: false,
-        config: configPath,
-      },
-      testPackContext,
-    );
-
-    stderrSpy.mockRestore();
-
-    expect(exitCode).toBe(0);
-    expect(stderrCalls.join('')).toContain('Custom pack references are not supported');
-  });
-
-  it('--model flag still overrides pack-based resolution', async () => {
-    const harness = createHarnessWithModels({
-      doStream: async () => ({ stream: createTextStream('Response') }),
-      customModels: [
-        { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
-      ],
-    });
-
-    await harness.init();
-    await harness.selectOrCreateThread();
-
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeModelPackId: 'test-pack' },
-      }),
-    );
 
     const exitCode = await runHeadless(
       harness,
@@ -1393,17 +709,94 @@ describe('headless mode — pack resolution', () => {
         format: 'default',
         continue_: false,
         model: 'anthropic/claude-haiku-4-5',
-        config: configPath,
+        mode: 'fast',
       },
-      testPackContext,
+      { build: 'anthropic/claude-opus-4-6', fast: 'cerebras/zai-glm-4.7', plan: 'openai/gpt-5.2-codex' },
     );
 
     expect(exitCode).toBe(0);
-    // --model should win over pack
+    // --model should win over effectiveDefaults
     expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
   });
 
-  it('pack resolution without packContext degrades gracefully', async () => {
+  it('--mode returns exit code 1 when resolved model is not available', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [], // No models available
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
+
+    const exitCode = await runHeadless(
+      harness,
+      {
+        prompt: 'Hello',
+        format: 'default',
+        continue_: false,
+        mode: 'fast',
+      },
+      { build: 'anthropic/claude-opus-4-6', fast: 'nonexistent/model', plan: 'openai/gpt-5.2-codex' },
+    );
+
+    stderrSpy.mockRestore();
+
+    expect(exitCode).toBe(1);
+    expect(stderrCalls.join('')).toContain('Unknown model');
+    expect(stderrCalls.join('')).toContain('nonexistent/model');
+    expect(stderrCalls.join('')).toContain('mode');
+  });
+
+  it('--mode returns exit code 1 when resolved model has no API key', async () => {
+    const harness = createHarnessWithModels({
+      doStream: async () => ({ stream: createTextStream('Should not reach here') }),
+      customModels: [
+        {
+          id: 'openai/gpt-4o',
+          provider: 'openai',
+          modelName: 'gpt-4o',
+          hasApiKey: false,
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+        },
+      ],
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
+
+    const exitCode = await runHeadless(
+      harness,
+      {
+        prompt: 'Hello',
+        format: 'default',
+        continue_: false,
+        mode: 'fast',
+      },
+      { fast: 'openai/gpt-4o' },
+    );
+
+    stderrSpy.mockRestore();
+
+    expect(exitCode).toBe(1);
+    expect(stderrCalls.join('')).toContain('no API key configured');
+    expect(stderrCalls.join('')).toContain('OPENAI_API_KEY');
+  });
+
+  it('no effectiveDefaults warns and falls back to default', async () => {
     const harness = createHarnessWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [],
@@ -1412,24 +805,29 @@ describe('headless mode — pack resolution', () => {
     await harness.init();
     await harness.selectOrCreateThread();
 
-    const configDir = mkdtempSync(join(tmpdir(), 'headless-cfg-'));
-    tempStorePaths.push(configDir);
-    const configPath = join(configDir, 'headless.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        models: { activeModelPackId: 'test-pack' },
-      }),
-    );
+    const stderrCalls: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((...args: any[]) => {
+      stderrCalls.push(String(args[0]));
+      return origWrite(...(args as Parameters<typeof origWrite>));
+    });
 
-    // No packContext passed — should not error, just skip pack resolution
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    // No effectiveDefaults passed — should warn, not error
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
-      config: configPath,
+      mode: 'fast',
     });
 
+    stderrSpy.mockRestore();
+
     expect(exitCode).toBe(0);
+    expect(stderrCalls.join('')).toContain('--mode fast has no configured model, using default');
+    // No model_changed event should have been emitted
+    expect(events.find(e => e.type === 'model_changed')).toBeUndefined();
   });
 });

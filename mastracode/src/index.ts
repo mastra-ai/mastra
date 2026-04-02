@@ -79,6 +79,8 @@ export interface MastraCodeConfig {
   storage?: StorageConfig;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
+  /** Path to a custom settings.json file. Default: global settings */
+  settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
@@ -130,7 +132,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   // Load global settings to resolve storage preferences (needed before storage creation)
-  const globalSettings = loadSettings();
+  const globalSettings = loadSettings(config?.settingsPath);
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
@@ -408,5 +410,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning, builtinPacks, builtinOmPacks };
+  return {
+    harness,
+    mcpManager,
+    hookManager,
+    authStorage,
+    resolveModel,
+    storageWarning,
+    builtinPacks,
+    builtinOmPacks,
+    effectiveDefaults,
+  };
 }

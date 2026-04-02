@@ -1,0 +1,133 @@
+---
+'mastracode': minor
+'@mastra/mcp-registry-registry': patch
+'@mastra/voice-google-gemini-live': patch
+'@mastra/otel-exporter': patch
+'@mastra/google-cloud-pubsub': patch
+'@mastra/otel-bridge': patch
+'@mastra/voice-openai-realtime': patch
+'@mastra/longmemeval': patch
+'@mastra/braintrust': patch
+'@mastra/mcp-docs-server': patch
+'@mastra/langsmith': patch
+'@mastra/express': patch
+'@mastra/fastify': patch
+'@mastra/langfuse': patch
+'@mastra/agent-builder': patch
+'create-mastra': patch
+'@mastra/playground-ui': patch
+'@mastra/schema-compat': patch
+'@mastra/client-js': patch
+'@mastra/opencode': patch
+'@mastra/datadog': patch
+'@mastra/laminar': patch
+'@mastra/posthog': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/observability': patch
+'@mastra/sentry': patch
+'@mastra/hono': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/elasticsearch': patch
+'@mastra/arize': patch
+'@mastra/koa': patch
+'@mastra/ai-sdk': patch
+'@mastra/fastembed': patch
+'@mastra/turbopuffer': patch
+'@mastra/agentfs': patch
+'@mastra/daytona': patch
+'@mastra/react': patch
+'@mastra/deployer-netlify': patch
+'@mastra/deployer': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/opensearch': patch
+'@mastra/inngest': patch
+'@mastra/blaxel': patch
+'@mastra/vercel': patch
+'@mastra/auth-better-auth': patch
+'@mastra/deployer-vercel': patch
+'@mastra/codemod': patch
+'@mastra/loggers': patch
+'@mastra/couchbase': patch
+'@mastra/s3vectors': patch
+'@mastra/vectorize': patch
+'@mastra/voice-cloudflare': patch
+'@mastra/voice-elevenlabs': patch
+'@mastra/deployer-cloud': patch
+'@mastra/editor': patch
+'@mastra/memory': patch
+'@mastra/server': patch
+'@mastra/dynamodb': patch
+'@mastra/pinecone': patch
+'@mastra/voice-modelslab': patch
+'@mastra/voice-speechify': patch
+'@mastra/evals': patch
+'@mastra/mongodb': patch
+'@mastra/upstash': patch
+'@mastra/voice-deepgram': patch
+'@mastra/e2b': patch
+'@mastra/gcs': patch
+'@mastra/auth-firebase': patch
+'@mastra/auth-supabase': patch
+'@mastra/auth': patch
+'@mastra/core': patch
+'@mastra/chroma': patch
+'@mastra/convex': patch
+'@mastra/duckdb': patch
+'@mastra/libsql': patch
+'@mastra/qdrant': patch
+'@mastra/s3': patch
+'mastra': patch
+'@mastra/mcp': patch
+'@mastra/rag': patch
+'@mastra/astra': patch
+'@mastra/lance': patch
+'@mastra/mssql': patch
+'@mastra/voice-gladia': patch
+'@mastra/voice-google': patch
+'@mastra/voice-openai': patch
+'@mastra/voice-playai': patch
+'@mastra/voice-sarvam': patch
+'@mastra/auth-studio': patch
+'@mastra/auth-workos': patch
+'@mastra/voice-azure': patch
+'@mastra/auth-auth0': patch
+'@mastra/auth-clerk': patch
+'@mastra/auth-cloud': patch
+'@mastra/voice-murf': patch
+'@mastra/auth-okta': patch
+'@mastra/pg': patch
+---
+
+Replaced `--config` and `--profile` headless flags with a single `--settings` flag.
+
+**Why:** There were two separate settings file concepts (`headless.json` and `settings.json`) that duplicated model resolution logic. Now there's one: `settings.json`. Pass `--settings <path>` to use a custom settings file, or omit it to use the default global settings.
+
+**What changed:**
+
+- Removed `--config <path>` and `--profile <name>` flags
+- Removed `headless.json` config file support
+- Added `--settings <path>` flag to point to a custom `settings.json`
+- Added `settingsPath` option to `createMastraCode()` for programmatic use
+
+**Usage examples:**
+
+Use different settings files for different environments instead of profiles:
+
+```bash
+# Use default global settings (same as interactive TUI)
+mastracode --prompt "Fix the bug in auth.ts"
+
+# Use a CI-specific settings file
+mastracode --settings ./settings-ci.json --prompt "Run tests"
+
+# Combine with CLI overrides
+mastracode --settings ./settings-ci.json --mode fast --prompt "Quick lint check"
+```
+
+Create environment-specific settings files by copying your global `settings.json` and editing:
+
+```bash
+cp ~/.mastracode/settings.json ./settings-ci.json
+# Edit settings-ci.json with CI-appropriate models and preferences
+```

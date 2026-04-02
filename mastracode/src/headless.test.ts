@@ -111,8 +111,8 @@ describe('parseHeadlessArgs', () => {
       'plan',
       '--thinking-level',
       'low',
-      '--config',
-      './config.json',
+      '--settings',
+      './settings-ci.json',
     ]);
     expect(args.prompt).toBe('Run tests');
     expect(args.continue_).toBe(true);
@@ -121,7 +121,7 @@ describe('parseHeadlessArgs', () => {
     expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
     expect(args.mode).toBe('plan');
     expect(args.thinkingLevel).toBe('low');
-    expect(args.config).toBe('./config.json');
+    expect(args.settings).toBe('./settings-ci.json');
   });
 
   it('returns defaults when only prompt provided', () => {
@@ -188,57 +188,14 @@ describe('parseHeadlessArgs', () => {
     expect(args.thinkingLevel).toBeUndefined();
   });
 
-  it('parses --config with path', () => {
-    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--config', './my-config.json']);
-    expect(args.config).toBe('./my-config.json');
+  it('parses --settings with path', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--settings', './settings-ci.json']);
+    expect(args.settings).toBe('./settings-ci.json');
   });
 
-  it('returns undefined config when not provided', () => {
+  it('returns undefined settings when not provided', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
-    expect(args.config).toBeUndefined();
-  });
-
-  it('parses --profile with value', () => {
-    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--profile', 'ci']);
-    expect(args.profile).toBe('ci');
-  });
-
-  it('returns undefined profile when not provided', () => {
-    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
-    expect(args.profile).toBeUndefined();
-  });
-
-  it('parses all flags together including new ones', () => {
-    const args = parseHeadlessArgs([
-      'node',
-      'main.js',
-      '--prompt',
-      'Run tests',
-      '--continue',
-      '--timeout',
-      '600',
-      '--format',
-      'json',
-      '--model',
-      'anthropic/claude-sonnet-4-20250514',
-      '--mode',
-      'build',
-      '--thinking-level',
-      'medium',
-      '--config',
-      './ci.json',
-      '--profile',
-      'ci',
-    ]);
-    expect(args.prompt).toBe('Run tests');
-    expect(args.continue_).toBe(true);
-    expect(args.timeout).toBe(600);
-    expect(args.format).toBe('json');
-    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
-    expect(args.mode).toBe('build');
-    expect(args.thinkingLevel).toBe('medium');
-    expect(args.config).toBe('./ci.json');
-    expect(args.profile).toBe('ci');
+    expect(args.settings).toBeUndefined();
   });
 });
 
