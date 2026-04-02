@@ -90,7 +90,10 @@ async function getMemoryFromContext({
   mastra,
   agentId,
   requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'>): Promise<MastraMemory | null | undefined> {
+  allowMissingAgent = false,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
+  allowMissingAgent?: boolean;
+}): Promise<MastraMemory | null | undefined> {
   const logger = mastra.getLogger();
   let agent;
   if (agentId) {
@@ -131,8 +134,11 @@ async function getMemoryFromContext({
     }
 
     if (!agent) {
-      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
-      return null;
+      if (allowMissingAgent) {
+        logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+        return null;
+      }
+      throw new HTTPException(404, { message: 'Agent not found' });
     }
   }
 
@@ -324,7 +330,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (memory) {
         // Check for Observational Memory
@@ -400,7 +406,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (!memory) {
         // Return null config when memory is not configured (Issue #11765)
@@ -596,7 +602,7 @@ export const LIST_THREADS_ROUTE = createRoute({
         filter!.metadata = metadata;
       }
 
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (memory) {
         const result = await memory.listThreads({
@@ -647,7 +653,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
 
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
         if (!thread) {
@@ -710,7 +716,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'No threadId found' });
       }
 
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
@@ -779,7 +785,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
       validateBody({ threadId: effectiveThreadId });
       if (!memory) {
         // Return null working memory when memory is not configured (Issue #11765)
@@ -1128,7 +1134,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       // Extract string IDs for validation and deletion
       const stringIds = normalizedIds.map(id => (typeof id === 'string' ? id : id.id));
 
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       // If effectiveResourceId is set, validate ownership of all messages before deletion
       // Fail closed: if we can't verify ownership, deny deletion
