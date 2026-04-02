@@ -8,6 +8,7 @@ import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
@@ -434,5 +435,70 @@ describe('headless mode — thread control', () => {
     const threads = await harness.listThreads();
     const titled = threads.find(t => t.title === 'my-new-title');
     expect(titled).toBeDefined();
+  });
+
+  it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: createTextStream('Cloned!') }) }) as any,
+      tools: {},
+    });
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-clone-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+
+    const storage = new LibSQLStore({
+      id: 'test-store',
+      url: `file:${storePath}`,
+    });
+
+    const memory = new Memory({ storage });
+
+    const harness = new Harness({
+      id: 'test-harness',
+      storage,
+      memory,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: true } as any,
+    });
+
+    await harness.init();
+    const sourceThread = await harness.createThread({ title: 'source-thread' });
+
+    const events: any[] = [];
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: any) => {
+      try {
+        events.push(JSON.parse(chunk.toString()));
+      } catch {
+        // Non-JSON output (debug logs, etc.) — ignore
+      }
+      return true;
+    }) as any;
+
+    try {
+      const exitCode = await runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'json',
+        continue_: false,
+        cloneThread: true,
+        thread: 'source-thread',
+      });
+
+      expect(exitCode).toBe(0);
+
+      const cloneEvent = events.find(e => e.type === 'thread_cloned');
+      expect(cloneEvent).toBeDefined();
+      expect(cloneEvent.threadId).toBeTypeOf('string');
+      expect(cloneEvent.threadId.length).toBeGreaterThan(0);
+
+      // Cloned thread should have a different ID than source
+      expect(cloneEvent.threadId).not.toBe(sourceThread.id);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
   });
 });

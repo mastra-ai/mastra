@@ -272,27 +272,36 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
   });
 
   // --- Thread selection ---
-  if (args.thread) {
-    const result = await resolveThread(harness, args.thread);
-    if ('error' in result) {
-      const msg = result.error;
-      if (emit) emit({ type: 'error', error: { message: msg } });
-      else process.stderr.write(`Error: ${msg}\n`);
-      if (timeoutId) clearTimeout(timeoutId);
-      return 1;
+  try {
+    if (args.thread) {
+      const result = await resolveThread(harness, args.thread);
+      if ('error' in result) {
+        const msg = result.error;
+        if (emit) emit({ type: 'error', error: { message: msg } });
+        else process.stderr.write(`Error: ${msg}\n`);
+        if (timeoutId) clearTimeout(timeoutId);
+        return 1;
+      }
+      await harness.switchThread({ threadId: result.threadId });
+      if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
+    } else {
+      const thread = await harness.selectOrCreateThread();
+      if (!emit) process.stderr.write(`[thread] ${thread.id}\n`);
     }
-    await harness.switchThread({ threadId: result.threadId });
-    if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
-  } else {
-    const thread = await harness.selectOrCreateThread();
-    if (!emit) process.stderr.write(`[thread] ${thread.id}\n`);
+  } catch (err) {
+    const msg = `Failed to select thread: ${(err as Error).message}`;
+    if (emit) emit({ type: 'error', error: { message: msg } });
+    else process.stderr.write(`Error: ${msg}\n`);
+    if (timeoutId) clearTimeout(timeoutId);
+    return 1;
   }
 
   // --- Clone ---
   if (args.cloneThread) {
     try {
       const cloned = await harness.cloneThread();
-      if (!emit) process.stderr.write(`[cloned] thread ${cloned.id}\n`);
+      if (emit) emit({ type: 'thread_cloned', threadId: cloned.id });
+      else process.stderr.write(`[cloned] thread ${cloned.id}\n`);
     } catch (err) {
       const msg = `Failed to clone thread: ${(err as Error).message}`;
       if (emit) emit({ type: 'error', error: { message: msg } });
