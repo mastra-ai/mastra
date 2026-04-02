@@ -9,11 +9,9 @@ Agents can now communicate over messaging platforms like Slack, Discord, and Tel
 **Key features:**
 - Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
 - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
-- Gateway support for platforms with persistent WebSocket connections (e.g., Discord)
 - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
 - Multi-user thread awareness with author prefixes for group conversations
 - Thread subscriptions persisted via Mastra storage (survives restarts)
-- `cards: false` option to disable rich cards and auto-approve tools via LLM
 
 **New exports from `@mastra/core/channels`:**
 - `AgentChannels` — internal class managing Chat SDK instance and event handlers
