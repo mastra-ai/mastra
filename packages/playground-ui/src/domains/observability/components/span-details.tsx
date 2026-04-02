@@ -29,26 +29,28 @@ export function SpanDetails({ span }: SpanDetailsProps) {
         </div>
       )}
 
-      <SideDialog.CodeSection
-        title="Input"
-        icon={<FileInputIcon />}
-        codeStr={JSON.stringify(span.input || null, null, 2)}
-      />
-      <SideDialog.CodeSection
-        title="Output"
-        icon={<FileOutputIcon />}
-        codeStr={JSON.stringify(span.output || null, null, 2)}
-      />
-      <SideDialog.CodeSection
-        title="Metadata"
-        icon={<BracesIcon />}
-        codeStr={JSON.stringify(span.metadata || null, null, 2)}
-      />
-      <SideDialog.CodeSection
-        title="Attributes"
-        icon={<BracesIcon />}
-        codeStr={JSON.stringify(span.attributes || null, null, 2)}
-      />
+      <div className="grid gap-3 mt-3">
+        <SideDialog.CodeSection
+          title="Input"
+          icon={<FileInputIcon />}
+          codeStr={JSON.stringify(span.input || null, null, 2)}
+        />
+        <SideDialog.CodeSection
+          title="Output"
+          icon={<FileOutputIcon />}
+          codeStr={JSON.stringify(span.output || null, null, 2)}
+        />
+        <SideDialog.CodeSection
+          title="Metadata"
+          icon={<BracesIcon />}
+          codeStr={JSON.stringify(span.metadata || null, null, 2)}
+        />
+        <SideDialog.CodeSection
+          title="Attributes"
+          icon={<BracesIcon />}
+          codeStr={JSON.stringify(span.attributes || null, null, 2)}
+        />
+      </div>
     </>
   );
 }

@@ -43,7 +43,7 @@ export function TimelineTimingCol({
           },
         )}
       >
-        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors duration-1000')}>
+        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors')}>
           <div className="relative w-full h-1.5 rounded-sm">
             <div
               className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}

@@ -30,7 +30,7 @@ type Trace = {
   threadId?: string | null;
 };
 
-type TracesListProps = {
+type OldTracesListProps = {
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
   traces?: Trace[];
@@ -187,7 +187,7 @@ function GroupedTracesList({
   );
 }
 
-export function TracesList({
+export function OldTracesList({
   traces,
   selectedTraceId,
   onTraceClick,
@@ -199,7 +199,7 @@ export function TracesList({
   groupByThread,
   threadTitles,
   columns = tracesListColumns,
-}: TracesListProps) {
+}: OldTracesListProps) {
   if (!traces) {
     return null;
   }

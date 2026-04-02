@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils';
 
-export interface DataDetailsPanelProps {
+export interface DataPanelProps {
   collapsed?: boolean;
   children: React.ReactNode;
 }
 
-export function DataDetailsPanel({ collapsed, children }: DataDetailsPanelProps) {
+export function DataPanelRoot({ collapsed, children }: DataPanelProps) {
   return (
     <section
       className={cn(

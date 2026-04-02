@@ -34,7 +34,7 @@ export function TimelineNameCol({
   return (
     <div
       aria-label={`View details for span ${span.name}`}
-      className={cn('rounded-md transition-colors flex opacity-80 min-h-12 items-center rounded-l-lg', 'mt-4 xl:mt-0', {
+      className={cn('rounded-md flex opacity-80 min-h-12 items-center rounded-l-lg', 'mt-4 xl:mt-0', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
         'bg-surface4': selectedSpanId === span.id,
       })}

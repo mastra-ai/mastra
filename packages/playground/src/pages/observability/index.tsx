@@ -4,7 +4,7 @@ import {
   EntityListPageLayout,
   MainHeader,
   ButtonWithTooltip,
-  TracesList,
+  OldTracesList,
   tracesListColumns,
   TracesTools,
   CONTEXT_FIELD_IDS,
@@ -347,7 +347,7 @@ export default function Observability() {
 
   const filtersApplied =
     selectedEntityOption?.value !== 'all' ||
-    selectedDateFrom ||
+    datePreset !== 'last-24h' ||
     selectedDateTo ||
     searchQuery.trim() ||
     selectedTags.length > 0 ||
@@ -423,7 +423,7 @@ export default function Observability() {
         {isTracesLoading ? (
           <EntryListSkeleton columns={tracesListColumns} />
         ) : (
-          <TracesList
+          <OldTracesList
             traces={traces}
             selectedTraceId={selectedTraceId}
             onTraceClick={handleTraceClick}

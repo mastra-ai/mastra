@@ -1,17 +1,17 @@
 import { XIcon } from 'lucide-react';
 import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
 
-export interface DataDetailsPanelCloseButtonProps {
+export interface DataPanelCloseButtonProps {
   onClick: () => void;
   tooltip?: string;
   className?: string;
 }
 
-export function DataDetailsPanelCloseButton({
+export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
   className,
-}: DataDetailsPanelCloseButtonProps) {
+}: DataPanelCloseButtonProps) {
   return (
     <ButtonWithTooltip
       size="md"

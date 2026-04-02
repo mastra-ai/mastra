@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils';
 
-export interface DataDetailsPanelHeaderProps {
+export interface DataPanelHeaderProps {
   className?: string;
   children: React.ReactNode;
 }
 
-export function DataDetailsPanelHeader({ className, children }: DataDetailsPanelHeaderProps) {
+export function DataPanelHeader({ className, children }: DataPanelHeaderProps) {
   return (
     <div className={cn('flex items-center justify-between gap-2 border-b border-border1 mx-4 py-3', className)}>
       {children}

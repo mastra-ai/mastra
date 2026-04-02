@@ -1,21 +1,22 @@
 import { format } from 'date-fns';
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { ArrowRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
 import { Button } from '@/ds/components/Button';
 import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { DataPanel } from '@/ds/components/DataPanel';
 import { ButtonsGroup } from '@/index';
 import { cn } from '@/lib/utils';
 
-const KV = DataDetailsPanel.KeyValueList;
+const KV = DataKeysAndValues;
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-export interface LogDetailsProps {
+export interface LogDataPanelProps {
   log: LogRecord;
   onClose: () => void;
   onTraceClick?: (traceId: string) => void;
@@ -26,7 +27,7 @@ export interface LogDetailsProps {
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function LogDetails({
+export function LogDataPanel({
   log,
   onClose,
   onTraceClick,
@@ -35,18 +36,18 @@ export function LogDetails({
   onNext,
   collapsed: controlledCollapsed,
   onCollapsedChange,
-}: LogDetailsProps) {
+}: LogDataPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const date = toDate(log.timestamp);
 
   return (
-    <DataDetailsPanel collapsed={collapsed}>
-      <DataDetailsPanel.Header>
-        <DataDetailsPanel.Heading>
+    <DataPanel collapsed={collapsed}>
+      <DataPanel.Header>
+        <DataPanel.Heading>
           Log <b>{format(date, 'MMM dd, HH:mm:ss.SSS')}</b>
-        </DataDetailsPanel.Heading>
+        </DataPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
           {onCollapsedChange && (
             <ButtonWithTooltip
@@ -58,21 +59,19 @@ export function LogDetails({
             </ButtonWithTooltip>
           )}
 
-          <ButtonsGroup spacing="close">
-            <ButtonWithTooltip size="md" tooltipContent="Previous log" onClick={onPrevious} disabled={!onPrevious}>
-              <ArrowUpIcon />
-            </ButtonWithTooltip>
-            <ButtonWithTooltip size="md" tooltipContent="Next log" onClick={onNext} disabled={!onNext}>
-              <ArrowDownIcon />
-            </ButtonWithTooltip>
-          </ButtonsGroup>
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Previous log"
+            nextLabel="Next log"
+          />
 
-          <DataDetailsPanel.CloseButton onClick={onClose} />
+          <DataPanel.CloseButton onClick={onClose} />
         </ButtonsGroup>
-      </DataDetailsPanel.Header>
+      </DataPanel.Header>
 
       {!collapsed && (
-        <DataDetailsPanel.Content>
+        <DataPanel.Content>
           <p className="text-ui-md text-neutral4 font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
 
           {(log.traceId || log.spanId) && (
@@ -154,10 +153,10 @@ export function LogDetails({
           </KV>
 
           {log.data && Object.keys(log.data).length > 0 && (
-            <DataDetailsPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
+            <DataPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
           )}
-        </DataDetailsPanel.Content>
+        </DataPanel.Content>
       )}
-    </DataDetailsPanel>
+    </DataPanel>
   );
 }

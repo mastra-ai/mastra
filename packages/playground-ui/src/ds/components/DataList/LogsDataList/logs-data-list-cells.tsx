@@ -1,5 +1,5 @@
 import { format, isToday } from 'date-fns';
-import { DataListCell } from '../DataList/data-list-cells';
+import { DataListCell } from '../data-list-cells';
 import type { LogLevel } from '@/domains/logs/types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';

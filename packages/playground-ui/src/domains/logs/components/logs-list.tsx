@@ -1,10 +1,13 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTraceSpans } from '../hooks/use-trace-spans';
 import type { LogRecord } from '../types';
-import { LogDetails } from './log-details';
+import { LogDataPanel } from './log-data-panel';
 import { NoLogsInfo } from './no-logs-info';
-import { SpanDetails } from './span-details';
-import { TraceDetails } from './trace-details';
+import { SpanDataPanel } from '@/domains/traces/components/span-data-panel';
+import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
+import { getAllSpanIds } from './trace/get-descendant-ids';
+import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 import { cn } from '@/lib/utils';
@@ -88,7 +91,7 @@ export function LogsList({
     [onFeaturedChange, featuredLogId, featuredTraceId, featuredSpanId],
   );
 
-  // SpanRecord cached from TraceDetails callback (needed for SpanDetails rendering)
+  // SpanRecord cached from TraceDataPanel callback (needed for SpanDataPanel rendering)
   const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
 
@@ -197,6 +200,40 @@ export function LogsList({
     updateFeatured({ logId: null });
   }, [updateFeatured]);
 
+  const { data: traceData } = useTraceSpans(featuredTraceId);
+  const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
+
+  const timelineSpanIds = useMemo(
+    () => getAllSpanIds(formatHierarchicalSpans(traceSpans)),
+    [traceSpans],
+  );
+
+  const spanIdToRecord = useMemo(() => {
+    const m = new Map<string, SpanRecord>();
+    for (const s of traceSpans) m.set(s.spanId, s);
+    return m;
+  }, [traceSpans]);
+
+  const featuredSpanIdx = featuredSpanId ? timelineSpanIds.indexOf(featuredSpanId) : -1;
+
+  const handlePreviousSpan =
+    featuredSpanIdx > 0
+      ? () => {
+          const prevId = timelineSpanIds[featuredSpanIdx - 1];
+          updateFeatured({ spanId: prevId });
+          setFeaturedSpanRecord(spanIdToRecord.get(prevId));
+        }
+      : undefined;
+
+  const handleNextSpan =
+    featuredSpanIdx >= 0 && featuredSpanIdx < timelineSpanIds.length - 1
+      ? () => {
+          const nextId = timelineSpanIds[featuredSpanIdx + 1];
+          updateFeatured({ spanId: nextId });
+          setFeaturedSpanRecord(spanIdToRecord.get(nextId));
+        }
+      : undefined;
+
   if (error) {
     return <ErrorState title="Failed to load logs" message={error.message} />;
   }
@@ -274,7 +311,7 @@ export function LogsList({
                       : 'grid-rows-[1fr]',
           )}
         >
-          <LogDetails
+          <LogDataPanel
             log={featuredLog}
             onClose={handleLogClose}
             onTraceClick={handleTraceClick}
@@ -286,14 +323,21 @@ export function LogsList({
           />
 
           {featuredTraceId && (
-            <TraceDetails
+            <TraceDataPanel
               traceId={featuredTraceId}
               onClose={handleTraceClose}
               onSpanSelect={handleSpanSelect}
               initialSpanId={featuredSpanId}
             />
           )}
-          {featuredSpanRecord && <SpanDetails span={featuredSpanRecord} onClose={handleSpanClose} />}
+          {featuredSpanRecord && (
+            <SpanDataPanel
+              span={featuredSpanRecord}
+              onClose={handleSpanClose}
+              onPrevious={handlePreviousSpan}
+              onNext={handleNextSpan}
+            />
+          )}
         </div>
       )}
     </div>

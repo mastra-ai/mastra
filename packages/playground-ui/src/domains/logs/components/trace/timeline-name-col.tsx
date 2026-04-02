@@ -29,8 +29,9 @@ export function TimelineNameCol({
 }: TimelineNameColProps) {
   return (
     <div
+      data-span-id={span.id}
       aria-label={`View details for span ${span.name}`}
-      className={cn('rounded-md transition-colors flex opacity-80 min-h-8 items-center rounded-l-lg', {
+      className={cn('rounded-md flex opacity-80 min-h-8 items-center rounded-l-lg', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
         'bg-surface4': selectedSpanId === span.id,
       })}
@@ -44,6 +45,7 @@ export function TimelineNameCol({
           'text-ui-sm flex items-center text-left gap-1.5 text-neutral6 w-full min-w-0 rounded-md h-full px-2 py-1 transition-colors',
           '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
           'hover:bg-surface4 [&:hover>svg]:opacity-60',
+          'outline-none focus-visible:ring-2 focus-visible:ring-accent1',
         )}
       >
         <span className="min-w-0 truncate">{span.name}</span>

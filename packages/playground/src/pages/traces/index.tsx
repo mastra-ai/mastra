@@ -1,0 +1,328 @@
+import { EntityType } from '@mastra/core/observability';
+import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
+import {
+  EntityListPageLayout,
+  MainHeader,
+  TracesToolbar,
+  CONTEXT_FIELD_IDS,
+  parseError,
+  TracesList,
+  useAgents,
+  useWorkflows,
+  useTags,
+  useEnvironments,
+  useServiceNames,
+  PermissionDenied,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+
+import { EyeIcon } from 'lucide-react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { useTraces } from '@/domains/observability/hooks/use-traces';
+
+export default function Traces() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
+    value: 'all',
+    label: 'All',
+    type: 'all' as const,
+  });
+  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(
+    () => new Date(Date.now() - 24 * 60 * 60 * 1000),
+  );
+  const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
+  const [groupByThread, setGroupByThread] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [errorOnly, setErrorOnly] = useState<boolean>(false);
+  const [selectedMetadata, setSelectedMetadata] = useState<Record<string, string>>({});
+  const [datePreset, setDatePreset] = useState<TraceDatePreset>('last-24h');
+  const [contextFilters, setContextFilters] = useState<Record<string, string>>({});
+  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { data: availableTags = [] } = useTags();
+  const { data: discoveredEnvironments = [] } = useEnvironments();
+  const { data: discoveredServiceNames = [] } = useServiceNames();
+
+  const metadataFilterObj = useMemo(() => {
+    if (Object.keys(selectedMetadata).length === 0) return undefined;
+    return selectedMetadata;
+  }, [selectedMetadata]);
+
+  const {
+    data: tracesData,
+    isLoading: isTracesLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+    error: TracesError,
+    isError: isTracesError,
+  } = useTraces({
+    filters: {
+      ...(selectedEntityOption?.type !== 'all' && {
+        entityId: selectedEntityOption?.value,
+        entityType: selectedEntityOption?.type,
+      }),
+      ...(selectedDateFrom && {
+        startedAt: {
+          start: selectedDateFrom,
+        },
+      }),
+      ...(selectedDateTo && {
+        endedAt: {
+          end: selectedDateTo,
+        },
+      }),
+      ...(selectedTags.length > 0 && { tags: selectedTags }),
+      ...(errorOnly && { status: 'error' }),
+      ...(metadataFilterObj && { metadata: metadataFilterObj }),
+      ...Object.fromEntries(Object.entries(contextFilters).filter(([, v]) => v.trim())),
+    },
+  });
+
+  const allTraces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const threadTitles = tracesData?.threadTitles ?? {};
+
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const traces = useMemo(() => {
+    if (!deferredSearchQuery.trim()) return allTraces;
+    const q = deferredSearchQuery.trim().toLowerCase();
+    return allTraces.filter(t => {
+      if (t.traceId?.toLowerCase().includes(q)) return true;
+      if (t.name?.toLowerCase().includes(q)) return true;
+      if (t.entityId?.toLowerCase().includes(q)) return true;
+      if (t.entityName?.toLowerCase().includes(q)) return true;
+      const meta = t.metadata;
+      if (meta && typeof meta === 'object') {
+        for (const val of Object.values(meta)) {
+          if (String(val).toLowerCase().includes(q)) return true;
+        }
+      }
+      return false;
+    });
+  }, [allTraces, deferredSearchQuery]);
+
+  // Accumulate available metadata keys/values across all loaded trace batches.
+  const metadataAccRef = useRef<Record<string, Set<string>>>({});
+  const prevMetadataResultRef = useRef<Record<string, string[]>>({});
+
+  const availableMetadata = useMemo(() => {
+    let changed = false;
+    const acc = metadataAccRef.current;
+    for (const trace of allTraces) {
+      const meta = trace.metadata;
+      if (meta && typeof meta === 'object') {
+        for (const [key, value] of Object.entries(meta)) {
+          if (value == null) continue;
+          if (!acc[key]) {
+            acc[key] = new Set();
+            changed = true;
+          }
+          const str = String(value);
+          if (!acc[key].has(str)) {
+            acc[key].add(str);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (!changed) return prevMetadataResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevMetadataResultRef.current = result;
+    return result;
+  }, [allTraces]);
+
+  const contextAccRef = useRef<Record<string, Set<string>>>({});
+  const prevContextResultRef = useRef<Record<string, string[]>>({});
+
+  const availableContextValues = useMemo(() => {
+    let changed = false;
+    const acc = contextAccRef.current;
+    for (const trace of allTraces) {
+      for (const field of CONTEXT_FIELD_IDS) {
+        const value = trace[field];
+        if (value != null && typeof value === 'string' && value.trim()) {
+          if (!acc[field]) {
+            acc[field] = new Set();
+            changed = true;
+          }
+          if (!acc[field].has(value)) {
+            acc[field].add(value);
+            changed = true;
+          }
+        }
+      }
+    }
+    for (const env of discoveredEnvironments) {
+      if (!acc['environment']) {
+        acc['environment'] = new Set();
+        changed = true;
+      }
+      if (!acc['environment'].has(env)) {
+        acc['environment'].add(env);
+        changed = true;
+      }
+    }
+    for (const sn of discoveredServiceNames) {
+      if (!acc['serviceName']) {
+        acc['serviceName'] = new Set();
+        changed = true;
+      }
+      if (!acc['serviceName'].has(sn)) {
+        acc['serviceName'].add(sn);
+        changed = true;
+      }
+    }
+    if (!changed) return prevContextResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevContextResultRef.current = result;
+    return result;
+  }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
+
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(agents) || []).map(([_, value]) => ({
+        value: value.id,
+        label: value.name,
+        type: EntityType.AGENT,
+      })),
+    [agents],
+  );
+
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(workflows || {}) || []).map(([, value]) => ({
+        value: value.name,
+        label: value.name,
+        type: EntityType.WORKFLOW_RUN,
+      })),
+    [workflows],
+  );
+
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
+
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
+
+  const handleReset = () => {
+    setSearchParams({ entity: 'all' });
+    setSelectedDateFrom(undefined);
+    setSelectedDateTo(undefined);
+    setGroupByThread(false);
+    setSearchQuery('');
+    setSelectedTags([]);
+    setErrorOnly(false);
+    setSelectedMetadata({});
+    setDatePreset('last-24h');
+    setContextFilters({});
+    metadataAccRef.current = {};
+    prevMetadataResultRef.current = {};
+    contextAccRef.current = {};
+    prevContextResultRef.current = {};
+  };
+
+  const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
+    if (type === 'from') {
+      return setSelectedDateFrom(value);
+    }
+    setSelectedDateTo(value);
+  };
+
+  const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
+    if (option?.value) setSearchParams({ entity: option.value });
+  };
+
+  const error = isTracesError ? parseError(TracesError) : undefined;
+
+  // 403 check
+  if (TracesError && is403ForbiddenError(TracesError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <EyeIcon /> Traces
+              </MainHeader.Title>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="traces" />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
+
+  const filtersApplied =
+    selectedEntityOption?.value !== 'all' ||
+    datePreset !== 'last-24h' ||
+    selectedDateTo ||
+    searchQuery.trim() ||
+    selectedTags.length > 0 ||
+    errorOnly ||
+    Object.keys(selectedMetadata).length > 0 ||
+    Object.values(contextFilters).some(v => v.trim());
+
+  return (
+    <EntityListPageLayout className="max-w-none">
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isTracesLoading}>
+              <EyeIcon /> New Traces
+            </MainHeader.Title>
+          </MainHeader.Column>
+        </MainHeader>
+
+        <TracesToolbar
+          onEntityChange={handleSelectedEntityChange}
+          onReset={handleReset}
+          selectedEntity={selectedEntityOption}
+          entityOptions={entityOptions}
+          onDateChange={handleDataChange}
+          selectedDateFrom={selectedDateFrom}
+          selectedDateTo={selectedDateTo}
+          isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+          groupByThread={groupByThread}
+          onGroupByThreadChange={setGroupByThread}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedTags={selectedTags}
+          availableTags={availableTags}
+          onTagsChange={setSelectedTags}
+          errorOnly={errorOnly}
+          onErrorOnlyChange={setErrorOnly}
+          selectedMetadata={selectedMetadata}
+          availableMetadata={availableMetadata}
+          onMetadataChange={setSelectedMetadata}
+          datePreset={datePreset}
+          onDatePresetChange={setDatePreset}
+          contextFilters={contextFilters}
+          availableContextValues={availableContextValues}
+          onContextFiltersChange={setContextFilters}
+        />
+      </EntityListPageLayout.Top>
+
+      <TracesList
+        traces={traces}
+        isLoading={isTracesLoading}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        error={error?.error}
+        filtersApplied={Boolean(filtersApplied)}
+        groupByThread={groupByThread}
+        threadTitles={threadTitles}
+      />
+    </EntityListPageLayout>
+  );
+}
