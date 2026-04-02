@@ -537,7 +537,6 @@ export class AgentChannels {
         }
       }
     });
-    // chat.onReaction()
     await chat.initialize();
     this.chat = chat;
 
