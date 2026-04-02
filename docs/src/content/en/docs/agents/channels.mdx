@@ -54,50 +54,35 @@ export const mastra = new Mastra({
 })
 ```
 
-Each adapter reads credentials from environment variables by default. See [Platform setup](#platform-setup) for webhook URLs and required permissions.
+Each adapter reads credentials from environment variables by default.
 
-## Multimodal content
+## Platform setup
 
-Models like Gemini can natively process images, video, and audio. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:
+Each platform requires credentials and event configuration. See the Chat SDK adapter docs for full setup: [Slack](https://chat-sdk.dev/adapters/slack), [Discord](https://chat-sdk.dev/adapters/discord), [Telegram](https://chat-sdk.dev/adapters/telegram).
 
-```typescript title="src/mastra/agents/vision-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { createDiscordAdapter } from '@chat-adapter/discord'
-import { google } from '@ai-sdk/google'
+Mastra generates a webhook route for each platform at:
 
-export const visionAgent = new Agent({
-  name: 'Vision Agent',
-  instructions: 'You can see images, watch videos, and listen to audio.',
-  model: google('gemini-3.1-flash-image-preview'),
-  channels: {
-    adapters: {
-      discord: createDiscordAdapter(),
-    },
-    inlineMedia: ['image/*', 'video/*', 'audio/*'],
-    inlineLinks: [
-      // Gemini treats YouTube URLs as native video file parts
-      { match: 'youtube.com', mimeType: 'video/*' },
-      { match: 'youtu.be', mimeType: 'video/*' },
-      'imgur.com', // HEAD-check imgur links; inline as file part if mimeType matches inlineMedia
-    ],
-  },
-})
+```
+/api/agents/{agentId}/channels/{platform}/webhook
 ```
 
-With this configuration:
+For example: `/api/agents/support-agent/channels/slack/webhook`
 
-- A user uploads a screenshot and the agent describes what it sees
-- A user uploads an `.mp4` clip and the agent summarizes the video
-- A user pastes a YouTube link and the agent watches and discusses the video
-- A user pastes an imgur link and the agent sees the image directly
+Point your platform's webhook or interactions URL to this path.
 
-By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without crashing models that reject them.
+### Local development
 
-:::note
+Platform webhooks need a public URL to reach your local server. Use a tunnel to expose `localhost:4111`:
 
-See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced mime types.
+```bash
+# ngrok
+ngrok http 4111
 
-:::
+# cloudflared
+cloudflared tunnel --url http://localhost:4111
+```
+
+Copy the generated URL and use it as the base for your webhook paths (e.g. `https://abc123.ngrok.io/api/agents/support-agent/channels/slack/webhook`).
 
 ## Thread context
 
@@ -145,33 +130,48 @@ In group conversations, Mastra automatically prefixes each message with the send
 [Bob (@U456DEF)]: I have a question too.
 ```
 
-## Platform setup
+## Multimodal content
 
-Each platform requires credentials and event configuration. See the Chat SDK adapter docs for full setup: [Slack](https://chat-sdk.dev/adapters/slack), [Discord](https://chat-sdk.dev/adapters/discord), [Telegram](https://chat-sdk.dev/adapters/telegram).
+Models like Gemini can natively process images, video, and audio. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:
 
-Mastra generates a webhook route for each platform at:
+```typescript title="src/mastra/agents/vision-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { google } from '@ai-sdk/google'
 
+export const visionAgent = new Agent({
+  name: 'Vision Agent',
+  instructions: 'You can see images, watch videos, and listen to audio.',
+  model: google('gemini-3.1-flash-image-preview'),
+  channels: {
+    adapters: {
+      discord: createDiscordAdapter(),
+    },
+    inlineMedia: ['image/*', 'video/*', 'audio/*'],
+    inlineLinks: [
+      // Gemini treats YouTube URLs as native video file parts
+      { match: 'youtube.com', mimeType: 'video/*' },
+      { match: 'youtu.be', mimeType: 'video/*' },
+      'imgur.com', // HEAD-check imgur links; inline as file part if mimeType matches inlineMedia
+    ],
+  },
+})
 ```
-/api/agents/{agentId}/channels/{platform}/webhook
-```
 
-For example: `/api/agents/support-agent/channels/slack/webhook`
+With this configuration:
 
-Point your platform's webhook or interactions URL to this path.
+- A user uploads a screenshot and the agent describes what it sees
+- A user uploads an `.mp4` clip and the agent summarizes the video
+- A user pastes a YouTube link and the agent watches and discusses the video
+- A user pastes an imgur link and the agent sees the image directly
 
-### Local development
+By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without crashing models that reject them.
 
-Platform webhooks need a public URL to reach your local server. Use a tunnel to expose `localhost:4111`:
+:::note
 
-```bash
-# ngrok
-ngrok http 4111
+See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced mime types.
 
-# cloudflared
-cloudflared tunnel --url http://localhost:4111
-```
-
-Copy the generated URL and use it as the base for your webhook paths (e.g. `https://abc123.ngrok.io/api/agents/support-agent/channels/slack/webhook`).
+:::
 
 ## Related
 
