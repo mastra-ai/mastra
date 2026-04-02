@@ -211,7 +211,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           data: value.data,
           base64: typeof value.data === 'string' ? value.data : undefined,
           mimeType: value.mediaType,
-          providerMetadata: pm,
+          ...(pm != null ? { providerMetadata: pm } : {}),
         },
       };
     }
