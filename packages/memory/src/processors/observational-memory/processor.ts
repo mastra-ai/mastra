@@ -225,6 +225,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
+          const observerExchange = this.engine.observer.lastExchange;
           writeProcessInputStepReproCapture({
             threadId,
             resourceId,
@@ -240,7 +241,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             postContextTokenCount: finalTotalPending,
             messageList,
             details: {},
+            observerExchange,
           });
+          // Clear after capture so it doesn't leak into subsequent steps
+          this.engine.observer.lastExchange = undefined;
         }
       }
 
