@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { ChatChannelProcessor } from '@mastra/core/channels';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { createDiscordAdapter } from '@chat-adapter/discord';
 
@@ -24,7 +23,6 @@ export const exampleAgent = new Agent({
       telegram: createTelegramAdapter(),
     },
   },
-  inputProcessors: [new ChatChannelProcessor()],
   workspace: new Workspace({
     id: 'example-workspace',
     filesystem: new LocalFilesystem({ basePath: './workspace' }),
