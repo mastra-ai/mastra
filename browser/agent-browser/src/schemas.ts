@@ -139,9 +139,10 @@ export const uploadInputSchema = z.object({
 export type UploadInput = z.output<typeof uploadInputSchema>;
 
 /**
- * browser_dialog - Handle browser dialogs (alert, confirm, prompt)
+ * browser_dialog - Click an element that triggers a dialog and handle it
  */
 export const dialogInputSchema = z.object({
+  triggerRef: z.string().describe('Element ref that triggers the dialog (e.g., @e5)'),
   action: z.enum(['accept', 'dismiss']).describe('Accept or dismiss the dialog'),
   text: z.string().optional().describe('Text to enter for prompt dialogs'),
 });
@@ -174,8 +175,10 @@ export type TabsInput = z.output<typeof tabsInputSchema>;
  * browser_drag - Drag an element to another element
  */
 export const dragInputSchema = z.object({
-  sourceRef: z.string().describe('Element ref to drag from'),
-  targetRef: z.string().describe('Element ref to drag to'),
+  sourceRef: z.string().optional().describe('Element ref to drag from (e.g., @e5)'),
+  targetRef: z.string().optional().describe('Element ref to drag to (e.g., @e7)'),
+  sourceSelector: z.string().optional().describe('CSS selector for source element (use if ref not available)'),
+  targetSelector: z.string().optional().describe('CSS selector for target element (use if ref not available)'),
 });
 export type DragInput = z.output<typeof dragInputSchema>;
 

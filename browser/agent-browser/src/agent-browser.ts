@@ -1028,23 +1028,41 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 12. browser_dialog - Handle dialogs (alert/confirm/prompt)
+  // 12. browser_dialog - Click element that triggers dialog and handle it
   // ---------------------------------------------------------------------------
 
   async dialog(
     input: DialogInput,
-  ): Promise<{ success: true; action: 'accept' | 'dismiss'; hint: string } | BrowserToolError> {
+  ): Promise<
+    | { success: true; action: 'accept' | 'dismiss'; dialogType: string; message: string; hint: string }
+    | BrowserToolError
+  > {
     try {
       const page = await this.getPage();
+      const locator = await this.requireLocator(input.triggerRef);
+
+      if (!locator) {
+        return this.createError(
+          'stale_ref',
+          `Trigger ref ${input.triggerRef} not found.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('Dialog handler timed out. Make sure the dialog is triggered before calling this.'));
+          page.off('dialog', dialogHandler);
+          reject(
+            new Error(`No dialog appeared after clicking ${input.triggerRef}. The element may not trigger a dialog.`),
+          );
         }, this.defaultTimeout);
 
-        (page as any).once('dialog', async (dialog: any) => {
+        const dialogHandler = async (dialog: any) => {
           clearTimeout(timeout);
           try {
+            const dialogType = dialog.type();
+            const message = dialog.message();
+
             if (input.action === 'accept') {
               await dialog.accept(input.text);
             } else {
@@ -1053,11 +1071,23 @@ export class AgentBrowser extends MastraBrowser {
             resolve({
               success: true,
               action: input.action,
+              dialogType,
+              message,
               hint: 'Dialog handled. Take a snapshot to continue.',
             });
           } catch (e) {
             reject(e);
           }
+        };
+
+        // Set up listener first, then click
+        page.once('dialog', dialogHandler);
+
+        // Click the trigger element (don't await - dialog blocks execution)
+        locator.click({ timeout: this.defaultTimeout }).catch((e: Error) => {
+          clearTimeout(timeout);
+          page.off('dialog', dialogHandler);
+          reject(e);
         });
       });
     } catch (error) {
@@ -1233,22 +1263,44 @@ export class AgentBrowser extends MastraBrowser {
   async drag(input: DragInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage();
-      const sourceLocator = await this.requireLocator(input.sourceRef);
-      const targetLocator = await this.requireLocator(input.targetRef);
+
+      // Resolve source locator (prefer ref, fallback to selector)
+      let sourceLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
+      if (input.sourceRef) {
+        sourceLocator = await this.requireLocator(input.sourceRef);
+      } else if (input.sourceSelector) {
+        sourceLocator = page.locator(input.sourceSelector);
+      }
 
       if (!sourceLocator) {
         return this.createError(
           'stale_ref',
-          `Source ref ${input.sourceRef} not found.`,
-          'Take a new snapshot to get fresh refs.',
+          input.sourceRef
+            ? `Source ref ${input.sourceRef} not found.`
+            : 'No source element specified. Provide sourceRef or sourceSelector.',
+          input.sourceRef
+            ? 'Take a new snapshot to get fresh refs, or use sourceSelector for elements not in the accessibility tree.'
+            : undefined,
         );
+      }
+
+      // Resolve target locator (prefer ref, fallback to selector)
+      let targetLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
+      if (input.targetRef) {
+        targetLocator = await this.requireLocator(input.targetRef);
+      } else if (input.targetSelector) {
+        targetLocator = page.locator(input.targetSelector);
       }
 
       if (!targetLocator) {
         return this.createError(
           'stale_ref',
-          `Target ref ${input.targetRef} not found.`,
-          'Take a new snapshot to get fresh refs.',
+          input.targetRef
+            ? `Target ref ${input.targetRef} not found.`
+            : 'No target element specified. Provide targetRef or targetSelector.',
+          input.targetRef
+            ? 'Take a new snapshot to get fresh refs, or use targetSelector for elements not in the accessibility tree.'
+            : undefined,
         );
       }
 

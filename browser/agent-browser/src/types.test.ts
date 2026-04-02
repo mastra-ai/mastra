@@ -263,23 +263,28 @@ describe('uploadInputSchema', () => {
 });
 
 describe('dialogInputSchema', () => {
-  it('accepts accept action', () => {
-    const result = dialogInputSchema.safeParse({ action: 'accept' });
+  it('accepts triggerRef with accept action', () => {
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e1', action: 'accept' });
     expect(result.success).toBe(true);
   });
 
-  it('accepts dismiss action', () => {
-    const result = dialogInputSchema.safeParse({ action: 'dismiss' });
+  it('accepts triggerRef with dismiss action', () => {
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e2', action: 'dismiss' });
     expect(result.success).toBe(true);
   });
 
   it('accepts accept with text for prompts', () => {
-    const result = dialogInputSchema.safeParse({ action: 'accept', text: 'user input' });
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e3', action: 'accept', text: 'user input' });
     expect(result.success).toBe(true);
   });
 
-  it('requires action', () => {
+  it('requires triggerRef and action', () => {
     const result = dialogInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('requires triggerRef', () => {
+    const result = dialogInputSchema.safeParse({ action: 'accept' });
     expect(result.success).toBe(false);
   });
 });
@@ -349,14 +354,20 @@ describe('dragInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('requires sourceRef', () => {
-    const result = dragInputSchema.safeParse({ targetRef: '@e10' });
-    expect(result.success).toBe(false);
+  it('accepts sourceSelector and targetSelector', () => {
+    const result = dragInputSchema.safeParse({ sourceSelector: '#source', targetSelector: '#target' });
+    expect(result.success).toBe(true);
   });
 
-  it('requires targetRef', () => {
-    const result = dragInputSchema.safeParse({ sourceRef: '@e5' });
-    expect(result.success).toBe(false);
+  it('accepts mixed ref and selector', () => {
+    const result = dragInputSchema.safeParse({ sourceRef: '@e5', targetSelector: '#target' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty object (validation happens in implementation)', () => {
+    // Schema allows empty, but implementation will return error
+    const result = dragInputSchema.safeParse({});
+    expect(result.success).toBe(true);
   });
 });
 
