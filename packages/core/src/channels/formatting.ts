@@ -104,7 +104,7 @@ export function formatToolResult(
   }
 
   // Plain text format
-  const resultBody = isError ? `Error: ${resultText}` : resultText;
+  const resultBody = isError && !resultText.startsWith('Error: ') ? `Error: ${resultText}` : resultText;
   return `${header} · ${status}\n${resultBody}`;
 }
 
