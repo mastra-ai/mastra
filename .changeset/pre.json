@@ -122,5 +122,14 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "fix-sandbox-relative-cwd",
+    "gateway-client-js",
+    "gateway-mastracode",
+    "gateway-memory-server",
+    "gateway-playground-ui",
+    "good-towns-fix",
+    "green-birds-knock",
+    "tender-hairs-sell"
+  ]
 }
