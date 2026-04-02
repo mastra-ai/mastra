@@ -170,6 +170,19 @@ export function DatasetItemsList({
                     </span>
                   </EntityList.TextCell>
                 )}
+                {columns.some(col => col.name === 'trajectory') && (
+                  <EntityList.TextCell>
+                    {item.expectedTrajectory ? (
+                      <span className="text-xs">
+                        {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
+                          ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
+                          : 'Yes'}
+                      </span>
+                    ) : (
+                      <span className="text-neutral4">—</span>
+                    )}
+                  </EntityList.TextCell>
+                )}
                 <EntityList.TextCell>
                   <span className="truncate block text-neutral2">{formatDate(createdAtDate)}</span>
                 </EntityList.TextCell>

@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -527,8 +527,11 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultOptions,
     modelList,
@@ -582,7 +585,7 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
+    logger.debug('Agent not found, looking through sub-agents', { agentId });
     const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
@@ -614,7 +617,7 @@ export async function getAgentFromSystem({
 
   // If still not found, try to get stored agent
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
     } catch (error) {
@@ -767,8 +770,11 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     modelList,
     defaultOptions,
@@ -1195,13 +1201,16 @@ export const GET_PROVIDERS_ROUTE = createRoute({
         allProviders[id] = provider;
       }
 
+      // Include gateway providers (defaults + user-registered)
       if (mastra) {
-        const customGateways = mastra.listGateways();
-        if (customGateways) {
-          for (const gateway of Object.values(customGateways)) {
+        const allGateways = mastra.listGateways();
+        if (allGateways) {
+          for (const gateway of Object.values(allGateways)) {
+            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+            if (gateway.id === 'models.dev') continue;
             try {
-              const customProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(customProviders)) {
+              const gatewayProviders = await gateway.fetchProviders();
+              for (const [providerId, config] of Object.entries(gatewayProviders)) {
                 allProviders[providerId] = config;
               }
             } catch (error) {

@@ -93,7 +93,7 @@ export abstract class MastraVoice<
   ): Promise<string | NodeJS.ReadableStream | void>;
 
   updateConfig(_options: Record<string, unknown>): void {
-    this.logger.warn('updateConfig not implemented by this voice provider');
+    this.logger.debug('updateConfig not implemented by this voice provider');
   }
 
   /**
@@ -102,7 +102,7 @@ export abstract class MastraVoice<
    */
   connect(_options?: Record<string, unknown>): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('connect not implemented by this voice provider');
+    this.logger.debug('connect not implemented by this voice provider');
     return Promise.resolve();
   }
 
@@ -112,7 +112,7 @@ export abstract class MastraVoice<
    */
   send(_audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('relay not implemented by this voice provider');
+    this.logger.debug('relay not implemented by this voice provider');
     return Promise.resolve();
   }
 
@@ -120,7 +120,7 @@ export abstract class MastraVoice<
    * Trigger voice providers to respond
    */
   answer(_options?: Record<string, unknown>): Promise<void> {
-    this.logger.warn('answer not implemented by this voice provider');
+    this.logger.debug('answer not implemented by this voice provider');
     return Promise.resolve();
   }
 
@@ -145,7 +145,7 @@ export abstract class MastraVoice<
    */
   close(): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('close not implemented by this voice provider');
+    this.logger.debug('close not implemented by this voice provider');
   }
 
   /**
@@ -158,7 +158,7 @@ export abstract class MastraVoice<
     _callback: (data: E extends keyof TEventArgs ? TEventArgs[E] : unknown) => void,
   ): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('on not implemented by this voice provider');
+    this.logger.debug('on not implemented by this voice provider');
   }
 
   /**
@@ -171,7 +171,7 @@ export abstract class MastraVoice<
     _callback: (data: E extends keyof TEventArgs ? TEventArgs[E] : unknown) => void,
   ): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('off not implemented by this voice provider');
+    this.logger.debug('off not implemented by this voice provider');
   }
 
   /**
@@ -186,7 +186,7 @@ export abstract class MastraVoice<
     >
   > {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('getSpeakers not implemented by this voice provider');
+    this.logger.debug('getSpeakers not implemented by this voice provider');
     return Promise.resolve([]);
   }
 
@@ -196,7 +196,7 @@ export abstract class MastraVoice<
    */
   getListener(): Promise<{ enabled: boolean }> {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('getListener not implemented by this voice provider');
+    this.logger.debug('getListener not implemented by this voice provider');
     return Promise.resolve({ enabled: false });
   }
 }

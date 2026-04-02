@@ -29,6 +29,5 @@ export async function scoreTraces({
       error,
     );
     mastra.getLogger()?.trackException(mastraError);
-    mastra.getLogger()?.error(mastraError.toString());
   }
 }

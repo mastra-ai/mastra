@@ -78,8 +78,8 @@ export interface AgentLegacyCapabilities {
   hasOwnMemory(): boolean;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
-  /** Get LLM instance */
-  getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
+  /** Get the agent's LLM instance, optionally using a request-scoped model override */
+  getLLM(options: { requestContext: RequestContext; model?: DynamicArgument<MastraModelConfig> }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   /** Get memory messages (deprecated - use input processors) */
@@ -252,10 +252,6 @@ export class AgentLegacyHandler {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
       before: async () => {
-        if (process.env.NODE_ENV !== 'test') {
-          this.capabilities.logger.debug(`[Agents:${this.capabilities.name}] - Starting generation`, { runId });
-        }
-
         const agentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
@@ -288,25 +284,6 @@ export class AgentLegacyHandler {
         const innerObservabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
         const memory = await this.capabilities.getMemory({ requestContext });
-
-        const toolEnhancements = [
-          // toolsets
-          toolsets && Object.keys(toolsets || {}).length > 0
-            ? `toolsets present (${Object.keys(toolsets || {}).length} tools)`
-            : undefined,
-
-          // memory tools
-          memory && resourceId ? 'memory and resourceId available' : undefined,
-        ]
-          .filter(Boolean)
-          .join(', ');
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Enhancing tools: ${toolEnhancements}`, {
-          runId,
-          toolsets: toolsets ? Object.keys(toolsets) : undefined,
-          clientTools: clientTools ? Object.keys(clientTools) : undefined,
-          hasMemory: !!memory,
-          hasResourceId: !!resourceId,
-        });
 
         const threadId = thread?.id;
 
@@ -383,20 +360,9 @@ export class AgentLegacyHandler {
             text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${threadId}" and resourceId "${resourceId}"`,
           });
           (this.capabilities.logger as any).trackException(mastraError);
-          this.capabilities.logger.error(mastraError.toString());
           agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
-        const store = memory.constructor.name;
-        this.capabilities.logger.debug(
-          `[Agent:${this.capabilities.name}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-          {
-            runId,
-            resourceId,
-            threadId,
-            memoryStore: store,
-          },
-        );
 
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId });
@@ -527,7 +493,8 @@ export class AgentLegacyHandler {
           }),
         };
 
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Post processing LLM response`, {
+        this.capabilities.logger.debug('Post processing LLM response', {
+          agentName: this.capabilities.name,
           runId,
           result: resToLog,
           threadId,
@@ -651,7 +618,6 @@ export class AgentLegacyHandler {
               e,
             );
             (this.capabilities.logger as any).trackException(mastraError);
-            this.capabilities.logger.error(mastraError.toString());
             agentSpan?.error({ error: mastraError });
             throw mastraError;
           }
@@ -789,9 +755,9 @@ export class AgentLegacyHandler {
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {
-      this.capabilities.logger.warn(
-        `[Agent:${this.capabilities.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
-      );
+      this.capabilities.logger.warn('No memory configured but resourceId and threadId were passed in args', {
+        agent: this.capabilities.name,
+      });
     }
     const runId =
       args.runId ||
@@ -804,7 +770,10 @@ export class AgentLegacyHandler {
       }) ||
       randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
-    const llm = await this.capabilities.getLLM({ requestContext });
+    const llm = await this.capabilities.getLLM({
+      requestContext,
+      model: (args as { model?: DynamicArgument<MastraModelConfig> }).model,
+    });
 
     const memory = await this.capabilities.getMemory({ requestContext });
 
@@ -1396,10 +1365,6 @@ export class AgentLegacyHandler {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     if (!output || experimental_output) {
-      this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm stream call`, {
-        runId,
-      });
-
       const streamResult = llm.__stream({
         ...llmOptions,
         experimental_output,
@@ -1460,7 +1425,8 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
-    this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
+    this.capabilities.logger.debug('Starting LLM streamObject call', {
+      agent: this.capabilities.name,
       runId,
     });
 
