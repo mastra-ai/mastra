@@ -102,8 +102,16 @@ export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
   }, []);
 
   const handleOpenExternal = useCallback(() => {
-    if (currentUrl) {
-      window.open(currentUrl, '_blank', 'noopener,noreferrer');
+    if (!currentUrl) return;
+
+    // Validate URL to prevent javascript:/data: scheme attacks
+    try {
+      const url = new URL(currentUrl);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        window.open(url.href, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      // Invalid URL, ignore
     }
   }, [currentUrl]);
 
