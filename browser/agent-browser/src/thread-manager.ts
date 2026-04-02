@@ -104,7 +104,18 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
         launchOptions.cdpUrl = await this.resolveCdpUrl(this.browserConfig.cdpUrl);
       }
 
-      await manager.launch(launchOptions);
+      try {
+        await manager.launch(launchOptions);
+      } catch (error) {
+        // Clean up manager on launch failure
+        try {
+          await manager.close();
+        } catch {
+          // Ignore close errors - launch already failed
+        }
+        throw error;
+      }
+
       session.manager = manager;
       this.threadBrowsers.set(threadId, manager);
 

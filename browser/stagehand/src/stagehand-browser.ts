@@ -1256,6 +1256,31 @@ export class StagehandBrowser extends MastraBrowser {
       }
     };
 
+    // Register cleanup handler first to ensure we can clean up even if setup fails partway
+    const cleanup = () => {
+      // Clear per-thread debounce timer
+      const timer = this.tabChangeDebounceTimers.get(streamKey);
+      if (timer) {
+        clearTimeout(timer);
+        this.tabChangeDebounceTimers.delete(streamKey);
+      }
+      if (targetInfoDebounceTimer) {
+        clearTimeout(targetInfoDebounceTimer);
+        targetInfoDebounceTimer = null;
+      }
+      connection.off?.('Target.targetCreated', onTargetCreated);
+      connection.off?.('Target.targetDestroyed', onTargetDestroyed);
+      connection.off?.('Target.attachedToTarget', onTargetAttached);
+      connection.off?.('Target.targetInfoChanged', onTargetInfoChanged);
+      // Clean up page session listener
+      if (pageSession?.off) {
+        pageSession.off('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
+      }
+    };
+
+    // Register cleanup before adding listeners to prevent leaks on partial setup failure
+    stream.once('stop', cleanup);
+
     try {
       connection.on?.('Target.targetCreated', onTargetCreated);
       connection.on?.('Target.targetDestroyed', onTargetDestroyed);
@@ -1264,30 +1289,9 @@ export class StagehandBrowser extends MastraBrowser {
 
       // Set up navigation listener on the current page
       await setupPageNavigationListener();
-
-      // Clean up listeners when stream stops
-      stream.once('stop', () => {
-        // Clear per-thread debounce timer
-        const timer = this.tabChangeDebounceTimers.get(streamKey);
-        if (timer) {
-          clearTimeout(timer);
-          this.tabChangeDebounceTimers.delete(streamKey);
-        }
-        if (targetInfoDebounceTimer) {
-          clearTimeout(targetInfoDebounceTimer);
-          targetInfoDebounceTimer = null;
-        }
-        connection.off?.('Target.targetCreated', onTargetCreated);
-        connection.off?.('Target.targetDestroyed', onTargetDestroyed);
-        connection.off?.('Target.attachedToTarget', onTargetAttached);
-        connection.off?.('Target.targetInfoChanged', onTargetInfoChanged);
-        // Clean up page session listener
-        if (pageSession?.off) {
-          pageSession.off('Page.frameNavigated', onFrameNavigated as (...args: unknown[]) => void);
-        }
-      });
     } catch (error) {
       this.logger.debug?.('Failed to set up tab change detection', error);
+      // Cleanup is already registered on stream stop, no need to call here
     }
   }
 

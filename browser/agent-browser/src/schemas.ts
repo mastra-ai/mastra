@@ -78,12 +78,21 @@ export type PressInput = z.output<typeof pressInputSchema>;
 /**
  * browser_select - Select option from dropdown
  */
-export const selectInputSchema = z.object({
-  ref: z.string().describe('Select element ref from snapshot'),
-  value: z.string().optional().describe('Option value to select'),
-  label: z.string().optional().describe('Option label to select'),
-  index: z.number().optional().describe('Option index to select (0-based)'),
-});
+export const selectInputSchema = z
+  .object({
+    ref: z.string().describe('Select element ref from snapshot'),
+    value: z.string().optional().describe('Option value to select'),
+    label: z.string().optional().describe('Option label to select'),
+    index: z.number().optional().describe('Option index to select (0-based)'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.value === undefined && data.label === undefined && data.index === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one of value, label, or index is required',
+      });
+    }
+  });
 export type SelectInput = z.output<typeof selectInputSchema>;
 
 /**
@@ -166,12 +175,29 @@ export type TabsInput = z.output<typeof tabsInputSchema>;
 /**
  * browser_drag - Drag an element to another element
  */
-export const dragInputSchema = z.object({
-  sourceRef: z.string().optional().describe('Element ref to drag from (e.g., @e5)'),
-  targetRef: z.string().optional().describe('Element ref to drag to (e.g., @e7)'),
-  sourceSelector: z.string().optional().describe('CSS selector for source element (use if ref not available)'),
-  targetSelector: z.string().optional().describe('CSS selector for target element (use if ref not available)'),
-});
+export const dragInputSchema = z
+  .object({
+    sourceRef: z.string().optional().describe('Element ref to drag from (e.g., @e5)'),
+    targetRef: z.string().optional().describe('Element ref to drag to (e.g., @e7)'),
+    sourceSelector: z.string().optional().describe('CSS selector for source element (use if ref not available)'),
+    targetSelector: z.string().optional().describe('CSS selector for target element (use if ref not available)'),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.sourceRef && !data.sourceSelector) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sourceRef'],
+        message: 'Either sourceRef or sourceSelector is required',
+      });
+    }
+    if (!data.targetRef && !data.targetSelector) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetRef'],
+        message: 'Either targetRef or targetSelector is required',
+      });
+    }
+  });
 export type DragInput = z.output<typeof dragInputSchema>;
 
 // =============================================================================
@@ -183,7 +209,7 @@ export type DragInput = z.output<typeof dragInputSchema>;
  */
 export const evaluateInputSchema = z.object({
   script: z.string().describe('JavaScript code to execute'),
-  arg: z.any().optional().describe('Argument to pass to the script'),
+  arg: z.unknown().optional().describe('Argument to pass to the script (JSON-serializable)'),
 });
 export type EvaluateInput = z.output<typeof evaluateInputSchema>;
 

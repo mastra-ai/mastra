@@ -198,6 +198,7 @@ export class ScreencastStream extends EventEmitter {
    * Use this when the active page/tab changes.
    *
    * @returns Promise that resolves when reconnection is complete
+   * @throws Error if reconnection fails (also emits 'error' event)
    */
   async reconnect(): Promise<void> {
     // Clean up existing session
@@ -227,8 +228,10 @@ export class ScreencastStream extends EventEmitter {
     try {
       await this.start();
     } catch (error) {
-      console.error('[ScreencastStream.reconnect] Failed to reconnect:', error);
-      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[ScreencastStream.reconnect] Failed to reconnect:', err);
+      this.emit('error', err);
+      throw err;
     }
   }
 }
