@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from '../http-exception';
 import {
   conversationDeletedSchema,
@@ -13,35 +12,8 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { mapMastraMessagesToConversationItems } from './responses.adapter';
-import { getResponseMemoryStore } from './responses.storage';
+import { findConversationThreadAcrossAgents, getAgentMemoryStore } from './responses.storage';
 import { getEffectiveResourceId } from './utils';
-
-/**
- * Resolves a stored conversation thread and enforces the caller's resource scope.
- * Conversations are persisted as memory threads, so all read/delete routes share
- * this lookup path.
- */
-async function resolveConversationThread({
-  conversationId,
-  memoryStore,
-  requestContext,
-}: {
-  conversationId: string;
-  memoryStore: NonNullable<Awaited<ReturnType<typeof getResponseMemoryStore>>>;
-  requestContext: RequestContext;
-}) {
-  const thread = await memoryStore.getThreadById({ threadId: conversationId });
-  if (!thread) {
-    throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-  }
-
-  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-  if (effectiveResourceId && thread.resourceId !== effectiveResourceId) {
-    throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-  }
-
-  return thread;
-}
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
   return {
@@ -91,6 +63,9 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });
       }
+      if (!(await getAgentMemoryStore({ agent, requestContext }))) {
+        throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+      }
 
       const threadId = conversation_id ?? randomUUID();
       const resourceId = getEffectiveResourceId(requestContext, resource_id) ?? threadId;
@@ -121,14 +96,12 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
+      if (!match) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
       }
 
-      const thread = await resolveConversationThread({ conversationId, memoryStore, requestContext });
-
-      return buildConversationObject({ thread });
+      return buildConversationObject({ thread: match.thread });
     } catch (error) {
       return handleError(error, 'Error retrieving conversation');
     }
@@ -148,14 +121,12 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
+      if (!match) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
       }
 
-      await resolveConversationThread({ conversationId, memoryStore, requestContext });
-
-      const { messages } = await memoryStore.listMessages({
+      const { messages } = await match.memoryStore.listMessages({
         threadId: conversationId,
         page: 0,
         perPage: 1000,
@@ -181,14 +152,12 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   requiresPermission: 'agents:delete',
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
-      const memoryStore = await getResponseMemoryStore(mastra);
-      if (!memoryStore) {
-        throw new HTTPException(500, { message: 'Memory storage is not available' });
+      const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
+      if (!match) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
       }
 
-      await resolveConversationThread({ conversationId, memoryStore, requestContext });
-
-      await memoryStore.deleteThread({ threadId: conversationId });
+      await match.memoryStore.deleteThread({ threadId: conversationId });
 
       return buildConversationDeleted(conversationId);
     } catch (error) {
