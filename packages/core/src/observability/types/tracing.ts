@@ -425,6 +425,10 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 export interface SpanErrorInfo {
   message: string;
   id?: string;
+  /** Error class name (e.g. "TypeError", "ValidationError") */
+  name?: string;
+  /** Stack trace string */
+  stack?: string;
   domain?: string;
   category?: string;
   details?: Record<string, any>;

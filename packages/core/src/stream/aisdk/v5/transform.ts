@@ -312,6 +312,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
         payload: {
+          providerMetadata: value.providerMetadata,
           stepResult: {
             reason: normalizeFinishReason(value.finishReason),
           },
@@ -322,7 +323,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           metadata: {
             providerMetadata: value.providerMetadata,
           },
-          messages,
+          messages: messages ?? {
+            all: [],
+            user: [],
+            nonUser: [],
+          },
           ...rest,
         },
       };
@@ -479,7 +484,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
-      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
+      const { request: _request, providerMetadata: metadataProviderMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
         response: {
@@ -490,7 +495,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         },
         usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
-        providerMetadata,
+        providerMetadata: metadataProviderMetadata ?? chunk.payload.providerMetadata,
       };
     }
     case 'text-delta':

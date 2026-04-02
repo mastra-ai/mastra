@@ -110,32 +110,8 @@ export default function Scorer() {
     }
   }, [workflowsError]);
 
-  // 403 check - permission denied for scorers
-  if (scorerError && is403ForbiddenError(scorerError)) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
-              <Icon>
-                <GaugeIcon />
-              </Icon>
-              Scorers
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              {scorerId}
-            </Crumb>
-          </Breadcrumb>
-        </Header>
-
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="scorers" />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
+  const scores = useMemo(() => scoresData?.scores || [], [scoresData?.scores]);
+  const pagination = scoresData?.pagination;
 
   const scorerAgents =
     scorer?.agentIds?.map(agentId => {
@@ -171,11 +147,85 @@ export default function Scorer() {
   ];
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    if (option?.value) setSearchParams({ entity: option.value });
+    if (!option?.value) return;
+
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('entity', option.value);
+      return next;
+    });
   };
 
-  const scores = scoresData?.scores || [];
-  const pagination = scoresData?.pagination;
+  useEffect(() => {
+    const scoreIdFromUrl = searchParams.get('scoreId');
+
+    if (!scoreIdFromUrl) {
+      if (selectedScoreId) {
+        setSelectedScoreId(undefined);
+      }
+      if (dialogIsOpen) {
+        setDialogIsOpen(false);
+      }
+      return;
+    }
+
+    const matchingScore = scores.find(score => score.id === scoreIdFromUrl);
+    if (!matchingScore) return;
+
+    if (selectedScoreId !== scoreIdFromUrl) {
+      setSelectedScoreId(scoreIdFromUrl);
+    }
+
+    if (!dialogIsOpen) {
+      setDialogIsOpen(true);
+    }
+  }, [dialogIsOpen, scores, searchParams, selectedScoreId]);
+
+  useEffect(() => {
+    const currentScoreId = searchParams.get('scoreId');
+
+    if (selectedScoreId ? currentScoreId === selectedScoreId : !currentScoreId) {
+      return;
+    }
+
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+
+      if (selectedScoreId) {
+        next.set('scoreId', selectedScoreId);
+      } else {
+        next.delete('scoreId');
+      }
+
+      return next;
+    });
+  }, [searchParams, selectedScoreId, setSearchParams]);
+
+  if (scorerError && is403ForbiddenError(scorerError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="scorers" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const handleScoreClick = (id: string) => {
     setSelectedScoreId(id);
@@ -231,7 +281,13 @@ export default function Scorer() {
               selectedEntity={selectedEntityOption}
               entityOptions={entityOptions}
               onEntityChange={handleSelectedEntityChange}
-              onReset={() => setSearchParams({ entity: 'all' })}
+              onReset={() => {
+                setSearchParams(prev => {
+                  const next = new URLSearchParams(prev);
+                  next.set('entity', 'all');
+                  return next;
+                });
+              }}
               isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
             />
 
@@ -261,7 +317,10 @@ export default function Scorer() {
         scorerName={scorer?.scorer?.config?.name}
         score={mapScore(scores.find(s => s.id === selectedScoreId))}
         isOpen={dialogIsOpen}
-        onClose={() => setDialogIsOpen(false)}
+        onClose={() => {
+          setDialogIsOpen(false);
+          setSelectedScoreId(undefined);
+        }}
         onNext={toNextScore}
         onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
