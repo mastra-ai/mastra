@@ -19,7 +19,10 @@ setupDummyApiKeys(MODE, ['openai', 'openrouter']);
 
 // V4
 describe('V4', async () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({
+    exactMatch: true,
+    name: RECORDING_NAME + '-v4',
+  });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -34,7 +37,10 @@ describe('V4', async () => {
 });
 // v5
 describe('V5', async () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({
+    exactMatch: true,
+    name: RECORDING_NAME + '-v5',
+  });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
@@ -51,7 +57,10 @@ describe('V5', async () => {
 });
 // v6
 describe('V6', async () => {
-  const mock = createGatewayMock();
+  const mock = createGatewayMock({
+    exactMatch: true,
+    name: RECORDING_NAME + '-v6',
+  });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 

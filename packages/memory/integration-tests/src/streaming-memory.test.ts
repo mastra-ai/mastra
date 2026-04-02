@@ -21,19 +21,19 @@ setupStreamingMemoryTest({
   model: openai('gpt-4o'),
   memory,
   tools: { get_weather: weatherToolV4 },
-  recordingName: RECORDING_NAME,
+  recordingName: `${RECORDING_NAME}-v4`,
 });
 
 setupStreamingMemoryTest({
   model: 'openai/gpt-4o',
   memory,
   tools: { get_weather: weatherToolV5 },
-  recordingName: RECORDING_NAME,
+  recordingName: `${RECORDING_NAME}-v5`,
 });
 
 setupStreamingMemoryTest({
   model: openaiV6('gpt-4o'),
   memory,
   tools: { get_weather: weatherToolV6 },
-  recordingName: RECORDING_NAME,
+  recordingName: `${RECORDING_NAME}-v6`,
 });
