@@ -239,7 +239,8 @@ describe('LocalSandbox', () => {
       // "." should resolve to tempDir (the workingDirectory), not process.cwd()
       const dotResult = await sandbox.executeCommand('pwd', [], { cwd: '.' });
       expect(dotResult.success).toBe(true);
-      expect(dotResult.stdout.trim()).toBe(tempDir);
+      // macOS /var is a symlink to /private/var, so realpath both sides
+      expect(await fs.realpath(dotResult.stdout.trim())).toBe(await fs.realpath(tempDir));
 
       // "./subdir" should resolve to tempDir/subdir
       const relResult = await sandbox.executeCommand('ls', ['-1'], { cwd: './subdir' });
