@@ -529,7 +529,7 @@ export function AgentTracesPanel({
     datasetName: string;
     items: BulkTraceItem[];
   }>({ isOpen: false, datasetId: '', datasetName: '', items: [] });
-  
+
   const [isPreparing, setIsPreparing] = useState(false);
 
   useEffect(() => {
