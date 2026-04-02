@@ -42,7 +42,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-Register the agent in your Mastra instance:
+Register the agent in your Mastra instance with storage so channel state persists across restarts:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -85,7 +85,7 @@ export const multiPlatformAgent = new Agent({
           botToken: process.env.DISCORD_BOT_TOKEN,
           publicKey: process.env.DISCORD_PUBLIC_KEY,
         }),
-        gateway: true, // Enable Discord Gateway for DMs and mentions
+        gateway: true,
       },
       telegram: createTelegramAdapter({
         botToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -95,121 +95,28 @@ export const multiPlatformAgent = new Agent({
 })
 ```
 
-## Per-adapter options
+Wrap an adapter in an object to configure per-adapter options like `gateway` (WebSocket mode) and `cards` (rich card rendering). Pass a plain adapter to use defaults.
 
-Configure per-adapter behavior by wrapping the adapter in an object:
+:::note
 
-```typescript
-const agent = new Agent({
-  // ...
-  channels: {
-    adapters: {
-      discord: {
-        adapter: createDiscordAdapter({
-          /* ... */
-        }),
-        gateway: true, // Enable Discord Gateway WebSocket
-        cards: false, // Use plain text instead of rich cards
-      },
-      slack: createSlackAdapter({
-        /* ... */
-      }), // Plain adapter uses defaults
-    },
-  },
-})
-```
+See [Channels reference](/reference/agents/channels#channeladapterconfig) for all per-adapter options.
 
-| Option | Type | Default | Description |
-| - | - | - | - |
-| `gateway` | `boolean` | `true` | Enable persistent WebSocket connections (Discord Gateway, Slack Socket Mode) |
-| `cards` | `boolean` | `true` | Render tool calls as interactive cards with buttons |
-
-### Disabling cards
-
-Set `cards: false` on an adapter to render tool calls as plain text instead of rich cards. This is useful for platforms with card rendering issues:
-
-```typescript
-const agent = new Agent({
-  // ...
-  channels: {
-    adapters: {
-      discord: {
-        adapter: createDiscordAdapter({
-          /* ... */
-        }),
-        cards: false,
-      },
-    },
-  },
-})
-```
-
-When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide whether to proceed based on the conversation context.
-
-## Channel config options
-
-The top-level `channels` object supports these options:
-
-| Option | Type | Default | Description |
-| - | - | - | - |
-| `adapters` | `Record<string, Adapter>` | required | Platform adapters keyed by name |
-| `handlers` | `ChannelHandlers` | — | Override default message handlers |
-| `inlineMedia` | `string[] \| function` | `['image/*']` | Mime type globs for attachments sent as file parts to the model |
-| `inlineLinks` | `InlineLinkEntry[]` | — | Promote URLs in message text to file parts |
-| `tools` | `boolean` | `true` | Include channel tools (e.g. `add_reaction`). Set to `false` for models without function calling |
-| `state` | `StateAdapter` | in-memory | State adapter for subscriptions and deduplication |
-| `userName` | `string` | agent's `name` | Bot display name shown in messages |
-| `threadContext` | `{ maxMessages?: number }` | `{ maxMessages: 10 }` | Fetch prior messages on first mention in a thread |
-| `chatOptions` | `ChatConfig` | — | Additional Chat SDK options (see below) |
-
-```typescript
-const agent = new Agent({
-  name: 'Support Bot',
-  channels: {
-    adapters: {
-      /* ... */
-    },
-    userName: 'Support Bot', // Defaults to agent's name if omitted
-    chatOptions: {
-      dedupeTtlMs: 600000, // 10 minute deduplication window
-    },
-  },
-})
-```
-
-When Mastra storage is configured, channel state (subscriptions, deduplication) is persisted automatically via `MastraStateAdapter`. You can override this by passing a Chat SDK state adapter (e.g. `createRedisState()` from `@chat-adapter/state-redis`) to the `state` option.
-
-The `chatOptions` object accepts any [Chat SDK configuration](https://chat-sdk.dev/docs/usage) not already exposed by Mastra, such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.
+:::
 
 ## Thread context
 
-When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform to provide context on the first mention.
-
-```typescript
-const agent = new Agent({
-  channels: {
-    adapters: {
-      slack: createSlackAdapter({
-        /* ... */
-      }),
-    },
-    threadContext: { maxMessages: 20 }, // Fetch more context
-  },
-})
-```
-
-Thread context follows this flow:
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
 
 1. On the **first mention** in a thread, the agent fetches recent messages from the platform.
 1. These messages are included in the system prompt as context.
 1. After responding, the agent subscribes to the thread and has full history via Mastra's memory.
 1. Subsequent messages in that thread do **not** re-fetch from the platform.
 
-Set `maxMessages: 0` to disable this behavior. This only applies to non-DM threads. In DMs, the agent already has full conversation history.
+Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
 ## Multimodal attachments
 
-When a user uploads a file (image, video, PDF, etc.) in a platform message, the agent can receive it as a file part for the model to process. The `inlineMedia` option controls which attachment types are sent inline to the model. Everything else is described as a text summary so the agent knows about the file without crashing models that reject unsupported types.
+When a user uploads a file in a platform message, the `inlineMedia` option controls which types are sent as file parts to the model. Everything else is described as a text summary so the agent knows about the file without crashing models that reject unsupported types.
 
 ```typescript
 const agent = new Agent({
@@ -225,13 +132,7 @@ const agent = new Agent({
 })
 ```
 
-For platforms with private CDNs (e.g. Slack), the agent automatically fetches attachments with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the agent passes the URL directly to the model.
-
-## Inline links
-
-Use `inlineLinks` to promote URLs found in message text to file parts so the model can process linked content (images, videos, etc.) instead of seeing raw URL text.
-
-Each entry matches a domain. Use a string for domains where a HEAD request determines the Content-Type, or an object to force a specific mime type. Forcing the mime type is useful for sites like YouTube where HEAD returns `text/html` but the model treats the URL as video.
+You can also promote URLs in message text to file parts using `inlineLinks`. This is useful for models like Gemini that can process YouTube URLs as video:
 
 ```typescript
 const agent = new Agent({
@@ -242,21 +143,22 @@ const agent = new Agent({
     },
     inlineMedia: ['image/*', 'video/*'],
     inlineLinks: [
-      // Force YouTube URLs as video (skip HEAD)
       { match: 'youtube.com', mimeType: 'video/*' },
       { match: 'youtu.be', mimeType: 'video/*' },
-      // HEAD-check all other URLs, inline if mime matches inlineMedia
-      '*',
     ],
   },
 })
 ```
 
-For string entries (including `'*'`), the resolved Content-Type is checked against `inlineMedia`. Only matching types become file parts. For object entries with a forced `mimeType`, the file part is always added regardless of the `inlineMedia` setting.
+:::note
+
+See [Channels reference](/reference/agents/channels#inlinemedia) for the full `inlineMedia` and `inlineLinks` configuration.
+
+:::
 
 ## Custom handlers
 
-Override or disable default message handlers using the `handlers` option:
+Override or disable default message handlers:
 
 ```typescript
 const agent = new Agent({
@@ -266,31 +168,23 @@ const agent = new Agent({
       /* ... */
     },
     handlers: {
-      // Disable direct message handling
-      onDirectMessage: false,
-
-      // Wrap the default mention handler with custom logic
-      onMention: (thread, message, defaultHandler) => {
+      onDirectMessage: false, // Disable DM handling
+      onMention: async (thread, message, defaultHandler) => {
         console.log('Received mention:', message.text)
-        // Call the default handler to process normally
-        defaultHandler()
+        await defaultHandler(thread, message)
       },
     },
   },
 })
 ```
 
-| Handler | Description |
-| - | - |
-| `onDirectMessage` | Called when the bot receives a direct message |
-| `onMention` | Called when the bot is mentioned in a channel |
-| `onSubscribedMessage` | Called for messages in subscribed threads |
+Each handler can be omitted (use default), set to `false` (disable), or a function that wraps or replaces the default behavior.
 
-Each handler can be:
+:::note
 
-- Omitted: Uses the default Mastra handler
-- `false`: Disables the handler entirely
-- A function `(thread, message, defaultHandler) => void`: Wraps or replaces the default
+See [Channels reference](/reference/agents/channels#channelhandlers) for all handler options.
+
+:::
 
 ## Tool approval
 
@@ -315,17 +209,11 @@ const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
 
-## Thread subscriptions
-
-By default, agents respond to direct messages and mentions. To have an agent follow an entire thread (responding to all messages, not just mentions), use thread subscriptions.
-
-The agent can subscribe to threads programmatically, and subscriptions persist across restarts when storage is configured.
+Set `cards: false` on an adapter to render tool calls as plain text instead of interactive cards. When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context.
 
 ## Multi-user awareness
 
-In group conversations, the agent automatically prefixes each message with the sender's name and platform mention ID. This helps the agent distinguish between different speakers and address them appropriately.
-
-For example, in a Slack thread with multiple users, the agent sees messages like:
+In group conversations, the agent automatically prefixes each message with the sender's name and platform mention ID. This helps the agent distinguish between speakers:
 
 ```
 [Alice (@U123ABC)]: Can you help me with this?
@@ -365,12 +253,9 @@ Each platform requires specific configuration. See the Chat SDK documentation fo
    https://api.telegram.org/bot<token>/setWebhook?url=<your-url>/api/agents/{agentId}/channels/telegram/webhook
    ```
 
-## Storage
-
-When Mastra storage is configured (as shown in the [quickstart](#quickstart)), thread subscriptions and mappings persist across restarts. Without storage, the agent uses in-memory state and subscriptions are lost on restart.
-
 ## Related
 
 - [Agent overview](/docs/agents/overview)
 - [Tool approval](/docs/agents/agent-approval)
+- [Channels reference](/reference/agents/channels)
 - [Chat SDK documentation](https://chat-sdk.dev)
