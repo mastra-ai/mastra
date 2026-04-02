@@ -57,7 +57,7 @@ describe('browser_drag', () => {
       if (ref === '@target') return targetLocator;
       return null;
     });
-    browser = new AgentBrowser({ threadIsolation: 'none' });
+    browser = new AgentBrowser({ scope: 'shared' });
     await browser.launch();
   });
 

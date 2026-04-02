@@ -14,7 +14,7 @@ import { AgentBrowser } from './agent-browser';
 let canLaunchBrowser = true;
 try {
   // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
-  const testBrowser = new AgentBrowser({ headless: true, threadIsolation: 'none' });
+  const testBrowser = new AgentBrowser({ headless: true, scope: 'shared' });
   await testBrowser.ensureReady();
   await testBrowser.close();
 } catch {
@@ -26,7 +26,7 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
 
   beforeAll(async () => {
     // Use 'none' isolation for simpler shared browser behavior in integration tests
-    browser = new AgentBrowser({ headless: true, timeout: 15_000, threadIsolation: 'none' });
+    browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared' });
     await browser.ensureReady();
   });
 

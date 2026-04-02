@@ -42,7 +42,7 @@ describe('browser_dialog', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    browser = new AgentBrowser({ threadIsolation: 'none' });
+    browser = new AgentBrowser({ scope: 'shared' });
     await browser.launch();
   });
 
@@ -135,7 +135,7 @@ describe('browser_dialog', () => {
       // Don't trigger dialog
     });
 
-    const fastBrowser = new AgentBrowser({ threadIsolation: 'none', timeout: 50 });
+    const fastBrowser = new AgentBrowser({ scope: 'shared', timeout: 50 });
     await fastBrowser.launch();
 
     await expect(fastBrowser.dialog({ triggerRef: '@e1', action: 'accept' })).rejects.toThrow('No dialog appeared');

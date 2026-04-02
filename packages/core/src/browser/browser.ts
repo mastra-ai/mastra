@@ -28,7 +28,7 @@ import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
-import type { BrowserState, BrowserTabState, ThreadIsolationMode, ThreadManager } from './thread-manager';
+import type { BrowserState, BrowserTabState, BrowserScope, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
 export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
@@ -64,7 +64,6 @@ export type CdpUrlProvider = string | (() => string | Promise<string>);
  * Base configuration shared by all browser providers.
  * Provider packages extend this with their own options.
  */
-// ThreadIsolationMode is imported from ./thread-manager
 
 export interface BrowserConfig {
   /**
@@ -96,11 +95,12 @@ export interface BrowserConfig {
   cdpUrl?: CdpUrlProvider;
 
   /**
-   * How to isolate browser sessions across threads.
-   * @see ThreadIsolationMode for details on each mode.
-   * @default 'none'
+   * Browser instance scope across threads.
+   * - 'shared': All threads share a single browser instance
+   * - 'thread': Each thread gets its own browser instance (full isolation)
+   * @default 'thread'
    */
-  threadIsolation?: ThreadIsolationMode;
+  scope?: BrowserScope;
 
   /**
    * Called after the browser reaches 'ready' status.
@@ -719,11 +719,11 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Get the thread isolation mode.
-   * @returns The isolation mode from threadManager or config, or 'none' if not set
+   * Get the browser scope mode.
+   * @returns The scope from threadManager or config, defaults to 'shared'
    */
-  getThreadIsolationMode(): ThreadIsolationMode {
-    return this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
+  getScope(): BrowserScope {
+    return this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
   }
 
   // ---------------------------------------------------------------------------
@@ -752,10 +752,10 @@ export abstract class MastraBrowser extends MastraBase {
       return true;
     }
 
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    // No isolation - all threads share the same session
-    if (isolation === 'none') {
+    // Shared scope - all threads share the same session
+    if (scope === 'shared') {
       return true;
     }
 
@@ -780,14 +780,14 @@ export abstract class MastraBrowser extends MastraBase {
     const mergedOptions = options ?? this.config.screencast;
 
     const threadId = mergedOptions?.threadId;
-    const isolation = this.threadManager?.getIsolationMode() ?? this.config.threadIsolation ?? 'none';
+    const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
 
-    // No isolation - just start the screencast
-    if (isolation === 'none') {
+    // Shared scope - just start the screencast
+    if (scope === 'shared') {
       return this.startScreencast(mergedOptions);
     }
 
-    // For 'browser' isolation, only start if the thread has an existing session
+    // For 'thread' scope, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
       return null;
     }

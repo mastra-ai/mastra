@@ -34,9 +34,9 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
 /**
  * Thread manager implementation for AgentBrowser.
  *
- * Supports two isolation modes:
- * - 'none': All threads share the shared browser manager
- * - 'browser': Each thread gets a dedicated browser manager instance
+ * Supports two scope modes:
+ * - 'shared': All threads share the shared browser manager
+ * - 'thread': Each thread gets a dedicated browser manager instance
  */
 export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   private sharedManager: BrowserManager | null = null;
@@ -91,8 +91,8 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       browserState: savedState,
     };
 
-    if (this.isolation === 'browser') {
-      // Full browser isolation - create a new browser manager
+    if (this.scope === 'thread') {
+      // Full thread isolation - create a new browser manager
       const manager = new BrowserManager();
 
       const launchOptions: BrowserLaunchOptions = {
@@ -117,7 +117,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       // This is done after restoration so the screencast starts on the correct active page
       this.onBrowserCreated?.(manager, threadId);
     }
-    // For 'none' isolation, no session setup needed - all threads share the manager
+    // For 'shared' scope, no session setup needed - all threads share the manager
 
     return session;
   }
@@ -171,7 +171,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
    * Get the browser manager for a specific session.
    */
   protected getManagerForSession(session: AgentBrowserSession): BrowserManager {
-    if (this.isolation === 'browser' && session.manager) {
+    if (this.scope === 'thread' && session.manager) {
       return session.manager;
     }
     return this.getSharedManager();
@@ -181,7 +181,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
    * Destroy a session and clean up resources.
    */
   protected async doDestroySession(session: AgentBrowserSession): Promise<void> {
-    if (this.isolation === 'browser' && session.manager) {
+    if (this.scope === 'thread' && session.manager) {
       // Close the dedicated browser manager
       await session.manager.close();
       this.threadBrowsers.delete(session.threadId);
@@ -219,7 +219,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
    * Returns null if no session exists for the thread.
    */
   getExistingManagerForThread(threadId: string): BrowserManager | null {
-    if (this.isolation === 'browser') {
+    if (this.scope === 'thread') {
       return this.threadBrowsers.get(threadId) ?? null;
     }
     return this.sharedManager;

@@ -47,7 +47,7 @@ describe('browser_tabs', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    browser = new AgentBrowser({ threadIsolation: 'none' });
+    browser = new AgentBrowser({ scope: 'shared' });
     await browser.launch();
   });
 
@@ -155,7 +155,7 @@ describe('browser_tabs', () => {
   describe('error handling', () => {
     it('returns error when browser not launched', async () => {
       mockManager.isLaunched.mockReturnValue(false);
-      const newBrowser = new AgentBrowser({ threadIsolation: 'none' });
+      const newBrowser = new AgentBrowser({ scope: 'shared' });
       // Don't call launch
 
       const result = await newBrowser.tabs({ action: 'list' });

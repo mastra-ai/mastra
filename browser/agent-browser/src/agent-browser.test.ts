@@ -141,7 +141,7 @@ describe('AgentBrowser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Use 'none' isolation to get simpler shared browser behavior for unit tests
-    browser = new AgentBrowser({ threadIsolation: 'none' });
+    browser = new AgentBrowser({ scope: 'shared' });
   });
 
   afterEach(async () => {
@@ -171,27 +171,27 @@ describe('AgentBrowser', () => {
       expect(custom.status).toBe('pending');
     });
 
-    it('forces threadIsolation to "none" when cdpUrl is provided', () => {
+    it('forces scope to "shared" when cdpUrl is provided', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      // Create browser with cdpUrl and browser isolation (should be forced to 'none')
+      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
       const browserWithCdp = new AgentBrowser({
         cdpUrl: 'ws://localhost:9222',
-        threadIsolation: 'browser',
+        scope: 'thread',
       });
 
-      // The thread manager should have 'none' isolation, not 'browser'
-      expect(browserWithCdp['threadManager'].getIsolationMode()).toBe('none');
+      // The thread manager should have 'shared' scope, not 'thread'
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
 
       warnSpy.mockRestore();
     });
 
-    it('respects threadIsolation when no cdpUrl is provided', () => {
+    it('respects scope when no cdpUrl is provided', () => {
       const browserWithIsolation = new AgentBrowser({
-        threadIsolation: 'browser',
+        scope: 'thread',
       });
 
-      expect(browserWithIsolation['threadManager'].getIsolationMode()).toBe('browser');
+      expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
     });
   });
 

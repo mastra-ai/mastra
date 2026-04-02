@@ -40,27 +40,27 @@ describe('StagehandThreadManager', () => {
   });
 
   describe('constructor', () => {
-    it('creates manager with none isolation', () => {
+    it('creates manager with shared scope', () => {
       const manager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
-      expect(manager.getIsolationMode()).toBe('none');
+      expect(manager.getScope()).toBe('shared');
     });
 
-    it('creates manager with browser isolation', () => {
+    it('creates manager with thread scope', () => {
       const manager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
       });
 
-      expect(manager.getIsolationMode()).toBe('browser');
+      expect(manager.getScope()).toBe('thread');
     });
   });
 
-  describe('shared stagehand (none isolation)', () => {
+  describe('shared stagehand (shared scope)', () => {
     it('setStagehand stores the instance', () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
       threadManager.setStagehand(mockStagehand as any);
@@ -70,7 +70,7 @@ describe('StagehandThreadManager', () => {
 
     it('clearStagehand removes the instance', () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
       threadManager.setStagehand(mockStagehand as any);
@@ -81,7 +81,7 @@ describe('StagehandThreadManager', () => {
 
     it('getStagehandForThread returns shared instance', () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
       threadManager.setStagehand(mockStagehand as any);
@@ -91,7 +91,7 @@ describe('StagehandThreadManager', () => {
 
     it('getPageForThread returns active page from shared instance', () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
       threadManager.setStagehand(mockStagehand as any);
@@ -103,30 +103,30 @@ describe('StagehandThreadManager', () => {
   describe('session management', () => {
     it('hasSession returns false initially', () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
 
-    it('hasSession returns false for none isolation (no session tracking)', async () => {
+    it('hasSession returns false for shared scope (no session tracking)', async () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'none',
+        scope: 'shared',
       });
       threadManager.setStagehand(mockStagehand as any);
 
       await threadManager.getManagerForThread('thread-1');
 
-      // 'none' isolation uses shared instance, no session tracking
+      // 'shared' scope uses shared instance, no session tracking
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
   });
 
-  describe('browser isolation mode', () => {
+  describe('thread scope mode', () => {
     it('creates dedicated stagehand for each thread', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 
@@ -139,7 +139,7 @@ describe('StagehandThreadManager', () => {
     it('hasSession returns true after getManagerForThread', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 
@@ -150,7 +150,7 @@ describe('StagehandThreadManager', () => {
 
     it('throws error if createStagehand not set', async () => {
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
       });
 
       await expect(threadManager.getManagerForThread('thread-1')).rejects.toThrow('createStagehand factory not set');
@@ -159,7 +159,7 @@ describe('StagehandThreadManager', () => {
     it('setCreateStagehand allows setting factory later', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
       });
 
       threadManager.setCreateStagehand(createStagehand);
@@ -172,7 +172,7 @@ describe('StagehandThreadManager', () => {
       const onBrowserCreated = vi.fn();
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
         onBrowserCreated,
       });
@@ -185,7 +185,7 @@ describe('StagehandThreadManager', () => {
     it('destroySession closes stagehand instance', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 
@@ -199,7 +199,7 @@ describe('StagehandThreadManager', () => {
     it('hasActiveThreadStagehands returns true when instances exist', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 
@@ -218,7 +218,7 @@ describe('StagehandThreadManager', () => {
         close: vi.fn().mockResolvedValue(undefined),
       });
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 
@@ -241,7 +241,7 @@ describe('StagehandThreadManager', () => {
         close: closeStagehand,
       });
       const threadManager = new StagehandThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         createStagehand,
       });
 

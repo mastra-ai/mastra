@@ -33,7 +33,7 @@ type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePa
  * Unlike AgentBrowser which uses refs ([ref=e1]), StagehandBrowser uses
  * natural language instructions for all interactions.
  *
- * Supports thread isolation via the threadIsolation config:
+ * Supports thread isolation via the scope config:
  * - 'none': All threads share the same Stagehand instance
  * - 'browser': Each thread gets its own Stagehand instance (separate browser)
  */
@@ -56,21 +56,21 @@ export class StagehandBrowser extends MastraBrowser {
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
 
-    // Determine thread isolation mode
-    // When connecting to an external browser via cdpUrl, 'browser' isolation doesn't make sense
+    // Determine browser scope
+    // When connecting to an external browser via cdpUrl, 'thread' scope doesn't make sense
     // because we can't spawn new browser instances - we're connecting to an existing one
-    let effectiveIsolation = config.threadIsolation ?? 'browser';
-    if (config.cdpUrl && effectiveIsolation === 'browser') {
+    let effectiveScope = config.scope ?? 'thread';
+    if (config.cdpUrl && effectiveScope === 'thread') {
       this.logger.warn?.(
-        'Thread isolation mode "browser" is not supported when connecting via cdpUrl. ' +
-          'Falling back to "none" (shared browser connection).',
+        'Browser scope "thread" is not supported when connecting via cdpUrl. ' +
+          'Falling back to "shared" (shared browser connection).',
       );
-      effectiveIsolation = 'none';
+      effectiveScope = 'shared';
     }
 
     // Initialize thread manager
     this.threadManager = new StagehandThreadManager({
-      isolation: effectiveIsolation,
+      scope: effectiveScope,
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
       onSessionCreated: () => {
@@ -87,7 +87,7 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Ensure browser is ready and thread session exists.
-   * For 'browser' isolation, this creates a dedicated Stagehand instance for the thread.
+   * For 'thread' scope, this creates a dedicated Stagehand instance for the thread.
    */
   override async ensureReady(): Promise<void> {
     // Always ensure the factory is set before any thread operations
@@ -97,10 +97,10 @@ export class StagehandBrowser extends MastraBrowser {
     // Call super first - this will trigger doLaunch() if not already launched
     await super.ensureReady();
 
-    // For 'browser' isolation, ensure thread session exists after browser is ready
-    const isolation = this.getThreadIsolationMode();
+    // For 'thread' scope, ensure thread session exists after browser is ready
+    const scope = this.getScope();
     const threadId = this.getCurrentThread();
-    if (isolation === 'browser' && threadId && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
       // This will create the Stagehand instance for this thread if needed
       await this.getStagehandForThread(threadId);
     }
@@ -168,12 +168,12 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   protected override async doLaunch(): Promise<void> {
-    const isolation = this.getThreadIsolationMode();
+    const scope = this.getScope();
 
     // Set up the thread manager's factory function for creating new Stagehand instances
     this.threadManager.setCreateStagehand(() => this.createStagehandInstance());
 
-    if (isolation === 'browser') {
+    if (scope === 'thread') {
       // For 'browser' isolation, don't launch a shared browser here.
       // Each thread will get its own Stagehand instance via getStagehandForThread().
       // We still need a placeholder so the base class knows we're "launched".
@@ -247,9 +247,9 @@ export class StagehandBrowser extends MastraBrowser {
    * Called by base class ensureReady() to detect externally closed browsers.
    */
   protected async checkBrowserAlive(): Promise<boolean> {
-    const isolation = this.getThreadIsolationMode();
+    const scope = this.getScope();
 
-    if (isolation === 'browser') {
+    if (scope === 'thread') {
       // For 'browser' isolation, check if any thread browsers are running
       return this.threadManager.hasActiveThreadStagehands();
     }
@@ -291,10 +291,10 @@ export class StagehandBrowser extends MastraBrowser {
    * For 'browser' isolation, only clears the current thread's session (not all threads).
    */
   override handleBrowserDisconnected(): void {
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
     const threadId = this.getCurrentThread();
 
-    if (isolation === 'browser' && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager.clearSession(threadId);
       this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
@@ -337,9 +337,9 @@ export class StagehandBrowser extends MastraBrowser {
    * For 'none' isolation, returns the shared instance.
    */
   private async getStagehandForThread(threadId: string | undefined): Promise<Stagehand | null> {
-    const isolation = this.getThreadIsolationMode();
+    const scope = this.getScope();
 
-    if (isolation === 'none') {
+    if (scope === 'shared') {
       return this.stagehand;
     }
 
@@ -377,11 +377,11 @@ export class StagehandBrowser extends MastraBrowser {
    * Get the current page from Stagehand v3, respecting thread isolation.
    */
   private getPage(): V3Page | null {
-    const isolation = this.getThreadIsolationMode();
+    const scope = this.getScope();
     const threadId = this.getCurrentThread();
 
     // For 'browser' isolation, get the thread's Stagehand's active page
-    if (isolation === 'browser' && threadId && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
       const stagehand = this.threadManager.getStagehandForThread(threadId);
       if (stagehand?.context) {
         return stagehand.context.activePage() as V3Page | null;
@@ -416,9 +416,9 @@ export class StagehandBrowser extends MastraBrowser {
    * Get the page for a specific thread, creating session if needed.
    */
   async getPageForThread(threadId: string): Promise<V3Page | null> {
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    if (isolation === 'none') {
+    if (scope === 'shared') {
       return this.getPage();
     }
 
@@ -737,8 +737,8 @@ export class StagehandBrowser extends MastraBrowser {
 
     // For 'browser' isolation, check if we have an existing session first
     // Don't create a new session just to get the URL
-    const isolation = this.threadManager.getIsolationMode();
-    if (isolation === 'browser' && effectiveThreadId) {
+    const scope = this.threadManager.getScope();
+    if (scope === 'thread' && effectiveThreadId) {
       const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
       if (!stagehand?.context) {
         return null; // No session yet, don't create one
@@ -799,10 +799,10 @@ export class StagehandBrowser extends MastraBrowser {
       return null;
     }
     try {
-      const isolation = this.threadManager.getIsolationMode();
+      const scope = this.threadManager.getScope();
       const effectiveThreadId = threadId ?? this.getCurrentThread();
 
-      if (isolation === 'browser' && effectiveThreadId) {
+      if (scope === 'thread' && effectiveThreadId) {
         const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
         if (!stagehand) return null;
         return this.getBrowserStateFromStagehand(stagehand);
@@ -864,10 +864,10 @@ export class StagehandBrowser extends MastraBrowser {
   private updateSessionBrowserState(threadId?: string): void {
     try {
       const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
-      const isolation = this.threadManager.getIsolationMode();
+      const scope = this.threadManager.getScope();
 
       let stagehand: Stagehand | null | undefined = null;
-      if (isolation === 'browser') {
+      if (scope === 'thread') {
         stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
       } else {
         stagehand = this.stagehand;

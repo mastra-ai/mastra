@@ -35,7 +35,7 @@ describe('browser_evaluate', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    browser = new AgentBrowser({ threadIsolation: 'none' });
+    browser = new AgentBrowser({ scope: 'shared' });
     await browser.launch();
   });
 

@@ -67,8 +67,8 @@ describe('StagehandBrowser', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Use 'none' isolation to get simpler shared browser behavior for unit tests
-    browser = new StagehandBrowser({ threadIsolation: 'none' });
+    // Use 'shared' scope to get simpler shared browser behavior for unit tests
+    browser = new StagehandBrowser({ scope: 'shared' });
   });
 
   afterEach(async () => {
@@ -122,23 +122,23 @@ describe('StagehandBrowser', () => {
       expect(customBrowser.name).toBe('StagehandBrowser');
     });
 
-    it('forces threadIsolation to "none" when cdpUrl is provided', () => {
-      // Create browser with cdpUrl and browser isolation (should be forced to 'none')
+    it('forces scope to "shared" when cdpUrl is provided', () => {
+      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
       const browserWithCdp = new StagehandBrowser({
         cdpUrl: 'ws://localhost:9222',
-        threadIsolation: 'browser',
+        scope: 'thread',
       });
 
-      // The thread manager should have 'none' isolation, not 'browser'
-      expect(browserWithCdp['threadManager'].getIsolationMode()).toBe('none');
+      // The thread manager should have 'shared' scope, not 'thread'
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
     });
 
-    it('respects threadIsolation when no cdpUrl is provided', () => {
+    it('respects scope when no cdpUrl is provided', () => {
       const browserWithIsolation = new StagehandBrowser({
-        threadIsolation: 'browser',
+        scope: 'thread',
       });
 
-      expect(browserWithIsolation['threadManager'].getIsolationMode()).toBe('browser');
+      expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
     });
   });
 

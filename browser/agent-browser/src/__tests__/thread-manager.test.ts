@@ -37,29 +37,29 @@ describe('AgentBrowserThreadManager', () => {
   });
 
   describe('constructor', () => {
-    it('creates manager with none isolation', () => {
+    it('creates manager with shared scope', () => {
       const manager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
 
-      expect(manager.getIsolationMode()).toBe('none');
+      expect(manager.getScope()).toBe('shared');
     });
 
-    it('creates manager with browser isolation', () => {
+    it('creates manager with thread scope', () => {
       const manager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: {},
       });
 
-      expect(manager.getIsolationMode()).toBe('browser');
+      expect(manager.getScope()).toBe('thread');
     });
   });
 
-  describe('shared manager (none isolation)', () => {
+  describe('shared manager (shared scope)', () => {
     it('setSharedManager stores the manager', () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
 
@@ -71,7 +71,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('clearSharedManager removes the manager', () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
 
@@ -86,29 +86,29 @@ describe('AgentBrowserThreadManager', () => {
   describe('session management', () => {
     it('hasSession returns false initially', () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
 
-    it('hasSession returns false for none isolation (no session tracking)', async () => {
+    it('hasSession returns false for shared scope (no session tracking)', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
       threadManager.setSharedManager({ fake: true } as any);
 
       await threadManager.getManagerForThread('thread-1');
 
-      // 'none' isolation uses shared manager, no session tracking
+      // 'shared' scope uses shared manager, no session tracking
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
 
     it('hasSession returns true after getManagerForThread in browser mode', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -119,7 +119,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('destroySession removes session in browser mode', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -132,7 +132,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('destroyAllSessions clears all sessions', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'none',
+        scope: 'shared',
         browserConfig: {},
       });
       threadManager.setSharedManager({ fake: true } as any);
@@ -150,7 +150,7 @@ describe('AgentBrowserThreadManager', () => {
   describe('browser state', () => {
     it('updateBrowserState stores state for thread in browser mode', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -168,7 +168,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('clearSession clears session tracking', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -186,10 +186,10 @@ describe('AgentBrowserThreadManager', () => {
     });
   });
 
-  describe('browser isolation mode', () => {
+  describe('thread scope mode', () => {
     it('creates dedicated manager for each thread in browser mode', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -202,7 +202,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('hasActiveThreadBrowsers returns true when browsers exist', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -215,7 +215,7 @@ describe('AgentBrowserThreadManager', () => {
 
     it('destroySession closes browser in browser mode', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
@@ -229,7 +229,7 @@ describe('AgentBrowserThreadManager', () => {
     it('onBrowserCreated callback is called', async () => {
       const onBrowserCreated = vi.fn();
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
         onBrowserCreated,
       });
@@ -243,7 +243,7 @@ describe('AgentBrowserThreadManager', () => {
   describe('clearAllSessions', () => {
     it('clears all sessions without closing browsers', async () => {
       const threadManager = new AgentBrowserThreadManager({
-        isolation: 'browser',
+        scope: 'thread',
         browserConfig: { headless: true },
       });
 
