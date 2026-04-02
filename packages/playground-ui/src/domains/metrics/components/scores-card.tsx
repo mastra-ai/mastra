@@ -61,7 +61,7 @@ export function ScoresCard() {
                 <Tab value="over-time">Over Time</Tab>
                 <Tab value="summary">Summary</Tab>
               </TabList>
-              <TabContent value="over-time">
+              <TabContent value="over-time" className="pb-0">
                 {data.overTimeData.length > 0 ? (
                   <MetricsLineChart data={data.overTimeData} series={series} yDomain={[0, 1]} />
                 ) : (

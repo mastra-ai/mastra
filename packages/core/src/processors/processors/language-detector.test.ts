@@ -154,6 +154,32 @@ describe('LanguageDetector', () => {
       consoleInfoSpy.mockRestore();
     });
 
+    it('should only detect the last message when lastMessageOnly is enabled', async () => {
+      const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.92, false));
+      const detector = new LanguageDetector({
+        model,
+        targetLanguages: ['English'],
+        strategy: 'detect',
+        lastMessageOnly: true,
+      });
+
+      const messages = [
+        createTestMessage('Hello, how are you today?', 'user', 'msg1'),
+        createTestMessage('Hola, ¿cómo estás?', 'user', 'msg2'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect((result[0].content.metadata as any)?.language_detection).toBeUndefined();
+      expect((result[1].content.metadata as any)?.language_detection).toEqual({
+        detected_language: 'Spanish',
+        iso_code: 'es',
+        confidence: 0.92,
+        is_target_language: false,
+        target_languages: ['English'],
+      });
+    });
+
     it('should detect Spanish content as non-target language', async () => {
       const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.92, false));
       const detector = new LanguageDetector({

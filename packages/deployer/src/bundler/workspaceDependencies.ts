@@ -153,7 +153,7 @@ export const packWorkspaceDependencies = async ({
     const workspaceDirPath = join(bundleOutputDir, 'workspace-module');
     await ensureDir(workspaceDirPath);
 
-    logger.info(`Packaging ${usedWorkspacePackages.size} workspace dependencies...`);
+    logger.info('Packaging workspace dependencies', { count: usedWorkspacePackages.size });
 
     const batchSize = 5;
     const packages = Array.from(usedWorkspacePackages.values());
@@ -174,6 +174,6 @@ export const packWorkspaceDependencies = async ({
       );
     }
 
-    logger.info(`Successfully packaged ${usedWorkspacePackages.size} workspace dependencies`);
+    logger.info('Successfully packaged workspace dependencies', { count: usedWorkspacePackages.size });
   }
 };

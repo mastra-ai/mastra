@@ -7,11 +7,13 @@ import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
+  ensureSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
   makeCoreTool,
   maskStreamTags,
   resolveSerializedZodOutput,
+  safeStringify,
 } from './utils';
 
 describe('maskStreamTags', () => {
@@ -224,7 +226,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
-    const errorSpy = vi.spyOn(ConsoleLogger.prototype, 'error');
+    const trackExceptionSpy = vi.spyOn(ConsoleLogger.prototype, 'trackException');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -242,9 +244,9 @@ describe('makeCoreTool', () => {
       await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
         MastraError,
       );
-      expect(errorSpy).toHaveBeenCalled();
+      expect(trackExceptionSpy).toHaveBeenCalled();
     }
-    errorSpy.mockRestore();
+    trackExceptionSpy.mockRestore();
   });
 
   it('should handle undefined execute function', () => {
@@ -346,7 +348,10 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Executing tool',
+    expect.objectContaining({ agent: 'testAgent', tool: 'testTool' }),
+  );
 
   debugSpy.mockRestore();
 });
@@ -512,5 +517,90 @@ describe('generateEmptyFromSchema', () => {
       },
     };
     expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+  });
+});
+
+describe('safeStringify', () => {
+  it('should stringify simple values', () => {
+    expect(safeStringify({ a: 1, b: 'hello' })).toBe('{"a":1,"b":"hello"}');
+    expect(safeStringify(null)).toBe('null');
+    expect(safeStringify(42)).toBe('42');
+    expect(safeStringify('text')).toBe('"text"');
+  });
+
+  it('should handle circular references without throwing', () => {
+    const obj: any = { name: 'test' };
+    obj.self = obj;
+    const result = safeStringify(obj);
+    expect(result).toBe('{"name":"test","self":"[Circular]"}');
+  });
+
+  it('should handle deeply nested circular references', () => {
+    const a: any = { id: 'a' };
+    const b: any = { id: 'b', parent: a };
+    a.child = b;
+    const result = safeStringify(a);
+    const parsed = JSON.parse(result);
+    expect(parsed.id).toBe('a');
+    expect(parsed.child.id).toBe('b');
+    expect(parsed.child.parent).toBe('[Circular]');
+  });
+
+  it('should support space parameter', () => {
+    expect(safeStringify({ a: 1 }, 2)).toBe('{\n  "a": 1\n}');
+  });
+
+  it('should preserve shared (non-circular) references by duplicating them', () => {
+    const shared = { x: 1 };
+    const obj = { a: shared, b: shared };
+    const result = JSON.parse(safeStringify(obj));
+    expect(result.a).toEqual({ x: 1 });
+    expect(result.b).toEqual({ x: 1 });
+  });
+
+  it('should handle BigInt values without throwing', () => {
+    const obj = { count: BigInt(42), name: 'test' };
+    const result = safeStringify(obj);
+    expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
+  });
+});
+
+describe('ensureSerializable', () => {
+  it('should return primitives unchanged', () => {
+    expect(ensureSerializable(null)).toBe(null);
+    expect(ensureSerializable(42)).toBe(42);
+    expect(ensureSerializable('text')).toBe('text');
+    expect(ensureSerializable(true)).toBe(true);
+  });
+
+  it('should return serializable objects unchanged (same reference)', () => {
+    const obj = { a: 1, b: [2, 3], c: { d: 'hello' } };
+    const result = ensureSerializable(obj);
+    expect(result).toBe(obj);
+  });
+
+  it('should strip circular references and return a new object', () => {
+    const obj: any = { name: 'test', value: 42 };
+    obj.self = obj;
+    const result = ensureSerializable(obj) as any;
+    expect(result).not.toBe(obj);
+    expect(result.name).toBe('test');
+    expect(result.value).toBe(42);
+    expect(result.self).toBe('[Circular]');
+    // Result should be JSON-serializable
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should handle nested circular references between parent and child objects', () => {
+    const properties: any = { color: 'red', size: 10 };
+    const screen: any = { properties };
+    properties.variantScreenInstance = screen;
+    const obj = { screen, metadata: 'test' };
+
+    const result = ensureSerializable(obj) as any;
+    expect(result.metadata).toBe('test');
+    expect(result.screen.properties.color).toBe('red');
+    expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
+    expect(() => JSON.stringify(result)).not.toThrow();
   });
 });
