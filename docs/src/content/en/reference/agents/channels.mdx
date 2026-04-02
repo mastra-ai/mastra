@@ -76,9 +76,9 @@ export const supportAgent = new Agent({
     name: 'state',
     type: 'StateAdapter',
     isOptional: true,
-    defaultValue: 'in-memory (or MastraStateAdapter when storage is configured)',
+    defaultValue: 'MastraStateAdapter (from Mastra storage)',
     description:
-      'State adapter for subscriptions and deduplication. When Mastra storage is configured, `MastraStateAdapter` is used automatically.',
+      'State adapter for subscriptions and deduplication. Defaults to `MastraStateAdapter` backed by the Mastra instance storage. Channels require storage to be configured.',
   },
   {
     name: 'userName',

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage/mock';
 import type { ChannelConfig } from '../agent-channels';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
@@ -98,6 +99,7 @@ describe('Mastra Channel Integration', () => {
       const mastra = new Mastra({
         logger: false,
         agents: { agent1, agent2 },
+        storage: new InMemoryStore(),
       });
 
       const channels = mastra.getChannels();
@@ -123,6 +125,7 @@ describe('Mastra Channel Integration', () => {
       const mastra = new Mastra({
         logger: false,
         agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
       });
 
       const server = mastra.getServer();
@@ -138,6 +141,7 @@ describe('Mastra Channel Integration', () => {
       const mastra = new Mastra({
         logger: false,
         agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
         server: {
           apiRoutes: [
             {

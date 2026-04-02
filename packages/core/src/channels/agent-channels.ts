@@ -1,4 +1,3 @@
-import { createMemoryState } from '@chat-adapter/state-memory';
 import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { Chat } from 'chat';
 import { z } from 'zod';
@@ -439,13 +438,13 @@ export class AgentChannels {
     } else {
       const storage = mastra.getStorage();
       const memoryStore = storage ? await storage.getStore('memory') : undefined;
-      if (memoryStore) {
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
-        this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
-      } else {
-        this.stateAdapter = createMemoryState();
-        this.log('info', 'Using in-memory state (subscriptions will not persist across restarts)');
+      if (!memoryStore) {
+        throw new Error(
+          'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
+        );
       }
+      this.stateAdapter = new MastraStateAdapter(memoryStore);
+      this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
     }
 
     const chat = new Chat({
