@@ -3,6 +3,7 @@ export const RegisteredLogger = {
   AGENT: 'AGENT',
   OBSERVABILITY: 'OBSERVABILITY',
   AUTH: 'AUTH',
+  BROWSER: 'BROWSER',
   NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
