@@ -1,0 +1,164 @@
+---
+title: "Span filtering | Tracing | Observability"
+description: "Control which spans are exported to reduce noise and costs in your observability platform"
+packages:
+  - "@mastra/observability"
+---
+
+# Span filtering
+
+Span filtering lets you selectively exclude spans from being exported to your observability platform. This is useful for reducing noise and lowering costs, especially with platforms that charge per-span like Langfuse.
+
+Mastra provides two complementary filtering options on `ObservabilityInstanceConfig`:
+
+- **`excludeSpanTypes`** — a declarative list of span types to drop
+- **`spanFilter`** — a predicate function for fine-grained control
+
+Both options are applied per observability instance, so you can filter differently for each platform.
+
+## Exclude span types
+
+Use `excludeSpanTypes` to drop entire categories of spans by their `SpanType`. This handles the most common filtering use case with zero boilerplate.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SpanType } from '@mastra/core/observability'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP],
+      },
+    },
+  }),
+})
+```
+
+### Available span types
+
+These are the span types you can filter:
+
+| Span type | Description |
+| - | - |
+| `AGENT_RUN` | Root span for agent execution |
+| `MODEL_GENERATION` | LLM API call with token usage |
+| `MODEL_STEP` | Single model execution step within a generation |
+| `MODEL_CHUNK` | Individual streaming chunk |
+| `TOOL_CALL` | Tool execution |
+| `MCP_TOOL_CALL` | MCP tool execution |
+| `WORKFLOW_RUN` | Root span for workflow execution |
+| `WORKFLOW_STEP` | Individual workflow step |
+| `WORKFLOW_CONDITIONAL` | Conditional branch evaluation |
+| `WORKFLOW_CONDITIONAL_EVAL` | Individual condition evaluation |
+| `WORKFLOW_PARALLEL` | Parallel execution |
+| `WORKFLOW_LOOP` | Loop execution |
+| `WORKFLOW_SLEEP` | Sleep/delay operation |
+| `WORKFLOW_WAIT_EVENT` | Wait for event operation |
+| `PROCESSOR_RUN` | Input/output processor execution |
+| `SCORER_RUN` | Scorer execution |
+| `SCORER_STEP` | Individual scorer pipeline step |
+
+## Span filter function
+
+Use `spanFilter` for advanced filtering that goes beyond span type. The filter receives the exported span data and returns `true` to keep or `false` to drop.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SpanType } from '@mastra/core/observability'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        spanFilter: span => {
+          // Drop all model chunks
+          if (span.type === SpanType.MODEL_CHUNK) return false
+
+          // Only keep failed tool calls
+          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
+
+          return true
+        },
+      },
+    },
+  }),
+})
+```
+
+### Filter by metadata
+
+```ts
+spanFilter: span => {
+  // Only export spans from production
+  return span.metadata?.environment === 'production'
+}
+```
+
+### Filter by entity
+
+```ts
+spanFilter: span => {
+  // Exclude spans from a specific agent
+  if (span.entityId === 'noisy-agent') return false
+  return true
+}
+```
+
+## Combining both options
+
+You can use `excludeSpanTypes` and `spanFilter` together. `excludeSpanTypes` runs first as a fast check, then `spanFilter` runs on remaining spans for more complex logic.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SpanType } from '@mastra/core/observability'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        // Fast type-based exclusion
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+        // Fine-grained filtering on remaining spans
+        spanFilter: span => {
+          // Only keep tool calls that took longer than 100ms
+          if (span.type === SpanType.TOOL_CALL && span.endTime && span.startTime) {
+            const duration = new Date(span.endTime).getTime() - new Date(span.startTime).getTime()
+            return duration > 100
+          }
+          return true
+        },
+      },
+    },
+  }),
+})
+```
+
+## Processing order
+
+Span filtering happens at export time, after other processing steps:
+
+1. **Internal span check** — internal spans are dropped unless `includeInternalSpans` is `true`
+1. **`excludeSpanTypes`** — spans matching excluded types are dropped
+1. **`spanOutputProcessors`** — remaining spans go through output processors (e.g., `SensitiveDataFilter`)
+1. **`spanFilter`** — the filter function runs on the final exported span data
+
+If the `spanFilter` function throws an error, the span is kept to avoid silent data loss. The error is logged.
+
+## Related
+
+- [Tracing overview](/docs/observability/tracing/overview) — tracing configuration and concepts
+- [Sensitive data filter](/docs/observability/tracing/processors/sensitive-data-filter) — redacting sensitive data from spans
+- [Configuration reference](/reference/observability/tracing/configuration) — full `ObservabilityInstanceConfig` API

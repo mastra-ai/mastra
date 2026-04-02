@@ -15,6 +15,8 @@ import type {
   SerializationOptions,
   CardinalityConfig,
   LogLevel,
+  AnyExportedSpan,
+  SpanType,
 } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 
@@ -71,6 +73,36 @@ export interface ObservabilityInstanceConfig {
   spanOutputProcessors?: SpanOutputProcessor[];
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
+  /**
+   * Span types to exclude from export. Spans of these types are silently dropped
+   * before reaching exporters. This is useful for reducing noise and costs in
+   * observability platforms that charge per-span (e.g., Langfuse).
+   *
+   * @example
+   * ```typescript
+   * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
+   * ```
+   */
+  excludeSpanTypes?: SpanType[];
+  /**
+   * Filter function to control which spans are exported. Return `true` to keep
+   * the span, `false` to drop it. This runs after `excludeSpanTypes` and
+   * `spanOutputProcessors`, giving you access to the final exported span data
+   * for fine-grained filtering by type, attributes, entity, metadata, or any
+   * combination.
+   *
+   * @example
+   * ```typescript
+   * spanFilter: (span) => {
+   *   // Drop all model chunks
+   *   if (span.type === SpanType.MODEL_CHUNK) return false;
+   *   // Only keep tool calls that failed
+   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   return true;
+   * }
+   * ```
+   */
+  spanFilter?: (span: AnyExportedSpan) => boolean;
   /**
    * RequestContext keys to automatically extract as metadata for all spans
    * created with this tracing configuration.
