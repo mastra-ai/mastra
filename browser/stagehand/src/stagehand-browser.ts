@@ -250,40 +250,56 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Set up close event listener for a thread's Stagehand instance.
-   * This handles the case where a thread's browser is closed externally.
+   * Uses CDP Target.targetDestroyed events to detect when all pages are gone.
    */
   private setupCloseListenerForThread(stagehand: Stagehand, threadId: string): void {
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
-      this.logger.debug?.(`Browser closed for thread: ${threadId}`);
       this.handleThreadBrowserDisconnected(threadId);
     };
 
     try {
-      const context = stagehand.context;
-      if (!context) return;
+      const stagehandAny = stagehand as any;
+      const conn = stagehandAny.ctx?.conn;
 
-      // Listen for context close
-      const contextWithEvents = context as unknown as { on?: (event: string, cb: () => void) => void };
-      if (contextWithEvents?.on) {
-        contextWithEvents.on('close', handleDisconnect);
+      if (!conn?.on) {
+        return;
       }
 
-      // Listen for last page closing
-      const pages = context.pages?.() ?? [];
-      for (const page of pages) {
-        const pageWithEvents = page as unknown as { on?: (event: string, cb: () => void) => void };
-        if (pageWithEvents?.on) {
-          pageWithEvents.on('close', () => {
-            const remainingPages = context.pages?.() ?? [];
-            if (remainingPages.length === 0) {
-              handleDisconnect();
-            }
-          });
+      // Track page targets - when all are destroyed, browser is closed
+      const pageTargets = new Set<string>();
+
+      // Initialize with current pages
+      const context = stagehand.context;
+      if (context) {
+        const pages = context.pages?.() ?? [];
+        for (const page of pages) {
+          const pageAny = page as any;
+          const targetId = pageAny._targetId ?? pageAny.targetId;
+          if (targetId) {
+            pageTargets.add(targetId);
+          }
         }
       }
+
+      // Listen for new page targets
+      conn.on('Target.targetCreated', (params: { targetInfo: { targetId: string; type: string } }) => {
+        if (params.targetInfo.type === 'page') {
+          pageTargets.add(params.targetInfo.targetId);
+        }
+      });
+
+      // Listen for destroyed targets - when all pages gone, browser closed
+      conn.on('Target.targetDestroyed', (params: { targetId: string }) => {
+        if (pageTargets.has(params.targetId)) {
+          pageTargets.delete(params.targetId);
+          if (pageTargets.size === 0) {
+            handleDisconnect();
+          }
+        }
+      });
     } catch {
       // Ignore errors setting up close listener
     }
@@ -1288,6 +1304,13 @@ export class StagehandBrowser extends MastraBrowser {
     // Check if browser is still running before attempting reconnect
     if (!this.isBrowserRunning()) {
       this.logger.debug?.('Skipping screencast reconnect - browser not running');
+      return;
+    }
+
+    // For thread scope, also check if this specific thread still has a session
+    const scope = this.getScope();
+    if (scope === 'thread' && threadId && !this.threadManager.getStagehandForThread(threadId)) {
+      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
       return;
     }
 
