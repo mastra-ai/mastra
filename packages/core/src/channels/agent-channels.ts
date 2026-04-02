@@ -162,6 +162,46 @@ export interface ChannelConfig {
    */
   inlineMedia?: string[] | ((mimeType: string) => boolean);
 
+  /**
+   * Promote URLs found in message text to file parts so the model can "see" linked
+   * content (images, videos, PDFs, etc.) instead of just the raw URL text.
+   *
+   * Each entry matches a domain. When a URL in the message matches, it's added as
+   * a `file` part alongside the text. Use a string for domains where a HEAD request
+   * determines the Content-Type, or an object to force a specific mime type (useful
+   * for sites like YouTube where HEAD returns `text/html` but the model treats the
+   * URL as video).
+   *
+   * - **String** — domain to match; HEAD determines the mime type
+   * - **Object** `{ match, mimeType }` — domain + forced mime type (skips HEAD)
+   * - `'*'` — match all URLs (HEAD each one)
+   * - `undefined` (default) — disabled, no URLs are promoted
+   *
+   * For string entries (or `'*'`), the resolved Content-Type is checked against
+   * `inlineMedia` — only matching types become file parts. For object entries with
+   * a forced `mimeType`, the file part is always added.
+   *
+   * @example
+   * ```ts
+   * // Gemini can process YouTube URLs natively as video
+   * inlineLinks: [
+   *   { match: 'youtube.com', mimeType: 'video/*' },
+   *   { match: 'youtu.be', mimeType: 'video/*' },
+   * ]
+   *
+   * // HEAD-check linked images from any domain
+   * inlineLinks: ['*']
+   *
+   * // Mix: force YouTube, HEAD-check everything else
+   * inlineLinks: [
+   *   { match: 'youtube.com', mimeType: 'video/*' },
+   *   'imgur.com',
+   *   'i.redd.it',
+   * ]
+   * ```
+   */
+  inlineLinks?: InlineLinkEntry[];
+
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
 
@@ -231,6 +271,68 @@ function buildInlineMediaCheck(config?: string[] | ((mimeType: string) => boolea
   };
 }
 
+/** A single entry in the `inlineLinks` config. */
+export type InlineLinkEntry =
+  | string // Domain pattern — HEAD determines mime type, checked against inlineMedia
+  | { match: string; mimeType: string }; // Domain + forced mime type (skips HEAD & inlineMedia)
+
+/** Resolved inline-link rule after normalisation. */
+interface InlineLinkRule {
+  match: string;
+  /** If set, skip HEAD and use this mime type directly. */
+  forcedMimeType?: string;
+}
+
+/**
+ * Normalise the `inlineLinks` config into a list of rules.
+ * Returns `undefined` if the feature is disabled.
+ */
+function normalizeInlineLinks(config?: InlineLinkEntry[]): InlineLinkRule[] | undefined {
+  if (config == null || config.length === 0) return undefined;
+  return config.map(entry =>
+    typeof entry === 'string' ? { match: entry } : { match: entry.match, forcedMimeType: entry.mimeType },
+  );
+}
+
+/** Check if a URL's hostname matches a domain pattern. @internal */
+export function matchesDomain(url: string, pattern: string): boolean {
+  if (pattern === '*') return true;
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === pattern || hostname.endsWith(`.${pattern}`);
+  } catch {
+    return false;
+  }
+}
+
+/** Find the first matching inline-link rule for a URL. */
+function findInlineLinkRule(url: string, rules: InlineLinkRule[]): InlineLinkRule | undefined {
+  return rules.find(rule => matchesDomain(url, rule.match));
+}
+
+/** Extract URLs from plain text. @internal */
+const URL_REGEX = /https?:\/\/[^\s<>)"']+/gi;
+export function extractUrls(text: string): string[] {
+  return Array.from(text.matchAll(URL_REGEX), m => m[0]);
+}
+
+/**
+ * HEAD a URL to determine its Content-Type.
+ * Returns undefined if the request fails or has no Content-Type.
+ */
+async function headContentType(url: string, logger?: IMastraLogger): Promise<string | undefined> {
+  try {
+    const res = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    if (!res.ok) return undefined;
+    const ct = res.headers.get('content-type');
+    // Strip parameters (e.g. 'image/png; charset=utf-8' → 'image/png')
+    return ct?.split(';')[0]?.trim() || undefined;
+  } catch (e) {
+    logger?.debug('[CHANNEL] HEAD request failed for link', { url, error: String(e) });
+    return undefined;
+  }
+}
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -257,6 +359,8 @@ export class AgentChannels {
   private threadContext: { maxMessages?: number };
   /** Determines whether a mime type should be sent inline to the model. */
   private shouldInline: (mimeType: string) => boolean;
+  /** Inline-link rules for promoting URLs in message text to file parts. */
+  private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
@@ -286,6 +390,7 @@ export class AgentChannels {
     this.chatOptions = config.chatOptions ?? {};
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
+    this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
@@ -796,7 +901,6 @@ export class AgentChannels {
             const buf = await att.fetchData();
             const base64 = Buffer.from(buf).toString('base64');
             data = `data:${mimeType};base64,${base64}`;
-            this.logger?.debug('[CHANNEL] Inlining attachment via fetchData', { mimeType });
           } catch (err) {
             this.logger?.warn('[CHANNEL] fetchData failed, falling back to URL', { mimeType, error: String(err) });
             data = att.url || '';
@@ -804,7 +908,6 @@ export class AgentChannels {
         } else {
           // Public URL (e.g. Discord CDN) — let the provider fetch directly
           data = att.url || '';
-          this.logger?.debug('[CHANNEL] Inlining attachment as URL', { mimeType, url: att.url });
         }
         parts.push({
           type: 'file',
@@ -814,8 +917,27 @@ export class AgentChannels {
       } else {
         const filename = att.name || att.url?.split('/').pop() || 'file';
         const description = `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`;
-        this.logger?.debug('[CHANNEL] Attachment as text description', { mimeType, filename });
         parts.push({ type: 'text', text: `\n${description}` });
+      }
+    }
+
+    // Promote URLs in message text to file parts based on `inlineLinks` config.
+    if (this.inlineLinkRules && rawText) {
+      const urls = extractUrls(rawText);
+      for (const url of urls) {
+        const rule = findInlineLinkRule(url, this.inlineLinkRules);
+        if (!rule) continue;
+
+        if (rule.forcedMimeType) {
+          // Object entry with forced mime type — skip HEAD, always promote.
+          parts.push({ type: 'file', data: url, mimeType: rule.forcedMimeType });
+        } else {
+          // String entry — HEAD to determine Content-Type, then check inlineMedia.
+          const contentType = await headContentType(url, this.logger);
+          if (contentType && this.shouldInline(contentType)) {
+            parts.push({ type: 'file', data: url, mimeType: contentType });
+          }
+        }
       }
     }
 
@@ -961,6 +1083,8 @@ export class AgentChannels {
       });
     }
 
+    let typingInterval: ReturnType<typeof setInterval> | undefined;
+
     const ensureTyping = async () => {
       if (!typingStarted) {
         typingStarted = true;
@@ -969,6 +1093,26 @@ export class AgentChannels {
         } catch (e) {
           this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
         }
+      }
+    };
+
+    // Keep the typing indicator alive for slow generation (e.g. image models).
+    // Discord's indicator expires after ~10s, so we re-fire every 8s.
+    const startTypingKeepalive = () => {
+      if (typingInterval) return;
+      typingInterval = setInterval(async () => {
+        try {
+          await sdkThread.startTyping();
+        } catch {
+          // best-effort
+        }
+      }, 8_000);
+    };
+
+    const stopTypingKeepalive = () => {
+      if (typingInterval) {
+        clearInterval(typingInterval);
+        typingInterval = undefined;
       }
     };
 
@@ -981,16 +1125,30 @@ export class AgentChannels {
       }
     };
 
+    // If nothing triggers typing within 3s, start it anyway and keep it
+    // alive — covers slow generation (e.g. image models) where no text/tool
+    // chunks arrive for a long time.
+    const typingFallbackTimer = setTimeout(async () => {
+      if (!typingStarted) {
+        await ensureTyping();
+        startTypingKeepalive();
+      }
+    }, 3_000);
+
     for await (const chunk of stream.fullStream) {
       // --- Text accumulation ---
       if (chunk.type === 'text-delta') {
-        if (chunk.payload.text) await ensureTyping();
+        if (chunk.payload.text) {
+          await ensureTyping();
+          startTypingKeepalive();
+        }
         textBuffer += chunk.payload.text;
         continue;
       }
 
       if (chunk.type === 'reasoning-delta') {
         await ensureTyping();
+        startTypingKeepalive();
         continue;
       }
 
@@ -1029,6 +1187,7 @@ export class AgentChannels {
       if (chunk.type === 'tool-call') {
         if (this.channelToolNames.has(chunk.payload.toolName)) continue;
         await ensureTyping();
+        startTypingKeepalive();
         await flushText();
 
         const displayName = stripToolPrefix(chunk.payload.toolName);
@@ -1102,10 +1261,15 @@ export class AgentChannels {
       }
     }
 
+    clearTimeout(typingFallbackTimer);
+    stopTypingKeepalive();
+
     // Check for errors that occurred during streaming
     if (stream.error) {
-      this.log('error', `[${platform}] Stream completed with error`, { error: JSON.stringify(stream.error, null, 2) });
-      await sdkThread.post(`❌ Error: ${stream.error.message}`);
+      const msg = stream.error.message;
+      const display = msg.length > 500 ? msg.slice(0, 500) + '…' : msg;
+      this.log('error', `[${platform}] Stream completed with error`, { error: display });
+      await sdkThread.post(`❌ Error: ${display}`);
     }
   }
 

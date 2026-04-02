@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { AgentChannels } from '../agent-channels';
+import { AgentChannels, matchesDomain, extractUrls } from '../agent-channels';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -173,5 +173,59 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onReaction).toBe('function');
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
     });
+  });
+});
+
+describe('matchesDomain', () => {
+  it('matches exact hostname', () => {
+    expect(matchesDomain('https://youtube.com/watch?v=123', 'youtube.com')).toBe(true);
+  });
+
+  it('matches subdomain', () => {
+    expect(matchesDomain('https://www.youtube.com/watch?v=123', 'youtube.com')).toBe(true);
+  });
+
+  it('rejects unrelated domain', () => {
+    expect(matchesDomain('https://example.com/page', 'youtube.com')).toBe(false);
+  });
+
+  it('wildcard matches everything', () => {
+    expect(matchesDomain('https://anything.example.org/path', '*')).toBe(true);
+  });
+
+  it('returns false for invalid URL', () => {
+    expect(matchesDomain('not-a-url', 'example.com')).toBe(false);
+  });
+
+  it('does not match partial domain names', () => {
+    expect(matchesDomain('https://notyoutube.com/watch', 'youtube.com')).toBe(false);
+  });
+});
+
+describe('extractUrls', () => {
+  it('extracts http and https URLs', () => {
+    const text = 'Check out https://example.com and http://other.org/page';
+    expect(extractUrls(text)).toEqual(['https://example.com', 'http://other.org/page']);
+  });
+
+  it('returns empty array for no URLs', () => {
+    expect(extractUrls('just plain text')).toEqual([]);
+  });
+
+  it('handles URLs with query params and fragments', () => {
+    const text = 'Watch https://youtube.com/watch?v=abc123&t=10#section';
+    const urls = extractUrls(text);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('youtube.com/watch?v=abc123');
+  });
+
+  it('extracts multiple URLs from one message', () => {
+    const text = 'See https://a.com and https://b.com and https://c.com';
+    expect(extractUrls(text)).toHaveLength(3);
+  });
+
+  it('stops at closing angle brackets and parens', () => {
+    const text = 'Link: <https://example.com> or (https://other.com)';
+    expect(extractUrls(text)).toEqual(['https://example.com', 'https://other.com']);
   });
 });
