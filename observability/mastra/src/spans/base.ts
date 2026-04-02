@@ -126,6 +126,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public errorInfo?: {
     message: string;
     id?: string;
+    name?: string;
+    stack?: string;
     domain?: string;
     category?: string;
     details?: Record<string, any>;

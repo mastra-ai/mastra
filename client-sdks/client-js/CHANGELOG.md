@@ -1,5 +1,202 @@
 # @mastra/client-js
 
+## 1.12.1-alpha.0
+
+### Patch Changes
+
+- Added `memoryType` field to `GetMemoryStatusResponse` and `GetMemoryConfigResponseExtended` types to distinguish between `'local'` and `'gateway'` memory backends. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+- Updated dependencies [[`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0-alpha.0
+
+## 1.12.0
+
+### Minor Changes
+
+- **Added Responses API support for local Mastra apps** ([#14339](https://github.com/mastra-ai/mastra/pull/14339))
+
+  You can now call Mastra through a Responses API flow and continue stored turns with
+  `previous_response_id`, while keeping `model` as a Mastra model string and using
+  `agent_id` to target the registered Mastra agent that handles the request. This API acts as an agent-backed
+  adapter layer on top of Mastra memory and storage. Advanced provider-native settings can
+  also be passed through with `providerOptions`, and provider-returned continuation state
+  is surfaced back on the response under the same `providerOptions` field. Stored
+  response IDs now map directly to the persisted assistant turn ID in Mastra memory.
+  Configured tool definitions are returned under `tools`, while executed tool activity
+  is surfaced through `output` items such as `function_call`, `function_call_output`,
+  and the final assistant message. Stored responses also return `conversation_id`, which
+  maps directly to the underlying Mastra memory thread ID. You can create a conversation
+  explicitly with `client.conversations.create()` or let the first stored response create
+  it implicitly, inspect the stored item history with `client.conversations.items.list()`,
+  retrieve the conversation with `client.conversations.retrieve()`, or remove it with
+  `client.conversations.delete()`. Responses requests also support
+  `text.format`, including `json_object` for JSON mode and `json_schema` for
+  schema-constrained structured output, through the same agent-backed route.
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({
+    baseUrl: 'http://localhost:4111',
+  });
+
+  const first = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Write a short bedtime story.',
+    store: true,
+  });
+
+  const second = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Make it funnier.',
+    store: true,
+    previous_response_id: first.id,
+  });
+
+  const items = await client.conversations.items.list(first.conversation_id!);
+
+  const jsonResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a JSON object with a title and summary.',
+    text: {
+      format: {
+        type: 'json_object',
+      },
+    },
+  });
+
+  const structuredResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a structured support ticket summary.',
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'ticket_summary',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            summary: { type: 'string' },
+            priority: { type: 'string' },
+          },
+          required: ['summary', 'priority'],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0
+
+## 1.12.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0-alpha.2
+
+## 1.12.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- **Added Responses API support for local Mastra apps** ([#14339](https://github.com/mastra-ai/mastra/pull/14339))
+
+  You can now call Mastra through a Responses API flow and continue stored turns with
+  `previous_response_id`, while keeping `model` as a Mastra model string and using
+  `agent_id` to target the registered Mastra agent that handles the request. This API acts as an agent-backed
+  adapter layer on top of Mastra memory and storage. Advanced provider-native settings can
+  also be passed through with `providerOptions`, and provider-returned continuation state
+  is surfaced back on the response under the same `providerOptions` field. Stored
+  response IDs now map directly to the persisted assistant turn ID in Mastra memory.
+  Configured tool definitions are returned under `tools`, while executed tool activity
+  is surfaced through `output` items such as `function_call`, `function_call_output`,
+  and the final assistant message. Stored responses also return `conversation_id`, which
+  maps directly to the underlying Mastra memory thread ID. You can create a conversation
+  explicitly with `client.conversations.create()` or let the first stored response create
+  it implicitly, inspect the stored item history with `client.conversations.items.list()`,
+  retrieve the conversation with `client.conversations.retrieve()`, or remove it with
+  `client.conversations.delete()`. Responses requests also support
+  `text.format`, including `json_object` for JSON mode and `json_schema` for
+  schema-constrained structured output, through the same agent-backed route.
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({
+    baseUrl: 'http://localhost:4111',
+  });
+
+  const first = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Write a short bedtime story.',
+    store: true,
+  });
+
+  const second = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Make it funnier.',
+    store: true,
+    previous_response_id: first.id,
+  });
+
+  const items = await client.conversations.items.list(first.conversation_id!);
+
+  const jsonResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a JSON object with a title and summary.',
+    text: {
+      format: {
+        type: 'json_object',
+      },
+    },
+  });
+
+  const structuredResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a structured support ticket summary.',
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'ticket_summary',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            summary: { type: 'string' },
+            priority: { type: 'string' },
+          },
+          required: ['summary', 'priority'],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a)]:
+  - @mastra/core@1.21.0-alpha.0
+
 ## 1.11.2
 
 ### Patch Changes

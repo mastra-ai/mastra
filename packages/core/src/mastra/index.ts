@@ -13,11 +13,13 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
+import { defaultGateways } from '../llm/model/router';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type {
+  DefinitionSource,
   ObservabilityEntrypoint,
   ObservabilityExporter,
   ObservabilityInstance,
@@ -727,6 +729,17 @@ export class Mastra<
       });
     }
 
+    // Auto-register default gateways (MastraGateway, NetlifyGateway, ModelsDevGateway)
+    // so they're available via listGateways() without explicit config.
+    // Skip duplicates so user-provided gateways above take precedence.
+    // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
+    for (const gateway of defaultGateways) {
+      const key = gateway.getId();
+      if (!(this.#gateways as Record<string, MastraModelGateway>)[key]) {
+        (this.#gateways as Record<string, MastraModelGateway>)[key] = gateway;
+      }
+    }
+
     // Add MCP servers and agents last since they might reference other primitives
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
@@ -965,7 +978,7 @@ export class Mastra<
   public addAgent<A extends Agent | ToolLoopAgentLike>(
     agent: A,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
@@ -1650,7 +1663,7 @@ export class Mastra<
   public addScorer<S extends MastraScorer<any, any, any, any>>(
     scorer: S,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);

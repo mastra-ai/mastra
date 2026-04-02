@@ -4,8 +4,9 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan, executeWithContext } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
+import { executeWithContext } from '@mastra/core/observability/context-storage';
 
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';

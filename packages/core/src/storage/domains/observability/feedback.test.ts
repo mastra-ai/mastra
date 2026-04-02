@@ -74,18 +74,17 @@ describe('Feedback Schemas', () => {
       expect(record.comment).toBeUndefined();
     });
 
-    it('rejects missing traceId', () => {
-      expect(() =>
-        feedbackRecordSchema.parse({
-          id: 'fb-4',
-          timestamp: now,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          createdAt: now,
-          updatedAt: null,
-        }),
-      ).toThrow();
+    it('accepts unanchored feedback without traceId', () => {
+      const record = feedbackRecordSchema.parse({
+        id: 'fb-4',
+        timestamp: now,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        createdAt: now,
+        updatedAt: null,
+      });
+      expect(record.traceId).toBeUndefined();
     });
   });
 

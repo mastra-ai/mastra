@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as utils from '../observability/context-storage';
 import type { LoggerContext } from '../observability/types/logging';
-import * as utils from '../observability/utils';
 import { DualLogger } from './dual-logger';
 import type { IMastraLogger } from './logger';
 

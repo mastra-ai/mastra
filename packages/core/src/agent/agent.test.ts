@@ -272,6 +272,79 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toContain('Donald Trump');
     });
 
+    it('should use the request-scoped model override for generate', async () => {
+      let configuredModelUsed = false;
+      let overrideModelUsed = false;
+
+      const configuredModel =
+        version === 'v1'
+          ? new MockLanguageModelV1({
+              doGenerate: async () => {
+                configuredModelUsed = true;
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20 },
+                  text: 'configured model',
+                };
+              },
+            })
+          : new MockLanguageModelV2({
+              doGenerate: async () => {
+                configuredModelUsed = true;
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'configured model' }],
+                  warnings: [],
+                };
+              },
+            });
+
+      const overrideModel =
+        version === 'v1'
+          ? new MockLanguageModelV1({
+              doGenerate: async () => {
+                overrideModelUsed = true;
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20 },
+                  text: 'override model',
+                };
+              },
+            })
+          : new MockLanguageModelV2({
+              doGenerate: async () => {
+                overrideModelUsed = true;
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'override model' }],
+                  warnings: [],
+                };
+              },
+            });
+
+      const agent = new Agent({
+        id: 'override-agent',
+        name: 'Override Agent',
+        instructions: 'test agent',
+        model: configuredModel,
+      });
+
+      const result =
+        version === 'v1'
+          ? await agent.generateLegacy('Hello', { model: overrideModel })
+          : await agent.generate('Hello', { model: overrideModel });
+
+      expect(result.text).toBe('override model');
+      expect(overrideModelUsed).toBe(true);
+      expect(configuredModelUsed).toBe(false);
+    });
+
     it('should get a structured response from the agent with', async () => {
       const electionAgent = new Agent({
         id: 'us-election-agent',
