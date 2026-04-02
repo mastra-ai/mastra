@@ -106,7 +106,7 @@ function parseRangeFormat(cursor: string): { startId: string; endId: string } | 
 async function resolveCursorMessage(
   memory: RecallMemory,
   cursor: string,
-  access?: { resourceId?: string; threadScope?: string },
+  access?: { resourceId?: string; threadScope?: string; enforceThreadScope?: boolean },
 ): Promise<MastraDBMessage | { hint: string; startId: string; endId: string }> {
   const normalized = cursor.trim();
 
@@ -124,7 +124,11 @@ async function resolveCursorMessage(
 
   const memoryStore = await memory.getMemoryStore();
   const result = await memoryStore.listMessagesById({ messageIds: [normalized] });
-  const message = result.messages.find(message => message.id === normalized);
+  let message = result.messages.find(message => message.id === normalized) ?? null;
+
+  if (!message) {
+    message = await resolveCursorMessageByRecall(memory, normalized, access);
+  }
 
   if (!message) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
@@ -135,12 +139,55 @@ async function resolveCursorMessage(
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
-  // In thread scope, verify the cursor belongs to the current thread
-  if (access?.threadScope && message.threadId !== access.threadScope) {
+  // In strict thread scope, verify the cursor belongs to the current thread
+  if (access?.enforceThreadScope && access.threadScope && message.threadId !== access.threadScope) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
   return message;
+}
+
+async function resolveCursorMessageByRecall(
+  memory: RecallMemory,
+  cursor: string,
+  access?: { resourceId?: string; threadScope?: string; enforceThreadScope?: boolean },
+): Promise<MastraDBMessage | null> {
+  if (access?.enforceThreadScope && access.threadScope) {
+    const result = await memory.recall({
+      threadId: access.threadScope,
+      resourceId: access.resourceId,
+      page: 0,
+      perPage: false,
+    });
+
+    return result.messages.find(message => message.id === cursor) ?? null;
+  }
+
+  if (!access?.resourceId) {
+    return null;
+  }
+
+  const threads = await memory.listThreads({
+    page: 0,
+    perPage: 100,
+    orderBy: { field: 'updatedAt', direction: 'DESC' },
+    filter: { resourceId: access.resourceId },
+  });
+
+  for (const thread of threads.threads) {
+    const result = await memory.recall({
+      threadId: thread.id,
+      resourceId: access.resourceId,
+      page: 0,
+      perPage: false,
+    });
+    const message = result.messages.find(message => message.id === cursor);
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
 }
 
 // ── Thread listing ──────────────────────────────────────────────────
@@ -494,6 +541,34 @@ function buildRenderedText(parts: FormattedPart[], timestamps: Map<string, Date>
   return lines.join('\n');
 }
 
+async function getNextVisibleMessage({
+  memory,
+  threadId,
+  resourceId,
+  after,
+}: {
+  memory: RecallMemory;
+  threadId: string;
+  resourceId?: string;
+  after: Date;
+}): Promise<MastraDBMessage | null> {
+  const result = await memory.recall({
+    threadId,
+    resourceId,
+    page: 0,
+    perPage: 50,
+    orderBy: { field: 'createdAt', direction: 'ASC' },
+    filter: {
+      dateRange: {
+        start: after,
+        startExclusive: true,
+      },
+    },
+  });
+
+  return result.messages.find(hasVisibleParts) ?? null;
+}
+
 const MAX_EXPAND_USER_TEXT_TOKENS = 200;
 const MAX_EXPAND_OTHER_TOKENS = 50;
 
@@ -606,7 +681,11 @@ export async function recallPart({
     throw new Error('Thread ID is required for recall');
   }
 
-  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
+  const resolved = await resolveCursorMessage(memory, cursor, {
+    resourceId,
+    threadScope,
+    enforceThreadScope: false,
+  });
 
   if ('hint' in resolved) {
     throw new Error(resolved.hint);
@@ -623,9 +702,40 @@ export async function recallPart({
   const target = allParts.find(p => p.partIndex === partIndex);
 
   if (!target) {
-    throw new Error(
-      `Part index ${partIndex} not found in message ${cursor}. Available indices: ${allParts.map(p => p.partIndex).join(', ')}`,
-    );
+    const availableIndices = allParts.map(p => p.partIndex).join(', ');
+    const highestVisiblePartIndex = Math.max(...allParts.map(p => p.partIndex));
+
+    if (partIndex > highestVisiblePartIndex) {
+      const nextMessage = await getNextVisibleMessage({
+        memory,
+        threadId,
+        resourceId,
+        after: resolved.createdAt,
+      });
+
+      if (nextMessage) {
+        const nextParts = formatMessageParts(nextMessage, 'high');
+        const firstNextPart = nextParts[0];
+
+        if (firstNextPart) {
+          const fallbackNote = `Part index ${partIndex} not found in message ${cursor}; showing partIndex ${firstNextPart.partIndex} from next message ${firstNextPart.messageId}.\n\n`;
+          const fallbackText = `${fallbackNote}${firstNextPart.text}`;
+          const truncatedText = truncateStringByTokens(fallbackText, maxTokens);
+          const wasTruncated = truncatedText !== fallbackText;
+
+          return {
+            text: truncatedText,
+            messageId: firstNextPart.messageId,
+            partIndex: firstNextPart.partIndex,
+            role: firstNextPart.role,
+            type: firstNextPart.type,
+            truncated: wasTruncated,
+          };
+        }
+      }
+    }
+
+    throw new Error(`Part index ${partIndex} not found in message ${cursor}. Available indices: ${availableIndices}`);
   }
 
   const truncatedText = truncateStringByTokens(target.text, maxTokens);
@@ -695,7 +805,11 @@ export async function recallMessages({
   const normalizedPage = Math.max(Math.min(rawPage, MAX_PAGE), -MAX_PAGE);
   const normalizedLimit = Math.min(limit, MAX_LIMIT);
 
-  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
+  const resolved = await resolveCursorMessage(memory, cursor, {
+    resourceId,
+    threadScope,
+    enforceThreadScope: false,
+  });
 
   if ('hint' in resolved) {
     return {
@@ -713,10 +827,11 @@ export async function recallMessages({
   }
 
   const anchor = resolved;
+  const crossThreadId = anchor.threadId && anchor.threadId !== threadId ? anchor.threadId : undefined;
 
-  if (anchor.threadId && anchor.threadId !== threadId) {
+  if (crossThreadId && threadScope) {
     return {
-      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}".`,
+      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}". Pass threadId="${anchor.threadId}" to browse that thread, or omit threadId and use this cursor directly in resource scope.`,
       count: 0,
       cursor,
       page: normalizedPage,
@@ -729,7 +844,10 @@ export async function recallMessages({
     };
   }
 
-  const resolvedThreadId = threadId;
+  const resolvedThreadId = crossThreadId ?? threadId;
+  if (!resolvedThreadId) {
+    throw new Error('Thread ID is required for recall');
+  }
 
   const isForward = normalizedPage > 0;
   const pageIndex = Math.max(Math.abs(normalizedPage), 1) - 1;
@@ -1139,7 +1257,27 @@ export const recallTool = (
       }
 
       if (hasCursor && !hasExplicitThreadId && !currentThreadId) {
-        throw new Error('Current thread is required when browsing by cursor');
+        if (!isResourceScope) {
+          throw new Error('Current thread is required when browsing by cursor');
+        }
+
+        const resolved = await resolveCursorMessage(memory, cursor!, { resourceId });
+        if ('hint' in resolved) {
+          return {
+            messages: resolved.hint,
+            count: 0,
+            cursor: cursor!,
+            page: page ?? 1,
+            limit: Math.min(limit ?? 20, 20),
+            detail: detail ?? 'low',
+            hasNextPage: false,
+            hasPrevPage: false,
+            truncated: false,
+            tokenOffset: 0,
+          };
+        }
+
+        targetThreadId = resolved.threadId;
       }
 
       if (!targetThreadId) {

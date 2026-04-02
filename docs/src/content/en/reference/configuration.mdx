@@ -782,9 +782,9 @@ Return a `{ status, body }` object to override the default `400` response, or `u
 
 The `context` parameter indicates which part of the request failed validation:
 
-- `'query'` — query parameters
-- `'body'` — request body
-- `'path'` — path parameters
+- `'query'`: query parameters
+- `'body'`: request body
+- `'path'`: path parameters
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -830,7 +830,7 @@ export const mastra = new Mastra({
 **Type:** `string`\
 **Default:** `/`
 
-Base path for hosting Mastra Studio. Use this to host the Studio on a sub-path of your existing application instead of the root.
+Base path for hosting [Studio](/docs/studio/overview). Use this to host the Studio on a sub-path of your existing application instead of the root.
 
 This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
 

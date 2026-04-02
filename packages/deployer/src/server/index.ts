@@ -513,11 +513,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on ${protocol}://${host}:${port}${apiPrefix}`);
+      logger.info('Mastra API running', { url: `${protocol}://${host}:${port}${apiPrefix}` });
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
         const studioUrl = `${studioProtocol}://${studioHost}:${studioPort}${studioBasePath}`;
-        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
+        logger.info('Studio available', { url: studioUrl });
       }
 
       if (process.send) {

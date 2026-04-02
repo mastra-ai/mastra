@@ -16,7 +16,7 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
     <RadixTabs.Trigger
       value={value}
       className={cn(
-        'text-sm p-3 text-neutral3 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5',
+        'text-sm py-3 px-2 text-neutral3 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none',
         transitions.all,
         focusRing.visible,
         'hover:text-neutral4',
