@@ -19,7 +19,7 @@ import type {
   KeyboardEventParams,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, TabsInput } from './schemas';
+import type { ActInput, ExtractInput, ObserveInput, NavigateInput, TabsInput } from './schemas';
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
@@ -575,30 +575,6 @@ export class StagehandBrowser extends MastraBrowser {
       };
     } catch (error) {
       return this.createErrorFromException(error, 'Navigate');
-    }
-  }
-
-  /**
-   * Take a screenshot
-   */
-  async screenshot(input: ScreenshotInput): Promise<{ success: true; base64: string } | BrowserToolError> {
-    const page = this.getPage();
-
-    if (!page) {
-      return this.createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
-    }
-
-    try {
-      const buffer = await page.screenshot({
-        fullPage: input.fullPage ?? false,
-      });
-
-      return {
-        success: true,
-        base64: buffer.toString('base64'),
-      };
-    } catch (error) {
-      return this.createErrorFromException(error, 'Screenshot');
     }
   }
 

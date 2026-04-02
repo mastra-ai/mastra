@@ -1,13 +1,13 @@
 /**
  * AgentBrowser Tool Schemas
  *
- * 17 flat schemas for browser tools. Each tool has a single-purpose schema
+ * Flat schemas for browser tools. Each tool has a single-purpose schema
  * without discriminated unions, making them easier for LLMs to understand.
  *
  * Tools:
- * - Core (9): goto, snapshot, click, type, press, select, scroll, screenshot, close
- * - Extended (7): hover, back, upload, dialog, wait, tabs, drag
- * - Escape Hatch (1): evaluate
+ * - Core: goto, snapshot, click, type, press, select, scroll, close
+ * - Extended: hover, back, dialog, wait, tabs, drag
+ * - Escape Hatch: evaluate
  */
 
 import { z } from 'zod';
@@ -97,15 +97,6 @@ export const scrollInputSchema = z.object({
 export type ScrollInput = z.output<typeof scrollInputSchema>;
 
 /**
- * browser_screenshot - Take a screenshot
- */
-export const screenshotInputSchema = z.object({
-  ref: z.string().optional().describe('Element ref to screenshot (full page if omitted)'),
-  fullPage: z.boolean().optional().describe('Capture full scrollable page (default: false)'),
-});
-export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
-
-/**
  * browser_close - Close the browser
  */
 export const closeInputSchema = z.object({});
@@ -128,15 +119,6 @@ export type HoverInput = z.output<typeof hoverInputSchema>;
  */
 export const backInputSchema = z.object({});
 export type BackInput = z.output<typeof backInputSchema>;
-
-/**
- * browser_upload - Upload file(s) to a file input
- */
-export const uploadInputSchema = z.object({
-  ref: z.string().describe('File input element ref'),
-  files: z.array(z.string()).describe('File paths to upload'),
-});
-export type UploadInput = z.output<typeof uploadInputSchema>;
 
 /**
  * browser_dialog - Click an element that triggers a dialog and handle it
@@ -208,12 +190,10 @@ export const browserSchemas = {
   press: pressInputSchema,
   select: selectInputSchema,
   scroll: scrollInputSchema,
-  screenshot: screenshotInputSchema,
   close: closeInputSchema,
   // Extended
   hover: hoverInputSchema,
   back: backInputSchema,
-  upload: uploadInputSchema,
   dialog: dialogInputSchema,
   wait: waitInputSchema,
   tabs: tabsInputSchema,

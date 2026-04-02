@@ -23,9 +23,7 @@ import type {
   PressInput,
   SelectInput,
   ScrollInput,
-  ScreenshotInput,
   HoverInput,
-  UploadInput,
   DialogInput,
   WaitInput,
   TabsInput,
@@ -921,36 +919,7 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 8. browser_screenshot - Take screenshot
-  // ---------------------------------------------------------------------------
-
-  async screenshot(input: ScreenshotInput): Promise<{ success: true; base64: string } | BrowserToolError> {
-    try {
-      const page = await this.getPage();
-
-      const options: { fullPage?: boolean; type?: 'png' | 'jpeg' } = {
-        fullPage: input.fullPage ?? false,
-      };
-
-      let buffer: Buffer;
-      if (input.ref) {
-        const locator = await this.requireLocator(input.ref);
-        if (!locator) {
-          return this.createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
-        }
-        buffer = await locator.screenshot(options);
-      } else {
-        buffer = await page.screenshot(options);
-      }
-
-      return { success: true, base64: buffer.toString('base64') };
-    } catch (error) {
-      return this.createErrorFromException(error, 'Screenshot');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 9. browser_hover - Hover over element
+  // 8. browser_hover - Hover over element
   // ---------------------------------------------------------------------------
 
   async hover(input: HoverInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
@@ -999,36 +968,7 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 11. browser_upload - Upload file(s)
-  // ---------------------------------------------------------------------------
-
-  async upload(input: UploadInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
-    try {
-      const page = await this.getPage();
-      const locator = await this.requireLocator(input.ref);
-
-      if (!locator) {
-        return this.createError(
-          'stale_ref',
-          `Ref ${input.ref} not found. The page has changed.`,
-          'Take a new snapshot to get fresh refs.',
-        );
-      }
-
-      await locator.setInputFiles(input.files, { timeout: this.defaultTimeout });
-
-      return {
-        success: true,
-        url: page.url(),
-        hint: 'File(s) uploaded. Take a snapshot to see updated state.',
-      };
-    } catch (error) {
-      return this.createErrorFromException(error, 'Upload');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 12. browser_dialog - Click element that triggers dialog and handle it
+  // 11. browser_dialog - Click element that triggers dialog and handle it
   // ---------------------------------------------------------------------------
 
   async dialog(

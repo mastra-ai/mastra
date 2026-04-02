@@ -17,14 +17,11 @@ import { createEvaluateTool } from './evaluate';
 import { createGotoTool } from './goto';
 import { createHoverTool } from './hover';
 import { createPressTool } from './press';
-// TODO: Re-enable once we have proper image handling in tool results (COR-761)
-// import { createScreenshotTool } from './screenshot';
 import { createScrollTool } from './scroll';
 import { createSelectTool } from './select';
 import { createSnapshotTool } from './snapshot';
 import { createTabsTool } from './tabs';
 import { createTypeTool } from './type';
-import { createUploadTool } from './upload';
 import { createWaitTool } from './wait';
 
 export { BROWSER_TOOLS, type BrowserToolName } from './constants';
@@ -43,13 +40,10 @@ export function createAgentBrowserTools(browser: AgentBrowser): Record<string, T
     [BROWSER_TOOLS.PRESS]: createPressTool(browser),
     [BROWSER_TOOLS.SELECT]: createSelectTool(browser),
     [BROWSER_TOOLS.SCROLL]: createScrollTool(browser),
-    // TODO: Re-enable once we have proper image handling in tool results (COR-761)
-    // [BROWSER_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
     [BROWSER_TOOLS.CLOSE]: createCloseTool(browser),
-    // Extended (7)
+    // Extended
     [BROWSER_TOOLS.HOVER]: createHoverTool(browser),
     [BROWSER_TOOLS.BACK]: createBackTool(browser),
-    [BROWSER_TOOLS.UPLOAD]: createUploadTool(browser),
     [BROWSER_TOOLS.DIALOG]: createDialogTool(browser),
     [BROWSER_TOOLS.WAIT]: createWaitTool(browser),
     [BROWSER_TOOLS.TABS]: createTabsTool(browser),

@@ -11,12 +11,10 @@ export const BROWSER_TOOLS = {
   PRESS: 'browser_press',
   SELECT: 'browser_select',
   SCROLL: 'browser_scroll',
-  SCREENSHOT: 'browser_screenshot',
   CLOSE: 'browser_close',
   // Extended
   HOVER: 'browser_hover',
   BACK: 'browser_back',
-  UPLOAD: 'browser_upload',
   DIALOG: 'browser_dialog',
   WAIT: 'browser_wait',
   TABS: 'browser_tabs',

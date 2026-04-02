@@ -21,9 +21,9 @@ export {
   extractInputSchema,
   observeInputSchema,
   navigateInputSchema,
-  screenshotInputSchema,
   closeInputSchema,
+  tabsInputSchema,
   stagehandSchemas,
 } from './schemas';
 
-export type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, CloseInput } from './schemas';
+export type { ActInput, ExtractInput, ObserveInput, NavigateInput, CloseInput, TabsInput } from './schemas';

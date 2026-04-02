@@ -10,7 +10,7 @@ export type { BrowserToolName } from './tools';
 
 // Schema exports
 export {
-  // Core (9)
+  // Core
   gotoInputSchema,
   snapshotInputSchema,
   clickInputSchema,
@@ -18,17 +18,15 @@ export {
   pressInputSchema,
   selectInputSchema,
   scrollInputSchema,
-  screenshotInputSchema,
   closeInputSchema,
-  // Extended (7)
+  // Extended
   hoverInputSchema,
   backInputSchema,
-  uploadInputSchema,
   dialogInputSchema,
   waitInputSchema,
   tabsInputSchema,
   dragInputSchema,
-  // Escape hatch (1)
+  // Escape hatch
   evaluateInputSchema,
   // All schemas
   browserSchemas,
@@ -42,11 +40,9 @@ export type {
   PressInput,
   SelectInput,
   ScrollInput,
-  ScreenshotInput,
   CloseInput,
   HoverInput,
   BackInput,
-  UploadInput,
   DialogInput,
   WaitInput,
   TabsInput,

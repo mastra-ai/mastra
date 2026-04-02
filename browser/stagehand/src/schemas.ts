@@ -70,14 +70,6 @@ export const navigateInputSchema = z.object({
 export type NavigateInput = z.output<typeof navigateInputSchema>;
 
 /**
- * stagehand_screenshot - Take a screenshot
- */
-export const screenshotInputSchema = z.object({
-  fullPage: z.boolean().optional().describe('Capture full scrollable page (default: false)'),
-});
-export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
-
-/**
  * stagehand_close - Close the browser
  */
 export const closeInputSchema = z.object({});
@@ -111,7 +103,6 @@ export const stagehandSchemas = {
   observe: observeInputSchema,
   // Navigation & State
   navigate: navigateInputSchema,
-  screenshot: screenshotInputSchema,
   tabs: tabsInputSchema,
   close: closeInputSchema,
 } as const;

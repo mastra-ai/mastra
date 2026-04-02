@@ -65,21 +65,6 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(result.snapshot).toContain('Click me');
   }, 30_000);
 
-  it('takes a screenshot', async () => {
-    await browser.goto({
-      url: 'data:text/html,<html><body style="background:blue"><h1 style="color:white">Screenshot Test</h1></body></html>',
-      waitUntil: 'load',
-    });
-
-    const result = await browser.screenshot({
-      fullPage: false,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.base64).toBeDefined();
-    expect(result.base64.length).toBeGreaterThan(0);
-  }, 30_000);
-
   it('types text into an input field', async () => {
     // Use a page with multiple interactive elements to ensure refs are generated
     await browser.goto({

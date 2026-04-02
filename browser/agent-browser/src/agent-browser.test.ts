@@ -414,34 +414,8 @@ describe('AgentBrowser', () => {
     });
   });
 
-  describe('screenshot', () => {
-    beforeEach(async () => {
-      await browser.ensureReady();
-      await browser.snapshot({});
-    });
-
-    it('takes a screenshot', async () => {
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(true);
-      expect(result.base64).toBeDefined();
-    });
-
-    it('supports fullPage option', async () => {
-      await browser.screenshot({ fullPage: true });
-
-      expect(mockPage.screenshot).toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }));
-    });
-
-    it('takes element screenshot by ref', async () => {
-      await browser.screenshot({ ref: '@e1' });
-
-      expect(mockLocator.screenshot).toHaveBeenCalled();
-    });
-  });
-
   // =============================================================================
-  // Extended Tools (7)
+  // Extended Tools
   // =============================================================================
 
   describe('hover', () => {
@@ -471,7 +445,7 @@ describe('AgentBrowser', () => {
     });
   });
 
-  // Tool tests (upload, dialog, drag, evaluate) are in __tests__/tools.test.ts
+  // Tool tests (dialog, drag, evaluate) are in __tests__/*.test.ts
 
   // =============================================================================
   // Screencast

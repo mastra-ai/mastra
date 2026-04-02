@@ -1,7 +1,7 @@
 /**
  * Schema Tests
  *
- * Tests for the 17 flat browser tool schemas.
+ * Tests for the browser tool schemas.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -13,11 +13,9 @@ import {
   pressInputSchema,
   selectInputSchema,
   scrollInputSchema,
-  screenshotInputSchema,
   closeInputSchema,
   hoverInputSchema,
   backInputSchema,
-  uploadInputSchema,
   dialogInputSchema,
   waitInputSchema,
   tabsInputSchema,
@@ -193,23 +191,6 @@ describe('scrollInputSchema', () => {
   });
 });
 
-describe('screenshotInputSchema', () => {
-  it('accepts empty input', () => {
-    const result = screenshotInputSchema.safeParse({});
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts ref', () => {
-    const result = screenshotInputSchema.safeParse({ ref: '@e5' });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts fullPage option', () => {
-    const result = screenshotInputSchema.safeParse({ fullPage: true });
-    expect(result.success).toBe(true);
-  });
-});
-
 describe('closeInputSchema', () => {
   it('accepts empty input', () => {
     const result = closeInputSchema.safeParse({});
@@ -237,28 +218,6 @@ describe('backInputSchema', () => {
   it('accepts empty input', () => {
     const result = backInputSchema.safeParse({});
     expect(result.success).toBe(true);
-  });
-});
-
-describe('uploadInputSchema', () => {
-  it('accepts ref and files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file.txt'] });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts multiple files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file1.txt', '/path/to/file2.txt'] });
-    expect(result.success).toBe(true);
-  });
-
-  it('requires ref', () => {
-    const result = uploadInputSchema.safeParse({ files: ['/path/to/file.txt'] });
-    expect(result.success).toBe(false);
-  });
-
-  it('requires files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5' });
-    expect(result.success).toBe(false);
   });
 });
 

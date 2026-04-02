@@ -477,44 +477,6 @@ describe('StagehandBrowser', () => {
     });
   });
 
-  describe('screenshot', () => {
-    beforeEach(async () => {
-      await browser.launch();
-    });
-
-    it('should take screenshot successfully', async () => {
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(true);
-      expect(result.base64).toBe(Buffer.from('fake-png').toString('base64'));
-    });
-
-    it('should take full page screenshot', async () => {
-      await browser.screenshot({ fullPage: true });
-
-      expect(mockPage.screenshot).toHaveBeenCalledWith({ fullPage: true });
-    });
-
-    it('should handle screenshot failure', async () => {
-      mockPage.screenshot.mockRejectedValueOnce(new Error('Screenshot failed'));
-
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Screenshot failed');
-    });
-
-    it('should handle no page available', async () => {
-      mockContext.activePage.mockReturnValueOnce(null);
-      mockContext.pages.mockReturnValueOnce([]);
-
-      const result = await browser.screenshot({});
-
-      expect(result.success).toBe(false);
-      expect((result as any).message).toContain('page not available');
-    });
-  });
-
   describe('getCurrentUrl', () => {
     it('should return null when not launched', async () => {
       expect(await browser.getCurrentUrl()).toBeNull();
