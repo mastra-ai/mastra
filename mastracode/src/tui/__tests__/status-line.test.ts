@@ -48,7 +48,7 @@ vi.mock('../theme.js', () => ({
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
   TUI_MIN_CONTRAST: 5.5,
-  getTermWidth: () => 200,
+  getTermWidth: () => process.stdout.columns || 200,
 }));
 
 import { updateStatusLine } from '../status-line.js';
@@ -118,5 +118,17 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
+  });
+
+  it('preserves the gateway prefix when compacting gateway-backed model ids', () => {
+    const state = createState();
+    state.harness.getFullModelId.mockReturnValue('mastra/anthropic/claude-opus-4.6');
+    process.stdout.columns = 25;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('mastra/claude-opus-4.6');
+    expect(rendered).not.toContain('anthropic/claude-opus-4.6');
   });
 });

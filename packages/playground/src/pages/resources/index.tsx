@@ -1,5 +1,5 @@
 import { EntityListPageLayout, MainHeader } from '@mastra/playground-ui';
-import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon } from 'lucide-react';
+import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
 
 const resources = [
   {
@@ -35,6 +35,14 @@ const resources = [
     description: 'Running Mastra Studio locally? Deploy to the cloud so your team can collaborate.',
     icon: CloudUploadIcon,
     href: 'https://mastra.ai/cloud',
+    external: true,
+  },
+  {
+    title: 'Talk to our Sales team',
+    description:
+      'Get a custom demo, discuss on-prem deployments, and how we can help you accelerate getting agents into production.',
+    icon: BuildingIcon,
+    href: 'https://mastra.ai/contact?ref=studio',
     external: true,
   },
 ];

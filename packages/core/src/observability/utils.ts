@@ -1,24 +1,15 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+/**
+ * Browser-safe observability utilities.
+ *
+ * Functions that depend on AsyncLocalStorage (getCurrentSpan, executeWithContext,
+ * executeWithContextSync) are in context-storage.ts and should only be imported
+ * by server-side code.
+ */
 
 import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
 const entityTypeValues = new Set(Object.values(EntityType));
-
-/**
- * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
- * so that infrastructure code (e.g. DualLogger) can resolve the active span without
- * being passed it explicitly.
- */
-const spanContextStorage = new AsyncLocalStorage<AnySpan>();
-
-/**
- * Returns the current span from AsyncLocalStorage, if one is active.
- * Used by DualLogger to forward logs to a span-correlated loggerVNext.
- */
-export function getCurrentSpan(): AnySpan | undefined {
-  return spanContextStorage.getStore();
-}
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -65,70 +56,6 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       metadata,
     },
   });
-}
-
-/**
- * Execute an async function within the span's tracing context if available.
- * Falls back to direct execution if no span exists.
- *
- * When a bridge is configured, this enables auto-instrumented operations
- * (HTTP requests, database queries, etc.) to be properly nested under the
- * current span in the external tracing system.
- *
- * @param span - The span to use as context (or undefined to execute without context)
- * @param fn - The async function to execute
- * @returns The result of the function execution
- *
- * @example
- * ```typescript
- * const result = await executeWithContext(llmSpan, async () =>
- *   model.generateText(args)
- * );
- * ```
- */
-export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
-  const { span, fn } = params;
-
-  // Wrap fn so the span is available via getCurrentSpan() inside the async context.
-  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
-
-  if (span?.executeInContext) {
-    return span.executeInContext(wrappedFn);
-  }
-
-  return wrappedFn();
-}
-
-/**
- * Execute a synchronous function within the span's tracing context if available.
- * Falls back to direct execution if no span exists.
- *
- * When a bridge is configured, this enables auto-instrumented operations
- * (HTTP requests, database queries, etc.) to be properly nested under the
- * current span in the external tracing system.
- *
- * @param span - The span to use as context (or undefined to execute without context)
- * @param fn - The synchronous function to execute
- * @returns The result of the function execution
- *
- * @example
- * ```typescript
- * const result = executeWithContextSync(llmSpan, () =>
- *   model.streamText(args)
- * );
- * ```
- */
-export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
-  const { span, fn } = params;
-
-  // Wrap fn so the span is available via getCurrentSpan() inside the sync context.
-  const wrappedFn = span ? () => spanContextStorage.run(span, fn) : fn;
-
-  if (span?.executeInContextSync) {
-    return span.executeInContextSync(wrappedFn);
-  }
-
-  return wrappedFn();
 }
 
 /**

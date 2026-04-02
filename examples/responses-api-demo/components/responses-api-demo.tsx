@@ -9,11 +9,22 @@ import { ConversationsExample } from './conversations-example';
 import { OpenAISDKResponsesExample } from './openai-sdk-responses-example';
 import { ProviderBackedResponsesExample } from './provider-backed-responses-example';
 
-type ExampleId = 'agent-memory' | 'agent-tools' | 'agent-structured' | 'conversations' | 'openai-sdk' | 'provider-backed';
+type ExampleId =
+  | 'agent-memory'
+  | 'agent-tools'
+  | 'agent-structured'
+  | 'conversations'
+  | 'openai-sdk'
+  | 'provider-backed';
 
 const EXAMPLES = [
   { id: 'agent-memory', label: 'Mastra Agent Responses', withConversations: false, Component: AgentResponsesExample },
-  { id: 'agent-tools', label: 'Mastra Agent + Tool Responses', withConversations: false, Component: AgentToolResponsesExample },
+  {
+    id: 'agent-tools',
+    label: 'Mastra Agent + Tool Responses',
+    withConversations: false,
+    Component: AgentToolResponsesExample,
+  },
   {
     id: 'agent-structured',
     label: 'Mastra Agent + Structured Output',
@@ -22,7 +33,12 @@ const EXAMPLES = [
   },
   { id: 'conversations', label: 'Conversations', withConversations: true, Component: ConversationsExample },
   { id: 'openai-sdk', label: 'Mastra via OpenAI SDK', withConversations: false, Component: OpenAISDKResponsesExample },
-  { id: 'provider-backed', label: 'Provider-backed Agent Responses', withConversations: false, Component: ProviderBackedResponsesExample },
+  {
+    id: 'provider-backed',
+    label: 'Provider-backed Agent Responses',
+    withConversations: false,
+    Component: ProviderBackedResponsesExample,
+  },
 ] as const satisfies readonly {
   id: ExampleId;
   label: string;
@@ -30,7 +46,10 @@ const EXAMPLES = [
   Component: ComponentType;
 }[];
 
-const EXAMPLE_BY_ID = Object.fromEntries(EXAMPLES.map(example => [example.id, example])) as Record<ExampleId, (typeof EXAMPLES)[number]>;
+const EXAMPLE_BY_ID = Object.fromEntries(EXAMPLES.map(example => [example.id, example])) as Record<
+  ExampleId,
+  (typeof EXAMPLES)[number]
+>;
 
 export function ResponsesApiDemo() {
   const [activeExampleId, setActiveExampleId] = useState<ExampleId>('agent-memory');
@@ -59,7 +78,9 @@ export function ResponsesApiDemo() {
   }
 
   return (
-    <main className={`demo-shell demo-shell--with-sidebar${activeExample.withConversations ? ' demo-shell--with-conversations' : ''}`}>
+    <main
+      className={`demo-shell demo-shell--with-sidebar${activeExample.withConversations ? ' demo-shell--with-conversations' : ''}`}
+    >
       <aside className="demo-sidebar">
         <div className="demo-sidebar__header">
           <span className="demo-sidebar__eyebrow">Modes</span>

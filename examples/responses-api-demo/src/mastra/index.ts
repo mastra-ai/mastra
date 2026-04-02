@@ -17,6 +17,6 @@ export const mastra = new Mastra({
     build: {
       swaggerUI: true,
       openAPIDocs: true,
-    }
-  }
+    },
+  },
 });

@@ -12,7 +12,7 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
 
 const ANALYTICS_OBSERVABILITY_TYPES = new Set([
-  // 'ObservabilityStorageClickhouse',
+  'ObservabilityStorageClickhouseVNext',
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
 ]);
@@ -33,7 +33,7 @@ export function MetricsDashboard() {
         <EmptyState
           iconSlot={<CircleSlashIcon />}
           titleSlot="Metrics are not available with your current storage"
-          descriptionSlot="Metrics require DuckDB or in-memory storage for observability. ClickHouse support is coming soon. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+          descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
           actionSlot={
             <Button
               variant="ghost"
