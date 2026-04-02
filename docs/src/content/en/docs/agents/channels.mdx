@@ -150,6 +150,9 @@ The top-level `channels` object supports these options:
 | - | - | - | - |
 | `adapters` | `Record<string, Adapter>` | required | Platform adapters keyed by name |
 | `handlers` | `ChannelHandlers` | — | Override default message handlers |
+| `inlineMedia` | `string[] \| function` | `['image/*']` | Mime type globs for attachments sent as file parts to the model |
+| `inlineLinks` | `InlineLinkEntry[]` | — | Promote URLs in message text to file parts |
+| `tools` | `boolean` | `true` | Include channel tools (e.g. `add_reaction`). Set to `false` for models without function calling |
 | `state` | `StateAdapter` | in-memory | State adapter for subscriptions and deduplication |
 | `userName` | `string` | agent's `name` | Bot display name shown in messages |
 | `threadContext` | `{ maxMessages?: number }` | `{ maxMessages: 10 }` | Fetch prior messages on first mention in a thread |
@@ -190,14 +193,63 @@ const agent = new Agent({
 })
 ```
 
-How it works:
+Thread context follows this flow:
 
-1. On the **first mention** in a thread, the agent fetches recent messages from the platform
-1. These messages are included in the system prompt as context
-1. After responding, the agent subscribes to the thread and has full history via Mastra's memory
-1. Subsequent messages in that thread do **not** re-fetch from the platform
+1. On the **first mention** in a thread, the agent fetches recent messages from the platform.
+1. These messages are included in the system prompt as context.
+1. After responding, the agent subscribes to the thread and has full history via Mastra's memory.
+1. Subsequent messages in that thread do **not** re-fetch from the platform.
 
-Set `maxMessages: 0` to disable this behavior. This only applies to non-DM threads — in DMs, the agent already has full conversation history.
+Set `maxMessages: 0` to disable this behavior. This only applies to non-DM threads. In DMs, the agent already has full conversation history.
+
+## Multimodal attachments
+
+When a user uploads a file (image, video, PDF, etc.) in a platform message, the agent can receive it as a file part for the model to process. The `inlineMedia` option controls which attachment types are sent inline to the model. Everything else is described as a text summary so the agent knows about the file without crashing models that reject unsupported types.
+
+```typescript
+const agent = new Agent({
+  // ...
+  channels: {
+    adapters: {
+      /* ... */
+    },
+    // Default: only images are sent inline
+    inlineMedia: ['image/*'],
+
+    // Gemini supports video and audio natively
+    inlineMedia: ['image/*', 'video/*', 'audio/*'],
+  },
+})
+```
+
+For platforms with private CDNs (e.g. Slack), the agent automatically fetches attachments with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the agent passes the URL directly to the model.
+
+## Inline links
+
+Use `inlineLinks` to promote URLs found in message text to file parts so the model can process linked content (images, videos, etc.) instead of seeing raw URL text.
+
+Each entry matches a domain. Use a string for domains where a HEAD request determines the Content-Type, or an object to force a specific mime type. Forcing the mime type is useful for sites like YouTube where HEAD returns `text/html` but the model treats the URL as video.
+
+```typescript
+const agent = new Agent({
+  // ...
+  channels: {
+    adapters: {
+      /* ... */
+    },
+    inlineMedia: ['image/*', 'video/*'],
+    inlineLinks: [
+      // Force YouTube URLs as video (skip HEAD)
+      { match: 'youtube.com', mimeType: 'video/*' },
+      { match: 'youtu.be', mimeType: 'video/*' },
+      // HEAD-check all other URLs, inline if mime matches inlineMedia
+      '*',
+    ],
+  },
+})
+```
+
+For string entries (including `'*'`), the resolved Content-Type is checked against `inlineMedia`. Only matching types become file parts. For object entries with a forced `mimeType`, the file part is always added regardless of the `inlineMedia` setting.
 
 ## Custom handlers
 
@@ -215,7 +267,7 @@ const agent = new Agent({
       onDirectMessage: false,
 
       // Wrap the default mention handler with custom logic
-      onNewMention: (thread, message, defaultHandler) => {
+      onMention: (thread, message, defaultHandler) => {
         console.log('Received mention:', message.text)
         // Call the default handler to process normally
         defaultHandler()
@@ -228,14 +280,14 @@ const agent = new Agent({
 | Handler | Description |
 | - | - |
 | `onDirectMessage` | Called when the bot receives a direct message |
-| `onNewMention` | Called when the bot is mentioned in a channel |
+| `onMention` | Called when the bot is mentioned in a channel |
 | `onSubscribedMessage` | Called for messages in subscribed threads |
 
 Each handler can be:
 
 - Omitted: Uses the default Mastra handler
 - `false`: Disables the handler entirely
-- A function: `(thread, message, defaultHandler) => void` to wrap or replace the default
+- A function `(thread, message, defaultHandler) => void`: Wraps or replaces the default
 
 ## Tool approval
 
