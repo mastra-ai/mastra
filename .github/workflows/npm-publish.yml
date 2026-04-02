@@ -16,9 +16,14 @@ on:
           - prerelease
           - stable
           - snapshot
+          - hotfix
         default: prerelease
       tag:
         description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
+        required: false
+        type: string
+      hotfix_branch:
+        description: 'Hotfix branch to publish'
         required: false
         type: string
       dry_run:
@@ -202,6 +207,104 @@ jobs:
         run: |
           pnpm changeset-cli tag
           git push origin --tags
+
+  hotfix:
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish_type == 'hotfix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          ref: ${{ github.event.inputs.hotfix_branch }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Publish packages
+        if: ${{ !inputs.dry_run }}
+        run: pnpm publish -r --access public --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
+
+      - name: Publish packages - dry run
+        if: ${{ inputs.dry_run }}
+        run: pnpm publish -r --dry-run --access public --no-git-checks
+
+      - name: Add tags
+        if: ${{ !inputs.dry_run }}
+        run: |
+          pnpm changeset-cli tag
+          git push origin --tags
+
+      - name: Merge hotfix branch into main
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git fetch origin main
+          git checkout -B hotfix-main origin/main
+          git merge --no-ff -m 'chore: merge hotfix release into main' "origin/${{ github.event.inputs.hotfix_branch }}"
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Close tracking PR
+        if: ${{ !inputs.dry_run }}
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-auth.outputs.token }}
+          script: |
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${context.payload.inputs.hotfix_branch}`,
+              base: 'main',
+              per_page: 100,
+            });
+
+            const trackingPr = pullRequests[0];
+            if (!trackingPr) {
+              core.info(`No open tracking PR found for ${context.payload.inputs.hotfix_branch}`);
+              return;
+            }
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: trackingPr.number,
+              state: 'closed',
+            });
+
+      - name: Delete hotfix branch
+        if: ${{ !inputs.dry_run }}
+        run: git push origin --delete "${{ github.event.inputs.hotfix_branch }}"
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
   enter_prerelease:
     needs: stable

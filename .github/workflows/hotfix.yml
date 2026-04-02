@@ -1,0 +1,85 @@
+name: Hotfix
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_numbers:
+        description: 'Comma or whitespace separated merged PR numbers'
+        required: true
+        type: string
+      hotfix_branch:
+        description: 'Hotfix branch name'
+        required: false
+        type: string
+        default: hotfix/current
+      publish_now:
+        description: 'Publish immediately after updating the hotfix branch'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  hotfix:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    outputs:
+      hotfix_branch: ${{ steps.hotfix.outputs.hotfix_branch }}
+      hotfix_pr_url: ${{ steps.hotfix.outputs.hotfix_pr_url }}
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build hotfix branch
+        id: hotfix
+        run: pnpm tsx packages/_changeset-cli/src/git/hotfix.ts "${{ github.event.inputs.pr_numbers }}" --branch "${{ github.event.inputs.hotfix_branch }}"
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HUSKY: 0
+
+      - name: Summarize hotfix branch
+        run: |
+          echo "Hotfix branch: ${{ steps.hotfix.outputs.hotfix_branch }}"
+          echo "Tracking PR: ${{ steps.hotfix.outputs.hotfix_pr_url }}"
+
+      - name: Trigger hotfix publish
+        if: ${{ github.event.inputs.publish_now == 'true' }}
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-auth.outputs.token }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'npm-publish.yml',
+              ref: 'main',
+              inputs: {
+                publish_type: 'hotfix',
+                hotfix_branch: `${{ steps.hotfix.outputs.hotfix_branch }}`,
+                dry_run: 'false',
+              },
+            });
