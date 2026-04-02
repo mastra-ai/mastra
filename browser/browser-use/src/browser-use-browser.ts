@@ -188,7 +188,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
 
     // Initialize thread manager
     this.threadManager = new BrowserUseThreadManager({
-      isolation: config.threadIsolation ?? 'browser',
+      scope: config.scope ?? 'thread',
       browserConfig: config,
       onSessionCreated: (sessionInfo, threadId) => {
         this.logger.debug?.(`Cloud session created for thread ${threadId}: ${sessionInfo.id}`);
@@ -204,9 +204,9 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Launch the browser by creating a cloud session and connecting via CDP.
    */
   protected override async doLaunch(): Promise<void> {
-    const isolation = this.getThreadIsolationMode();
+    const isolation = this.getScope();
 
-    if (isolation === 'browser') {
+    if (isolation === 'thread') {
       // For 'browser' isolation, sessions are created on-demand per thread
       // We don't create a shared session here
       this.logger.debug?.('Browser isolation mode: sessions created per thread');
@@ -231,11 +231,11 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * For 'browser' isolation, creates the cloud session and connects CDP before super.ensureReady().
    */
   override async ensureReady(): Promise<void> {
-    const isolation = this.getThreadIsolationMode();
+    const isolation = this.getScope();
     const threadId = this.getCurrentThread() ?? DEFAULT_THREAD_ID;
 
     // For 'browser' isolation, create session and connect CDP on-demand
-    if (isolation === 'browser') {
+    if (isolation === 'thread') {
       const existingSession = this.threadManager.getExistingSessionForThread(threadId);
 
       if (!existingSession) {
@@ -288,9 +288,9 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Check if the browser is alive.
    */
   override async checkBrowserAlive(): Promise<boolean> {
-    const isolation = this.getThreadIsolationMode();
+    const isolation = this.getScope();
 
-    if (isolation === 'browser') {
+    if (isolation === 'thread') {
       // Check if any thread sessions exist
       return this.threadManager.hasActiveThreadSessions();
     }
@@ -485,7 +485,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
     this.cdpClient = null;
     this.notifyBrowserClosed();
 
-    if (this.config.autoReconnect && this.sessionInfo?.cdpUrl) {
+    if (this.browserConfig.autoReconnect && this.sessionInfo?.cdpUrl) {
       this.scheduleReconnect();
     }
   }
@@ -499,7 +499,7 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
           this.scheduleReconnect();
         });
       }
-    }, this.config.reconnectDelay ?? 1000);
+    }, this.browserConfig.reconnectDelay ?? 1000);
   }
 
   private clearReconnectTimer(): void {
@@ -532,10 +532,10 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
    * Get CDP client for a specific thread.
    */
   private async getCdpClientForThread(threadId?: string): Promise<CdpClient> {
-    const isolation = this.getThreadIsolationMode();
+    const isolation = this.getScope();
     const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
 
-    if (isolation === 'none' || effectiveThreadId === DEFAULT_THREAD_ID) {
+    if (isolation === 'shared' || effectiveThreadId === DEFAULT_THREAD_ID) {
       if (!this.cdpClient?.isConnected) {
         throw new Error('Not connected to browser');
       }

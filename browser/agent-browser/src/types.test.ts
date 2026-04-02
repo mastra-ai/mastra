@@ -1,7 +1,7 @@
 /**
  * Schema Tests
  *
- * Tests for the 17 flat browser tool schemas.
+ * Tests for the browser tool schemas.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -13,11 +13,9 @@ import {
   pressInputSchema,
   selectInputSchema,
   scrollInputSchema,
-  screenshotInputSchema,
   closeInputSchema,
   hoverInputSchema,
   backInputSchema,
-  uploadInputSchema,
   dialogInputSchema,
   waitInputSchema,
   tabsInputSchema,
@@ -164,6 +162,11 @@ describe('selectInputSchema', () => {
     const result = selectInputSchema.safeParse({ value: 'option1' });
     expect(result.success).toBe(false);
   });
+
+  it('requires at least one selection criterion', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('scrollInputSchema', () => {
@@ -190,23 +193,6 @@ describe('scrollInputSchema', () => {
   it('rejects invalid direction', () => {
     const result = scrollInputSchema.safeParse({ direction: 'diagonal' });
     expect(result.success).toBe(false);
-  });
-});
-
-describe('screenshotInputSchema', () => {
-  it('accepts empty input', () => {
-    const result = screenshotInputSchema.safeParse({});
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts ref', () => {
-    const result = screenshotInputSchema.safeParse({ ref: '@e5' });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts fullPage option', () => {
-    const result = screenshotInputSchema.safeParse({ fullPage: true });
-    expect(result.success).toBe(true);
   });
 });
 
@@ -240,46 +226,29 @@ describe('backInputSchema', () => {
   });
 });
 
-describe('uploadInputSchema', () => {
-  it('accepts ref and files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file.txt'] });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts multiple files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file1.txt', '/path/to/file2.txt'] });
-    expect(result.success).toBe(true);
-  });
-
-  it('requires ref', () => {
-    const result = uploadInputSchema.safeParse({ files: ['/path/to/file.txt'] });
-    expect(result.success).toBe(false);
-  });
-
-  it('requires files', () => {
-    const result = uploadInputSchema.safeParse({ ref: '@e5' });
-    expect(result.success).toBe(false);
-  });
-});
-
 describe('dialogInputSchema', () => {
-  it('accepts accept action', () => {
-    const result = dialogInputSchema.safeParse({ action: 'accept' });
+  it('accepts triggerRef with accept action', () => {
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e1', action: 'accept' });
     expect(result.success).toBe(true);
   });
 
-  it('accepts dismiss action', () => {
-    const result = dialogInputSchema.safeParse({ action: 'dismiss' });
+  it('accepts triggerRef with dismiss action', () => {
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e2', action: 'dismiss' });
     expect(result.success).toBe(true);
   });
 
   it('accepts accept with text for prompts', () => {
-    const result = dialogInputSchema.safeParse({ action: 'accept', text: 'user input' });
+    const result = dialogInputSchema.safeParse({ triggerRef: '@e3', action: 'accept', text: 'user input' });
     expect(result.success).toBe(true);
   });
 
-  it('requires action', () => {
+  it('requires triggerRef and action', () => {
     const result = dialogInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('requires triggerRef', () => {
+    const result = dialogInputSchema.safeParse({ action: 'accept' });
     expect(result.success).toBe(false);
   });
 });
@@ -349,13 +318,28 @@ describe('dragInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('requires sourceRef', () => {
-    const result = dragInputSchema.safeParse({ targetRef: '@e10' });
+  it('accepts sourceSelector and targetSelector', () => {
+    const result = dragInputSchema.safeParse({ sourceSelector: '#source', targetSelector: '#target' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts mixed ref and selector', () => {
+    const result = dragInputSchema.safeParse({ sourceRef: '@e5', targetSelector: '#target' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty object (requires source and target)', () => {
+    const result = dragInputSchema.safeParse({});
     expect(result.success).toBe(false);
   });
 
-  it('requires targetRef', () => {
+  it('rejects missing target', () => {
     const result = dragInputSchema.safeParse({ sourceRef: '@e5' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing source', () => {
+    const result = dragInputSchema.safeParse({ targetRef: '@e10' });
     expect(result.success).toBe(false);
   });
 });

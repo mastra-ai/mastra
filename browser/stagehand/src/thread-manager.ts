@@ -1,7 +1,7 @@
 /**
  * StagehandThreadManager - Thread isolation for StagehandBrowser
  *
- * Supports two isolation modes:
+ * Supports two scope modes:
  * - 'none': All threads share the same Stagehand instance and page
  * - 'browser': Each thread gets its own Stagehand instance (separate browser)
  *
@@ -21,7 +21,7 @@ type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePa
  * Extended session info for Stagehand threads.
  */
 export interface StagehandThreadSession extends ThreadSession {
-  /** For 'browser' mode: dedicated Stagehand instance */
+  /** For 'thread' mode: dedicated Stagehand instance */
   stagehand?: V3;
 }
 
@@ -29,7 +29,7 @@ export interface StagehandThreadSession extends ThreadSession {
  * Configuration for StagehandThreadManager.
  */
 export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
-  /** Function to create a new Stagehand instance (for 'browser' mode) */
+  /** Function to create a new Stagehand instance (for 'thread' mode) */
   createStagehand?: () => Promise<V3>;
   /** Callback when a new browser/Stagehand instance is created for a thread */
   onBrowserCreated?: (stagehand: V3, threadId: string) => void;
@@ -38,7 +38,7 @@ export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
 /**
  * Thread manager for StagehandBrowser.
  *
- * Supports two isolation modes:
+ * Supports two scope modes:
  * - 'none': All threads share the shared Stagehand instance
  * - 'browser': Each thread gets a dedicated Stagehand instance
  */
@@ -48,7 +48,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   private createStagehand?: () => Promise<V3>;
   private onBrowserCreated?: (stagehand: V3, threadId: string) => void;
 
-  /** Map of thread ID to dedicated Stagehand instance (for 'browser' mode) */
+  /** Map of thread ID to dedicated Stagehand instance (for 'thread' mode) */
   private readonly threadStagehands = new Map<string, V3>();
 
   constructor(config: StagehandThreadManagerConfig) {
@@ -73,7 +73,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
 
   /**
    * Set the factory function for creating new Stagehand instances.
-   * Required for 'browser' isolation mode.
+   * Required for 'browser' scope mode.
    */
   setCreateStagehand(factory: () => Promise<V3>): void {
     this.createStagehand = factory;
@@ -91,11 +91,11 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
 
   /**
    * Get the Stagehand instance for a specific thread.
-   * In 'none' mode, returns the shared instance.
-   * In 'browser' mode, returns the thread's dedicated instance.
+   * In 'shared' mode, returns the shared instance.
+   * In 'thread' mode, returns the thread's dedicated instance.
    */
   getStagehandForThread(threadId: string): V3 | undefined {
-    if (this.isolation === 'browser') {
+    if (this.scope === 'thread') {
       const session = this.sessions.get(threadId);
       return session?.stagehand;
     }
@@ -132,10 +132,10 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       browserState: savedState,
     };
 
-    if (this.isolation === 'browser') {
-      // Full browser isolation - create a new Stagehand instance
+    if (this.scope === 'thread') {
+      // Full thread scope - create a new Stagehand instance
       if (!this.createStagehand) {
-        throw new Error('createStagehand factory not set - required for browser isolation');
+        throw new Error('createStagehand factory not set - required for thread scope');
       }
 
       this.logger?.debug?.(`Creating dedicated Stagehand instance for thread ${threadId}`);
@@ -153,7 +153,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       // This is done after restoration so the screencast starts on the correct active page
       this.onBrowserCreated?.(stagehand, threadId);
     }
-    // For 'none' isolation, no session setup needed - all threads share the instance
+    // For 'shared' scope, no session setup needed - all threads share the instance
 
     return session;
   }
@@ -197,8 +197,8 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
 
   /**
    * Switch to an existing session.
-   * For 'browser' mode, no switching needed - each thread has its own instance.
-   * For 'none' mode, nothing to switch.
+   * For 'thread' mode, no switching needed - each thread has its own instance.
+   * For 'shared' mode, nothing to switch.
    */
   protected override async switchToSession(_session: StagehandThreadSession): Promise<void> {
     // No-op for both modes - 'browser' has separate instances, 'none' shares everything
@@ -208,7 +208,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    * Get the manager for a specific session.
    */
   protected override getManagerForSession(session: StagehandThreadSession): V3Page | V3 {
-    if (this.isolation === 'browser' && session.stagehand) {
+    if (this.scope === 'thread' && session.stagehand) {
       return session.stagehand.context.activePage() ?? session.stagehand;
     }
     return this.getSharedManager();
@@ -218,7 +218,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    * Destroy a session and clean up resources.
    */
   protected override async doDestroySession(session: StagehandThreadSession): Promise<void> {
-    if (this.isolation === 'browser' && session.stagehand) {
+    if (this.scope === 'thread' && session.stagehand) {
       // Close the dedicated Stagehand instance
       try {
         await session.stagehand.close();
@@ -228,7 +228,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       }
       this.threadStagehands.delete(session.threadId);
     }
-    // For 'none' mode, nothing to clean up - all threads share the instance
+    // For 'shared' mode, nothing to clean up - all threads share the instance
   }
 
   /**

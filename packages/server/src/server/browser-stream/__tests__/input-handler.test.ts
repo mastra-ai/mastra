@@ -13,6 +13,8 @@ describe('handleInputMessage', () => {
       ensureReady: vi.fn().mockResolvedValue(undefined),
       getCurrentUrl: vi.fn().mockReturnValue('about:blank'),
       getLastUrl: vi.fn().mockReturnValue('https://example.com'),
+      getLastBrowserState: vi.fn().mockReturnValue({ tabs: [{ url: 'https://example.com' }], activeTabIndex: 0 }),
+      setCurrentThread: vi.fn(),
       navigateTo: vi.fn().mockResolvedValue(undefined),
     } as unknown as MastraBrowser;
 
@@ -63,6 +65,7 @@ describe('handleInputMessage', () => {
             x: 100,
             y: 200,
           }),
+          undefined, // threadId
         );
       });
     });
@@ -88,6 +91,7 @@ describe('handleInputMessage', () => {
             button: 'left',
             clickCount: 1,
           }),
+          undefined, // threadId
         );
       });
     });
@@ -111,6 +115,7 @@ describe('handleInputMessage', () => {
             deltaX: 0,
             deltaY: -120,
           }),
+          undefined, // threadId
         );
       });
     });
@@ -132,6 +137,7 @@ describe('handleInputMessage', () => {
             type: 'keyDown',
             key: 'a',
           }),
+          undefined, // threadId
         );
       });
     });
@@ -151,6 +157,7 @@ describe('handleInputMessage', () => {
             type: 'char',
             text: 'a',
           }),
+          undefined, // threadId
         );
       });
     });
@@ -171,19 +178,8 @@ describe('handleInputMessage', () => {
             key: 'Enter',
             windowsVirtualKeyCode: 13,
           }),
+          undefined, // threadId
         );
-      });
-    });
-  });
-
-  describe('relaunch input', () => {
-    it('should call ensureReady and restore URL on relaunch', async () => {
-      const message = JSON.stringify({ type: 'relaunch' });
-
-      handleInputMessage(message, getToolset, 'agent-1');
-
-      await vi.waitFor(() => {
-        expect(mockToolset.ensureReady).toHaveBeenCalled();
       });
     });
   });

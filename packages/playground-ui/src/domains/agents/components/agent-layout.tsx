@@ -62,6 +62,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
           </>
         )}
       </Group>
+      {/* Browser modal overlay - center view mode */}
       {browserOverlay}
     </div>
   );

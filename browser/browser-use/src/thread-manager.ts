@@ -50,7 +50,7 @@ export class BrowserUseThreadManager extends ThreadManager<BrowserSessionInfo> {
   private readonly threadSessions = new Map<string, BrowserSessionInfo>();
 
   constructor(config: BrowserUseThreadManagerConfig) {
-    super({ isolation: config.isolation, logger: config.logger });
+    super({ scope: config.scope, logger: config.logger });
     this.browserConfig = config.browserConfig;
     this.onSessionCreatedCallback = config.onSessionCreated;
 

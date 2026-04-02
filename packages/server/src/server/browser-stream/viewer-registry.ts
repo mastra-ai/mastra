@@ -11,6 +11,7 @@ interface ScreencastStreamLike {
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): void;
   on(event: 'stop', handler: (reason: string) => void): void;
   on(event: 'error', handler: (error: Error) => void): void;
+  on(event: 'url', handler: (url: string) => void): void;
   stop(): Promise<void>;
 }
 
@@ -59,6 +60,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
   /** Map of agentId to last known viewport dimensions (for change detection) */
   private lastViewports = new Map<string, { width: number; height: number }>();
 
+  /** Map of viewerKey to last broadcast status (for replay to new viewers) */
+  private lastStatuses = new Map<string, string>();
+
   /**
    * Add a viewer for an agent. Starts screencast if this is the first viewer.
    *
@@ -89,6 +93,36 @@ export class ViewerRegistry implements ViewerRegistryLike {
     // Use agentId for toolset lookup, viewerKey for registry keying
     if (wasEmpty) {
       await this.startScreencast(viewerKey, getToolset, agentId ?? viewerKey, threadId);
+    } else {
+      // Send current state to new viewer (screencast already running)
+      this.sendCurrentState(viewerKey, ws);
+    }
+  }
+
+  /**
+   * Send current state (URL, viewport) to a newly connected viewer.
+   */
+  private sendCurrentState(viewerKey: string, ws: BrowserStreamWebSocket): void {
+    try {
+      // Send last known URL
+      const lastUrl = this.lastUrls.get(viewerKey);
+      if (lastUrl) {
+        ws.send(JSON.stringify({ url: lastUrl }));
+      }
+
+      // Send last known viewport
+      const lastViewport = this.lastViewports.get(viewerKey);
+      if (lastViewport) {
+        ws.send(JSON.stringify({ viewport: lastViewport }));
+      }
+
+      // Send actual current status (not always 'streaming')
+      const lastStatus = this.lastStatuses.get(viewerKey);
+      if (lastStatus) {
+        ws.send(JSON.stringify({ status: lastStatus }));
+      }
+    } catch (error) {
+      console.warn('[ViewerRegistry] Error sending current state to new viewer:', error);
     }
   }
 
@@ -157,6 +191,11 @@ export class ViewerRegistry implements ViewerRegistryLike {
    * @param status - The status message to send
    */
   broadcastStatus(viewerKey: string, status: StatusMessage): void {
+    // Track last status for replay to new viewers
+    if (status.status) {
+      this.lastStatuses.set(viewerKey, status.status);
+    }
+
     const viewerSet = this.viewers.get(viewerKey);
     if (!viewerSet) {
       return;
@@ -245,6 +284,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
     // Register callback for browser restarts (external close + re-launch)
     // This ensures screencast reconnects after browser is externally closed
+    // Pass threadId so callback only fires when that specific thread's browser is ready
     if (!this.browserReadyCleanups.has(viewerKey)) {
       const cleanup = toolset.onBrowserReady(() => {
         // Only start if we still have viewers
@@ -265,12 +305,13 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.doStartScreencast(viewerKey, toolset, threadId).catch(error => {
           console.error(`[ViewerRegistry] Failed to start screencast on browser ready for ${viewerKey}:`, error);
         });
-      });
+      }, threadId);
       this.browserReadyCleanups.set(viewerKey, cleanup);
     }
 
     // Register callback for browser closed (external close detection)
     // This ensures UI shows "browser closed" overlay immediately
+    // Pass threadId so callback only fires when that specific thread's browser closes
     if (!this.browserClosedCleanups.has(viewerKey)) {
       const cleanup = toolset.onBrowserClosed(() => {
         console.info(`[ViewerRegistry] Browser closed for ${viewerKey}, notifying viewers...`);
@@ -278,7 +319,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.screencasts.delete(viewerKey);
         // Broadcast browser_closed status to UI
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
-      });
+      }, threadId);
       this.browserClosedCleanups.set(viewerKey, cleanup);
     }
 
@@ -328,19 +369,31 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
       this.screencasts.set(viewerKey, stream);
 
+      // Capture reference to guard against stale callbacks from superseded streams
+      const currentStream = stream;
+
       // Wire up frame events + viewport tracking
       stream.on('frame', frame => {
+        // Ignore frames from superseded streams
+        if (this.screencasts.get(viewerKey) !== currentStream) return;
         this.broadcastFrame(viewerKey, frame.data);
         this.broadcastViewportIfChanged(viewerKey, frame.viewport);
       });
 
       // Wire up URL change events (emitted by browser providers on navigation)
       stream.on('url', (url: string) => {
+        // Ignore URL updates from superseded streams
+        if (this.screencasts.get(viewerKey) !== currentStream) return;
         this.broadcastUrlIfChanged(viewerKey, url);
       });
 
       // Wire up stop events
       stream.on('stop', reason => {
+        // Ignore stop events from superseded streams (e.g., old stream stopping after reconnect)
+        if (this.screencasts.get(viewerKey) !== currentStream) {
+          console.info(`[ViewerRegistry] Ignoring stop from superseded stream for ${viewerKey}`);
+          return;
+        }
         console.info(`[ViewerRegistry] Screencast stopped for ${viewerKey}: ${reason}`);
         this.screencasts.delete(viewerKey);
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
@@ -348,6 +401,8 @@ export class ViewerRegistry implements ViewerRegistryLike {
 
       // Wire up error events
       stream.on('error', error => {
+        // Ignore errors from superseded streams
+        if (this.screencasts.get(viewerKey) !== currentStream) return;
         console.error(`[ViewerRegistry] Screencast error for ${viewerKey}:`, error);
       });
 
@@ -408,34 +463,35 @@ export class ViewerRegistry implements ViewerRegistryLike {
    * Stops screencast and broadcasts browser_closed status.
    * Call this before calling toolset.close() to ensure UI is notified.
    *
-   * @param agentId - The agent ID
+   * @param viewerKey - The viewer key (agentId or agentId:threadId for thread-scoped)
    */
-  async closeBrowserSession(agentId: string): Promise<void> {
+  async closeBrowserSession(viewerKey: string): Promise<void> {
     // NOTE: Do NOT clean up the onBrowserReady callback here.
     // Viewers are still connected (WebSocket stays open), so we need
     // the callback to fire when the browser relaunches from a subsequent
     // tool call. Callback cleanup only happens in removeViewer() when
     // the last viewer disconnects.
 
-    // Clear URL and viewport tracking so next session sends fresh data
-    this.lastUrls.delete(agentId);
-    this.lastViewports.delete(agentId);
+    // Clear URL, viewport, and status tracking so next session sends fresh data
+    this.lastUrls.delete(viewerKey);
+    this.lastViewports.delete(viewerKey);
+    this.lastStatuses.delete(viewerKey);
 
     // Stop screencast if active
-    const stream = this.screencasts.get(agentId);
+    const stream = this.screencasts.get(viewerKey);
     if (stream) {
       try {
         await stream.stop();
         // Note: stream.stop() emits 'stop' event which triggers broadcastStatus
       } catch (error) {
-        console.warn(`[ViewerRegistry] Error stopping screencast for ${agentId}:`, error);
+        console.warn(`[ViewerRegistry] Error stopping screencast for ${viewerKey}:`, error);
         // Still broadcast browser_closed even if stop fails
-        this.screencasts.delete(agentId);
-        this.broadcastStatus(agentId, { status: 'browser_closed' });
+        this.screencasts.delete(viewerKey);
+        this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       }
     } else {
       // No active screencast, but still broadcast browser_closed
-      this.broadcastStatus(agentId, { status: 'browser_closed' });
+      this.broadcastStatus(viewerKey, { status: 'browser_closed' });
     }
   }
 }

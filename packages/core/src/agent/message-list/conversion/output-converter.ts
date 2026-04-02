@@ -291,6 +291,55 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
+ *
+ * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
+ * assistant file parts (fixed in v6 but not backported). This causes providers
+ * like Google Gemini to reject round-tripped responses that require metadata
+ * (e.g. `thoughtSignature` on generated images).
+ *
+ * We collect all `providerMetadata` values from assistant `file` UI parts in
+ * order, then walk the model messages and assign them to assistant `file` parts
+ * in the same order. The ordering is guaranteed to be preserved.
+ */
+function restoreAssistantFileProviderMetadata(
+  modelMessages: AIV5Type.ModelMessage[],
+  uiMessages: AIV5Type.UIMessage[],
+): AIV5Type.ModelMessage[] {
+  // Collect providerMetadata from ALL assistant file UI parts in order,
+  // using undefined as a placeholder for parts without metadata so that
+  // the indices stay aligned with the model-side file parts.
+  const fileMetadata: (AIV5Type.ProviderMetadata | undefined)[] = [];
+  for (const msg of uiMessages) {
+    if (msg.role !== 'assistant') continue;
+    for (const part of msg.parts) {
+      if (part.type === 'file') {
+        fileMetadata.push(part.providerMetadata ?? undefined);
+      }
+    }
+  }
+
+  if (fileMetadata.length === 0 || fileMetadata.every(m => m == null)) return modelMessages;
+
+  // Walk model messages and restore providerOptions on assistant file parts
+  let metadataIndex = 0;
+  return modelMessages.map(msg => {
+    if (msg.role !== 'assistant' || typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'file' || metadataIndex >= fileMetadata.length) return part;
+      const metadata = fileMetadata[metadataIndex++];
+      if (part.providerOptions || !metadata) return part;
+      modified = true;
+      return { ...part, providerOptions: metadata };
+    });
+
+    return modified ? { ...msg, content } : msg;
+  });
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -305,47 +354,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 ): AIV5Type.ModelMessage[] {
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
-  const result = AIV5.convertToModelMessages(preprocessed);
 
-  // Build a lookup of toolCallId → stored modelOutput from providerMetadata.mastra.modelOutput.
-  // This allows toModelOutput results computed at tool execution time to be preserved
-  // in the model prompt without re-running the transformation.
-  const storedModelOutputs = new Map<string, unknown>();
-  for (const dbMsg of dbMessages) {
-    if (dbMsg.content?.format === 2 && dbMsg.content.parts) {
-      for (const part of dbMsg.content.parts) {
-        if (
-          part.type === 'tool-invocation' &&
-          part.toolInvocation?.state === 'result' &&
-          part.providerMetadata?.mastra &&
-          typeof part.providerMetadata.mastra === 'object' &&
-          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
-        ) {
-          storedModelOutputs.set(
-            part.toolInvocation.toolCallId,
-            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-          );
-        }
-      }
-    }
-  }
-
-  // Apply stored modelOutput to tool-result parts in model messages
-  if (storedModelOutputs.size > 0) {
-    for (const modelMsg of result) {
-      if (modelMsg.role === 'tool' && Array.isArray(modelMsg.content)) {
-        for (let i = 0; i < modelMsg.content.length; i++) {
-          const part = modelMsg.content[i]!;
-          if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-            modelMsg.content[i] = {
-              ...part,
-              output: storedModelOutputs.get(part.toolCallId) as any,
-            };
-          }
-        }
-      }
-    }
-  }
+  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion

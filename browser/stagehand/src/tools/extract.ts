@@ -14,9 +14,10 @@ export function createExtractTool(browser: StagehandBrowser) {
       'Extract structured data from the page using natural language. Can optionally provide a JSON schema for the expected data structure.',
     inputSchema: extractInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return await browser.extract(input);
+      return await browser.extract(input, threadId);
     },
   });
 }

@@ -46,6 +46,8 @@ function normalizeErrorInfo(error: SpanRecord['error']): RecordedErrorInfo {
   return {
     message: error.message,
     id: 'id' in error && typeof error.id === 'string' ? error.id : undefined,
+    name: 'name' in error && typeof error.name === 'string' ? error.name : undefined,
+    stack: 'stack' in error && typeof error.stack === 'string' ? error.stack : undefined,
     domain: 'domain' in error && typeof error.domain === 'string' ? error.domain : undefined,
     category: 'category' in error && typeof error.category === 'string' ? error.category : undefined,
     details:
@@ -211,6 +213,8 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   public readonly errorInfo?: {
     message: string;
     id?: string;
+    name?: string;
+    stack?: string;
     domain?: string;
     category?: string;
     details?: Record<string, any>;

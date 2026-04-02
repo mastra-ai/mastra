@@ -93,7 +93,8 @@ export class ScreencastStream extends EventEmitter {
       this.frameHandler = (params: CdpScreencastFrame) => {
         const frameData: ScreencastFrameData = {
           data: params.data,
-          timestamp: params.metadata?.timestamp ?? Date.now(),
+          // CDP provides timestamp in seconds, convert to milliseconds for consistency
+          timestamp: params.metadata?.timestamp ? params.metadata.timestamp * 1000 : Date.now(),
           viewport: {
             width: params.metadata?.deviceWidth ?? 0,
             height: params.metadata?.deviceHeight ?? 0,
@@ -114,13 +115,27 @@ export class ScreencastStream extends EventEmitter {
       this.cdpSession.on('Page.screencastFrame', this.frameHandler);
 
       // Start screencast via CDP
-      await this.cdpSession.send('Page.startScreencast', {
-        format: this.options.format,
-        quality: this.options.quality,
-        maxWidth: this.options.maxWidth,
-        maxHeight: this.options.maxHeight,
-        everyNthFrame: this.options.everyNthFrame,
-      });
+      try {
+        await this.cdpSession.send('Page.startScreencast', {
+          format: this.options.format,
+          quality: this.options.quality,
+          maxWidth: this.options.maxWidth,
+          maxHeight: this.options.maxHeight,
+          everyNthFrame: this.options.everyNthFrame,
+        });
+      } catch (startError) {
+        // Clean up handler before re-throwing to prevent resource leak
+        if (this.cdpSession?.off) {
+          try {
+            this.cdpSession.off('Page.screencastFrame', this.frameHandler);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+        this.frameHandler = null;
+        this.cdpSession = null;
+        throw startError;
+      }
 
       this.active = true;
     } catch (error) {
@@ -197,6 +212,7 @@ export class ScreencastStream extends EventEmitter {
    * Use this when the active page/tab changes.
    *
    * @returns Promise that resolves when reconnection is complete
+   * @throws Error if reconnection fails (also emits 'error' event)
    */
   async reconnect(): Promise<void> {
     // Clean up existing session
@@ -226,8 +242,10 @@ export class ScreencastStream extends EventEmitter {
     try {
       await this.start();
     } catch (error) {
-      console.error('[ScreencastStream.reconnect] Failed to reconnect:', error);
-      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[ScreencastStream.reconnect] Failed to reconnect:', err);
+      // Don't emit 'error' here - start() already emits it before rejecting
+      throw err;
     }
   }
 }

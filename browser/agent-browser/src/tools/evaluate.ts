@@ -12,9 +12,10 @@ export function createEvaluateTool(browser: AgentBrowser) {
       'Execute JavaScript in the browser. Use for complex interactions not covered by other tools. Returns the script result.',
     inputSchema: evaluateInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.evaluate(input);
+      return browser.evaluate(input, threadId);
     },
   });
 }

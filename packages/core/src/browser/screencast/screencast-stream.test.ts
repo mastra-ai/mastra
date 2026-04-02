@@ -223,7 +223,8 @@ describe('ScreencastStream', () => {
       expect(emittedFrame.viewport.height).toBe(720);
       expect(emittedFrame.viewport.scrollOffsetY).toBe(100);
       expect(emittedFrame.sessionId).toBe(1);
-      expect(emittedFrame.timestamp).toBe(12345);
+      // CDP timestamp is in seconds, converted to milliseconds
+      expect(emittedFrame.timestamp).toBe(12345 * 1000);
     });
 
     it('acknowledges frames via Page.screencastFrameAck', async () => {

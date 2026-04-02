@@ -134,7 +134,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
       browserState: savedState,
     };
 
-    if (this.isolation === 'browser') {
+    if (this.scope === 'thread') {
       // Full browser isolation - spawn a new browser process
       const connection = await this.spawnBrowserForThread(threadId);
       session.connection = connection;
@@ -144,7 +144,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
       // State restoration happens in BrowserViewer after CDP connection is established
       this.onBrowserCreated?.(connection, threadId);
     }
-    // For 'none' isolation, no session setup needed - all threads share the connection
+    // For 'shared' scope, no session setup needed - all threads share the connection
 
     return session;
   }
@@ -238,7 +238,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
    * Get the browser connection for a specific session.
    */
   protected getManagerForSession(session: BrowserViewerSession): ThreadCdpConnection {
-    if (this.isolation === 'browser' && session.connection) {
+    if (this.scope === 'thread' && session.connection) {
       return session.connection;
     }
     return this.getSharedManager();

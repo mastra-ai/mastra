@@ -1,149 +1,204 @@
-import { Globe } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
 import { BrowserViewFrame } from './browser-view-frame';
-import { BrowserViewHeader } from './browser-view-header';
+import { IconButton } from '@/ds/components/IconButton';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import { cn } from '@/lib/utils';
 
-type ViewState = 'expanded' | 'minimized' | 'tucked';
-
-interface BrowserViewPanelProps {
-  agentId: string;
-  threadId: string;
+/**
+ * Get StatusBadge configuration based on stream status
+ */
+function getStatusBadgeConfig(status: StreamStatus): {
+  variant: 'success' | 'warning' | 'error' | 'neutral';
+  pulse: boolean;
+  label: string;
+} {
+  switch (status) {
+    case 'idle':
+      return { variant: 'neutral', pulse: false, label: 'Idle' };
+    case 'connecting':
+      return { variant: 'warning', pulse: true, label: 'Connecting' };
+    case 'connected':
+      return { variant: 'warning', pulse: true, label: 'Connected' };
+    case 'browser_starting':
+      return { variant: 'warning', pulse: true, label: 'Starting' };
+    case 'streaming':
+      return { variant: 'success', pulse: false, label: 'Live' };
+    case 'browser_closed':
+      return { variant: 'neutral', pulse: false, label: 'Closed' };
+    case 'disconnected':
+      return { variant: 'error', pulse: true, label: 'Disconnected' };
+    case 'error':
+      return { variant: 'error', pulse: false, label: 'Error' };
+    default:
+      return { variant: 'neutral', pulse: false, label: 'Unknown' };
+  }
 }
 
 /**
- * Browser view panel that assembles frame and header components.
- * Renders as an overlay positioned absolutely over the right portion of the layout.
+ * Full-screen modal browser view (center view mode).
  *
- * States:
- * - Hidden: translated off-screen (isActive=false)
- * - Expanded: full-height overlay on the right
- * - Minimized: mini browser window in top-right corner
- * - Tucked: small pill in top-right corner, click to restore
+ * Shows the browser screencast in a large centered modal with:
+ * - URL bar and status
+ * - Browser actions below the screencast
+ * - Controls to minimize, switch to sidebar, or close
  *
- * IMPORTANT: Always mounted to preserve WebSocket connection.
- * BrowserViewFrame is always at the same tree position to avoid remounts.
+ * The panel is always mounted to preserve WebSocket connection.
+ * Visibility is controlled via viewMode in browser session context.
  */
-export function BrowserViewPanel({ agentId, threadId }: BrowserViewPanelProps) {
-  const { isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
-  const [isClosing, setIsClosing] = useState(false);
-  const [viewState, setViewState] = useState<ViewState>('minimized');
+export function BrowserViewPanel() {
+  const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
+  const [isVisible, setIsVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  const handleStatusChange = useCallback(
-    (newStatus: StreamStatus) => {
-      setStatus(newStatus);
+  const isPanelOpen = viewMode === 'modal';
 
-      if (newStatus === 'streaming') {
-        show();
-        setIsClosing(false);
-      }
-    },
-    [setStatus, show],
-  );
+  // Track visibility separately to allow animation
+  useEffect(() => {
+    if (isPanelOpen) {
+      requestAnimationFrame(() => setIsVisible(true));
+    } else {
+      setIsVisible(false);
+    }
+  }, [isPanelOpen]);
 
-  const handleUrlChange = useCallback(
-    (url: string | null) => {
-      setCurrentUrl(url);
-    },
-    [setCurrentUrl],
-  );
+  // Focus management: trap focus in dialog and restore on close
+  useEffect(() => {
+    if (isPanelOpen) {
+      // Store the previously focused element
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      // Focus the dialog
+      dialogRef.current?.focus();
+    } else if (previousFocusRef.current) {
+      // Restore focus when closing
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    }
+  }, [isPanelOpen]);
 
   const handleClose = useCallback(async () => {
-    if (isClosing) return;
-    setIsClosing(true);
+    await closeBrowser();
+  }, [closeBrowser]);
+
+  const handleMinimize = useCallback(() => {
     hide();
+  }, [hide]);
 
+  const handleOpenSidebar = useCallback(() => {
+    setViewMode('sidebar');
+  }, [setViewMode]);
+
+  const handleOpenExternal = useCallback(() => {
+    if (!currentUrl) return;
+
+    // Validate URL to prevent javascript:/data: scheme attacks
     try {
-      const response = await fetch(`/api/agents/${agentId}/browser/close`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('[BrowserViewPanel] Failed to close browser:', response.statusText);
+      const url = new URL(currentUrl);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        window.open(url.href, '_blank', 'noopener,noreferrer');
       }
-    } catch (error) {
-      console.error('[BrowserViewPanel] Error closing browser:', error);
-    } finally {
-      setIsClosing(false);
+    } catch {
+      // Invalid URL, ignore
     }
-  }, [agentId, isClosing, hide]);
+  }, [currentUrl]);
 
-  const handleFirstFrame = useCallback(() => {
-    show();
-    setIsClosing(false);
-  }, [show]);
+  // Handle escape key to minimize
+  useEffect(() => {
+    if (!isPanelOpen) return;
 
-  const handleToggleCollapse = useCallback(() => {
-    setViewState(prev => (prev === 'expanded' ? 'minimized' : 'expanded'));
-  }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        hide();
+      }
+    };
 
-  const handleTuck = useCallback(() => {
-    setViewState('tucked');
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isPanelOpen, hide]);
 
-  const handleUntuck = useCallback(() => {
-    setViewState('minimized');
-  }, []);
+  // Handle backdrop click to minimize
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) {
+        hide();
+      }
+    },
+    [hide],
+  );
 
-  const isTucked = viewState === 'tucked';
-  const isMinimized = viewState === 'minimized';
-  const isExpanded = viewState === 'expanded';
-  const isLive = status === 'streaming';
+  const statusConfig = getStatusBadgeConfig(status);
 
   return (
-    <>
-      {/* Tucked pill — visible only when active + tucked */}
-      {isActive && isTucked && (
-        <button
-          type="button"
-          onClick={handleUntuck}
-          className="absolute top-2 right-2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface2 border border-border1 shadow-lg hover:bg-surface3 transition-colors"
-        >
-          <Globe className="h-3.5 w-3.5 text-neutral4" />
-          <span className="text-xs font-medium text-neutral4">Browser</span>
-          <StatusBadge variant={isLive ? 'success' : 'neutral'} size="sm" withDot pulse={isLive}>
-            {isLive ? 'Live' : 'Idle'}
-          </StatusBadge>
-        </button>
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex items-center justify-center p-8',
+        'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
+        isPanelOpen && isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}
-
-      {/* Main overlay — always rendered at the same tree position to preserve WebSocket */}
+      onClick={handleBackdropClick}
+      aria-hidden={!isPanelOpen}
+    >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Browser view"
+        tabIndex={-1}
         className={cn(
-          'absolute z-10 shadow-xl transition-all duration-300 ease-in-out',
-          isActive && !isTucked
-            ? isMinimized
-              ? 'top-2 right-2 w-[480px] h-80 rounded-lg'
-              : 'inset-y-0 right-0 w-[40%]'
-            : 'inset-y-0 right-0 w-[40%] translate-x-full',
+          'flex flex-col w-full max-w-5xl max-h-full',
+          'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
+          'transition-transform duration-200 outline-none',
+          isPanelOpen && isVisible ? 'scale-100' : 'scale-95',
         )}
+        onClick={e => e.stopPropagation()}
       >
-        <div className={cn('flex flex-col bg-surface2 overflow-hidden', isMinimized ? 'rounded-lg' : 'h-full')}>
-          {!isTucked && (
-            <BrowserViewHeader
-              url={currentUrl}
-              status={status}
-              isCollapsed={isMinimized}
-              onClose={handleClose}
-              onToggleCollapse={handleToggleCollapse}
-              onTuck={isMinimized ? handleTuck : undefined}
-            />
-          )}
-          <div className={cn('shrink-0', isMinimized && 'flex-1 min-h-0 p-1')}>
-            <BrowserViewFrame
-              agentId={agentId}
-              threadId={threadId}
-              onStatusChange={handleStatusChange}
-              onUrlChange={handleUrlChange}
-              onFirstFrame={handleFirstFrame}
-            />
+        {/* Header with URL bar and controls */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border1 shrink-0">
+          <Globe className="h-4 w-4 text-neutral4 shrink-0" />
+          <div className="flex-1 min-w-0 px-3 py-1.5 bg-surface3 rounded-md border border-border1">
+            <span className={cn('text-sm truncate block', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
+              {currentUrl || 'No URL'}
+            </span>
           </div>
-          {isExpanded && <BrowserToolCallHistory className="flex-1 min-h-0" />}
+          <StatusBadge variant={statusConfig.variant} size="sm" withDot pulse={statusConfig.pulse}>
+            {statusConfig.label}
+          </StatusBadge>
+          <div className="flex items-center gap-1 ml-2">
+            <IconButton variant="ghost" size="sm" tooltip="Open in sidebar" onClick={handleOpenSidebar}>
+              <PanelRight className="h-4 w-4" />
+            </IconButton>
+            <IconButton variant="ghost" size="sm" tooltip="Minimize to chat" onClick={handleMinimize}>
+              <Minimize2 className="h-4 w-4" />
+            </IconButton>
+            {currentUrl && (
+              <IconButton variant="ghost" size="sm" tooltip="Open in new tab" onClick={handleOpenExternal}>
+                <ExternalLink className="h-4 w-4" />
+              </IconButton>
+            )}
+            <IconButton variant="ghost" size="sm" tooltip="Close browser" onClick={handleClose}>
+              <X className="h-4 w-4" />
+            </IconButton>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Screencast */}
+          <div className="p-4">
+            <BrowserViewFrame className="w-full max-h-[60vh]" />
+          </div>
+
+          {/* Browser actions history */}
+          <div className="px-4 pb-4">
+            <BrowserToolCallHistory />
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

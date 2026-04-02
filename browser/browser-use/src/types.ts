@@ -1,6 +1,6 @@
-import type { BrowserConfig as BaseBrowserConfig, ThreadIsolationMode } from '@mastra/core/browser';
+import type { BrowserConfig as BaseBrowserConfig, BrowserScope } from '@mastra/core/browser';
 
-export type { ThreadIsolationMode };
+export type { BrowserScope };
 
 /**
  * Configuration options for BrowserUseBrowser.
@@ -37,10 +37,11 @@ export interface BrowserConfig extends Omit<BaseBrowserConfig, 'headless' | 'cdp
 
   /**
    * Browser screen dimensions.
+   * When provided, both width and height must be specified.
    */
   viewport?: {
-    width?: number;
-    height?: number;
+    width: number;
+    height: number;
   };
 
   /**
@@ -48,6 +49,18 @@ export interface BrowserConfig extends Omit<BaseBrowserConfig, 'headless' | 'cdp
    * @default false
    */
   enableRecording?: boolean;
+
+  /**
+   * Whether to automatically reconnect when the browser disconnects.
+   * @default false
+   */
+  autoReconnect?: boolean;
+
+  /**
+   * Delay in milliseconds before attempting to reconnect.
+   * @default 1000
+   */
+  reconnectDelay?: number;
 }
 
 /**

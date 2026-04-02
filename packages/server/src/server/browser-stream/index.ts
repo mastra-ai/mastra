@@ -26,7 +26,6 @@ export type {
   BrowserStreamConfig,
   MouseInputMessage,
   KeyboardInputMessage,
-  RelaunchInputMessage,
   ClientInputMessage,
   ViewportMessage,
   BrowserStreamWebSocket,

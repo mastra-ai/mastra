@@ -1,5 +1,72 @@
 # @mastra/playground-ui
 
+## 21.0.1-alpha.1
+
+### Patch Changes
+
+- Updated scores metrics to use aggregate and time series APIs instead of fetching raw scores. Scores Over Time chart now always shows hourly data points regardless of the selected time range. Avg Score KPI uses weighted averages via the aggregate API. Updated metrics card layout to use flexible row heights and refined chart legend styling. ([#14937](https://github.com/mastra-ai/mastra/pull/14937))
+
+- Fixed deep links for scorer, observability, and agent trace dialogs. ([#14970](https://github.com/mastra-ai/mastra/pull/14970))
+
+  Developers can now share and reload URLs that keep the selected trace, scoring tab, span, and score in Studio.
+
+  **Before**
+  `/observability`
+  `/agents/chef-agent/traces`
+  `/evaluation/scorers/response-quality`
+
+  **After**
+  `/observability?traceId=...&spanId=...&tab=scores&scoreId=...`
+  `/agents/chef-agent/traces?traceId=...&spanId=...&tab=scores&scoreId=...`
+  `/evaluation/scorers/response-quality?entity=...&scoreId=...`
+
+  This makes review links reliable across the scorer page, observability, and the agent traces view.
+
+- Fixed light theme visibility for metrics charts: CartesianGrid lines now adapt to the current theme, and HorizontalBars use reduced opacity in light mode so labels remain readable. Updated MetricsCard minimum height. ([#14975](https://github.com/mastra-ai/mastra/pull/14975))
+
+- Updated dependencies [[`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6)]:
+  - @mastra/core@1.22.0-alpha.1
+  - @mastra/client-js@1.12.1-alpha.1
+  - @mastra/react@0.2.22-alpha.1
+
+## 21.0.1-alpha.0
+
+### Patch Changes
+
+- Added gateway memory indicator in Studio agent memory panel. When an agent uses gateway-backed memory, the panel hides local-only sections (search, working memory, config) and shows a "Memory Gateway" badge instead. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+- Updated dependencies [[`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0-alpha.0
+  - @mastra/client-js@1.12.1-alpha.0
+  - @mastra/react@0.2.22-alpha.0
+
+## 21.0.0
+
+### Patch Changes
+
+- Added component tests for StudioConfigForm apiPrefix handling to validate the fix for issue #14634. ([#14893](https://github.com/mastra-ai/mastra/pull/14893))
+
+- Fixed broken colors in DataDetailsPanelCodeSection when using Light theme by adding theme-aware CodeMirror styling and container classes ([#14923](https://github.com/mastra-ai/mastra/pull/14923))
+
+- Fixed SearchFieldBlock search icon sizing and vertical alignment to properly scale across all input sizes (sm, md, default, lg) ([#14927](https://github.com/mastra-ai/mastra/pull/14927))
+
+- Reverted HorizontalBars layout to original inline style with label overlaid inside the bar and total displayed to the right ([#14919](https://github.com/mastra-ai/mastra/pull/14919))
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`edf8f9d`](https://github.com/mastra-ai/mastra/commit/edf8f9d9cd671ffbc8533ac154da6c3386799b33), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0
+  - @mastra/client-js@1.12.0
+  - @mastra/ai-sdk@1.3.0
+  - @mastra/react@0.2.21
+
+## 21.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0-alpha.2
+  - @mastra/client-js@1.12.0-alpha.2
+  - @mastra/react@0.2.21-alpha.2
+
 ## 21.0.0-alpha.1
 
 ### Patch Changes

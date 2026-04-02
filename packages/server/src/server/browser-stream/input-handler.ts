@@ -1,6 +1,27 @@
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from './types.js';
 
+// Valid CDP mouse event types
+const VALID_MOUSE_EVENTS = new Set(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel']);
+
+// Valid CDP keyboard event types
+const VALID_KEYBOARD_EVENTS = new Set(['keyDown', 'keyUp', 'char']);
+
+// Input dispatch queue per agent+thread to serialize input events
+const inputQueues = new Map<string, Promise<void>>();
+
+/**
+ * Serialize input dispatch to maintain event ordering.
+ * Input events must be processed in order to avoid race conditions.
+ */
+function enqueueInput(key: string, fn: () => Promise<void>): void {
+  const current = inputQueues.get(key) ?? Promise.resolve();
+  const next = current.then(fn).catch(() => {
+    // Errors are handled inside fn, just ensure chain continues
+  });
+  inputQueues.set(key, next);
+}
+
 /**
  * Map of key names to Windows virtual key codes.
  * Required for non-printable keys (Enter, Tab, Arrow keys, etc.)
@@ -101,28 +122,34 @@ export function handleInputMessage(
     return;
   }
 
+  // Serialize input dispatch per agent+thread to maintain event ordering
+  const queueKey = `${agentId}:${threadId ?? 'default'}`;
+
   switch (message.type) {
     case 'mouse':
-      void injectMouse(toolset, message, threadId).catch(err => {
-        if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset);
-        } else if (!isExpectedInjectionError(err)) {
-          console.warn('[InputHandler] Mouse injection error:', err);
+      enqueueInput(queueKey, async () => {
+        try {
+          await injectMouse(toolset, message, threadId);
+        } catch (err) {
+          if (isDisconnectionError(err)) {
+            notifyBrowserClosed(toolset, threadId);
+          } else if (!isExpectedInjectionError(err)) {
+            console.warn('[InputHandler] Mouse injection error:', err);
+          }
         }
       });
       break;
     case 'keyboard':
-      void injectKeyboard(toolset, message, threadId).catch(err => {
-        if (isDisconnectionError(err)) {
-          notifyBrowserClosed(toolset);
-        } else if (!isExpectedInjectionError(err)) {
-          console.warn('[InputHandler] Keyboard injection error:', err);
+      enqueueInput(queueKey, async () => {
+        try {
+          await injectKeyboard(toolset, message, threadId);
+        } catch (err) {
+          if (isDisconnectionError(err)) {
+            notifyBrowserClosed(toolset, threadId);
+          } else if (!isExpectedInjectionError(err)) {
+            console.warn('[InputHandler] Keyboard injection error:', err);
+          }
         }
-      });
-      break;
-    case 'relaunch':
-      void relaunchBrowser(toolset, threadId).catch(err => {
-        console.warn('[InputHandler] Browser relaunch error:', err);
       });
       break;
   }
@@ -137,8 +164,9 @@ export function handleInputMessage(
 function isDisconnectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
+  // Note: 'no cdp session' is handled by isExpectedInjectionError (startup race)
+  // and should not trigger browser closed state
   return (
-    msg.includes('no cdp session') ||
     msg.includes('target closed') ||
     msg.includes('browser has been closed') ||
     msg.includes('page has been closed') ||
@@ -166,37 +194,26 @@ function isExpectedInjectionError(err: unknown): boolean {
 /**
  * Notify the browser that it was closed externally.
  * This triggers the onBrowserClosed callbacks to update the UI.
+ * If threadId is provided and the browser supports thread-specific closing,
+ * only that thread's session is closed.
  */
-function notifyBrowserClosed(toolset: MastraBrowser): void {
-  // Call handleBrowserDisconnected if available (it's public on the implementations)
-  const browser = toolset as unknown as { handleBrowserDisconnected?: () => void };
-  if (typeof browser.handleBrowserDisconnected === 'function') {
-    browser.handleBrowserDisconnected();
-  }
-}
+function notifyBrowserClosed(toolset: MastraBrowser, threadId?: string): void {
+  const browser = toolset as unknown as {
+    closeThreadSession?: (threadId: string) => Promise<void>;
+    handleBrowserDisconnected?: () => void;
+  };
 
-/**
- * Relaunch the browser by calling ensureReady().
- * This is triggered when the user clicks the "Browser Closed" overlay.
- * If there was a previous URL, navigate back to it.
- */
-async function relaunchBrowser(toolset: MastraBrowser, threadId?: string): Promise<void> {
-  const lastState = toolset.getLastBrowserState(threadId);
-  const firstUrl = lastState?.tabs[0]?.url;
-  console.info(`[InputHandler] Relaunching browser...${firstUrl ? ` (restoring: ${firstUrl})` : ''}`);
-
-  // Set the current thread before ensuring ready so the session is created for this thread
-  if (threadId) {
-    toolset.setCurrentThread(threadId);
+  // For thread-scoped browsers, close only the specific thread's session
+  if (threadId && typeof browser.closeThreadSession === 'function') {
+    void browser.closeThreadSession(threadId).catch(() => {
+      // Fall back to global disconnect if thread-specific close fails
+      browser.handleBrowserDisconnected?.();
+    });
+    return;
   }
 
-  await toolset.ensureReady();
-
-  // Note: Full state restoration (multiple tabs) happens in createSession.
-  // This is a fallback for providers that don't support full restoration.
-  if (firstUrl && !lastState?.tabs.slice(1).length) {
-    await toolset.navigateTo(firstUrl);
-  }
+  // Fall back to global disconnect handling
+  browser.handleBrowserDisconnected?.();
 }
 
 // --- Input injection ---
@@ -243,6 +260,7 @@ async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage,
 
 /**
  * Type guard to validate incoming messages.
+ * Validates structure and rejects invalid event types at the boundary.
  */
 function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
   if (typeof msg !== 'object' || msg === null) {
@@ -252,14 +270,42 @@ function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
   const typed = msg as Record<string, unknown>;
 
   if (typed.type === 'mouse') {
-    return typeof typed.eventType === 'string' && typeof typed.x === 'number' && typeof typed.y === 'number';
+    // Validate mouse message structure
+    if (typeof typed.eventType !== 'string' || !VALID_MOUSE_EVENTS.has(typed.eventType)) {
+      return false;
+    }
+    if (typeof typed.x !== 'number' || typeof typed.y !== 'number') {
+      return false;
+    }
+    // Optional fields validation
+    if (typed.button !== undefined && typeof typed.button !== 'string') {
+      return false;
+    }
+    if (typed.deltaX !== undefined && typeof typed.deltaX !== 'number') {
+      return false;
+    }
+    if (typed.deltaY !== undefined && typeof typed.deltaY !== 'number') {
+      return false;
+    }
+    return true;
   }
 
   if (typed.type === 'keyboard') {
-    return typeof typed.eventType === 'string';
-  }
-
-  if (typed.type === 'relaunch') {
+    // Validate keyboard message structure
+    if (typeof typed.eventType !== 'string' || !VALID_KEYBOARD_EVENTS.has(typed.eventType)) {
+      return false;
+    }
+    // At least one of key, code, or text should be present for meaningful input
+    const hasKey = typeof typed.key === 'string';
+    const hasCode = typeof typed.code === 'string';
+    const hasText = typeof typed.text === 'string';
+    if (!hasKey && !hasCode && !hasText) {
+      return false;
+    }
+    // Optional modifiers validation
+    if (typed.modifiers !== undefined && typeof typed.modifiers !== 'number') {
+      return false;
+    }
     return true;
   }
 

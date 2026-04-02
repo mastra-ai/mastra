@@ -1,13 +1,13 @@
 /**
  * AgentBrowser Tool Schemas
  *
- * 17 flat schemas for browser tools. Each tool has a single-purpose schema
+ * Flat schemas for browser tools. Each tool has a single-purpose schema
  * without discriminated unions, making them easier for LLMs to understand.
  *
  * Tools:
- * - Core (9): goto, snapshot, click, type, press, select, scroll, screenshot, close
- * - Extended (7): hover, back, upload, dialog, wait, tabs, drag
- * - Escape Hatch (1): evaluate
+ * - Core: goto, snapshot, click, type, press, select, scroll, close
+ * - Extended: hover, back, dialog, wait, tabs, drag
+ * - Escape Hatch: evaluate
  */
 
 import { z } from 'zod';
@@ -78,12 +78,21 @@ export type PressInput = z.output<typeof pressInputSchema>;
 /**
  * browser_select - Select option from dropdown
  */
-export const selectInputSchema = z.object({
-  ref: z.string().describe('Select element ref from snapshot'),
-  value: z.string().optional().describe('Option value to select'),
-  label: z.string().optional().describe('Option label to select'),
-  index: z.number().optional().describe('Option index to select (0-based)'),
-});
+export const selectInputSchema = z
+  .object({
+    ref: z.string().describe('Select element ref from snapshot'),
+    value: z.string().optional().describe('Option value to select'),
+    label: z.string().optional().describe('Option label to select'),
+    index: z.number().int().min(0).optional().describe('Option index to select (0-based)'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.value === undefined && data.label === undefined && data.index === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one of value, label, or index is required',
+      });
+    }
+  });
 export type SelectInput = z.output<typeof selectInputSchema>;
 
 /**
@@ -95,15 +104,6 @@ export const scrollInputSchema = z.object({
   ref: z.string().optional().describe('Element ref to scroll (scrolls page if omitted)'),
 });
 export type ScrollInput = z.output<typeof scrollInputSchema>;
-
-/**
- * browser_screenshot - Take a screenshot
- */
-export const screenshotInputSchema = z.object({
-  ref: z.string().optional().describe('Element ref to screenshot (full page if omitted)'),
-  fullPage: z.boolean().optional().describe('Capture full scrollable page (default: false)'),
-});
-export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
 
 /**
  * browser_close - Close the browser
@@ -130,18 +130,10 @@ export const backInputSchema = z.object({});
 export type BackInput = z.output<typeof backInputSchema>;
 
 /**
- * browser_upload - Upload file(s) to a file input
- */
-export const uploadInputSchema = z.object({
-  ref: z.string().describe('File input element ref'),
-  files: z.array(z.string()).describe('File paths to upload'),
-});
-export type UploadInput = z.output<typeof uploadInputSchema>;
-
-/**
- * browser_dialog - Handle browser dialogs (alert, confirm, prompt)
+ * browser_dialog - Click an element that triggers a dialog and handle it
  */
 export const dialogInputSchema = z.object({
+  triggerRef: z.string().describe('Element ref that triggers the dialog (e.g., @e5)'),
   action: z.enum(['accept', 'dismiss']).describe('Accept or dismiss the dialog'),
   text: z.string().optional().describe('Text to enter for prompt dialogs'),
 });
@@ -163,20 +155,49 @@ export type WaitInput = z.output<typeof waitInputSchema>;
 /**
  * browser_tabs - Manage browser tabs
  */
-export const tabsInputSchema = z.object({
-  action: z.enum(['list', 'new', 'switch', 'close']).describe('Tab action'),
-  index: z.number().optional().describe('Tab index for switch/close'),
-  url: z.string().optional().describe('URL to open in new tab'),
-});
+export const tabsInputSchema = z
+  .object({
+    action: z.enum(['list', 'new', 'switch', 'close']).describe('Tab action'),
+    index: z.number().int().min(0).optional().describe('Tab index for switch/close'),
+    url: z.string().optional().describe('URL to open in new tab'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === 'switch' && value.index === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['index'],
+        message: 'index is required when action is "switch"',
+      });
+    }
+  });
 export type TabsInput = z.output<typeof tabsInputSchema>;
 
 /**
  * browser_drag - Drag an element to another element
  */
-export const dragInputSchema = z.object({
-  sourceRef: z.string().describe('Element ref to drag from'),
-  targetRef: z.string().describe('Element ref to drag to'),
-});
+export const dragInputSchema = z
+  .object({
+    sourceRef: z.string().optional().describe('Element ref to drag from (e.g., @e5)'),
+    targetRef: z.string().optional().describe('Element ref to drag to (e.g., @e7)'),
+    sourceSelector: z.string().optional().describe('CSS selector for source element (use if ref not available)'),
+    targetSelector: z.string().optional().describe('CSS selector for target element (use if ref not available)'),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.sourceRef && !data.sourceSelector) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sourceRef'],
+        message: 'Either sourceRef or sourceSelector is required',
+      });
+    }
+    if (!data.targetRef && !data.targetSelector) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetRef'],
+        message: 'Either targetRef or targetSelector is required',
+      });
+    }
+  });
 export type DragInput = z.output<typeof dragInputSchema>;
 
 // =============================================================================
@@ -188,7 +209,7 @@ export type DragInput = z.output<typeof dragInputSchema>;
  */
 export const evaluateInputSchema = z.object({
   script: z.string().describe('JavaScript code to execute'),
-  arg: z.any().optional().describe('Argument to pass to the script'),
+  arg: z.unknown().optional().describe('Argument to pass to the script (JSON-serializable)'),
 });
 export type EvaluateInput = z.output<typeof evaluateInputSchema>;
 
@@ -205,12 +226,10 @@ export const browserSchemas = {
   press: pressInputSchema,
   select: selectInputSchema,
   scroll: scrollInputSchema,
-  screenshot: screenshotInputSchema,
   close: closeInputSchema,
   // Extended
   hover: hoverInputSchema,
   back: backInputSchema,
-  upload: uploadInputSchema,
   dialog: dialogInputSchema,
   wait: waitInputSchema,
   tabs: tabsInputSchema,

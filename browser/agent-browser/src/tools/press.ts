@@ -11,9 +11,10 @@ export function createPressTool(browser: AgentBrowser) {
     description: 'Press a keyboard key (e.g., Enter, Tab, Escape, Control+a).',
     inputSchema: pressInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.press(input);
+      return browser.press(input, threadId);
     },
   });
 }

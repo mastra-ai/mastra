@@ -21,4 +21,4 @@ export type { BrowserUseToolName } from './tools';
 export * from './schemas';
 
 // Types
-export type { BrowserConfig, BrowserSessionInfo, ThreadIsolationMode } from './types';
+export type { BrowserConfig, BrowserSessionInfo, BrowserScope } from './types';

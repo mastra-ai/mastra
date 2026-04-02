@@ -1,5 +1,42 @@
 # @mastra/observability
 
+## 1.7.2-alpha.0
+
+### Patch Changes
+
+- **Fixed Anthropic cache tokens being double-counted in observability metrics** ([#13914](https://github.com/mastra-ai/mastra/pull/13914))
+
+  Anthropic cache token usage is now normalized correctly for AI SDK v6-style usage payloads, so input token metrics and tracing output no longer overcount cached tokens when the total already includes them.
+
+- Updated dependencies [[`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6)]:
+  - @mastra/core@1.22.0-alpha.1
+
+## 1.7.1
+
+### Patch Changes
+
+- Fixed score and feedback annotations being dropped before spans flush by emitting from live correlation context when available. Scores and feedback can now also be stored without a trace ID when only contextual metadata is available. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed pricing model lookup to fall back to dot-to-dash normalization for model names (e.g. `gpt-5.2` → `gpt-5-2`), resolving `no_matching_model` errors for Azure deployments ([#14959](https://github.com/mastra-ai/mastra/pull/14959))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0
+
+## 1.7.1-alpha.0
+
+### Patch Changes
+
+- Fixed score and feedback annotations being dropped before spans flush by emitting from live correlation context when available. Scores and feedback can now also be stored without a trace ID when only contextual metadata is available. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed pricing model lookup to fall back to dot-to-dash normalization for model names (e.g. `gpt-5.2` → `gpt-5-2`), resolving `no_matching_model` errors for Azure deployments ([#14959](https://github.com/mastra-ai/mastra/pull/14959))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Updated dependencies [[`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0-alpha.2
+
 ## 1.7.0
 
 ### Minor Changes

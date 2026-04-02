@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBrowserStream } from '../../hooks/use-browser-stream';
+import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { useClickRipple } from '../../hooks/use-click-ripple';
 import { useInputCoordination } from '../../hooks/use-input-coordination';
@@ -11,8 +11,6 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { cn } from '@/lib/utils';
 
 interface BrowserViewFrameProps {
-  agentId: string;
-  threadId: string;
   className?: string;
   onStatusChange?: (status: StreamStatus) => void;
   onUrlChange?: (url: string | null) => void;
@@ -21,39 +19,29 @@ interface BrowserViewFrameProps {
 
 /**
  * Browser view frame component that displays screencast stream.
+ *
+ * Consumes the shared WebSocket connection from BrowserSessionContext.
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
-export function BrowserViewFrame({
-  agentId,
-  threadId,
-  className,
-  onStatusChange,
-  onUrlChange,
-  onFirstFrame,
-}: BrowserViewFrameProps) {
+export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFirstFrame }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasFrameRef = useRef(false);
   const [hasFrame, setHasFrame] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
-  const [isRelaunching, setIsRelaunching] = useState(false);
+  // Get shared state from context (WebSocket is managed by provider)
+  const { status, currentUrl, latestFrame, viewport, sendMessage } = useBrowserSession();
 
-  // Memoize onFrame to avoid recreation
-  const handleFrame = useCallback((data: string) => {
-    if (imgRef.current) {
-      imgRef.current.src = `data:image/jpeg;base64,${data}`;
-      if (!imgRef.current.dataset.loaded) {
-        imgRef.current.dataset.loaded = '1';
+  // Update img.src when new frame arrives
+  useEffect(() => {
+    if (latestFrame && imgRef.current) {
+      imgRef.current.src = `data:image/jpeg;base64,${latestFrame}`;
+      if (!hasFrameRef.current) {
+        hasFrameRef.current = true;
         setHasFrame(true);
       }
     }
-  }, []);
-
-  const { status, error, currentUrl, viewport, sendMessage, connect } = useBrowserStream({
-    agentId,
-    threadId,
-    enabled: true,
-    onFrame: handleFrame,
-  });
+  }, [latestFrame]);
 
   const exitInteractive = useCallback(() => {
     setIsInteractive(false);
@@ -64,12 +52,6 @@ export function BrowserViewFrame({
       setIsInteractive(true);
     }
   }, [status]);
-
-  const handleRelaunch = useCallback(() => {
-    if (isRelaunching) return;
-    setIsRelaunching(true);
-    sendMessage(JSON.stringify({ type: 'relaunch' }));
-  }, [isRelaunching, sendMessage]);
 
   const { isAgentBusy, activeToolName } = useInputCoordination();
 
@@ -82,7 +64,7 @@ export function BrowserViewFrame({
 
   useKeyboardInteraction({
     sendMessage,
-    enabled: isInteractive,
+    enabled: isInteractive && status === 'streaming' && hasFrame && !isAgentBusy,
     onEscape: exitInteractive,
   });
 
@@ -108,18 +90,6 @@ export function BrowserViewFrame({
       onFirstFrame?.();
     }
   }, [hasFrame, onFirstFrame]);
-
-  // Auto-connect when component mounts or threadId changes
-  // Also reset frame state when threadId changes to show loading state
-  useEffect(() => {
-    // Reset frame state for new thread
-    setHasFrame(false);
-    if (imgRef.current) {
-      imgRef.current.dataset.loaded = '';
-      imgRef.current.src = '';
-    }
-    connect();
-  }, [connect]);
 
   // Exit interactive mode on click-outside or window blur
   useEffect(() => {
@@ -151,16 +121,8 @@ export function BrowserViewFrame({
     }
   }, [status]);
 
-  // Reset relaunching state when browser becomes active again
-  useEffect(() => {
-    if (status !== 'browser_closed') {
-      setIsRelaunching(false);
-    }
-  }, [status]);
-
   const isLoading = (status === 'connecting' || status === 'browser_starting' || status === 'streaming') && !hasFrame;
   const isReconnecting = status === 'disconnected' && hasFrame;
-  const isBrowserClosed = status === 'browser_closed' && hasFrame;
   const hasError = status === 'error';
 
   return (
@@ -178,6 +140,14 @@ export function BrowserViewFrame({
         ref={imgRef}
         alt="Browser screencast"
         onClick={handleFrameClick}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleFrameClick();
+          }
+        }}
+        tabIndex={status === 'streaming' ? 0 : -1}
+        role="button"
         className={cn(
           'absolute inset-0 w-full h-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
@@ -204,56 +174,6 @@ export function BrowserViewFrame({
         </div>
       )}
 
-      {/* Browser closed overlay - shown when browser window is closed */}
-      {isBrowserClosed && (
-        <div
-          className={cn(
-            'absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center transition-colors',
-            !isRelaunching && 'cursor-pointer hover:bg-black/60',
-          )}
-          onClick={handleRelaunch}
-          role="button"
-          tabIndex={0}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              handleRelaunch();
-            }
-          }}
-        >
-          <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
-            {isRelaunching ? (
-              <>
-                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-lg font-medium text-white">Relaunching...</span>
-                  <span className="text-sm text-white/70">Starting the browser</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                  <svg
-                    className="w-7 h-7 text-white/80"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-lg font-medium text-white">Browser Closed</span>
-                  <span className="text-sm text-white/70">Click to restart the browser</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Error overlay */}
       {hasError && (
         <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
@@ -275,7 +195,7 @@ export function BrowserViewFrame({
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-lg font-medium text-white">Connection Error</span>
-              {error && <span className="text-sm text-white/70">{error}</span>}
+              <span className="text-sm text-white/70">Failed to connect to browser</span>
             </div>
           </div>
         </div>
