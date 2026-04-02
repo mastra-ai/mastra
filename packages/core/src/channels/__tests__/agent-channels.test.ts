@@ -81,15 +81,13 @@ describe('AgentChannels', () => {
       const toolNames = Object.keys(tools);
 
       expect(toolNames).toContain('send_message');
-      expect(toolNames).toContain('edit_message');
-      expect(toolNames).toContain('delete_message');
       expect(toolNames).toContain('add_reaction');
       expect(toolNames).toContain('remove_reaction');
     });
 
-    it('generates exactly 5 tools regardless of adapter count', () => {
+    it('generates exactly 3 tools regardless of adapter count', () => {
       const tools = agentChannels.getTools();
-      expect(Object.keys(tools)).toHaveLength(5);
+      expect(Object.keys(tools)).toHaveLength(3);
     });
   });
 

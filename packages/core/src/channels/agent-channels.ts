@@ -4,6 +4,7 @@ import { Chat } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -79,19 +80,6 @@ export interface ChannelAdapterConfig {
    * @default `"❌ Error: <error.message>"`
    */
   formatError?: (error: Error) => PostableMessage;
-}
-
-/**
- * Represents a message posted to a platform during agent stream consumption.
- * Used to associate platform message IDs with Mastra message metadata.
- */
-export interface PostedMessage {
-  /** Platform-assigned message ID */
-  platformMessageId: string;
-  /** Type of content that was posted */
-  type: 'text' | 'tool-running' | 'tool-result' | 'tool-approval' | 'error';
-  /** Tool call ID if this message is tool-related */
-  toolCallId?: string;
 }
 
 /**
@@ -234,10 +222,8 @@ export class AgentChannels {
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
   /** Thread context config for fetching prior messages. */
   private threadContext: { maxMessages?: number };
-  /** Names of auto-generated channel tools whose effects are already visible. */
-  private channelToolNames: Set<string>;
-  /** Track the bot's last message ID per SDK thread for self-reference. */
-  private lastBotMessageIds = new Map<string, string>();
+  /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
+  private channelToolNames!: Set<string>;
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -262,14 +248,7 @@ export class AgentChannels {
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
     this.threadContext = config.threadContext ?? {};
-
-    this.channelToolNames = new Set([
-      'send_message',
-      'edit_message',
-      'delete_message',
-      'add_reaction',
-      'remove_reaction',
-    ]);
+    this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
 
   /**
@@ -485,17 +464,12 @@ export class AgentChannels {
           requestContext,
         });
 
-        const { postedMessages } = await this.consumeAgentStream(
+        await this.consumeAgentStream(
           resumedStream,
           sdkThread,
           platform,
           toolCallId ? { toolCallId, messageId } : undefined,
         );
-
-        // Update saved messages with platform message IDs
-        if (postedMessages.length > 0) {
-          await this.associatePlatformMessageIds(resumedStream, platform, postedMessages);
-        }
       } catch (err) {
         const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
         if (isStaleApproval) {
@@ -666,37 +640,37 @@ export class AgentChannels {
     // Fetch recent thread history when configured, this is a non-DM mention,
     // AND the agent isn't already subscribed to this thread. If subscribed,
     // the agent already has history via Mastra's memory system.
-    let threadHistory: ThreadHistoryMessage[] | undefined;
+    // History is prepended to the user message text (not as a separate message)
+    // to avoid consecutive user messages which some providers reject (e.g. DeepSeek).
+    let historyBlock: string | undefined;
     const maxMessages = this.threadContext.maxMessages ?? 10;
     if (maxMessages > 0 && !sdkThread.isDM) {
       const alreadySubscribed = await sdkThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${sdkThread.id}`);
-        threadHistory = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
-        this.logger?.debug?.(`Fetched ${threadHistory.length} messages from thread history`);
+        const history = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+        this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
+        if (history.length > 0) {
+          const lines = ['[Thread context — messages in this thread before you joined]'];
+          for (const msg of history) {
+            const mention = msg.userId ? sdkThread.mentionUser(msg.userId) : undefined;
+            let prefix = mention ? (msg.author ? `${msg.author} (${mention})` : mention) : msg.author;
+            if (msg.isBot) prefix += ' (bot)';
+            lines.push(`[${prefix}] (msg:${msg.id}): ${msg.text}`);
+          }
+          historyBlock = lines.join('\n');
+        }
       } else {
         this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${sdkThread.id}`);
       }
     }
 
-    // Build the author prefix (helps the agent distinguish speakers in multi-user threads)
+    // Extract author info for metadata and display
     const authorName = message.author.fullName || message.author.userName;
     const authorId = message.author.userId;
-    let authorPrefix = '';
-    if (authorId) {
-      const mention = sdkThread.mentionUser(authorId);
-      authorPrefix = authorName ? `${authorName} (${mention})` : mention;
-    } else if (authorName) {
-      authorPrefix = authorName;
-    }
-    if (message.author.isBot && authorPrefix) {
-      authorPrefix += ' (bot)';
-    }
+    const authorMention = authorId ? sdkThread.mentionUser(authorId) : undefined;
 
     // Build request context with channel info.
-    // Metadata like messageId, lastBotMessageId, and threadHistory are injected
-    // as ephemeral system messages by ChatChannelProcessor.processInputStep.
-    const lastBotMessageId = this.lastBotMessageIds.get(sdkThread.id);
     const requestContext = new RequestContext();
     requestContext.set('channel', {
       platform,
@@ -705,54 +679,97 @@ export class AgentChannels {
       threadId: sdkThread.id,
       channelId: sdkThread.channelId,
       messageId: message.id,
-      userId: message.author.userId,
+      userId: authorId,
       userName: authorName,
-      threadHistory,
-      lastBotMessageId,
     } satisfies ChannelContext);
 
-    // Build clean message text with author prefix only.
-    // Metadata (message IDs, thread history) is injected as ephemeral system messages
-    // by ChatChannelProcessor so it's visible to the LLM but NOT persisted to memory.
-    const rawText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
+    // Build message text.
+    // If thread history was fetched, prepend it so it's part of the same user message
+    // (avoids consecutive user messages which some providers reject).
+    const textSegments: string[] = [];
 
-    // Build multimodal content if the message has image/file attachments,
-    // otherwise pass a plain string. Use fetchData() when available (e.g. Slack
-    // private URLs that require auth), falling back to the public URL.
-    const usableAttachments = message.attachments.filter(a => a.url || a.fetchData);
-
-    let streamInput: Parameters<typeof agent.stream>[0];
-    if (usableAttachments.length > 0) {
-      type ContentPart =
-        | { type: 'text'; text: string }
-        | { type: 'image'; image: URL | Uint8Array; mimeType?: string }
-        | { type: 'file'; data: URL | Uint8Array; mimeType: string };
-      const parts: ContentPart[] = [{ type: 'text', text: rawText }];
-
-      for (const att of usableAttachments) {
-        const data = att.fetchData ? await att.fetchData() : undefined;
-        if (att.type === 'image') {
-          parts.push({
-            type: 'image',
-            image: data ?? new URL(att.url!),
-            ...(att.mimeType && { mimeType: att.mimeType }),
-          });
-        } else if (att.mimeType) {
-          parts.push({
-            type: 'file',
-            data: data ?? new URL(att.url!),
-            mimeType: att.mimeType,
-          });
-        }
-        // Skip non-image attachments without a mimeType — FilePart requires it
-      }
-
-      streamInput = { role: 'user' as const, content: parts };
-    } else {
-      streamInput = rawText;
+    if (historyBlock) {
+      textSegments.push(historyBlock);
     }
 
-    // Stream the agent response
+    const metadataBlock = `<system-reminder>\nEvent: ${sdkThread.isDM ? 'message' : 'mention'}\nMessage ID: ${message.id}\n</system-reminder>`;
+    textSegments.push(metadataBlock);
+
+    // In multi-user threads (not DMs), prefix the message with author info
+    // to help the agent distinguish speakers.
+    if (!sdkThread.isDM && (authorName || authorMention)) {
+      let authorPrefix = '';
+      if (authorMention) {
+        authorPrefix = authorName ? `${authorName} (${authorMention})` : authorMention;
+      } else {
+        authorPrefix = authorName!;
+      }
+      if (message.author.isBot) authorPrefix += ' (bot)';
+      textSegments.push(`[${authorPrefix}]: ${message.text}`);
+    } else {
+      textSegments.push(message.text);
+    }
+
+    const rawText = textSegments.join('\n\n');
+
+    // Build the message content with channel metadata.
+    // We construct a MastraDBMessage to preserve the platform message ID in metadata.
+    const usableAttachments = message.attachments.filter(a => a.url || a.fetchData);
+
+    type MastraPart =
+      | { type: 'text'; text: string }
+      | { type: 'image'; image: URL | Uint8Array; mimeType?: string }
+      | { type: 'file'; data: URL | Uint8Array; mimeType: string };
+    const parts: MastraPart[] = [{ type: 'text', text: rawText }];
+
+    // Add attachments (images, files) as additional parts
+    for (const att of usableAttachments) {
+      const data = att.fetchData ? await att.fetchData() : undefined;
+      if (att.type === 'image') {
+        parts.push({
+          type: 'image',
+          image: data ?? new URL(att.url!),
+          ...(att.mimeType && { mimeType: att.mimeType }),
+        });
+      } else if (att.mimeType) {
+        parts.push({
+          type: 'file',
+          data: data ?? new URL(att.url!),
+          mimeType: att.mimeType,
+        });
+      }
+      // Skip non-image attachments without a mimeType — FilePart requires it
+    }
+
+    // Build a MastraDBMessage with channel metadata so the platform message ID and author are tracked.
+    const streamInput: MastraDBMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: parts as MastraMessagePart[],
+        metadata: {
+          mastra: {
+            channels: {
+              [platform]: {
+                messageId: message.id,
+                author: {
+                  userId: authorId,
+                  userName: message.author.userName,
+                  fullName: message.author.fullName,
+                  mention: authorMention,
+                  isBot: message.author.isBot,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    // Stream the agent response.
+
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
     const stream = await agent.stream(streamInput, {
@@ -765,12 +782,7 @@ export class AgentChannels {
       autoResumeSuspendedTools: useCards ? undefined : true,
     });
 
-    const { postedMessages } = await this.consumeAgentStream(stream, sdkThread, platform);
-
-    // Update saved messages with platform message IDs for self-reference
-    if (postedMessages.length > 0) {
-      await this.associatePlatformMessageIds(stream, platform, postedMessages);
-    }
+    await this.consumeAgentStream(stream, sdkThread, platform);
 
     // Subscribe so follow-up messages also get handled
     await sdkThread.subscribe();
@@ -794,9 +806,10 @@ export class AgentChannels {
         // Skip the current message that triggered this request
         if (msg.id === currentMessageId) continue;
 
-        const authorName = msg.author.fullName || msg.author.userName || 'Unknown';
         messages.push({
-          author: authorName,
+          id: msg.id,
+          author: msg.author.fullName || msg.author.userName || 'Unknown',
+          userId: msg.author.userId,
           text: msg.text,
           isBot: msg.author.isBot === true,
         });
@@ -827,7 +840,7 @@ export class AgentChannels {
     sdkThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
-  ): Promise<{ postedMessages: PostedMessage[] }> {
+  ): Promise<void> {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
@@ -842,9 +855,6 @@ export class AgentChannels {
       messageId?: string; // platform message ID for editing
     }
     const toolCalls = new Map<string, TrackedTool>();
-
-    // Track all messages posted to the platform for metadata association
-    const postedMessages: PostedMessage[] = [];
 
     // Pre-seed the approved tool so its result can edit the approval card
     if (approvalContext) {
@@ -867,11 +877,7 @@ export class AgentChannels {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
-        const sentMessage = await sdkThread.post(textBuffer.trim());
-        if (sentMessage?.id) {
-          this.lastBotMessageIds.set(sdkThread.id, sentMessage.id);
-          postedMessages.push({ platformMessageId: sentMessage.id, type: 'text' });
-        }
+        await sdkThread.post(textBuffer.trim());
         textBuffer = '';
       }
     };
@@ -911,13 +917,6 @@ export class AgentChannels {
         if (!adapterConfig?.formatToolCall) {
           const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
           messageId = sentMessage?.id;
-          if (messageId) {
-            postedMessages.push({
-              platformMessageId: messageId,
-              type: 'tool-running',
-              toolCallId: chunk.payload.toolCallId,
-            });
-          }
         }
 
         toolCalls.set(chunk.payload.toolCallId, {
@@ -1006,66 +1005,7 @@ export class AgentChannels {
     // Check for errors that occurred during streaming
     if (stream.error) {
       this.log('error', `[${platform}] Stream completed with error`, { error: JSON.stringify(stream.error, null, 2) });
-      const errorMsg = await sdkThread.post(`❌ Error: ${stream.error.message}`);
-      if (errorMsg?.id) {
-        postedMessages.push({ platformMessageId: errorMsg.id, type: 'error' });
-      }
-    }
-
-    return { postedMessages };
-  }
-
-  /**
-   * Associate platform message IDs with the saved Mastra messages.
-   * Updates the last assistant message's metadata to include channel info.
-   */
-  private async associatePlatformMessageIds(
-    stream: MastraModelOutput,
-    platform: string,
-    postedMessages: PostedMessage[],
-  ): Promise<void> {
-    try {
-      // Get the full output which includes the saved messages
-      const fullOutput = await stream.getFullOutput();
-      const messages = fullOutput.messages;
-      if (!messages?.length) return;
-
-      // Find the last assistant message
-      const assistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
-      if (!assistantMessage) return;
-
-      // Find the last text message ID for easy self-reference
-      const lastTextMessage = [...postedMessages].reverse().find(m => m.type === 'text');
-
-      // Update the message metadata via storage
-      const mastra = this.agent.getMastraInstance?.();
-      const storage = mastra?.getStorage();
-      if (!storage) return;
-
-      const memoryStore = await storage.getStore('memory');
-      if (!memoryStore) return;
-
-      await memoryStore.updateMessages({
-        messages: [
-          {
-            id: assistantMessage.id,
-            content: {
-              ...assistantMessage.content,
-              metadata: {
-                ...assistantMessage.content?.metadata,
-                'mastra.channels': {
-                  [platform]: {
-                    messages: postedMessages,
-                    lastTextMessageId: lastTextMessage?.platformMessageId,
-                  },
-                },
-              },
-            },
-          },
-        ],
-      });
-    } catch (err) {
-      this.logger?.warn?.(`Failed to associate platform message IDs: ${err}`);
+      await sdkThread.post(`❌ Error: ${stream.error.message}`);
     }
   }
 
@@ -1140,33 +1080,6 @@ export class AgentChannels {
           const { adapter, threadId } = this.getAdapterFromContext(context);
           const result = await adapter.postMessage(threadId, { markdown: text });
           return { ok: true, messageId: result.id };
-        },
-      }),
-
-      edit_message: createTool({
-        id: 'edit_message',
-        description: 'Edit a previously sent message.',
-        inputSchema: z.object({
-          messageId: z.string().describe('The ID of the message to edit'),
-          text: z.string().describe('The new message text'),
-        }),
-        execute: async ({ messageId, text }, context) => {
-          const { adapter, threadId } = this.getAdapterFromContext(context);
-          await adapter.editMessage(threadId, messageId, { markdown: text });
-          return { ok: true };
-        },
-      }),
-
-      delete_message: createTool({
-        id: 'delete_message',
-        description: 'Delete a message.',
-        inputSchema: z.object({
-          messageId: z.string().describe('The ID of the message to delete'),
-        }),
-        execute: async ({ messageId }, context) => {
-          const { adapter, threadId } = this.getAdapterFromContext(context);
-          await adapter.deleteMessage(threadId, messageId);
-          return { ok: true };
         },
       }),
 

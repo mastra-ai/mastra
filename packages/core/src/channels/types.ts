@@ -1,10 +1,14 @@
 /**
- * A simplified message from the platform's thread history.
+ * A message from the platform's thread history.
  * Used to provide context when the agent is mentioned mid-conversation.
  */
 export type ThreadHistoryMessage = {
-  /** The user who sent this message. */
+  /** Platform message ID. */
+  id: string;
+  /** Display name of the author. */
   author: string;
+  /** Platform user ID of the author. */
+  userId?: string;
   /** The message text. */
   text: string;
   /** Whether the author is a bot. */
@@ -36,15 +40,4 @@ export type ChannelContext = {
   userId: string;
   /** Display name of the sender, if available. */
   userName?: string;
-  /**
-   * Recent messages from the platform thread, fetched when the agent is mentioned
-   * mid-conversation and `threadContext.maxMessages` is configured.
-   * Ordered oldest-first (chronological).
-   */
-  threadHistory?: ThreadHistoryMessage[];
-  /**
-   * Platform message ID of the bot's most recent message in this thread.
-   * Useful for self-referential commands like "delete my last message".
-   */
-  lastBotMessageId?: string;
 };
