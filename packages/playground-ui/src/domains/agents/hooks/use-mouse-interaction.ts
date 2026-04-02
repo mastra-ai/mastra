@@ -135,7 +135,7 @@ export function useMouseInteraction(options: UseMouseInteractionOptions): void {
 
       if (rafId !== null) return; // already scheduled
 
-      rafId = requestAnimationFrame((now: number) => {
+      rafId = requestAnimationFrame(now => {
         rafId = null;
 
         if (!pendingMoveEvent) return;
@@ -151,13 +151,15 @@ export function useMouseInteraction(options: UseMouseInteractionOptions): void {
           return;
         }
 
-        const rect = imgElement.getBoundingClientRect();
-        const mapped = mapClientToViewport(pendingMoveEvent.clientX, pendingMoveEvent.clientY, rect, viewport);
+        const eventToProcess = pendingMoveEvent;
         pendingMoveEvent = null;
+
+        const rect = imgElement.getBoundingClientRect();
+        const mapped = mapClientToViewport(eventToProcess.clientX, eventToProcess.clientY, rect, viewport);
 
         if (!mapped) return;
 
-        sendMouseEvent('mouseMoved', mapped.x, mapped.y, undefined, undefined, getModifiers(e));
+        sendMouseEvent('mouseMoved', mapped.x, mapped.y, undefined, undefined, getModifiers(eventToProcess));
       });
     }
 

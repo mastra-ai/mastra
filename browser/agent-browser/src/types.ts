@@ -2,7 +2,6 @@ import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
 
 /**
  * Configuration options for AgentBrowser.
- * Currently re-exports BaseBrowserConfig for API consistency.
- * Agent-browser specific options can be added here in the future.
+ * Type alias for BaseBrowserConfig.
  */
 export type BrowserConfig = BaseBrowserConfig;

@@ -13,9 +13,10 @@ export function createClickTool(browser: AgentBrowser) {
     description: 'Click an element using its ref from a snapshot. Use clickCount: 2 for double-click.',
     inputSchema: clickInputSchema,
     execute: async (input, { agent }) => {
-      browser.setCurrentThread(agent?.threadId);
+      const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return browser.click(input);
+      return browser.click(input, threadId);
     },
   });
 }

@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
-  browser_navigate: 'Navigate',
   browser_goto: 'Go to',
   browser_click: 'Click',
   browser_type: 'Type',
@@ -33,7 +32,6 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
 
 const KEY_ARG_MAP: Record<string, string> = {
   // AgentBrowser tools
-  browser_navigate: 'url',
   browser_goto: 'url',
   browser_click: 'ref',
   browser_type: 'text',

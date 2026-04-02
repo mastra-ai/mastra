@@ -310,10 +310,12 @@ export class AgentBrowser extends MastraBrowser {
   /**
    * Get the page for the current thread.
    * Uses thread scope if enabled, otherwise returns the shared page.
+   * @param explicitThreadId - Optional thread ID to use instead of getCurrentThread()
+   *                           Use this to avoid race conditions in concurrent tool calls.
    */
-  private async getPage(): Promise<Page> {
+  private async getPage(explicitThreadId?: string): Promise<Page> {
     const scope = this.getScope();
-    const threadId = this.getCurrentThread();
+    const threadId = explicitThreadId ?? this.getCurrentThread();
     // For thread scope, always use getPageForThread even for default thread
     // For shared scope with non-default thread, also use getPageForThread
     if (scope === 'thread' || (scope !== 'shared' && threadId !== DEFAULT_THREAD_ID)) {
@@ -623,9 +625,10 @@ export class AgentBrowser extends MastraBrowser {
 
   async goto(
     input: GotoInput,
+    threadId?: string,
   ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       await page.goto(input.url, {
         timeout: input.timeout ?? this.defaultTimeout,
@@ -647,7 +650,10 @@ export class AgentBrowser extends MastraBrowser {
   // 2. browser_snapshot - Capture accessibility tree
   // ---------------------------------------------------------------------------
 
-  async snapshot(input: SnapshotInput): Promise<
+  async snapshot(
+    input: SnapshotInput,
+    threadId?: string,
+  ): Promise<
     | {
         success: true;
         snapshot: string;
@@ -660,8 +666,8 @@ export class AgentBrowser extends MastraBrowser {
     | BrowserToolError
   > {
     try {
-      const manager = await this.getManagerForThread();
-      const page = await this.getPage();
+      const manager = await this.getManagerForThread(threadId);
+      const page = await this.getPage(threadId);
       const rawSnapshot = await manager.getSnapshot({
         interactive: input.interactiveOnly ?? true,
         compact: true,
@@ -706,9 +712,12 @@ export class AgentBrowser extends MastraBrowser {
   // 3. browser_click - Click on element
   // ---------------------------------------------------------------------------
 
-  async click(input: ClickInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async click(
+    input: ClickInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       const locator = await this.requireLocator(input.ref);
 
       if (!locator) {
@@ -752,9 +761,10 @@ export class AgentBrowser extends MastraBrowser {
 
   async type(
     input: TypeInput,
+    threadId?: string,
   ): Promise<{ success: true; value: string; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       const locator = await this.requireLocator(input.ref);
 
       if (!locator) {
@@ -812,9 +822,12 @@ export class AgentBrowser extends MastraBrowser {
   // 5. browser_press - Press keyboard key(s)
   // ---------------------------------------------------------------------------
 
-  async press(input: PressInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async press(
+    input: PressInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       await page.keyboard.press(input.key);
 
       return {
@@ -833,9 +846,10 @@ export class AgentBrowser extends MastraBrowser {
 
   async select(
     input: SelectInput,
+    threadId?: string,
   ): Promise<{ success: true; selected: string[]; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       const locator = await this.requireLocator(input.ref);
 
       if (!locator) {
@@ -872,9 +886,10 @@ export class AgentBrowser extends MastraBrowser {
 
   async scroll(
     input: ScrollInput,
+    threadId?: string,
   ): Promise<{ success: true; position: { x: number; y: number }; scroll: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       if (input.ref) {
         const locator = await this.requireLocator(input.ref);
@@ -937,9 +952,12 @@ export class AgentBrowser extends MastraBrowser {
   // 8. browser_hover - Hover over element
   // ---------------------------------------------------------------------------
 
-  async hover(input: HoverInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async hover(
+    input: HoverInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       const locator = await this.requireLocator(input.ref);
 
       if (!locator) {
@@ -966,9 +984,11 @@ export class AgentBrowser extends MastraBrowser {
   // 10. browser_back - Navigate back
   // ---------------------------------------------------------------------------
 
-  async back(): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
+  async back(
+    threadId?: string,
+  ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       await page.goBack({ timeout: this.defaultTimeout });
 
       return {
@@ -988,12 +1008,13 @@ export class AgentBrowser extends MastraBrowser {
 
   async dialog(
     input: DialogInput,
+    threadId?: string,
   ): Promise<
     | { success: true; action: 'accept' | 'dismiss'; dialogType: string; message: string; hint: string }
     | BrowserToolError
   > {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       const locator = await this.requireLocator(input.triggerRef);
 
       if (!locator) {
@@ -1054,7 +1075,7 @@ export class AgentBrowser extends MastraBrowser {
   // 13. browser_wait - Wait for element or condition
   // ---------------------------------------------------------------------------
 
-  async wait(input: WaitInput): Promise<{ success: true; hint: string } | BrowserToolError> {
+  async wait(input: WaitInput, threadId?: string): Promise<{ success: true; hint: string } | BrowserToolError> {
     try {
       const timeout = input.timeout ?? this.defaultTimeout;
 
@@ -1072,7 +1093,7 @@ export class AgentBrowser extends MastraBrowser {
           hint: `Element is now ${state}. Take a snapshot to continue.`,
         };
       } else {
-        const page = await this.getPage();
+        const page = await this.getPage(threadId);
         await page.waitForTimeout(timeout);
         return {
           success: true,
@@ -1088,7 +1109,10 @@ export class AgentBrowser extends MastraBrowser {
   // 14. browser_tabs - Manage browser tabs
   // ---------------------------------------------------------------------------
 
-  async tabs(input: TabsInput): Promise<
+  async tabs(
+    input: TabsInput,
+    threadId?: string,
+  ): Promise<
     | {
         success: true;
         tabs?: unknown[];
@@ -1101,7 +1125,7 @@ export class AgentBrowser extends MastraBrowser {
     | BrowserToolError
   > {
     try {
-      const browser = await this.getManagerForThread();
+      const browser = await this.getManagerForThread(threadId);
       if (!browser) {
         return this.createError(
           'browser_closed',
@@ -1217,9 +1241,12 @@ export class AgentBrowser extends MastraBrowser {
   // 15. browser_drag - Drag element to target
   // ---------------------------------------------------------------------------
 
-  async drag(input: DragInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+  async drag(
+    input: DragInput,
+    threadId?: string,
+  ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
 
       // Resolve source locator (prefer ref, fallback to selector)
       let sourceLocator: Awaited<ReturnType<typeof this.requireLocator>> | null = null;
@@ -1277,9 +1304,12 @@ export class AgentBrowser extends MastraBrowser {
   // 16. browser_evaluate - Execute JavaScript
   // ---------------------------------------------------------------------------
 
-  async evaluate(input: EvaluateInput): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
+  async evaluate(
+    input: EvaluateInput,
+    threadId?: string,
+  ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(threadId);
       // Wrap script in an async function to allow return statements
       const wrappedScript = `(async () => { ${input.script} })()`;
       const result = await page.evaluate(wrappedScript);

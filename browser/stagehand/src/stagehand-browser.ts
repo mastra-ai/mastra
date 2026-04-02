@@ -381,10 +381,12 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Get the current page from Stagehand v3, respecting thread isolation.
+   * @param explicitThreadId - Optional thread ID to use instead of getCurrentThread()
+   *                           Use this to avoid race conditions in concurrent tool calls.
    */
-  private getPage(): V3Page | null {
+  private getPage(explicitThreadId?: string): V3Page | null {
     const scope = this.getScope();
-    const threadId = this.getCurrentThread();
+    const threadId = explicitThreadId ?? this.getCurrentThread();
 
     // For 'browser' isolation, get the thread's Stagehand's active page
     if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
@@ -470,12 +472,15 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Perform an action using natural language instruction
+   * @param input - Action input
+   * @param threadId - Optional thread ID for thread-safe operation
    */
   async act(
     input: ActInput,
+    threadId?: string,
   ): Promise<{ success: true; message?: string; action?: string; url: string; hint: string } | BrowserToolError> {
     const stagehand = this.requireStagehand();
-    const page = this.getPage();
+    const page = this.getPage(threadId);
     const url = page?.url() ?? '';
 
     try {
@@ -501,12 +506,15 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Extract structured data from a page using natural language
+   * @param input - Extract input
+   * @param threadId - Optional thread ID for thread-safe operation
    */
   async extract(
     input: ExtractInput,
+    threadId?: string,
   ): Promise<{ success: true; data: unknown; url: string; hint: string } | BrowserToolError> {
     const stagehand = this.requireStagehand();
-    const page = this.getPage();
+    const page = this.getPage(threadId);
     const url = page?.url() ?? '';
 
     try {
@@ -530,12 +538,15 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Discover actionable elements on a page
+   * @param input - Observe input
+   * @param threadId - Optional thread ID for thread-safe operation
    */
   async observe(
     input: ObserveInput,
+    threadId?: string,
   ): Promise<{ success: true; actions: StagehandAction[]; url: string; hint: string } | BrowserToolError> {
     const stagehand = this.requireStagehand();
-    const page = this.getPage();
+    const page = this.getPage(threadId);
     const url = page?.url() ?? '';
 
     try {
@@ -571,11 +582,14 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Navigate to a URL
+   * @param input - Navigate input
+   * @param threadId - Optional thread ID for thread-safe operation
    */
   async navigate(
     input: NavigateInput,
+    threadId?: string,
   ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
-    const page = this.getPage();
+    const page = this.getPage(threadId);
 
     if (!page) {
       return this.createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
@@ -606,9 +620,12 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Manage browser tabs - list, create, switch, close
+   * @param input - Tabs input
+   * @param threadId - Optional thread ID for thread-safe operation
    */
   async tabs(
     input: TabsInput,
+    threadId?: string,
   ): Promise<
     | { success: true; tabs?: Array<{ index: number; url: string; title: string; active: boolean }>; hint: string }
     | { success: true; index?: number; url?: string; title?: string; remaining?: number; hint: string }
@@ -616,6 +633,7 @@ export class StagehandBrowser extends MastraBrowser {
   > {
     const stagehand = this.requireStagehand();
     const context = stagehand.context;
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
 
     if (!context) {
       return this.createError('browser_error', 'Browser context not available.', 'Ensure the browser is launched.');
@@ -677,7 +695,7 @@ export class StagehandBrowser extends MastraBrowser {
           context.setActivePage(targetPage);
           await this.reconnectScreencast('tab switch via tool');
           // Emit URL directly since we have the target page
-          const streamKey = this.getStreamKey(this.getCurrentThread());
+          const streamKey = this.getStreamKey(effectiveThreadId);
           const stream = this.activeScreencastStreams.get(streamKey);
           if (targetUrl && stream?.isActive()) {
             stream.emitUrl(targetUrl);
