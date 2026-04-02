@@ -110,9 +110,9 @@ const deleteFile = createTool({
     path: z.string().describe('Path to the file to delete'),
   }),
   requireApproval: true,
-  execute: async ({ context }) => {
-    await fs.unlink(context.path)
-    return { deleted: context.path }
+  execute: async ({ path }) => {
+    await fs.unlink(path)
+    return { deleted: path }
   },
 })
 ```
