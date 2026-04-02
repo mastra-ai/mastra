@@ -3,13 +3,23 @@ import type { ChunkType } from '../../types';
 
 export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string }): ChunkType | undefined {
   if (value.type === 'step-start') {
+    let parsedBody: Record<string, unknown> = {};
+    if (value.request?.body) {
+      try {
+        parsedBody = JSON.parse(value.request.body);
+      } catch {
+        // If the request body is not valid JSON, fall back to empty object
+        parsedBody = {};
+      }
+    }
+
     return {
       type: 'step-start',
       runId: ctx.runId,
       from: ChunkFrom.AGENT,
       payload: {
         messageId: value.messageId,
-        request: { body: JSON.parse(value.request!.body ?? '{}') },
+        request: { body: parsedBody },
         warnings: value.warnings,
       },
     };
@@ -71,9 +81,9 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
           providerMetadata: value.providerMetadata,
         },
         messages: {
-          all: value.messages.all,
-          user: value.messages.user,
-          nonUser: value.messages.nonUser,
+          all: value.messages?.all || [],
+          user: value.messages?.user || [],
+          nonUser: value.messages?.nonUser || [],
         },
       },
     };

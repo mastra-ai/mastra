@@ -383,4 +383,71 @@ describe('convertFullStreamChunkToMastra', () => {
       },
     });
   });
+
+  it('should not crash when step-start has undefined request', () => {
+    const value = {
+      type: 'step-start',
+      messageId: 'msg-1',
+      warnings: [],
+    };
+
+    const result = convertFullStreamChunkToMastra(value, testContext);
+
+    expect(result).toEqual({
+      type: 'step-start',
+      runId: testContext.runId,
+      from: ChunkFrom.AGENT,
+      payload: {
+        messageId: 'msg-1',
+        request: { body: {} },
+        warnings: [],
+      },
+    });
+  });
+
+  it('should not crash when step-start request body is invalid JSON', () => {
+    const value = {
+      type: 'step-start',
+      messageId: 'msg-2',
+      request: { body: 'not valid json {{{' },
+      warnings: [],
+    };
+
+    const result = convertFullStreamChunkToMastra(value, testContext);
+
+    expect(result).toEqual({
+      type: 'step-start',
+      runId: testContext.runId,
+      from: ChunkFrom.AGENT,
+      payload: {
+        messageId: 'msg-2',
+        request: { body: {} },
+        warnings: [],
+      },
+    });
+  });
+
+  it('should default messages arrays when messages is undefined in step-finish chunks', () => {
+    const value = {
+      type: 'step-finish',
+      id: 'step-1',
+      finishReason: 'complete',
+      usage: { total_tokens: 10 },
+      response: {},
+      messageId: 'msg-1',
+      providerMetadata: {},
+      warnings: [],
+      isContinued: false,
+      logprobs: null,
+      request: {},
+    };
+
+    const result = convertFullStreamChunkToMastra(value, testContext);
+
+    expect(result?.payload.messages).toEqual({
+      all: [],
+      user: [],
+      nonUser: [],
+    });
+  });
 });
