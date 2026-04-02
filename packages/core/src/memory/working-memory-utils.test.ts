@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
+import {
+  extractWorkingMemoryTags,
+  extractWorkingMemoryContent,
+  removeWorkingMemoryTags,
+  removeSystemReminderTags,
+} from './working-memory-utils';
 
 describe('Working Memory Utils - ReDoS Prevention', () => {
   // The vulnerable regex pattern that was replaced
@@ -184,5 +189,43 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
         expect(t.ms).toBeLessThan(5);
       }
     });
+  });
+});
+
+describe('removeSystemReminderTags', () => {
+  it('should remove simple system-reminder tags', () => {
+    expect(removeSystemReminderTags('<system-reminder>content</system-reminder>')).toBe('');
+  });
+
+  it('should remove system-reminder tags with attributes', () => {
+    expect(
+      removeSystemReminderTags('<system-reminder type="browser">Current URL: https://example.com</system-reminder>'),
+    ).toBe('');
+  });
+
+  it('should preserve surrounding text', () => {
+    expect(removeSystemReminderTags('Hello <system-reminder>secret</system-reminder> world')).toBe('Hello  world');
+  });
+
+  it('should handle multiple system-reminder tags', () => {
+    expect(
+      removeSystemReminderTags(
+        '<system-reminder>a</system-reminder> middle <system-reminder type="x">b</system-reminder>',
+      ),
+    ).toBe(' middle ');
+  });
+
+  it('should return unchanged text when no tags present', () => {
+    expect(removeSystemReminderTags('no tags here')).toBe('no tags here');
+  });
+
+  it('should handle unclosed tags by keeping them', () => {
+    expect(removeSystemReminderTags('before <system-reminder unclosed')).toBe('before <system-reminder unclosed');
+  });
+
+  it('should handle missing closing tag by keeping from start tag', () => {
+    expect(removeSystemReminderTags('before <system-reminder>unclosed content')).toBe(
+      'before <system-reminder>unclosed content',
+    );
   });
 });
