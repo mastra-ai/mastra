@@ -28,7 +28,7 @@ function ExperimentPage() {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
-  } = useDatasetExperiment(datasetId, experimentId!);
+  } = useDatasetExperiment(datasetId, experimentId ?? '');
 
   const {
     data: results,
@@ -38,7 +38,7 @@ function ExperimentPage() {
     hasNextPage,
   } = useDatasetExperimentResults({
     datasetId,
-    experimentId: experimentId!,
+    experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
   });
 
@@ -46,7 +46,7 @@ function ExperimentPage() {
     return null;
   }
 
-  if (experimentsListLoading || (experimentLoading && datasetId)) {
+  if (experimentsListLoading || experimentLoading || !datasetId) {
     return (
       <MainContentLayout>
         <div className="flex items-center justify-center h-full">

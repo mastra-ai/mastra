@@ -63,10 +63,14 @@ export default function Evaluation() {
     setExperimentsDatasetFilter('all');
   };
 
-  const hasScorerFilters = scorersSourceFilter !== 'all';
+  const hasScorerFilters = scorersSourceFilter !== 'all' || scorersSearch !== '';
   const hasDatasetFilters =
-    datasetsTargetFilter !== 'all' || datasetsExperimentFilter !== 'all' || datasetsTagFilter !== 'all';
-  const hasExperimentFilters = experimentsStatusFilter !== 'all' || experimentsDatasetFilter !== 'all';
+    datasetsTargetFilter !== 'all' ||
+    datasetsExperimentFilter !== 'all' ||
+    datasetsTagFilter !== 'all' ||
+    datasetsSearch !== '';
+  const hasExperimentFilters =
+    experimentsStatusFilter !== 'all' || experimentsDatasetFilter !== 'all' || experimentsSearch !== '';
 
   const tabConfig: Record<EvaluationTab, { icon: React.ReactNode; label: string }> = {
     overview: { icon: <FlaskConicalIcon />, label: 'Evaluation' },

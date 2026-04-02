@@ -1,5 +1,5 @@
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, XIcon, GaugeIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReviewItem } from './review-item-card';
 import { TagPicker } from './tag-picker';
 import { AlertDialog } from '@/ds/components/AlertDialog';
@@ -57,11 +57,15 @@ export function ReviewItemPanel({
     setShowRemoveConfirm(false);
   }, [item.id]);
 
+  const commentTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(commentTimerRef.current), []);
+
   const handleCommentBlur = () => {
     if (localComment !== (item.comment || '')) {
       onComment(localComment);
       setCommentSaved(true);
-      setTimeout(() => setCommentSaved(false), 1500);
+      clearTimeout(commentTimerRef.current);
+      commentTimerRef.current = setTimeout(() => setCommentSaved(false), 1500);
     }
   };
 

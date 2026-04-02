@@ -11,7 +11,8 @@ import {
   Trash2,
   XIcon,
 } from 'lucide-react';
-import { type ComponentPropsWithoutRef, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useReviewQueue } from '../../context/review-queue-context';
 
@@ -25,8 +26,7 @@ import { ReviewItemPanel } from '@/domains/review/components/review-item-panel';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Column } from '@/ds/components/Columns';
-import { Columns } from '@/ds/components/Columns';
+import { Column, Columns } from '@/ds/components/Columns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { EntityList } from '@/ds/components/EntityList';
@@ -73,7 +73,7 @@ interface AgentPlaygroundReviewProps {
 export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygroundReviewProps) {
   const { items, setItemTags, rateItem, commentItem, removeItem, completeItem, loadPersistedItems } = useReviewQueue();
   const { data: persistedItems } = useReviewItems(agentId);
-  const { data: completedItems, refetch: refetchCompleted } = useCompletedItems(agentId);
+  const { data: completedItems, refetch: refetchCompleted, isLoading: isLoadingCompleted } = useCompletedItems(agentId);
   const client = useMastraClient();
   const { provider, model } = usePlaygroundModel();
   const { data: allDatasets } = useDatasets();
@@ -257,6 +257,19 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     return count;
   }, [activeTagFilter, showCompleted]);
 
+  // Display items with tag filtering applied to both views
+  const displayItems = useMemo(() => {
+    const base = showCompleted ? (completedItems ?? []) : filteredItems;
+    if (!showCompleted || !activeTagFilter) return base;
+    if (activeTagFilter === '__untagged__') return base.filter(i => i.tags.length === 0);
+    return base.filter(i => i.tags.includes(activeTagFilter));
+  }, [showCompleted, completedItems, filteredItems, activeTagFilter]);
+  const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
+  const visibleIds = useMemo(() => new Set(displayItems.map(i => i.id)), [displayItems]);
+  const selectedVisibleCount = useMemo(() => [...selectedItemIds].filter(id => visibleIds.has(id)).length, [selectedItemIds, visibleIds]);
+  const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
+  const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
+
   // Bulk selection
   const toggleSelect = useCallback((id: string) => {
     setSelectedItemIds(prev => {
@@ -268,12 +281,12 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedItemIds.size === filteredItems.length) {
+    if (isAllSelected) {
       setSelectedItemIds(new Set());
     } else {
-      setSelectedItemIds(new Set(filteredItems.map(i => i.id)));
+      setSelectedItemIds(new Set(displayItems.map(i => i.id)));
     }
-  }, [selectedItemIds.size, filteredItems]);
+  }, [isAllSelected, displayItems]);
 
   const handleBulkTag = useCallback(
     (tag: string) => {
@@ -322,11 +335,6 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   const handleRowClick = useCallback((itemId: string) => {
     setFeaturedItemId(prev => (prev === itemId ? null : itemId));
   }, []);
-
-  // Display items
-  const displayItems = showCompleted ? (completedItems ?? []) : filteredItems;
-  const isAllSelected = displayItems.length > 0 && selectedItemIds.size === displayItems.length;
-  const isSomeSelected = selectedItemIds.size > 0 && selectedItemIds.size < displayItems.length;
 
   // Featured item
   const featuredItem = useMemo(() => {
@@ -726,7 +734,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             </div>
           </Column.Toolbar>
 
-          {displayItems.length === 0 ? (
+          {isLoadingDisplay ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Spinner className="h-4 w-4" />
+            </div>
+          ) : displayItems.length === 0 ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center px-8">
                 <Txt variant="ui-sm" className="text-neutral3 block">

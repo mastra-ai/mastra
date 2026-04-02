@@ -268,6 +268,19 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
     [items, updateExperimentResult, featuredItemId],
   );
 
+  // Display items with tag filtering applied to both views
+  const displayItems = useMemo(() => {
+    const base = showCompleted ? (completedItems ?? []) : filteredItems;
+    if (!showCompleted || !activeTagFilter) return base;
+    if (activeTagFilter === '__untagged__') return base.filter(i => i.tags.length === 0);
+    return base.filter(i => i.tags.includes(activeTagFilter));
+  }, [showCompleted, completedItems, filteredItems, activeTagFilter]);
+  const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
+  const visibleIds = useMemo(() => new Set(displayItems.map(i => i.id)), [displayItems]);
+  const selectedVisibleCount = useMemo(() => [...selectedItemIds].filter(id => visibleIds.has(id)).length, [selectedItemIds, visibleIds]);
+  const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
+  const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
+
   // Bulk selection
   const toggleSelect = useCallback((itemId: string) => {
     setSelectedItemIds(prev => {
@@ -279,12 +292,12 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedItemIds.size === filteredItems.length) {
+    if (isAllSelected) {
       setSelectedItemIds(new Set());
     } else {
-      setSelectedItemIds(new Set(filteredItems.map(i => i.id)));
+      setSelectedItemIds(new Set(displayItems.map(i => i.id)));
     }
-  }, [filteredItems, selectedItemIds]);
+  }, [isAllSelected, displayItems]);
 
   const handleBulkTag = useCallback(
     (tag: string) => {
@@ -395,24 +408,21 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   // Featured item
   const featuredItem = useMemo(() => {
     if (!featuredItemId) return null;
-    const displayItems = showCompleted ? (completedItems ?? []) : filteredItems;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
-  }, [featuredItemId, showCompleted, completedItems, filteredItems]);
+  }, [featuredItemId, displayItems]);
 
   // Navigation
   const toNextItem = useCallback(() => {
-    const displayItems = showCompleted ? (completedItems ?? []) : filteredItems;
     if (!featuredItemId || displayItems.length === 0) return;
     const idx = displayItems.findIndex(i => i.id === featuredItemId);
     if (idx < displayItems.length - 1) setFeaturedItemId(displayItems[idx + 1].id);
-  }, [featuredItemId, showCompleted, completedItems, filteredItems]);
+  }, [featuredItemId, displayItems]);
 
   const toPreviousItem = useCallback(() => {
-    const displayItems = showCompleted ? (completedItems ?? []) : filteredItems;
     if (!featuredItemId || displayItems.length === 0) return;
     const idx = displayItems.findIndex(i => i.id === featuredItemId);
     if (idx > 0) setFeaturedItemId(displayItems[idx - 1].id);
-  }, [featuredItemId, showCompleted, completedItems, filteredItems]);
+  }, [featuredItemId, displayItems]);
 
   // Grid columns for EntityList
   const gridColumns = featuredItem ? '2rem 1fr 10rem 8rem' : '2rem 1fr 10rem 8rem 6rem 6rem';
@@ -424,11 +434,6 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
       </div>
     );
   }
-
-  const displayItems = showCompleted ? (completedItems ?? []) : filteredItems;
-  const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
-  const isAllSelected = filteredItems.length > 0 && selectedItemIds.size === filteredItems.length;
-  const isSomeSelected = selectedItemIds.size > 0 && !isAllSelected;
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">

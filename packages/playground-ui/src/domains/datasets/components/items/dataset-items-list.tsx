@@ -148,7 +148,7 @@ export function DatasetItemsList({
                   <EntityList.Cell>
                     <Checkbox
                       checked={selectedIds.has(item.id)}
-                      onCheckedChange={() => {}}
+                      onCheckedChange={() => {}} // no-op: selection handled by onClick for shift-key multi-select
                       onClick={e => {
                         e.stopPropagation();
                         handleToggleSelection(item.id, e.shiftKey, allIds);

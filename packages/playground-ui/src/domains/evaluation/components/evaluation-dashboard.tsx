@@ -163,7 +163,7 @@ export function EvaluationDashboard({
           experiments={experiments ?? []}
           reviewByDataset={reviewByDataset}
           isLoading={isLoadingDatasets || isLoadingExperiments}
-          error={errorDatasets}
+          error={errorDatasets ?? errorExperiments}
           search={datasetSearch}
           targetFilter={datasetTargetFilter}
           experimentFilter={datasetExperimentFilter}

@@ -21,18 +21,17 @@ import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { Column } from '@/ds/components/Columns';
-import { Columns } from '@/ds/components/Columns';
+import { Column, Columns } from '@/ds/components/Columns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
-import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { Spinner } from '@/ds/components/Spinner';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import { Tabs } from '@/ds/components/Tabs';
+import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
 import { Tab } from '@/ds/components/Tabs/tabs-tab';
-import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
@@ -427,7 +426,7 @@ export function AgentPlaygroundEvaluate({
               onBack={() => setDetailView(null)}
               prefillTestItems={detailView.prefillTestItems}
               onSaved={(scorerId: string) => {
-                attachScorer(scorerId, {});
+                void attachScorer(scorerId, {});
                 setDetailView({ type: 'scorer', id: scorerId });
               }}
             />
