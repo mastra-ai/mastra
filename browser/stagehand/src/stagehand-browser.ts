@@ -144,10 +144,12 @@ export class StagehandBrowser extends MastraBrowser {
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
         headless: config.headless,
+        viewport: config.viewport,
       };
-    } else if (config.headless !== undefined && config.env !== 'BROWSERBASE') {
+    } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
         headless: config.headless,
+        viewport: config.viewport,
       };
     }
 

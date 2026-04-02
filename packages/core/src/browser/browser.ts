@@ -74,6 +74,15 @@ export interface BrowserConfig {
   headless?: boolean;
 
   /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+
+  /**
    * Default timeout in milliseconds for browser operations.
    * @default 10000 (10 seconds)
    */
@@ -108,20 +117,6 @@ export interface BrowserConfig {
    * Controls image format, quality, and dimensions.
    */
   screencast?: ScreencastOptions;
-
-  /**
-   * Auto-reconnect to the browser on disconnect.
-   * Useful for cloud CDP connections that may drop.
-   * @default false
-   */
-  autoReconnect?: boolean;
-
-  /**
-   * Delay in milliseconds before attempting to reconnect.
-   * Only used when autoReconnect is true.
-   * @default 1000
-   */
-  reconnectDelay?: number;
 }
 
 // =============================================================================

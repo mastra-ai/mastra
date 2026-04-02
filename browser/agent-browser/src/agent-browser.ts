@@ -187,6 +187,7 @@ export class AgentBrowser extends MastraBrowser {
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions = {
       headless: localConfig.headless ?? true,
+      viewport: localConfig.viewport,
     };
 
     // Resolve CDP URL if provided (can be string or function)

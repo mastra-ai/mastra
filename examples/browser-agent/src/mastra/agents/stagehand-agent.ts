@@ -6,15 +6,47 @@ import { Memory } from '@mastra/memory';
 
 const memory = new Memory();
 
-// Browser-Use CDP URL for testing external browser connections
+// Cloud provider credentials
+// Priority: Browserbase > Browserless > Generic CDP URL > Local
+
+// Option 1: Browserbase (native Stagehand integration)
+const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY;
+const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID;
+
+// Option 2: Browserless (via CDP URL)
+const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
+
+// Option 3: Generic CDP URL (Browser-Use, Steel, etc.)
 const CDP_URL = process.env.BROWSER_CDP_URL;
 
+// Determine which provider to use
+const useBrowserbase = !!(BROWSERBASE_API_KEY && BROWSERBASE_PROJECT_ID);
+const useBrowserless = !!BROWSERLESS_TOKEN && !useBrowserbase;
+const useCdpUrl = !!CDP_URL && !useBrowserbase && !useBrowserless;
+
+// Build CDP URL for Browserless
+const browserlessCdpUrl = BROWSERLESS_TOKEN
+  ? `wss://production-sfo.browserless.io?token=${BROWSERLESS_TOKEN}&stealth=true`
+  : undefined;
+
 export const stagehandBrowserToolset = new StagehandBrowser({
-  env: 'LOCAL',
-  cdpUrl: CDP_URL,
-  model: 'openai/gpt-5.2',
-  headless: !CDP_URL, // Use headed mode when connecting to external browser
-  verbose: 1,
+  // Environment selection
+  env: useBrowserbase ? 'BROWSERBASE' : 'LOCAL',
+
+  // Browserbase credentials (only used when env = 'BROWSERBASE')
+  apiKey: BROWSERBASE_API_KEY,
+  projectId: BROWSERBASE_PROJECT_ID,
+
+  // CDP URL for Browserless or other cloud providers (only used when env = 'LOCAL')
+  cdpUrl: useBrowserless ? browserlessCdpUrl : useCdpUrl ? CDP_URL : undefined,
+
+  // AI model for act/extract/observe
+  model: 'anthropic/claude-sonnet-4-20250514',
+
+  // Headless mode: false for cloud providers (we want to see the browser)
+  headless: useBrowserbase || useBrowserless || useCdpUrl ? false : true,
+
+  verbose: 0,
 });
 
 export const stagehandAgent = new Agent({

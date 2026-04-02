@@ -2,7 +2,7 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig, ThreadIsolationMode } from '@mastra/core/browser';
+import type { BrowserConfig } from '@mastra/core/browser';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -44,27 +44,17 @@ export interface StagehandBrowserConfig extends BrowserConfig {
   model?: ModelConfiguration;
 
   /**
-   * Enable self-healing selectors
+   * Enable self-healing selectors.
+   * When enabled, Stagehand uses AI to find elements even when selectors fail.
    * @default true
    */
   selfHeal?: boolean;
-
-  /**
-   * Enable experimental features
-   * @default false
-   */
-  experimental?: boolean;
 
   /**
    * Timeout for DOM to settle after actions (ms)
    * @default 5000
    */
   domSettleTimeout?: number;
-
-  /**
-   * Directory for caching action observations
-   */
-  cacheDir?: string;
 
   /**
    * Logging verbosity level
@@ -76,18 +66,9 @@ export interface StagehandBrowserConfig extends BrowserConfig {
   verbose?: 0 | 1 | 2;
 
   /**
-   * Custom system prompt for AI operations
+   * Custom system prompt for AI operations (act, extract, observe)
    */
   systemPrompt?: string;
-
-  /**
-   * Thread isolation mode for browser sessions.
-   * - 'none': All threads share the same Stagehand instance
-   * - 'browser': Each thread gets its own Stagehand instance (separate browser)
-   *
-   * @default 'browser'
-   */
-  threadIsolation?: ThreadIsolationMode;
 }
 
 /**
