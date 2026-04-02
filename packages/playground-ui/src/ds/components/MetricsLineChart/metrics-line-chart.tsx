@@ -43,7 +43,12 @@ export function MetricsLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid stroke="currentColor" strokeOpacity={0.08} vertical={false} className="text-black dark:text-white" />
+            <CartesianGrid
+              stroke="currentColor"
+              strokeOpacity={0.08}
+              vertical={false}
+              className="text-black dark:text-white"
+            />
             <XAxis
               dataKey="time"
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
