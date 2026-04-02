@@ -226,25 +226,30 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
           const observerExchange = this.engine.observer.lastExchange;
-          writeProcessInputStepReproCapture({
-            threadId,
-            resourceId,
-            stepNumber,
-            args,
-            preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
-            preMessages: preMessagesSnapshot!,
-            preBufferedChunks: [],
-            preContextTokenCount: 0,
-            preSerializedMessageList: preSerializedMessageList!,
-            postBufferedChunks: [],
-            postContextTokenCount: finalTotalPending,
-            messageList,
-            details: {},
-            observerExchange,
-          });
-          // Clear after capture so it doesn't leak into subsequent steps
-          this.engine.observer.lastExchange = undefined;
+          try {
+            writeProcessInputStepReproCapture({
+              threadId,
+              resourceId,
+              stepNumber,
+              args,
+              preRecord: preRecordSnapshot!,
+              postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
+              preMessages: preMessagesSnapshot!,
+              preBufferedChunks: [],
+              preContextTokenCount: 0,
+              preSerializedMessageList: preSerializedMessageList!,
+              postBufferedChunks: [],
+              postContextTokenCount: finalTotalPending,
+              messageList,
+              details: {},
+              observerExchange,
+            });
+          } finally {
+            // Only clear if it hasn't been replaced by a concurrent observation
+            if (this.engine.observer.lastExchange === observerExchange) {
+              this.engine.observer.lastExchange = undefined;
+            }
+          }
         }
       }
 

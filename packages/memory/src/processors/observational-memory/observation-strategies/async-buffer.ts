@@ -118,34 +118,39 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       lastBufferedAtTime: processed.lastObservedAt,
     });
 
-    // Update thread title immediately — don't wait for activation
+    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+
+    // Update thread title immediately — don't wait for activation.
+    // Wrapped in try/catch so title failures don't abort the buffering cycle.
     const newTitle = processed.threadTitle?.trim();
     if (newTitle && newTitle.length >= 3) {
-      const thread = await this.storage.getThreadById({ threadId });
-      if (thread) {
-        const oldTitle = thread.title?.trim();
-        if (newTitle !== oldTitle) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            threadTitle: processed.threadTitle,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: newTitle,
-            metadata: newMetadata,
-          });
+      try {
+        const thread = await this.storage.getThreadById({ threadId });
+        if (thread) {
+          const oldTitle = thread.title?.trim();
+          if (newTitle !== oldTitle) {
+            const newMetadata = setThreadOMMetadata(thread.metadata, {
+              threadTitle: processed.threadTitle,
+            });
+            await this.storage.updateThread({
+              id: threadId,
+              title: newTitle,
+              metadata: newMetadata,
+            });
 
-          const marker = createThreadUpdateMarker({
-            cycleId: this.cycleId,
-            threadId,
-            oldTitle,
-            newTitle,
-          });
-          await this.streamMarker(marker);
+            const marker = createThreadUpdateMarker({
+              cycleId: this.cycleId,
+              threadId,
+              oldTitle,
+              newTitle,
+            });
+            await this.streamMarker(marker);
+          }
         }
+      } catch {
+        omDebug(`[OM:asyncBuffer] failed to update thread title for ${threadId}`);
       }
     }
-
-    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
