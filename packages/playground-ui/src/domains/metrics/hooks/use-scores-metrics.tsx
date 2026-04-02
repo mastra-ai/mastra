@@ -77,6 +77,7 @@ export function useScoresMetrics() {
 
       // Merge time series into flat Recharts format
       const bucketMap = new Map<string, ScoresOverTimePoint>();
+      const rangeSpansDays = timestamp.end.toDateString() !== timestamp.start.toDateString();
 
       for (let i = 0; i < scorerIds.length; i++) {
         const scorerId = scorerIds[i];
@@ -88,11 +89,19 @@ export function useScoresMetrics() {
             const key = ts.toISOString();
             if (!bucketMap.has(key)) {
               bucketMap.set(key, {
-                time: ts.toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false,
-                }),
+                time: rangeSpansDays
+                  ? ts.toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    })
+                  : ts.toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    }),
               });
             }
             bucketMap.get(key)![scorerId] = +point.value.toFixed(2);
