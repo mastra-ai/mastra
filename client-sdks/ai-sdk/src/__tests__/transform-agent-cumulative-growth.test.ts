@@ -213,4 +213,19 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
         `This super-linear growth causes OOM in supervisor agent streaming (issue #14932).`,
     ).toBeLessThan(3);
   });
+
+  it('emitted data-tool-agent payloads should not contain internal tracking fields', () => {
+    const { emissions } = simulateMultiStepAgentRun(3);
+
+    for (const emission of emissions) {
+      const data = emission.data;
+      expect(data).not.toHaveProperty('_textOffset');
+      expect(data).not.toHaveProperty('_reasoningOffset');
+
+      // Also verify they don't appear in the serialized JSON sent over the wire
+      const serialized = JSON.stringify(emission);
+      expect(serialized).not.toContain('_textOffset');
+      expect(serialized).not.toContain('_reasoningOffset');
+    }
+  });
 });

@@ -583,10 +583,12 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
   }
 
   if (hasChanged) {
+    // Strip internal offset trackers so they don't leak over the wire.
+    const { _textOffset: _to, _reasoningOffset: _ro, ...data } = bufferedSteps.get(payload.runId!)!;
     return {
       type: 'data-tool-agent',
       id: payload.runId!,
-      data: bufferedSteps.get(payload.runId!),
+      data,
     } satisfies AgentDataPart;
   }
   return null;
