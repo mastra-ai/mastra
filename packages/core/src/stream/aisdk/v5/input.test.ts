@@ -297,6 +297,11 @@ describe('AISDKV5InputStream', () => {
             },
           },
         },
+        messages: {
+          all: [],
+          user: [],
+          nonUser: [],
+        },
         providerMetadata: {
           testProvider: {
             testKey: 'testValue',
