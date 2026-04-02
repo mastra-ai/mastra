@@ -8,6 +8,7 @@ import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
+import type { GatewayOMPoller } from '../agents/gateway-om.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -68,6 +69,9 @@ export interface MastraTUIOptions {
 
   /** Use inline questions instead of dialog overlays */
   inlineQuestions?: boolean;
+
+  /** Gateway OM poller for post-response status updates */
+  gatewayOMPoller?: GatewayOMPoller;
 }
 
 // =============================================================================
@@ -158,6 +162,7 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
 
   // ── Observational Memory ──────────────────────────────────────────────
+  gatewayOMPoller?: GatewayOMPoller;
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
@@ -252,6 +257,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
+
+    // Observational Memory
+    gatewayOMPoller: options.gatewayOMPoller,
 
     // Status line
     projectInfo: detectProject(process.cwd()),

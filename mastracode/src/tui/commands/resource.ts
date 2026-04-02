@@ -44,6 +44,12 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
     state.pendingNewThread = false;
+    // Clear stale tasks/plan so they don't leak into the switched thread's system prompt
+    void harness.setState({ tasks: [], activePlan: null } as any);
+    if (state.taskProgress) {
+      state.taskProgress.updateTasks([]);
+    }
+    state.taskWriteInsertIndex = -1;
     await ctx.renderExistingMessages();
     ctx.showInfo(
       sub === 'reset'
@@ -56,6 +62,12 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
     state.pendingNewThread = true;
+    // Clear stale tasks/plan so they don't leak into the new thread's system prompt
+    void harness.setState({ tasks: [], activePlan: null } as any);
+    if (state.taskProgress) {
+      state.taskProgress.updateTasks([]);
+    }
+    state.taskWriteInsertIndex = -1;
     ctx.showInfo(
       sub === 'reset'
         ? `Resource ID reset to: ${defaultId} (no existing threads, a new one will be created)`

@@ -77,6 +77,7 @@ async function tuiMain() {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    gatewayOMPoller: result.gatewayOMPoller,
   });
 
   tui.run().catch(error => {

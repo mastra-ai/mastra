@@ -247,6 +247,14 @@ export interface HarnessConfig<TState = {}> {
     acquire: (threadId: string) => void | Promise<void>;
     release: (threadId: string) => void | Promise<void>;
   };
+
+  /**
+   * Optional external OM progress provider (e.g., gateway API).
+   * When set, `loadOMProgress()` calls this first. If it returns an event,
+   * that event is emitted and local storage is skipped. Return null to
+   * fall back to local storage.
+   */
+  omProgressProvider?: OMProgressProvider;
 }
 
 /**
@@ -351,6 +359,16 @@ export type ModelUseCountProvider = () => Record<string, number>;
  * Lets the app layer track and persist model usage for ranking.
  */
 export type ModelUseCountTracker = (modelId: string) => void;
+
+/**
+ * Optional provider for loading OM progress from an external source (e.g., gateway).
+ * When set, `loadOMProgress()` calls this instead of reading from local storage.
+ * Return null to fall back to local storage behavior.
+ */
+export type OMProgressProvider = (
+  threadId: string,
+  resourceId: string,
+) => Promise<HarnessEvent | null>;
 
 // =============================================================================
 // Harness State

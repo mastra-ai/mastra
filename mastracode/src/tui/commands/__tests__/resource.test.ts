@@ -34,6 +34,7 @@ function createMockHarness(opts?: { id?: string; resourceId?: string }) {
       currentThreadId = threadId;
     }),
     getCurrentThreadId: vi.fn(() => currentThreadId),
+    setState: vi.fn(async () => {}),
 
     // Test helpers
     _addThread(resourceId: string, title: string, updatedAt: Date) {

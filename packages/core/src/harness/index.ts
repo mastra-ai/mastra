@@ -27,6 +27,7 @@ export type {
   ModelUseCountProvider,
   ModelUseCountTracker,
   OMBufferedStatus,
+  OMProgressProvider,
   OMProgressState,
   OMStatus,
   PermissionPolicy,

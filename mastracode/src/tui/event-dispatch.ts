@@ -58,6 +58,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       } else {
         handleAgentEnd(ectx);
       }
+      // Poll gateway OM status after response completes
+      if (state.gatewayOMPoller) {
+        state.gatewayOMPoller.pollAfterResponse(() => state.harness.loadOMProgress());
+      }
       break;
 
     case 'message_start':
@@ -121,6 +125,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'thread_changed': {
+      state.gatewayOMPoller?.cancelPending();
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();

@@ -52,6 +52,32 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
+
+    // When gateway is active with a mastra/ model, the gateway handles OM and
+    // message history enrichment server-side. Disable local OM so we don't
+    // run redundant observation/reflection cycles. MessageHistory still loads
+    // from local libsql — needed for context continuity when users switch
+    // between gateway and non-gateway models mid-conversation.
+    const isGatewayActive =
+      !!process.env['MASTRA_GATEWAY_API_KEY'] && (state?.currentModelId ?? '').startsWith('mastra/');
+
+    if (isGatewayActive) {
+      const gatewayCacheKey = 'gateway';
+      if (cachedMemory && cachedMemoryKey === gatewayCacheKey) {
+        return cachedMemory;
+      }
+      cachedMemory = new Memory({
+        storage,
+        vector: vector || false,
+        embedder: vector ? fastembed.small : undefined,
+        options: {
+          observationalMemory: false,
+        },
+      });
+      cachedMemoryKey = gatewayCacheKey;
+      return cachedMemory;
+    }
+
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;

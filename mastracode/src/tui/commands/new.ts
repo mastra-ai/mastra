@@ -14,6 +14,8 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
     state.taskProgress.updateTasks([]);
   }
   state.taskWriteInsertIndex = -1;
+  // Clear harness state tasks + active plan so they don't leak into the new thread's system prompt
+  void state.harness.setState({ tasks: [], activePlan: null } as any);
 
   ctx.updateStatusLine();
   state.ui.requestRender();

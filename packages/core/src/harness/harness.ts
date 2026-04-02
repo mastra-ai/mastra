@@ -997,6 +997,19 @@ export class Harness<TState = {}> {
   async loadOMProgress(): Promise<void> {
     if (!this.currentThreadId) return;
 
+    // Try external provider first (e.g., gateway)
+    if (this.config.omProgressProvider) {
+      try {
+        const event = await this.config.omProgressProvider(this.currentThreadId, this.resourceId);
+        if (event) {
+          this.emit(event);
+          return;
+        }
+      } catch {
+        // Fall through to local storage
+      }
+    }
+
     try {
       const memoryStorage = await this.getMemoryStorage();
       const record = await memoryStorage.getObservationalMemory(this.currentThreadId, this.resourceId);

@@ -1275,6 +1275,33 @@ export const CLONE_THREAD_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
 
+      // Gateway proxy: clone thread via gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          // Validate ownership before cloning
+          const existing = await gwClient.getThread(effectiveThreadId!);
+          if (!existing) {
+            throw new HTTPException(404, { message: 'Source thread not found on gateway' });
+          }
+          await validateThreadOwnership(toLocalThread(existing.thread), effectiveResourceId);
+
+          const result = await gwClient.cloneThread(effectiveThreadId!, {
+            newThreadId,
+            resourceId: effectiveResourceId,
+            title,
+            metadata,
+            options,
+          });
+
+          return {
+            thread: toLocalThread(result.thread),
+            clonedMessages: result.clonedMessages.map(toLocalMessage),
+          };
+        }
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });

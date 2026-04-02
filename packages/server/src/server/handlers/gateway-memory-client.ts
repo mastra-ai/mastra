@@ -148,6 +148,29 @@ export class GatewayMemoryClient {
     }
   }
 
+  async cloneThread(
+    threadId: string,
+    params: {
+      newThreadId?: string;
+      resourceId?: string;
+      title?: string;
+      metadata?: Record<string, unknown>;
+      options?: {
+        messageLimit?: number;
+        messageFilter?: {
+          startDate?: Date;
+          endDate?: Date;
+          messageIds?: string[];
+        };
+      };
+    },
+  ): Promise<{ thread: GatewayThread; clonedMessages: GatewayMessage[] }> {
+    return this.request(`${this.threadPath(threadId)}/clone`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
   // ── Messages ─────────────────────────────────────────────────
 
   async listMessages(

@@ -12,6 +12,7 @@ import type { ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { createGatewayOMPoller, createGatewayOMProgressProvider } from './agents/gateway-om.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { getDynamicModel, resolveModel } from './agents/model.js';
@@ -31,6 +32,7 @@ import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.j
 import {
   getCustomProviderId,
   loadSettings,
+  MEMORY_GATEWAY_DEFAULT_URL,
   MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
   resolveOmModel,
@@ -150,6 +152,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+
+  // Gateway OM status provider + poller (active only when gateway key is configured)
+  const gatewayBaseUrl =
+    globalSettings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? MEMORY_GATEWAY_DEFAULT_URL;
+  const gatewayOMProgressProvider = mgApiKey
+    ? createGatewayOMProgressProvider(gatewayBaseUrl, mgApiKey)
+    : undefined;
+  const gatewayOMPoller = mgApiKey ? createGatewayOMPoller() : undefined;
 
   // Project detection
   const project = detectProject(cwd);
@@ -434,6 +444,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       acquire: acquireThreadLock,
       release: releaseThreadLock,
     },
+    omProgressProvider: gatewayOMProgressProvider,
   });
 
   // Sync hookManager session ID on thread changes
@@ -447,5 +458,5 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
+  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning, gatewayOMPoller };
 }

@@ -147,6 +147,12 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.allToolComponents = [];
         state.allSystemReminderComponents = [];
         state.pendingTools.clear();
+        // Clear stale tasks/plan so they don't leak into the switched thread's system prompt
+        void state.harness.setState({ tasks: [], activePlan: null } as any);
+        if (state.taskProgress) {
+          state.taskProgress.updateTasks([]);
+        }
+        state.taskWriteInsertIndex = -1;
         await ctx.renderExistingMessages();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
