@@ -8,14 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import {
-  createAnswerRelevancyScorer,
-  createFaithfulnessScorer,
-  createToxicityScorer,
-  createCompletenessScorer,
-  createContentSimilarityScorer,
-  createToneScorer,
-} from '@mastra/evals/scorers/prebuilt';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { requestContextDemoAgent } from './request-context-demo-agent';
 
 // Export Dynamic Tools Agent
@@ -226,20 +219,6 @@ const answerRelevance = createAnswerRelevancyScorer({
   model: openai('gpt-4o'),
 });
 
-const faithfulness = createFaithfulnessScorer({
-  model: openai('gpt-4o'),
-});
-
-const toxicity = createToxicityScorer({
-  model: openai('gpt-4o'),
-});
-
-const completeness = createCompletenessScorer();
-
-const contentSimilarity = createContentSimilarityScorer();
-
-const tone = createToneScorer();
-
 export const evalAgent = new Agent({
   id: 'eval-agent',
   name: 'Eval Agent',
@@ -260,21 +239,6 @@ export const evalAgent = new Agent({
   scorers: {
     answerRelevance: {
       scorer: answerRelevance,
-    },
-    faithfulness: {
-      scorer: faithfulness,
-    },
-    toxicity: {
-      scorer: toxicity,
-    },
-    completeness: {
-      scorer: completeness,
-    },
-    contentSimilarity: {
-      scorer: contentSimilarity,
-    },
-    tone: {
-      scorer: tone,
     },
   },
 });
