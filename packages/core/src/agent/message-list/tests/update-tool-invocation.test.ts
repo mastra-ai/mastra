@@ -124,6 +124,62 @@ describe('MessageList.updateToolInvocation', () => {
     expect(unsaved[0]?.id).toBe(msg.id);
   });
 
+  it('should not mutate a sealed memory message after response-id rotation', () => {
+    const messageList = new MessageList();
+
+    const sealedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'data-om-status',
+          data: { windows: {} },
+        } as any,
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'tc-sealed',
+            toolName: 'web_search',
+            args: { query: 'hello' },
+          },
+        },
+      ],
+      'sealed-assistant-id',
+    );
+
+    sealedMessage.content.metadata = { mastra: { sealed: true } } as any;
+
+    messageList.add(sealedMessage, 'memory');
+    messageList.drainUnsavedMessages();
+
+    messageList.add(
+      makeAssistantMessage(
+        [
+          {
+            type: 'text',
+            text: 'post-seal continuation',
+          },
+        ],
+        'rotated-assistant-id',
+      ),
+      'response',
+    );
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-sealed',
+        toolName: 'web_search',
+        args: {},
+        result: { content: 'search results' },
+      },
+    });
+
+    expect(updated).toBe(false);
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.state).toBe('call');
+    expect(messageList.drainUnsavedMessages().map(message => message.id)).toEqual(['rotated-assistant-id']);
+  });
+
   it('should not move a response message (already in response source)', () => {
     const messageList = new MessageList();
 
