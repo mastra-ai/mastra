@@ -97,12 +97,16 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
     }
   }, []);
 
+  // Track intentional closes to avoid reconnecting after replacing a socket
+  const intentionalCloseRef = useRef(false);
+
   const connect = useCallback(() => {
     if (!agentId || !threadId) return;
 
     // Clear any existing connection and timeout
     clearReconnectTimeout();
     if (wsRef.current) {
+      intentionalCloseRef.current = true;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -115,6 +119,7 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
 
     try {
       const ws = new WebSocket(wsUrl);
+      intentionalCloseRef.current = false;
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -152,6 +157,10 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
                 case 'stopped':
                   setStatusState('disconnected');
                   break;
+                case 'error':
+                  setStatusState('error');
+                  setHasSession(false);
+                  break;
               }
             }
 
@@ -185,10 +194,13 @@ export function BrowserSessionProvider({ children, agentId, threadId }: BrowserS
       };
 
       ws.onclose = event => {
+        // Ignore close events from superseded sockets
+        if (wsRef.current !== ws) return;
+
         wsRef.current = null;
 
         // Don't reconnect if intentionally closed or max attempts reached
-        if (!event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
+        if (!intentionalCloseRef.current && !event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
           reconnectAttemptRef.current += 1;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 10000);
 

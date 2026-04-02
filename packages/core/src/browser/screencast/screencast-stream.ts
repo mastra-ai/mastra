@@ -93,7 +93,8 @@ export class ScreencastStream extends EventEmitter {
       this.frameHandler = (params: CdpScreencastFrame) => {
         const frameData: ScreencastFrameData = {
           data: params.data,
-          timestamp: params.metadata?.timestamp ?? Date.now(),
+          // CDP provides timestamp in seconds, convert to milliseconds for consistency
+          timestamp: params.metadata?.timestamp ? params.metadata.timestamp * 1000 : Date.now(),
           viewport: {
             width: params.metadata?.deviceWidth ?? 0,
             height: params.metadata?.deviceHeight ?? 0,
