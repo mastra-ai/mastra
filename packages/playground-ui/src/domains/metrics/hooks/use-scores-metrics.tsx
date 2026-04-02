@@ -61,7 +61,9 @@ export function useScoresMetrics() {
         return { summaryData: [], overTimeData: [], scorerNames: [], avgScore: null };
       }
 
-      const avgScore = Math.round((summaryData.reduce((s, d) => s + d.avg, 0) / summaryData.length) * 100) / 100;
+      const totalWeighted = summaryData.reduce((s, d) => s + d.avg * d.count, 0);
+      const totalCount = summaryData.reduce((s, d) => s + d.count, 0);
+      const avgScore = totalCount ? Math.round((totalWeighted / totalCount) * 100) / 100 : 0;
 
       const interval = '1h';
 
