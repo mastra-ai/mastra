@@ -35,36 +35,24 @@ export function useScoresMetrics() {
         return { summaryData: [], overTimeData: [], scorerNames: [], avgScore: null };
       }
 
-      // Fetch summary stats and time series for all scorers in parallel
-      const [summaryResults, timeSeriesResults] = await Promise.all([
-        Promise.all(
-          scorerIds.map(async scorerId => {
-            const [avg, min, max, count] = await Promise.all([
-              client.getScoreAggregate({ scorerId, aggregation: 'avg', filters }),
-              client.getScoreAggregate({ scorerId, aggregation: 'min', filters }),
-              client.getScoreAggregate({ scorerId, aggregation: 'max', filters }),
-              client.getScoreAggregate({ scorerId, aggregation: 'count', filters }),
-            ]);
-            return {
-              scorer: scorerId,
-              avg: avg.value ?? 0,
-              min: min.value ?? 0,
-              max: max.value ?? 0,
-              count: count.value ?? 0,
-            };
-          }),
-        ),
-        Promise.all(
-          scorerIds.map(scorerId =>
-            client.getScoreTimeSeries({
-              scorerId,
-              interval: '1h',
-              aggregation: 'avg',
-              filters,
-            }),
-          ),
-        ),
-      ]);
+      // Fetch summary stats first to determine which scorers have data
+      const summaryResults = await Promise.all(
+        scorerIds.map(async scorerId => {
+          const [avg, min, max, count] = await Promise.all([
+            client.getScoreAggregate({ scorerId, aggregation: 'avg', filters }),
+            client.getScoreAggregate({ scorerId, aggregation: 'min', filters }),
+            client.getScoreAggregate({ scorerId, aggregation: 'max', filters }),
+            client.getScoreAggregate({ scorerId, aggregation: 'count', filters }),
+          ]);
+          return {
+            scorer: scorerId,
+            avg: avg.value ?? 0,
+            min: min.value ?? 0,
+            max: max.value ?? 0,
+            count: count.value ?? 0,
+          };
+        }),
+      );
 
       const summaryData: ScorerSummary[] = summaryResults.filter(s => s.count > 0);
       const scorerNames = summaryData.map(s => s.scorer);
@@ -75,13 +63,29 @@ export function useScoresMetrics() {
 
       const avgScore = Math.round((summaryData.reduce((s, d) => s + d.avg, 0) / summaryData.length) * 100) / 100;
 
+      // Pick interval based on time range
+      const rangeMs = timestamp.end.getTime() - timestamp.start.getTime();
+      const rangeHours = rangeMs / 3_600_000;
+      const interval = rangeHours <= 24 ? '1h' : '1d';
+
+      // Fetch time series only for active scorers
+      const timeSeriesResults = await Promise.all(
+        scorerNames.map(scorerId =>
+          client.getScoreTimeSeries({
+            scorerId,
+            interval,
+            aggregation: 'avg',
+            filters,
+          }),
+        ),
+      );
+
       // Merge time series into flat Recharts format
       const bucketMap = new Map<string, ScoresOverTimePoint>();
       const rangeSpansDays = timestamp.end.toDateString() !== timestamp.start.toDateString();
 
-      for (let i = 0; i < scorerIds.length; i++) {
-        const scorerId = scorerIds[i];
-        if (!scorerNames.includes(scorerId)) continue;
+      for (let i = 0; i < scorerNames.length; i++) {
+        const scorerId = scorerNames[i];
         const series = timeSeriesResults[i]?.series ?? [];
         for (const s of series) {
           for (const point of s.points) {
