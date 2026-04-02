@@ -174,6 +174,18 @@ export interface BrowserViewerConfig extends BrowserConfig {
    * enabling proper CDP port discovery and thread isolation.
    */
   processManager?: SandboxProcessManager;
+
+  /**
+   * Whether to automatically reconnect when the browser disconnects.
+   * @default false
+   */
+  autoReconnect?: boolean;
+
+  /**
+   * Delay in milliseconds before attempting to reconnect.
+   * @default 1000
+   */
+  reconnectDelay?: number;
 }
 
 export interface BrowserViewerEvents {
@@ -389,7 +401,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
     // Initialize thread manager
     this.threadManager = new BrowserViewerThreadManager({
-      isolation: config.threadIsolation ?? 'browser',
+      scope: config.scope ?? 'thread',
       viewerConfig: config,
       processManager: config.processManager,
       cli: config.cli,
@@ -407,9 +419,9 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    */
   private getThreadState(threadId?: string): ThreadBrowserState | null {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    if (isolation === 'none') {
+    if (scope === 'shared') {
       return this.sharedState;
     }
 
@@ -421,9 +433,9 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    */
   private getOrCreateThreadState(threadId?: string): ThreadBrowserState {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    if (isolation === 'none') {
+    if (scope === 'shared') {
       if (!this.sharedState) {
         this.sharedState = this.createEmptyThreadState();
       }
@@ -977,14 +989,14 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
    * to clean up properly. Otherwise, we just disconnect (CLI handles lifecycle).
    */
   protected async doClose(): Promise<void> {
-    const isolation = this.threadManager.getIsolationMode();
+    const scope = this.threadManager.getScope();
 
-    if (isolation === 'browser') {
-      // In browser isolation mode, destroy all thread states
+    if (scope === 'thread') {
+      // In thread scope mode, destroy all thread states
       await this.destroyAllThreadStates();
       await this.threadManager.destroyAllSessions();
     } else {
-      // In 'none' mode, disconnect the shared connection
+      // In 'shared' mode, disconnect the shared connection
       await this.disconnect();
 
       // If we spawned the browser via processManager, kill it
@@ -1620,7 +1632,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
     this.setCdpClient(null);
     this.notifyBrowserClosed();
 
-    if (this.config.autoReconnect) {
+    if (this.viewerConfig.autoReconnect) {
       this.scheduleReconnect();
     }
   }
@@ -1632,7 +1644,7 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
         this.logger.error('Failed to reconnect to browser', error);
         this.scheduleReconnect();
       });
-    }, this.config.reconnectDelay ?? 1000);
+    }, this.viewerConfig.reconnectDelay ?? 1000);
   }
 
   private clearReconnectTimer(): void {

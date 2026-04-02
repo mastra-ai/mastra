@@ -134,8 +134,8 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
       browserState: savedState,
     };
 
-    if (this.isolation === 'browser') {
-      // Full browser isolation - spawn a new browser process
+    if (this.getScope() === 'thread') {
+      // Full thread scope - spawn a new browser process
       const connection = await this.spawnBrowserForThread(threadId);
       session.connection = connection;
       this.threadConnections.set(threadId, connection);
@@ -144,7 +144,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
       // State restoration happens in BrowserViewer after CDP connection is established
       this.onBrowserCreated?.(connection, threadId);
     }
-    // For 'none' isolation, no session setup needed - all threads share the connection
+    // For 'shared' scope, no session setup needed - all threads share the connection
 
     return session;
   }
@@ -154,12 +154,12 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
    */
   private async spawnBrowserForThread(threadId: string): Promise<ThreadCdpConnection> {
     if (!this.processManager) {
-      throw new Error('processManager required for browser isolation mode');
+      throw new Error('processManager required for thread scope mode');
     }
 
     const cli = this.cli;
     if (!cli) {
-      throw new Error('CLI provider required for browser isolation mode');
+      throw new Error('CLI provider required for thread scope mode');
     }
 
     let fullCommand: string;
@@ -182,7 +182,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
     } else {
       // Custom CLI provider - use getCdpUrlCommand as-is
       // Custom providers need to handle their own process spawning
-      throw new Error('Custom CLI providers are not supported for browser isolation mode');
+      throw new Error('Custom CLI providers are not supported for thread scope mode');
     }
 
     this.logger?.debug?.(`[BrowserViewerThreadManager] Spawning browser for thread ${threadId}: ${fullCommand}`);
@@ -238,7 +238,7 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
    * Get the browser connection for a specific session.
    */
   protected getManagerForSession(session: BrowserViewerSession): ThreadCdpConnection {
-    if (this.isolation === 'browser' && session.connection) {
+    if (this.getScope() === 'thread' && session.connection) {
       return session.connection;
     }
     return this.getSharedManager();
