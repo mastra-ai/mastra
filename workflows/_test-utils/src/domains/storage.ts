@@ -230,7 +230,7 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
 
     const workflow = createWorkflow({
       id: 'storage-resourceid-loop-workflow',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ value: z.number().optional() }),
       outputSchema: z.object({ value: z.number() }),
       options: { validateInputs: false },
     });
@@ -421,14 +421,13 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
 
         await execute(workflow, { value: 0 }, { runId, resourceId });
 
-        if (persistSpy) {
-          const calls = persistSpy.mock.calls;
-          expect(calls.length).toBeGreaterThan(0);
-          for (const [args] of calls) {
-            expect(args.resourceId).toBe(resourceId);
-          }
-          persistSpy.mockRestore();
+        expect(persistSpy).toBeDefined();
+        const calls = persistSpy!.mock.calls;
+        expect(calls.length).toBeGreaterThan(0);
+        for (const [args] of calls) {
+          expect(args.resourceId).toBe(resourceId);
         }
+        persistSpy!.mockRestore();
       },
     );
 
