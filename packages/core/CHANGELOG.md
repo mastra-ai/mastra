@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.21.0
+
+### Minor Changes
+
+- Adds a new `trimMode` option with a `contiguous` strategy that preserves a continuous suffix of messages by stopping at the first message that exceeds the token budget. Default behavior remains unchanged. ([#14801](https://github.com/mastra-ai/mastra/pull/14801))
+
+- Added scorer tracing and exported scores through the observability bus. ([#14920](https://github.com/mastra-ai/mastra/pull/14920))
+
+  **What changed**
+  - Added `SCORER_RUN` and `SCORER_STEP` spans for scorer execution.
+  - Exported scorer results through `mastra.observability.addScore()` when a target trace is available.
+  - Added score metadata for scorer name, target entity type, target scope, and scorer trace links.
+  - Deprecated the legacy scores-store helper while keeping the legacy write path during the transition.
+
+  **Why**
+  This makes scorer execution easier to debug and starts moving scorer results onto the new observability-based score pipeline.
+
+  **Example**
+
+  ```ts
+  await scorer.run({
+    input,
+    output,
+    scoreSource: 'experiment',
+    targetScope: 'span',
+    targetTraceId: traceId,
+    targetSpanId: spanId,
+  });
+  ```
+
+- Added component-scoped logging with custom filtering to ConsoleLogger ([#14947](https://github.com/mastra-ai/mastra/pull/14947))
+
+  ```typescript
+  new ConsoleLogger({
+    level: 'debug',
+    filter: ({ component }) => component === 'AGENT',
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a))
+
+- Fixed score and feedback emission to support live correlation context and unanchored annotations. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed a crash when using provider-defined tools (like `openai.tools.webSearch()`) with `autoResumeSuspendedTools` enabled. ([#14940](https://github.com/mastra-ai/mastra/pull/14940))
+
+- Fixed an AsyncLocalStorage runtime error when importing `@mastra/core/observability` in browser environments. ([#14948](https://github.com/mastra-ai/mastra/pull/14948))
+
+- Fixed assistant message prefill error crashing sessions. When a model does not support assistant message prefill, the harness now automatically retries with a user message instead of failing. ([#14953](https://github.com/mastra-ai/mastra/pull/14953))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Fixed workflow spans missing entityName, which caused the metrics dashboard to show 'unknown' for workflow trace volume ([#14949](https://github.com/mastra-ai/mastra/pull/14949))
+
+## 1.21.0-alpha.2
+
+### Minor Changes
+
+- Adds a new `trimMode` option with a `contiguous` strategy that preserves a continuous suffix of messages by stopping at the first message that exceeds the token budget. Default behavior remains unchanged. ([#14801](https://github.com/mastra-ai/mastra/pull/14801))
+
+- Added component-scoped logging with custom filtering to ConsoleLogger ([#14947](https://github.com/mastra-ai/mastra/pull/14947))
+
+  ```typescript
+  new ConsoleLogger({
+    level: 'debug',
+    filter: ({ component }) => component === 'AGENT',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed score and feedback emission to support live correlation context and unanchored annotations. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed a crash when using provider-defined tools (like `openai.tools.webSearch()`) with `autoResumeSuspendedTools` enabled. ([#14940](https://github.com/mastra-ai/mastra/pull/14940))
+
+- Fixed an AsyncLocalStorage runtime error when importing `@mastra/core/observability` in browser environments. ([#14948](https://github.com/mastra-ai/mastra/pull/14948))
+
+- Fixed assistant message prefill error crashing sessions. When a model does not support assistant message prefill, the harness now automatically retries with a user message instead of failing. ([#14953](https://github.com/mastra-ai/mastra/pull/14953))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Fixed workflow spans missing entityName, which caused the metrics dashboard to show 'unknown' for workflow trace volume ([#14949](https://github.com/mastra-ai/mastra/pull/14949))
+
 ## 1.21.0-alpha.1
 
 ### Minor Changes

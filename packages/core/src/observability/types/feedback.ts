@@ -65,8 +65,8 @@ export interface ExportedFeedback {
   /** When the feedback was recorded */
   timestamp: Date;
 
-  /** Trace that anchors the feedback target */
-  traceId: string;
+  /** Trace that anchors the feedback target when available */
+  traceId?: string;
 
   /** Span anchor when the feedback is about a specific span */
   spanId?: string;

@@ -46,7 +46,7 @@ export const scoreRecordSchema = z
     timestamp: z.date().describe('When the score was recorded'),
 
     // Target
-    traceId: traceIdField,
+    traceId: traceIdField.nullish().describe('Trace that anchors the scored target when available'),
     spanId: spanIdField.nullish().describe('Span ID this score applies to'),
 
     // Score data

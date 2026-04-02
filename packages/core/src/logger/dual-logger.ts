@@ -1,6 +1,6 @@
 import type { MastraError } from '../error';
+import { getCurrentSpan } from '../observability/context-storage';
 import type { LoggerContext } from '../observability/types/logging';
-import { getCurrentSpan } from '../observability/utils';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';
