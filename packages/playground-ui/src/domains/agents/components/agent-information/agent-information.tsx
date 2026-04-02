@@ -65,7 +65,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
           {hasMemory && (
             <TabContent value="memory">
-              <AgentMemory agentId={agentId} threadId={threadId} />
+              <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
             </TabContent>
           )}
 

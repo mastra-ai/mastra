@@ -107,7 +107,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
         return {
           threadExists: false,
-          thread: undefined,
+          thread: thread as StorageThreadType | undefined,
           messageList,
           processorStates,
           tripwire,
