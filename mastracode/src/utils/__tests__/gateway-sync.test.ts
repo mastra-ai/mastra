@@ -99,9 +99,7 @@ describe('gateway-sync', () => {
     );
 
     // Override shouldEnable to use the real env-var check
-    (mastra.shouldEnable as ReturnType<typeof vi.fn>).mockImplementation(
-      () => !!process.env['MASTRA_GATEWAY_API_KEY'],
-    );
+    (mastra.shouldEnable as ReturnType<typeof vi.fn>).mockImplementation(() => !!process.env['MASTRA_GATEWAY_API_KEY']);
 
     const { providers } = await fetchProvidersFromGateways([modelsDev, netlify, mastra]);
 
