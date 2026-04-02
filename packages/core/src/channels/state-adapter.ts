@@ -68,12 +68,10 @@ export class MastraStateAdapter implements StateAdapter {
   async unsubscribe(threadId: string): Promise<void> {
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return;
-    const { channel_subscribed, ...rest } = (thread.metadata ?? {}) as Record<string, unknown>;
-    void channel_subscribed; // consume for lint
     await this.memoryStore.updateThread({
       id: thread.id,
       title: thread.title ?? '',
-      metadata: { ...rest, channel_subscribed: 'false' },
+      metadata: { ...((thread.metadata ?? {}) as Record<string, unknown>), channel_subscribed: 'false' },
     });
   }
 

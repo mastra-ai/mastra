@@ -189,16 +189,6 @@ export interface ChannelConfig {
 }
 
 /**
- * @deprecated Use `ChannelConfig` instead. This type will be removed in a future version.
- */
-export interface ChannelOptions {
-  /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
-  state?: StateAdapter;
-  /** The bot's display name (default: `'Mastra'`). */
-  userName?: string;
-}
-
-/**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
  *
@@ -252,7 +242,7 @@ export class AgentChannels {
   }
 
   /**
-   * Bind this AgentChat to its owning agent. Called by Agent constructor.
+   * Bind this AgentChannels to its owning agent. Called by Agent constructor.
    * @internal
    */
   __setAgent(agent: Agent<any, any, any, any>): void {
@@ -431,8 +421,8 @@ export class AgentChannels {
               messageId,
               formatToolDenied(displayName, argsSummary, byUser, useCards),
             );
-          } catch {
-            // best-effort
+          } catch (err) {
+            this.log('debug', 'Failed to edit denied card', err);
           }
           return;
         }
@@ -440,8 +430,8 @@ export class AgentChannels {
         // Immediately edit the card to show "Approved" and remove the buttons
         try {
           await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
-        } catch {
-          // best-effort — continue with the stream even if edit fails
+        } catch (err) {
+          this.log('debug', 'Failed to edit approved card', err);
         }
 
         // Build request context for the resumed stream
@@ -487,14 +477,11 @@ export class AgentChannels {
               : `❌ Error: ${error.message}`;
             await thread.post(errorMessage);
           }
-        } catch {
-          // best-effort
+        } catch (err) {
+          this.log('debug', 'Failed to post error message for action', err);
         }
       }
     });
-
-    // TODO:
-    // chat.onSlashCommand()
     // chat.onReaction()
     await chat.initialize();
     this.chat = chat;
@@ -526,17 +513,19 @@ export class AgentChannels {
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
-      const chat = this;
+      const self = this;
       routes.push({
         path: `/api/agents/${agentId}/channels/${platform}/webhook`,
         method: 'POST',
         requiresAuth: false,
         createHandler: async () => {
           return async c => {
-            if (!chat.chat) {
+            const sdkInstance = self.chat;
+            if (!sdkInstance) {
               return c.json({ error: 'Chat not initialized' }, 503);
             }
-            const webhookHandler = (chat.chat.webhooks as Record<string, Function>)[platform];
+            // `webhooks` is an internal Chat SDK property (not in public typings)
+            const webhookHandler = (sdkInstance as any).webhooks?.[platform] as Function | undefined;
             if (!webhookHandler) {
               return c.json({ error: `No webhook handler for ${platform}` }, 404);
             }
@@ -611,8 +600,8 @@ export class AgentChannels {
           ? adapterConfig.formatError(error)
           : `❌ Error: ${error.message}`;
         await sdkThread.post(errorMessage);
-      } catch {
-        // best-effort — if we can't post the error, just log it
+      } catch (postErr) {
+        this.log('debug', 'Failed to post error message to thread', postErr);
       }
     }
   }
@@ -835,6 +824,23 @@ export class AgentChannels {
    * - `tool-call-approval`: Edits the card to show Approve/Deny buttons.
    * - `step-finish` / `finish`: Flushes accumulated text.
    */
+  private async editOrPost(
+    adapter: Adapter,
+    sdkThread: Thread,
+    messageId: string | undefined,
+    content: PostableMessage,
+  ) {
+    if (messageId) {
+      try {
+        await adapter.editMessage(sdkThread.id, messageId, content);
+      } catch {
+        await sdkThread.post(content);
+      }
+    } else {
+      await sdkThread.post(content);
+    }
+  }
+
   private async consumeAgentStream(
     stream: MastraModelOutput,
     sdkThread: Thread,
@@ -947,15 +953,7 @@ export class AgentChannels {
             isError: chunk.payload.isError,
           });
           if (custom != null) {
-            if (channelMsgId) {
-              try {
-                await adapter.editMessage(sdkThread.id, channelMsgId, custom);
-              } catch {
-                await sdkThread.post(custom);
-              }
-            } else {
-              await sdkThread.post(custom);
-            }
+            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
           }
         } else {
           const resultMessage = formatToolResult(
@@ -966,15 +964,7 @@ export class AgentChannels {
             durationMs,
             useCards,
           );
-          if (channelMsgId) {
-            try {
-              await adapter.editMessage(sdkThread.id, channelMsgId, resultMessage);
-            } catch {
-              await sdkThread.post(resultMessage);
-            }
-          } else {
-            await sdkThread.post(resultMessage);
-          }
+          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
         }
         continue;
       }
@@ -989,15 +979,7 @@ export class AgentChannels {
 
         const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
 
-        if (channelMsgId) {
-          try {
-            await adapter.editMessage(sdkThread.id, channelMsgId, approvalMessage);
-          } catch {
-            await sdkThread.post(approvalMessage);
-          }
-        } else {
-          await sdkThread.post(approvalMessage);
-        }
+        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
         continue;
       }
     }

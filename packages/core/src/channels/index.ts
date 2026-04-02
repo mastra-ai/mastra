@@ -5,7 +5,6 @@ export type {
   ChannelHandler,
   ChannelHandlerConfig,
   ChannelHandlers,
-  ChannelOptions,
   PostableMessage,
 } from './agent-channels';
 export { ChatChannelProcessor } from './processor';

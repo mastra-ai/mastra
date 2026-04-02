@@ -1,8 +1,8 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CardElement } from 'chat';
 import { Actions, Button, Card, CardText } from 'chat';
 
 import type { ProcessInputStepArgs, ProcessInputStepResult } from '../processors/index';
+import type { PostableMessage } from './agent-channels';
 import type { ChannelContext } from './types';
 
 // ---------------------------------------------------------------------------
@@ -12,9 +12,6 @@ import type { ChannelContext } from './types';
 const TOOL_PREFIXES = ['mastra_workspace_'];
 const MAX_ARG_SUMMARY_LENGTH = 40;
 const MAX_RESULT_LENGTH = 300;
-
-/** Message content that can be posted to a channel. */
-export type PostableMessage = string | CardElement;
 
 export function stripToolPrefix(name: string): string {
   for (const prefix of TOOL_PREFIXES) {
@@ -161,20 +158,6 @@ export function formatToolDenied(
   }
 
   return `${header} ✗\n✗ Denied${suffix}`;
-}
-
-// ---------------------------------------------------------------------------
-// Legacy helper (for backwards compatibility with custom formatToolCall)
-// ---------------------------------------------------------------------------
-
-export function buildToolResultCard(
-  toolName: string,
-  argsSummary: string,
-  resultText: string,
-  isError?: boolean,
-  durationMs?: number,
-): CardElement {
-  return formatToolResult(toolName, argsSummary, resultText, !!isError, durationMs, true) as CardElement;
 }
 
 // ---------------------------------------------------------------------------

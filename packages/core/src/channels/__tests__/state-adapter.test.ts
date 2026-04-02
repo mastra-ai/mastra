@@ -200,4 +200,66 @@ describe('MastraStateAdapter', () => {
       await adapter.releaseLock(lock!);
     });
   });
+
+  describe('queue operations', () => {
+    const makeEntry = (text: string) =>
+      ({
+        enqueuedAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        message: { id: text, text, author: { userId: 'u1' } },
+      }) as any;
+
+    it('enqueue returns the queue length', async () => {
+      const len1 = await adapter.enqueue('thread-1', makeEntry('a'), 10);
+      expect(len1).toBe(1);
+      const len2 = await adapter.enqueue('thread-1', makeEntry('b'), 10);
+      expect(len2).toBe(2);
+    });
+
+    it('dequeue returns entries in FIFO order', async () => {
+      await adapter.enqueue('thread-1', makeEntry('first'), 10);
+      await adapter.enqueue('thread-1', makeEntry('second'), 10);
+
+      const entry1 = await adapter.dequeue('thread-1');
+      expect(entry1?.message.text).toBe('first');
+      const entry2 = await adapter.dequeue('thread-1');
+      expect(entry2?.message.text).toBe('second');
+    });
+
+    it('dequeue returns null for empty queue', async () => {
+      const entry = await adapter.dequeue('thread-1');
+      expect(entry).toBeNull();
+    });
+
+    it('queueDepth returns the number of queued entries', async () => {
+      expect(await adapter.queueDepth('thread-1')).toBe(0);
+      await adapter.enqueue('thread-1', makeEntry('a'), 10);
+      expect(await adapter.queueDepth('thread-1')).toBe(1);
+      await adapter.dequeue('thread-1');
+      expect(await adapter.queueDepth('thread-1')).toBe(0);
+    });
+
+    it('enqueue trims oldest entries when exceeding maxSize', async () => {
+      await adapter.enqueue('thread-1', makeEntry('a'), 2);
+      await adapter.enqueue('thread-1', makeEntry('b'), 2);
+      await adapter.enqueue('thread-1', makeEntry('c'), 2);
+
+      expect(await adapter.queueDepth('thread-1')).toBe(2);
+      const entry = await adapter.dequeue('thread-1');
+      expect(entry?.message.text).toBe('b');
+    });
+
+    it('queues are isolated per thread', async () => {
+      await adapter.enqueue('thread-1', makeEntry('a'), 10);
+      await adapter.enqueue('thread-2', makeEntry('b'), 10);
+
+      expect(await adapter.queueDepth('thread-1')).toBe(1);
+      expect(await adapter.queueDepth('thread-2')).toBe(1);
+
+      const entry1 = await adapter.dequeue('thread-1');
+      expect(entry1?.message.text).toBe('a');
+      const entry2 = await adapter.dequeue('thread-2');
+      expect(entry2?.message.text).toBe('b');
+    });
+  });
 });
