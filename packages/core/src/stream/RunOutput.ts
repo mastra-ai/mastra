@@ -149,9 +149,40 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#handlePipelineError(reason);
       });
+  }
+
+  #handlePipelineError(reason: unknown) {
+    this.#streamError = reason instanceof Error ? reason : new Error(String(reason));
+    this.#status = 'failed';
+
+    this.#emitter.emit('chunk', {
+      type: 'workflow-finish',
+      runId: this.runId,
+      from: ChunkFrom.WORKFLOW,
+      payload: {
+        workflowStatus: this.#status,
+        metadata: {
+          error: this.#streamError,
+          errorMessage: this.#streamError.message,
+        },
+        output: {
+          usage: this.#usageCount,
+        },
+      },
+    });
+
+    this.#delayedPromises.usage.resolve(this.#usageCount);
+
+    Object.entries(this.#delayedPromises).forEach(([, promise]) => {
+      if (promise.status.type === 'pending') {
+        promise.reject(this.#streamError!);
+      }
+    });
+
+    this.#streamFinished = true;
+    this.#emitter.emit('finish');
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -313,8 +344,7 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#handlePipelineError(reason);
       });
   }
 
