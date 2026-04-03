@@ -47,6 +47,10 @@ async function initAuth(): Promise<AuthResult> {
       const { initOkta } = await import('./okta');
       return initOkta();
     }
+    case 'studio': {
+      const { initStudio } = await import('./studio');
+      return initStudio();
+    }
     default:
       return {};
   }
