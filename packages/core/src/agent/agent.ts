@@ -3005,6 +3005,19 @@ export class Agent<
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
 
+            // Save and clear reserved thread/resource keys so they don't override the
+            // sub-agent's isolated memory config. These keys take precedence over the
+            // memory option in generate/stream, so leaving them would cause the
+            // sub-agent to write to the parent's thread instead of its own.
+            const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+            const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+            if (savedThreadIdKey !== undefined) {
+              requestContext.delete(MASTRA_THREAD_ID_KEY);
+            }
+            if (savedResourceIdKey !== undefined) {
+              requestContext.delete(MASTRA_RESOURCE_ID_KEY);
+            }
+
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
@@ -3538,6 +3551,13 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+              // Restore reserved thread/resource keys for the parent agent
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+              }
 
               return result;
             } catch (err) {
@@ -3611,11 +3631,16 @@ export class Agent<
                 }
               }
 
-              // Wrap error in MastraError
               // Restore even on error so the parent's retry/fallback logic
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
+              }
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
               }
 
               const mastraError = new MastraError(
