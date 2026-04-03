@@ -170,6 +170,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -388,6 +390,30 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
   }
 }
 
+/**
+ * Get the list of browser tool names for an agent.
+ * Returns the tool names from the agent's browser provider if configured.
+ */
+export function getBrowserToolsFromAgent(agent: Agent, onError?: (error: unknown) => void): string[] {
+  try {
+    const browser = agent.browser;
+    if (!browser) {
+      return [];
+    }
+    return Object.keys(browser.getTools());
+  } catch (error) {
+    onError?.(error);
+    return [];
+  }
+}
+
+function createBrowserToolsErrorLogger(
+  logger: ReturnType<Context['mastra']['getLogger']>,
+  agentId: string,
+): (error: unknown) => void {
+  return error => logger.warn('Failed to get browser tools for agent', { agentId, error });
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -483,6 +509,7 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(logger, agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -524,6 +551,7 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -738,6 +766,7 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -767,6 +796,7 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
