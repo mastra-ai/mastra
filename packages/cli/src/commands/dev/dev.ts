@@ -293,6 +293,32 @@ async function checkAndRestart(
   await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, apiPrefix, publicDir }, bundler, startOptions);
 }
 
+/**
+ * Wait for a child process to exit, with a hard SIGKILL timeout as a fallback.
+ * Returns a promise that resolves once the process has fully exited.
+ */
+function waitForProcessExit(child: ChildProcess, timeoutMs = 5000): Promise<void> {
+  return new Promise<void>(resolve => {
+    if (child.exitCode !== null || child.killed) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      // Force-kill if still alive after timeout
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // already dead
+      }
+      resolve();
+    }, timeoutMs);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 async function rebundleAndRestart(
   dotMastraPath: string,
   { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
@@ -305,11 +331,14 @@ async function rebundleAndRestart(
 
   isRestarting = true;
   try {
-    // If current server process is running, stop it
+    // If current server process is running, stop it and WAIT for it to exit
+    // before starting the new one.  Without the await the old process may still
+    // be holding the port when startServer() calls listen(), causing EADDRINUSE.
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
       currentServerProcess.kill('SIGINT');
+      await waitForProcessExit(currentServerProcess);
     }
 
     const env = await bundler.loadEnvVars();
@@ -506,21 +535,32 @@ export async function dev({
 
     devLogger.shutdown();
 
+    // Kill the child server and WAIT for it to exit before tearing down the
+    // parent process.  Previously, process.exit(0) was called in the
+    // watcher.close() .finally() callback without awaiting the child, which
+    // caused the child to be orphaned and continue holding the port.
     if (currentServerProcess) {
       currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
     }
 
-    watcher
-      .close()
-      .catch(() => {})
-      .finally(() => process.exit(0));
+    try {
+      await watcher.close();
+    } catch {
+      // ignore watcher close errors during shutdown
+    }
+
+    process.exit(0);
   };
 
-  process.on('SIGINT', () => {
+  // Handle all common exit signals so the child server is never orphaned.
+  // SIGHUP is sent when a terminal tab/window is closed or the IDE restarts
+  // the process — without this handler the child would keep running.
+  const onSignal = () => {
     handleShutdown().catch(() => process.exit(0));
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    handleShutdown().catch(() => process.exit(0));
-  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }
