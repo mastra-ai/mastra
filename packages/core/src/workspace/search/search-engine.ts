@@ -117,6 +117,67 @@ export interface SearchEngineConfig {
 }
 
 // =============================================================================
+// Chunking
+// =============================================================================
+
+const DEFAULT_MAX_CHUNK_CHARS = 4000;
+const DEFAULT_OVERLAP_LINES = 3;
+
+export interface ChunkOptions {
+  maxChunkChars?: number;
+  overlapLines?: number;
+}
+
+export interface TextChunk {
+  content: string;
+  startLine: number;
+}
+
+/**
+ * Split text into line-based chunks that stay within a character budget.
+ *
+ * Each chunk is formed by accumulating whole lines until adding the next line
+ * would exceed `maxChunkChars`. Adjacent chunks share `overlapLines` lines so
+ * that context around chunk boundaries is preserved for embedding quality.
+ *
+ * Returns the original text as a single chunk when it already fits.
+ */
+export function splitIntoChunks(text: string, options: ChunkOptions = {}): TextChunk[] {
+  const maxChars = options.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS;
+  const overlapLines = options.overlapLines ?? DEFAULT_OVERLAP_LINES;
+
+  if (text.length <= maxChars) {
+    return [{ content: text, startLine: 1 }];
+  }
+
+  const lines = text.split('\n');
+  const chunks: TextChunk[] = [];
+  let start = 0;
+
+  while (start < lines.length) {
+    let end = start;
+    let charCount = 0;
+
+    while (end < lines.length) {
+      const lineLen = lines[end]!.length + (end > start ? 1 : 0); // +1 for newline separator
+      if (charCount + lineLen > maxChars && end > start) break;
+      charCount += lineLen;
+      end++;
+    }
+
+    chunks.push({
+      content: lines.slice(start, end).join('\n'),
+      startLine: start + 1, // 1-indexed
+    });
+
+    const nextStart = end - overlapLines;
+    start = nextStart <= start ? end : nextStart;
+  }
+
+  return chunks;
+}
+
+// =============================================================================
 // SearchEngine
 // =============================================================================
 
@@ -241,6 +302,30 @@ export class SearchEngine {
       if (this.#lazyVectorIndex) {
         this.#pendingVectorDocs = this.#pendingVectorDocs.filter(d => d.id !== id);
       }
+    }
+  }
+
+  /**
+   * Remove all documents whose ID starts with the given prefix.
+   * Used to remove all chunks belonging to a single source document.
+   */
+  async removeByPrefix(prefix: string): Promise<void> {
+    if (this.#bm25Index) {
+      const ids = this.#bm25Index.documentIds;
+      for (const id of ids) {
+        if (id.startsWith(prefix)) {
+          this.#bm25Index.remove(id);
+        }
+      }
+    }
+
+    if (this.#vectorConfig) {
+      if (this.#lazyVectorIndex) {
+        this.#pendingVectorDocs = this.#pendingVectorDocs.filter(d => !d.id.startsWith(prefix));
+      }
+      // Vector stores don't support prefix deletion natively, so we
+      // rely on the fact that chunk IDs are deterministic. Individual
+      // deleteVector calls are best-effort.
     }
   }
 

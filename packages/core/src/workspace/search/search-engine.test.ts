@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { SearchEngine } from './search-engine';
+import { SearchEngine, splitIntoChunks } from './search-engine';
 import type { Embedder } from './search-engine';
 
 describe('SearchEngine', () => {
@@ -541,5 +541,114 @@ Third line has learning too`;
       expect(chunk1Result?.lineRange).toEqual({ start: 1, end: 1 });
       expect(chunk2Result?.lineRange).toEqual({ start: 50, end: 50 });
     });
+  });
+
+  describe('removeByPrefix', () => {
+    it('should remove all BM25 documents matching a prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'first chunk content' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'second chunk content' });
+      await engine.index({ id: 'other.txt', content: 'other content' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      const results = await engine.search('content');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.id).toBe('other.txt');
+    });
+
+    it('should not remove documents that do not match the prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'a.txt#chunk-0', content: 'alpha' });
+      await engine.index({ id: 'b.txt#chunk-0', content: 'beta' });
+
+      await engine.removeByPrefix('a.txt#');
+
+      const results = await engine.search('alpha');
+      expect(results).toHaveLength(0);
+
+      const remaining = await engine.search('beta');
+      expect(remaining).toHaveLength(1);
+    });
+  });
+});
+
+describe('splitIntoChunks', () => {
+  it('should return a single chunk for short text', () => {
+    const chunks = splitIntoChunks('hello world');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('hello world');
+    expect(chunks[0]?.startLine).toBe(1);
+  });
+
+  it('should split text that exceeds maxChunkChars', () => {
+    const line = 'a'.repeat(50);
+    const lines = Array.from({ length: 20 }, () => line);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 200, overlapLines: 0 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    const reassembled = chunks.map(c => c.content).join('\n');
+    expect(reassembled).toBe(text);
+  });
+
+  it('should produce overlapping chunks when overlapLines > 0', () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 60, overlapLines: 2 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    for (let i = 1; i < chunks.length; i++) {
+      const prevLines = chunks[i - 1]!.content.split('\n');
+      const currLines = chunks[i]!.content.split('\n');
+      const prevTail = prevLines.slice(-2);
+      const currHead = currLines.slice(0, 2);
+      expect(currHead).toEqual(prevTail);
+    }
+  });
+
+  it('should set correct startLine for each chunk', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 40, overlapLines: 0 });
+
+    expect(chunks[0]?.startLine).toBe(1);
+
+    for (const chunk of chunks) {
+      const expectedLine = text.split('\n').indexOf(chunk.content.split('\n')[0]!) + 1;
+      expect(chunk.startLine).toBe(expectedLine);
+    }
+  });
+
+  it('should handle a single very long line', () => {
+    const text = 'x'.repeat(10000);
+    const chunks = splitIntoChunks(text, { maxChunkChars: 4000 });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe(text);
+  });
+
+  it('should handle empty text', () => {
+    const chunks = splitIntoChunks('');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('');
+  });
+
+  it('should not produce empty chunks', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 100, overlapLines: 2 });
+
+    for (const chunk of chunks) {
+      expect(chunk.content.length).toBeGreaterThan(0);
+    }
   });
 });

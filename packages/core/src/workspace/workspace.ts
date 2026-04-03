@@ -48,8 +48,8 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
@@ -843,6 +843,8 @@ export class Workspace<
 
   /**
    * Index a single file for search. Skips files that can't be read as text.
+   * Large files are automatically split into chunks to stay within embedding
+   * model token limits.
    */
   private async indexFileForSearch(filePath: string): Promise<void> {
     let content: string;
@@ -853,10 +855,29 @@ export class Workspace<
       return;
     }
 
-    try {
-      await this._searchEngine!.index({ id: filePath, content });
-    } catch (error) {
-      this._logger?.warn(`Failed to index file "${filePath}" for search`, { error });
+    const chunks = splitIntoChunks(content);
+
+    if (chunks.length === 1) {
+      try {
+        await this._searchEngine!.index({ id: filePath, content });
+      } catch (error) {
+        this._logger?.warn(`Failed to index file "${filePath}" for search`, { error });
+      }
+      return;
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]!;
+      try {
+        await this._searchEngine!.index({
+          id: `${filePath}#chunk-${i}`,
+          content: chunk.content,
+          startLineOffset: chunk.startLine,
+          metadata: { sourceFile: filePath },
+        });
+      } catch (error) {
+        this._logger?.warn(`Failed to index chunk ${i} of file "${filePath}" for search`, { error });
+      }
     }
   }
 
