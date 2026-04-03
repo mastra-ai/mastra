@@ -123,12 +123,13 @@ export abstract class ThreadManager<TManager = unknown> {
    * For 'thread' scope: Returns the thread-specific manager, or null if no session exists.
    * For 'shared' scope: Returns the shared manager (all threads use the same instance).
    *
-   * @param threadId - Thread identifier
+   * @param threadId - Thread identifier (defaults to DEFAULT_THREAD_ID)
    * @returns The manager for the thread, or null if not found (thread scope only)
    */
-  getExistingManagerForThread(threadId: string): TManager | null {
+  getExistingManagerForThread(threadId?: string): TManager | null {
+    const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
     if (this.scope === 'thread') {
-      return this.threadManagers.get(threadId) ?? null;
+      return this.threadManagers.get(effectiveThreadId) ?? null;
     }
     return this.sharedManager;
   }

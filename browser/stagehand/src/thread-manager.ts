@@ -64,7 +64,7 @@ export class StagehandThreadManager extends ThreadManager<V3> {
   /**
    * Get the page for a specific thread, creating session if needed.
    */
-  async getPageForThread(threadId: string): Promise<V3Page | null> {
+  async getPageForThread(threadId?: string): Promise<V3Page | null> {
     const stagehand = await this.getManagerForThread(threadId);
     return stagehand?.context?.activePage() ?? null;
   }
