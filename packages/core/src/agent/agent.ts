@@ -9,7 +9,6 @@ import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
-import { BrowserContextProcessor } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -418,26 +417,6 @@ export class Agent<
   }
 
   /**
-   * Gets the browser context processor to add when browser is configured.
-   * @internal
-   */
-  private getBrowserProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
-    if (!this.#browser) {
-      return [];
-    }
-
-    // Check for existing BrowserContextProcessor to avoid duplicates
-    const hasBrowserProcessor = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
-    );
-    if (hasBrowserProcessor) {
-      return [];
-    }
-
-    return [new BrowserContextProcessor()];
-  }
-
-  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -691,7 +670,7 @@ export class Agent<
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
     // Get browser context processors (with deduplication)
-    const browserProcessors = this.getBrowserProcessors(configuredProcessors);
+    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)

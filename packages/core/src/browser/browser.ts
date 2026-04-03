@@ -23,9 +23,12 @@
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
+import { isProcessorWorkflow } from '../processors/index';
+import type { InputProcessor, InputProcessorOrWorkflow } from '../processors/index';
 import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
+import { BrowserContextProcessor } from './processor';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
 import type { BrowserState, BrowserTabState, BrowserScope, ThreadManager } from './thread-manager';
@@ -1213,6 +1216,32 @@ export abstract class MastraBrowser extends MastraBase {
    * @returns Browser state including URL, tabs, and active tab index
    */
   protected abstract getBrowserStateForThread(threadId?: string): BrowserState | null;
+
+  // ---------------------------------------------------------------------------
+  // Input Processors
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns browser input processors (e.g., BrowserContextProcessor for context injection).
+   * Skips if the user already added a processor with the same id.
+   *
+   * This method is similar to AgentChannels.getInputProcessors() and allows
+   * browser implementations to provide their own processors.
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @returns Array of input processors for this browser instance
+   */
+  getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
+    );
+    if (hasProcessor) return [];
+    return [new BrowserContextProcessor()];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Abstract Methods - Must be implemented by providers
+  // ---------------------------------------------------------------------------
 
   /**
    * Get the browser tools for this provider.
