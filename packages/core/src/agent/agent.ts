@@ -3121,6 +3121,13 @@ export class Agent<
                       }
                     }
 
+                    if (savedThreadIdKey !== undefined) {
+                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                    }
+                    if (savedResourceIdKey !== undefined) {
+                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                    }
+
                     return {
                       text: `[Delegation Rejected] ${rejectionMessage}`,
                       subAgentThreadId,
@@ -3296,6 +3303,12 @@ export class Agent<
                 }
 
                 if (generateResult.finishReason === 'suspended') {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(generateResult.suspendPayload, {
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
@@ -3437,6 +3450,12 @@ export class Agent<
                 }
 
                 if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
@@ -3551,7 +3570,6 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
-              // Restore reserved thread/resource keys for the parent agent
               if (savedThreadIdKey !== undefined) {
                 requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
               }
