@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
-import { getLLMTestMode } from '@internal/llm-recorder';
+import { getLLMTestMode, withLLMRecording } from '@internal/llm-recorder';
 import { shouldSkipLLMTest } from '@internal/test-utils';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { Agent } from '@mastra/core/agent';
@@ -1097,22 +1097,39 @@ CRITICAL RULES:
 
         const expectedToolCalls = 36;
         const toolCallsDuringStream: string[] = [];
-        const stream = await agent.stream(
-          [
+
+        await withLLMRecording(REPRO_RECORDING_NAME, async () => {
+          const stream = await agent.stream(
+            [
+              {
+                role: 'user',
+                content: 'Analyze all the files in the data room. Read every single file and give me a summary.',
+              },
+            ] as any,
             {
-              role: 'user',
-              content: 'Analyze all the files in the data room. Read every single file and give me a summary.',
-            },
-          ] as any,
-          {
-            maxSteps: 100,
-            toolCallConcurrency: 1,
-            requestContext,
-            abortSignal: abortController.signal,
-            runId: `run_${threadId}_${Date.now()}`,
-            modelSettings: {
-              maxOutputTokens: 100_000,
-              temperature: 0.2,
+              maxSteps: 100,
+              toolCallConcurrency: 1,
+              requestContext,
+              abortSignal: abortController.signal,
+              runId: `run_${threadId}_${Date.now()}`,
+              modelSettings: {
+                maxOutputTokens: 100_000,
+                temperature: 0.2,
+                providerOptions: {
+                  anthropic: {
+                    sendReasoning: true,
+                    thinking: { type: 'enabled', budgetTokens: 10_000 },
+                  },
+                  google: {
+                    thinkingConfig: { thinkingLevel: 'medium', includeThoughts: true },
+                  },
+                  openai: {
+                    reasoningEffort: 'medium',
+                    promptCacheKey: 'o11-chat-v1',
+                    promptCacheRetention: '24h',
+                  },
+                },
+              },
               providerOptions: {
                 anthropic: {
                   sendReasoning: true,
@@ -1127,44 +1144,30 @@ CRITICAL RULES:
                   promptCacheRetention: '24h',
                 },
               },
-            },
-            providerOptions: {
-              anthropic: {
-                sendReasoning: true,
-                thinking: { type: 'enabled', budgetTokens: 10_000 },
+              memory: { thread: threadId, resource: testResourceId },
+              outputProcessors: [],
+              prepareStep: () => {
+                if (abortController.signal.aborted) throw new Error('Aborted');
+                return {};
               },
-              google: {
-                thinkingConfig: { thinkingLevel: 'medium', includeThoughts: true },
-              },
-              openai: {
-                reasoningEffort: 'medium',
-                promptCacheKey: 'o11-chat-v1',
-                promptCacheRetention: '24h',
-              },
-            },
-            memory: { thread: threadId, resource: testResourceId },
-            outputProcessors: [],
-            prepareStep: () => {
-              if (abortController.signal.aborted) throw new Error('Aborted');
-              return {};
-            },
-            onStepFinish: (result: any) => {
-              const toolCalls = result.toolCalls || [];
-              const toolResults = result.toolResults || [];
-              for (const toolCall of toolCalls) {
-                toolCallsDuringStream.push(toolCall.toolName ?? toolCall.name ?? toolCall.payload?.toolName ?? '?');
-              }
-              if (toolCalls.length === 0 && toolResults.length > 0) {
-                for (const toolResult of toolResults) {
-                  toolCallsDuringStream.push(toolResult.toolName ?? toolResult.name ?? '?');
+              onStepFinish: (result: any) => {
+                const toolCalls = result.toolCalls || [];
+                const toolResults = result.toolResults || [];
+                for (const toolCall of toolCalls) {
+                  toolCallsDuringStream.push(toolCall.toolName ?? toolCall.name ?? toolCall.payload?.toolName ?? '?');
                 }
-              }
-            },
-          } as any,
-        );
+                if (toolCalls.length === 0 && toolResults.length > 0) {
+                  for (const toolResult of toolResults) {
+                    toolCallsDuringStream.push(toolResult.toolName ?? toolResult.name ?? '?');
+                  }
+                }
+              },
+            } as any,
+          );
 
-        for await (const _ of stream.fullStream) {
-        }
+          for await (const _ of stream.fullStream) {
+          }
+        });
 
         const om = (await (memory as any).createOMProcessor([], requestContext)) as {
           waitForBuffering?: (threadId: string, resourceId: string) => Promise<void>;
