@@ -140,7 +140,7 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     const itemRes = await request.post(`/api/datasets/${datasetId}/items`, {
-      data: { input: { original: 'value' }, groundTruth: { expected: 'result' } },
+      data: { input: { original: 'value' }, groundTruth: { expected: 'result' }, expectedTrajectory: {} },
     });
     expect(itemRes.ok()).toBeTruthy();
 
