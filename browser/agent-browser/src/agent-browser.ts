@@ -295,6 +295,18 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
+   * Get the active page for a thread (implements abstract method from base class).
+   * Returns null if no page is available, unlike getPage which throws.
+   */
+  protected async getActivePage(threadId?: string): Promise<Page | null> {
+    try {
+      return await this.getPage(threadId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
   /**
    * Set up close event listener for a thread's browser manager.
    * This handles the case where a thread's browser is closed externally.
@@ -485,6 +497,17 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
+   * Get browser state for a thread (implements abstract method from base class).
+   * Sync version that uses existing manager lookup without creating sessions.
+   */
+  protected getBrowserStateForThread(threadId?: string): BrowserState | null {
+    const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+    const manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+    if (!manager) return null;
+    return this.getBrowserStateForManager(manager);
+  }
+
+  /**
    * Get browser state from a specific manager instance.
    */
   private getBrowserStateForManager(manager: BrowserManager): BrowserState | null {
@@ -525,33 +548,6 @@ export class AgentBrowser extends MastraBrowser {
       return manager.getActiveIndex();
     } catch {
       return 0;
-    }
-  }
-
-  /**
-   * Update the browser state in the thread session.
-   * Called on navigation, tab open/close to keep state fresh.
-   */
-  private updateSessionBrowserState(threadId?: string): void {
-    try {
-      const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
-      const scope = this.threadManager.getScope();
-
-      let manager: BrowserManager | null = null;
-      if (scope === 'thread') {
-        manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
-      } else {
-        manager = this.sharedManager;
-      }
-
-      if (manager) {
-        const state = this.getBrowserStateForManager(manager);
-        if (state) {
-          this.threadManager.updateBrowserState(effectiveThreadId, state);
-        }
-      }
-    } catch {
-      // Silently ignore errors during state update
     }
   }
 
@@ -1279,53 +1275,6 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
   // Screencast (for Studio live view)
   // ---------------------------------------------------------------------------
-
-  /**
-   * Reconnect the active screencast for a specific thread.
-   * Called internally when tabs are switched or closed.
-   */
-  private async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
-    const streamKey = this.getStreamKey(threadId);
-    const stream = this.activeScreencastStreams.get(streamKey);
-    if (!stream || !stream.isActive()) {
-      return;
-    }
-
-    // Check if browser is still running before attempting reconnect
-    if (!this.isBrowserRunning()) {
-      this.logger.debug?.('Skipping screencast reconnect - browser not running');
-      return;
-    }
-
-    // For thread scope, also check if this specific thread still has a session
-    const scope = this.getScope();
-    if (scope === 'thread' && threadId && !this.threadManager.getExistingManagerForThread(threadId)) {
-      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
-      return;
-    }
-
-    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
-
-    try {
-      // Small delay to let agent-browser update its internal state (activePageIndex, CDP session)
-      await new Promise(resolve => setTimeout(resolve, 150));
-      await stream.reconnect();
-
-      // Emit the URL of the new active page after reconnecting
-      // Use thread-specific manager in 'thread' scope
-      const manager =
-        threadId !== undefined ? this.threadManager.getExistingManagerForThread(threadId) : this.sharedManager;
-      const activePage = manager?.getPage();
-      if (activePage) {
-        const url = activePage.url();
-        if (url) {
-          stream.emitUrl(url);
-        }
-      }
-    } catch (error) {
-      this.logger.debug?.('Screencast reconnect failed', error);
-    }
-  }
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
     const threadId = _options?.threadId;

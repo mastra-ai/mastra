@@ -327,6 +327,66 @@ export abstract class MastraBrowser extends MastraBase {
     return threadId || MastraBrowser.SHARED_STREAM_KEY;
   }
 
+  /**
+   * Reconnect the active screencast for a specific thread.
+   * Called internally when tabs are switched or closed.
+   */
+  protected async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
+    const streamKey = this.getStreamKey(threadId);
+    const stream = this.activeScreencastStreams.get(streamKey);
+    if (!stream || !stream.isActive()) {
+      return;
+    }
+
+    // Check if browser is still running before attempting reconnect
+    if (!this.isBrowserRunning()) {
+      this.logger.debug?.('Skipping screencast reconnect - browser not running');
+      return;
+    }
+
+    // For thread scope, also check if this specific thread still has a session
+    const scope = this.getScope();
+    if (scope === 'thread' && threadId && !this.threadManager?.getExistingManagerForThread(threadId)) {
+      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
+      return;
+    }
+
+    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
+
+    try {
+      // Small delay to let tab state settle
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await stream.reconnect();
+
+      // Emit the URL of the new active page after reconnecting
+      const activePage = await this.getActivePage(threadId);
+      if (activePage) {
+        const url = activePage.url();
+        if (url) {
+          stream.emitUrl(url);
+        }
+      }
+    } catch (error) {
+      this.logger.debug?.('Screencast reconnect failed', error);
+    }
+  }
+
+  /**
+   * Update the browser state in the thread session.
+   * Called on navigation, tab open/close to keep state fresh.
+   */
+  protected updateSessionBrowserState(threadId?: string): void {
+    try {
+      const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+      const state = this.getBrowserStateForThread(effectiveThreadId);
+      if (state) {
+        this.threadManager?.updateBrowserState(effectiveThreadId, state);
+      }
+    } catch {
+      // Silently ignore errors during state update
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
@@ -1133,8 +1193,26 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Abstract Tools Method
+  // Abstract Methods (providers must implement)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Get the active page for a thread.
+   * Used by screencast reconnection to emit the current URL.
+   *
+   * @param threadId - Optional thread ID (uses current thread if not provided)
+   * @returns The active Playwright Page, or null if not available
+   */
+  protected abstract getActivePage(threadId?: string): Promise<{ url(): string } | null>;
+
+  /**
+   * Get the current browser state for a thread.
+   * Used to persist and restore browser state across sessions.
+   *
+   * @param threadId - Optional thread ID (uses current thread if not provided)
+   * @returns Browser state including URL, tabs, and active tab index
+   */
+  protected abstract getBrowserStateForThread(threadId?: string): BrowserState | null;
 
   /**
    * Get the browser tools for this provider.

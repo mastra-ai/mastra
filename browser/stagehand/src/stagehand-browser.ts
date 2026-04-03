@@ -479,6 +479,13 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Get the active page for a thread (implements abstract method from base class).
+   */
+  protected async getActivePage(threadId?: string): Promise<V3Page | null> {
+    return this.getPage(threadId);
+  }
+
+  /**
    * Get a CDP session for a specific page.
    */
   private getCdpSessionForPage(page: V3Page | null): any {
@@ -880,6 +887,22 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Get browser state for a thread (implements abstract method from base class).
+   * Sync version that uses existing manager lookup without creating sessions.
+   */
+  protected getBrowserStateForThread(threadId?: string): BrowserState | null {
+    const scope = this.threadManager.getScope();
+    const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+
+    if (scope === 'thread' && effectiveThreadId) {
+      const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+      return this.getBrowserStateFromStagehand(stagehand);
+    }
+
+    return this.getBrowserStateFromStagehand(this.sharedManager);
+  }
+
+  /**
    * Get browser state from a specific Stagehand instance.
    */
   private getBrowserStateFromStagehand(stagehand: Stagehand | null): BrowserState | null {
@@ -920,33 +943,6 @@ export class StagehandBrowser extends MastraBrowser {
   override async getActiveTabIndex(threadId?: string): Promise<number> {
     const state = await this.getBrowserState(threadId);
     return state?.activeTabIndex ?? 0;
-  }
-
-  /**
-   * Update the browser state in the thread session.
-   * Called on navigation, tab open/close to keep state fresh.
-   */
-  private updateSessionBrowserState(threadId?: string): void {
-    try {
-      const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
-      const scope = this.threadManager.getScope();
-
-      let stagehand: Stagehand | null | undefined = null;
-      if (scope === 'thread') {
-        stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
-      } else {
-        stagehand = this.sharedManager;
-      }
-
-      if (stagehand) {
-        const state = this.getBrowserStateFromStagehand(stagehand);
-        if (state) {
-          this.threadManager.updateBrowserState(effectiveThreadId, state);
-        }
-      }
-    } catch {
-      // Silently ignore errors during state update
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1118,7 +1114,7 @@ export class StagehandBrowser extends MastraBrowser {
               if (newPage && stagehand.context) {
                 stagehand.context.setActivePage(newPage);
               }
-              void this.reconnectScreencast('manual tab tracked');
+              void this.reconnectScreencastForThread(threadId, 'manual tab tracked');
               void setupPageNavigationListener();
             } else {
               this.logger.debug?.('Stagehand did not register the page (non-injectable URL)');
@@ -1237,59 +1233,6 @@ export class StagehandBrowser extends MastraBrowser {
       this.logger.debug?.('Failed to set up tab change detection', error);
       // Cleanup is already registered on stream stop, no need to call here
     }
-  }
-
-  /**
-   * Reconnect the active screencast for a specific thread.
-   */
-  private async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
-    const streamKey = this.getStreamKey(threadId);
-    const stream = this.activeScreencastStreams.get(streamKey);
-    if (!stream || !stream.isActive()) {
-      return;
-    }
-
-    // Check if browser is still running before attempting reconnect
-    if (!this.isBrowserRunning()) {
-      this.logger.debug?.('Skipping screencast reconnect - browser not running');
-      return;
-    }
-
-    // For thread scope, also check if this specific thread still has a session
-    const scope = this.getScope();
-    if (scope === 'thread' && threadId && !this.threadManager.getExistingManagerForThread(threadId)) {
-      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
-      return;
-    }
-
-    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
-
-    try {
-      // Small delay to let tab state settle
-      await new Promise(resolve => setTimeout(resolve, 150));
-      await stream.reconnect();
-
-      // Emit the URL of the new active page after reconnecting
-      const stagehand = await this.getManagerForThread(threadId);
-      const activePage = stagehand?.context?.activePage();
-      if (activePage) {
-        const url = activePage.url();
-        if (url) {
-          stream.emitUrl(url);
-        }
-      }
-    } catch (error) {
-      this.logger.debug?.('Screencast reconnect failed', error);
-    }
-  }
-
-  /**
-   * Reconnect the active screencast for the current thread.
-   * Wrapper for reconnectScreencastForThread using getCurrentThread().
-   */
-  private async reconnectScreencast(reason: string): Promise<void> {
-    const threadId = this.getCurrentThread();
-    await this.reconnectScreencastForThread(threadId, reason);
   }
 
   // NOTE: Manual tab switching in browser UI is not fully supported.
