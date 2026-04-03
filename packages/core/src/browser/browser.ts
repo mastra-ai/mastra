@@ -410,7 +410,9 @@ export abstract class MastraBrowser extends MastraBase {
     // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
     // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
     // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
-    if (config.cdpUrl && (config as { scope?: string }).scope === 'thread') {
+    // We capture scope before checking cdpUrl to avoid TypeScript narrowing the union type.
+    const scope = config.scope;
+    if (config.cdpUrl && scope === 'thread') {
       throw new Error(
         'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
           '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
