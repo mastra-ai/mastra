@@ -237,6 +237,7 @@ Perform the following smoke tests using Stagehand tools:
 #### 5.3 Cleanup
 
 After testing:
+
 - [ ] `stagehand_close` to close the browser session
 - [ ] Stop the dev server if needed
 

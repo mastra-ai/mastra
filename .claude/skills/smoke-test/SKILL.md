@@ -349,20 +349,20 @@ After completing all tests, provide a summary:
 
 ## Studio Routes
 
-| Feature         | Route                    |
-| --------------- | ------------------------ |
-| Agents          | `/agents`                |
-| Workflows       | `/workflows`             |
-| Tools           | `/tools`                 |
-| Evaluation      | `/evaluation`            |
-| Scorers         | `/evaluation?tab=scorers`|
-| Observability   | `/observability/traces`  |
-| Logs            | `/observability/logs`    |
-| MCP Servers     | `/mcps`                  |
-| Processors      | `/processors`            |
-| Templates       | `/templates`             |
-| Request Context | `/request-context`       |
-| Settings        | `/settings`              |
+| Feature         | Route                     |
+| --------------- | ------------------------- |
+| Agents          | `/agents`                 |
+| Workflows       | `/workflows`              |
+| Tools           | `/tools`                  |
+| Evaluation      | `/evaluation`             |
+| Scorers         | `/evaluation?tab=scorers` |
+| Observability   | `/observability/traces`   |
+| Logs            | `/observability/logs`     |
+| MCP Servers     | `/mcps`                   |
+| Processors      | `/processors`             |
+| Templates       | `/templates`              |
+| Request Context | `/request-context`        |
+| Settings        | `/settings`               |
 
 ## Notes
 
