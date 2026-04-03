@@ -7,6 +7,8 @@ import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import type { ObserverExchange } from './observer-runner';
+
 const OM_REPRO_CAPTURE_DIR = process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
 
 function sanitizeCapturePathSegment(value: string): string {
@@ -249,6 +251,7 @@ export function writeProcessInputStepReproCapture(params: {
   postContextTokenCount: number;
   messageList: MessageList;
   details: Record<string, unknown>;
+  observerExchange?: ObserverExchange;
   debug?: (message: string) => void;
 }) {
   if (!isOmReproCaptureEnabled()) {
@@ -348,6 +351,20 @@ export function writeProcessInputStepReproCapture(params: {
         join(captureDir, payload.fileName),
         `${JSON.stringify({ __captureError: serialized.error }, null, 2)}\n`,
       );
+    }
+
+    // Write observer exchange (prompt + raw LLM response) if available
+    if (params.observerExchange) {
+      const serialized = safeCaptureJsonOrError(params.observerExchange);
+      if (serialized.ok) {
+        writeFileSync(join(captureDir, 'observer-exchange.json'), `${JSON.stringify(serialized.value, null, 2)}\n`);
+      } else {
+        captureErrors.push({ fileName: 'observer-exchange.json', error: serialized.error });
+        writeFileSync(
+          join(captureDir, 'observer-exchange.json'),
+          `${JSON.stringify({ __captureError: serialized.error }, null, 2)}\n`,
+        );
+      }
     }
 
     if (captureErrors.length > 0) {

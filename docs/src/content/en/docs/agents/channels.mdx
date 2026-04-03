@@ -1,0 +1,181 @@
+---
+title: "Channels | Agents"
+description: "Learn how to connect your Mastra agents to messaging platforms like Slack, Discord, and Telegram using the Chat SDK."
+packages:
+  - "@mastra/core"
+---
+
+# Channels
+
+**Added in:** `@mastra/core@1.22.0`
+
+Channels connect your agents to messaging platforms like Slack, Discord, and Telegram. When a user sends a message on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation.
+
+## When to use channels
+
+Use channels when you want your agent to:
+
+- Respond to messages in Slack workspaces, Discord servers, or Telegram chats
+- Handle both direct messages and mentions in group conversations
+
+## Quickstart
+
+Configure channels directly on your agent using adapters from the [Chat SDK](https://chat-sdk.dev/adapters):
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+Register the agent in your Mastra instance with storage so channel state persists across restarts:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { supportAgent } from './agents/support-agent'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL,
+  }),
+})
+```
+
+Each adapter reads credentials from environment variables by default.
+
+## Platform setup
+
+Each platform requires credentials and event configuration. See the Chat SDK adapter docs for full setup: [Slack](https://chat-sdk.dev/adapters/slack), [Discord](https://chat-sdk.dev/adapters/discord), [Telegram](https://chat-sdk.dev/adapters/telegram).
+
+Mastra generates a webhook route for each platform at:
+
+```
+/api/agents/{agentId}/channels/{platform}/webhook
+```
+
+For example: `/api/agents/support-agent/channels/slack/webhook`
+
+Point your platform's webhook or interactions URL to this path.
+
+### Local development
+
+Platform webhooks need a public URL to reach your local server. Use a tunnel to expose `localhost:4111`:
+
+```bash
+# ngrok
+ngrok http 4111
+
+# cloudflared
+cloudflared tunnel --url http://localhost:4111
+```
+
+Copy the generated URL and use it as the base for your webhook paths (e.g. `https://abc123.ngrok.io/api/agents/support-agent/channels/slack/webhook`).
+
+## Thread context
+
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
+
+1. On the **first mention** in a thread, the agent fetches recent messages from the platform.
+1. These messages are prepended to the user's message as conversation context.
+1. After responding, the agent subscribes to the thread and has full history via Mastra's memory.
+1. Subsequent messages in that thread do **not** re-fetch from the platform.
+
+Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
+
+## Tool approval
+
+Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const deleteFile = createTool({
+  id: 'delete-file',
+  description: 'Delete a file from the system',
+  inputSchema: z.object({
+    path: z.string().describe('Path to the file to delete'),
+  }),
+  requireApproval: true,
+  execute: async ({ path }) => {
+    await fs.unlink(path)
+    return { deleted: path }
+  },
+})
+```
+
+When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
+
+Set `cards: false` on an adapter to render tool calls as plain text instead of interactive cards. When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context.
+
+## Multi-user awareness
+
+In group conversations, Mastra automatically prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
+
+```
+[Alice (@U123ABC)]: Can you help me with this?
+[Bob (@U456DEF)]: I have a question too.
+```
+
+## Multimodal content
+
+Models like Gemini can natively process images, video, and audio. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:
+
+```typescript title="src/mastra/agents/vision-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { google } from '@ai-sdk/google'
+
+export const visionAgent = new Agent({
+  name: 'Vision Agent',
+  instructions: 'You can see images, watch videos, and listen to audio.',
+  model: google('gemini-3.1-flash-image-preview'),
+  channels: {
+    adapters: {
+      discord: createDiscordAdapter(),
+    },
+    inlineMedia: ['image/*', 'video/*', 'audio/*'],
+    inlineLinks: [
+      // Gemini treats YouTube URLs as native video file parts
+      { match: 'youtube.com', mimeType: 'video/*' },
+      { match: 'youtu.be', mimeType: 'video/*' },
+      'imgur.com', // HEAD-check imgur links; inline as file part if mimeType matches inlineMedia
+    ],
+  },
+})
+```
+
+With this configuration:
+
+- A user uploads a screenshot and the agent describes what it sees
+- A user uploads an `.mp4` clip and the agent summarizes the video
+- A user pastes a YouTube link and the agent watches and discusses the video
+- A user pastes an imgur link and the agent sees the image directly
+
+By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without crashing models that reject them.
+
+:::note
+
+See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced mime types.
+
+:::
+
+## Related
+
+- [Agent overview](/docs/agents/overview)
+- [Tool approval](/docs/agents/agent-approval)
+- [Channels reference](/reference/agents/channels)
+- [Chat SDK adapters](https://chat-sdk.dev/adapters)

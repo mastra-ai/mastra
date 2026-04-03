@@ -17,6 +17,7 @@ export const RESOURCES = [
   'agents',
   'datasets',
   'embedders',
+  'experiments',
   'logs',
   'mcp',
   'memory',
@@ -81,6 +82,8 @@ export const PERMISSION_PATTERNS = {
   'datasets:*': 'datasets:*',
   /** Full access to embedders */
   'embedders:*': 'embedders:*',
+  /** Full access to experiments */
+  'experiments:*': 'experiments:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -131,12 +134,16 @@ export const PERMISSION_PATTERNS = {
   'agents:write': 'agents:write',
   /** Delete datasets */
   'datasets:delete': 'datasets:delete',
+  /** Execute datasets */
+  'datasets:execute': 'datasets:execute',
   /** View datasets */
   'datasets:read': 'datasets:read',
   /** Create and modify datasets */
   'datasets:write': 'datasets:write',
   /** View embedders */
   'embedders:read': 'embedders:read',
+  /** View experiments */
+  'experiments:read': 'experiments:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -236,9 +243,11 @@ export const PERMISSIONS = [
   'agents:read',
   'agents:write',
   'datasets:delete',
+  'datasets:execute',
   'datasets:read',
   'datasets:write',
   'embedders:read',
+  'experiments:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',

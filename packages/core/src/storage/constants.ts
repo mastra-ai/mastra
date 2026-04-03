@@ -405,6 +405,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
+  expectedTrajectory: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
