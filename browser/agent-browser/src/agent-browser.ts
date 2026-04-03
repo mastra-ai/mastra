@@ -64,17 +64,23 @@ export class AgentBrowser extends MastraBrowser {
       this.defaultTimeout = config.timeout;
     }
 
-    // Determine browser scope
-    // When connecting to an external browser via cdpUrl, 'thread' scope doesn't make sense
-    // because we can't spawn new browser instances - we're connecting to an existing one
-    let effectiveScope = config.scope ?? 'thread';
-    if (config.cdpUrl && effectiveScope === 'thread') {
-      this.logger.warn?.(
-        'Browser scope "thread" is not supported when connecting via cdpUrl. ' +
-          'Falling back to "shared" (shared browser connection).',
+    // Validate configuration: cdpUrl and scope: 'thread' are mutually exclusive
+    // When connecting to an external browser via cdpUrl, we connect to a single existing browser.
+    // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
+    // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
+    // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
+    if (config.cdpUrl && (config as { scope?: string }).scope === 'thread') {
+      throw new Error(
+        'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
+          '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
+          '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
+          'To fix this, either:\n' +
+          '1. Remove cdpUrl to let the browser spawn instances locally (supports thread isolation)\n' +
+          '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
       );
-      effectiveScope = 'shared';
     }
+
+    const effectiveScope = config.scope ?? 'thread';
 
     // Initialize thread manager
     this.threadManager = new AgentBrowserThreadManager({

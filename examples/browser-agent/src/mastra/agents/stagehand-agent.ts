@@ -1,6 +1,5 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { BrowserContextProcessor } from '@mastra/core/browser';
 import { StagehandBrowser } from '@mastra/stagehand';
 import { Memory } from '@mastra/memory';
 
@@ -68,5 +67,4 @@ You don't need element refs - just describe what you want to do in plain English
   model: openai('gpt-5.4'),
   browser: stagehandBrowserToolset,
   memory,
-  inputProcessors: [new BrowserContextProcessor()],
 });

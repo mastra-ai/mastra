@@ -9,6 +9,7 @@ import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
+import { BrowserContextProcessor } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -417,6 +418,26 @@ export class Agent<
   }
 
   /**
+   * Gets the browser context processor to add when browser is configured.
+   * @internal
+   */
+  private getBrowserProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
+    if (!this.#browser) {
+      return [];
+    }
+
+    // Check for existing BrowserContextProcessor to avoid duplicates
+    const hasBrowserProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
+    );
+    if (hasBrowserProcessor) {
+      return [];
+    }
+
+    return [new BrowserContextProcessor()];
+  }
+
+  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -669,16 +690,21 @@ export class Agent<
     // Get channel input processors (with deduplication)
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
+    // Get browser context processors (with deduplication)
+    const browserProcessors = this.getBrowserProcessors(configuredProcessors);
+
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace but before user-configured processors
     // Channel processors run after skills (context injection for platform awareness)
+    // Browser processors run last to inject browser context
     const allProcessors = [
       ...memoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
+      ...browserProcessors,
       ...configuredProcessors,
     ];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);

@@ -171,19 +171,24 @@ describe('AgentBrowser', () => {
       expect(custom.status).toBe('pending');
     });
 
-    it('forces scope to "shared" when cdpUrl is provided', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('throws error when cdpUrl and scope: "thread" are both provided', () => {
+      // cdpUrl and scope: 'thread' are mutually exclusive
+      expect(() => {
+        new AgentBrowser({
+          cdpUrl: 'ws://localhost:9222',
+          scope: 'thread',
+        });
+      }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
+    });
 
-      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
+    it('allows cdpUrl with scope: "shared"', () => {
+      // This should not throw
       const browserWithCdp = new AgentBrowser({
         cdpUrl: 'ws://localhost:9222',
-        scope: 'thread',
+        scope: 'shared',
       });
 
-      // The thread manager should have 'shared' scope, not 'thread'
       expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
-
-      warnSpy.mockRestore();
     });
 
     it('respects scope when no cdpUrl is provided', () => {

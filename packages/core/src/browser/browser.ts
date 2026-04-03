@@ -61,11 +61,16 @@ export type BrowserLifecycleHook = (args: { browser: MastraBrowser }) => void | 
 export type CdpUrlProvider = string | (() => string | Promise<string>);
 
 /**
- * Base configuration shared by all browser providers.
- * Provider packages extend this with their own options.
+ * Base configuration properties shared by all browser providers.
+ * This interface contains fields common to all browser configurations.
+ *
+ * **For extending**: Use this interface when creating provider-specific configs
+ * (e.g., `interface MyProviderConfig extends BrowserConfigBase`).
+ *
+ * **For consuming**: Use {@link BrowserConfig} which adds compile-time validation
+ * that `cdpUrl` and `scope: 'thread'` cannot be used together.
  */
-
-export interface BrowserConfig {
+export interface BrowserConfigBase {
   /**
    * Whether to run the browser in headless mode (no visible UI).
    * @default true
@@ -91,14 +96,52 @@ export interface BrowserConfig {
    * CDP WebSocket URL or async provider function.
    * When provided, connects to an existing browser instead of launching a new one.
    * Useful for cloud providers (Browserbase, Browserless, Kernel, etc.).
+   *
+   * **Important:** When using `cdpUrl`, you must use `scope: 'shared'` (or omit `scope`
+   * to let it default to 'shared' behavior). Using `cdpUrl` with `scope: 'thread'`
+   * will throw an error because thread isolation requires spawning separate browser
+   * instances, which isn't possible when connecting to an existing browser via CDP.
+   *
+   * @example
+   * ```ts
+   * // Connect to a local Chrome with remote debugging enabled
+   * { cdpUrl: 'ws://localhost:9222' }
+   *
+   * // Connect to Browserless cloud provider
+   * { cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN', scope: 'shared' }
+   *
+   * // Use an async provider function for dynamic URLs
+   * { cdpUrl: async () => await fetchBrowserlessUrl() }
+   * ```
    */
   cdpUrl?: CdpUrlProvider;
 
   /**
    * Browser instance scope across threads.
-   * - 'shared': All threads share a single browser instance
-   * - 'thread': Each thread gets its own browser instance (full isolation)
+   *
+   * - `'thread'` (default): Each thread gets its own isolated browser instance.
+   *   Best for parallel agents that need separate browser states.
+   *
+   * - `'shared'`: All threads share a single browser instance.
+   *   Required when using `cdpUrl` to connect to an existing browser.
+   *
+   * **Important:** `scope: 'thread'` cannot be used with `cdpUrl` because thread
+   * isolation requires spawning new browser instances, which isn't possible when
+   * connecting to an existing browser via CDP. This configuration will throw an error.
+   *
    * @default 'thread'
+   *
+   * @example
+   * ```ts
+   * // Isolated browsers per thread (default)
+   * { scope: 'thread' }
+   *
+   * // Shared browser for all threads
+   * { scope: 'shared' }
+   *
+   * // When using cdpUrl, scope must be 'shared'
+   * { cdpUrl: 'ws://localhost:9222', scope: 'shared' }
+   * ```
    */
   scope?: BrowserScope;
 
@@ -118,6 +161,30 @@ export interface BrowserConfig {
    */
   screencast?: ScreencastOptions;
 }
+
+/**
+ * Browser configuration with compile-time enforcement of cdpUrl/scope compatibility.
+ *
+ * This type enforces that `cdpUrl` and `scope: 'thread'` cannot be used together:
+ * - When `cdpUrl` is provided, `scope` must be `'shared'` or omitted
+ * - When `scope: 'thread'` is used, `cdpUrl` must not be provided
+ *
+ * @example
+ * ```ts
+ * // Valid configurations:
+ * { headless: true }                              // Local browser, thread scope (default)
+ * { scope: 'thread' }                             // Explicit thread isolation
+ * { scope: 'shared' }                             // Shared browser
+ * { cdpUrl: 'ws://localhost:9222' }               // CDP connection, defaults to shared
+ * { cdpUrl: 'ws://localhost:9222', scope: 'shared' }  // CDP with explicit shared
+ *
+ * // Invalid configuration (TypeScript error):
+ * { cdpUrl: 'ws://localhost:9222', scope: 'thread' }  // Error: cannot combine cdpUrl with thread scope
+ * ```
+ */
+export type BrowserConfig =
+  | (BrowserConfigBase & { cdpUrl?: undefined; scope?: BrowserScope })
+  | (BrowserConfigBase & { cdpUrl: CdpUrlProvider; scope?: 'shared' });
 
 // =============================================================================
 // Screencast Types (re-exported from ./screencast/types)

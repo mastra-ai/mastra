@@ -122,14 +122,23 @@ describe('StagehandBrowser', () => {
       expect(customBrowser.name).toBe('StagehandBrowser');
     });
 
-    it('forces scope to "shared" when cdpUrl is provided', () => {
-      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
+    it('throws error when cdpUrl and scope: "thread" are both provided', () => {
+      // cdpUrl and scope: 'thread' are mutually exclusive
+      expect(() => {
+        new StagehandBrowser({
+          cdpUrl: 'ws://localhost:9222',
+          scope: 'thread',
+        });
+      }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
+    });
+
+    it('allows cdpUrl with scope: "shared"', () => {
+      // This should not throw
       const browserWithCdp = new StagehandBrowser({
         cdpUrl: 'ws://localhost:9222',
-        scope: 'thread',
+        scope: 'shared',
       });
 
-      // The thread manager should have 'shared' scope, not 'thread'
       expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
     });
 
