@@ -59,9 +59,9 @@ vi.mock('@browserbasehq/stagehand', () => ({
 }));
 
 // Import AFTER vi.mock
-import { StagehandBrowser } from './stagehand-browser';
-import { createStagehandTools, STAGEHAND_TOOLS } from './tools';
-import type { StagehandBrowserConfig } from './types';
+import { StagehandBrowser } from '../stagehand-browser';
+import { createStagehandTools, STAGEHAND_TOOLS } from '../tools';
+import type { StagehandBrowserConfig } from '../types';
 
 describe('StagehandBrowser', () => {
   let browser: StagehandBrowser;

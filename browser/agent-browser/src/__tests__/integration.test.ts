@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { AgentBrowser } from './agent-browser';
+import { AgentBrowser } from '../agent-browser';
 
 // Check if we can actually launch a browser with AgentBrowser
 // Only skip for known environment/setup failures, not regressions

@@ -134,7 +134,7 @@ vi.mock('agent-browser', () => ({
 }));
 
 // Import AFTER vi.mock
-import { AgentBrowser } from './agent-browser';
+import { AgentBrowser } from '../agent-browser';
 
 describe('AgentBrowser', () => {
   let browser: AgentBrowser;
