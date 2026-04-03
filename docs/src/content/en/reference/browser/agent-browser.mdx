@@ -191,7 +191,7 @@ Click an element using its ref from the snapshot.
 | - | - | - |
 | `ref` | `string` | Element ref from snapshot (required) |
 | `button` | `"left" \| "right" \| "middle"` | Mouse button (optional) |
-| `clickCount` | `number` | Number of clicks, 2 for double-click (optional) |
+| `clickCount` | `number` | Number of activations, 2 for double (optional) |
 | `modifiers` | `string[]` | Modifier keys (optional) |
 
 ### `browser_type`
@@ -404,17 +404,17 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 
 1. Call `browser_snapshot` to see the page structure
 1. Find the element you want to interact with
-1. Use its ref with tools like `browser_click`, `browser_type`, etc.
+1. Use its ref with interaction tools like `browser_type` or `browser_scroll`.
 
 ```text
 // 1. Get snapshot
-// Returns: [textbox @e4] Search... [button @e5] Submit
+// Returns: [textbox @e4] Search... [link @e5] Home
 
 // 2. Type in the search box
 { tool: "browser_type", input: { ref: "@e4", text: "mastra" } }
 
-// 3. Click submit
-{ tool: "browser_click", input: { ref: "@e5" } }
+// 3. Navigate to home
+{ tool: "browser_goto", input: { url: "https://example.com" } }
 ```
 
 ## Related
