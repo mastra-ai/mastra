@@ -42,8 +42,8 @@ export class StagehandBrowser extends MastraBrowser {
   override readonly name = 'StagehandBrowser';
   override readonly provider = 'browserbase/stagehand';
 
-  /** Shared Stagehand instance (for 'shared' scope) */
-  private sharedManager: Stagehand | null = null;
+  /** Shared Stagehand instance (for 'shared' scope) - narrowed type from base class */
+  declare protected sharedManager: Stagehand | null;
   private stagehandConfig: StagehandBrowserConfig;
 
   /** Thread manager - narrowed type from base class */
@@ -369,30 +369,6 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Handle browser disconnection by clearing internal state.
-   * For 'thread' scope, only notifies the specific thread's callbacks.
-   * For 'shared' scope, notifies all callbacks.
-   */
-  override handleBrowserDisconnected(): void {
-    const scope = this.threadManager.getScope();
-    const threadId = this.getCurrentThread();
-
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
-      // Only clear the specific thread's session - other threads have independent browsers
-      this.threadManager.clearSession(threadId);
-      this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
-      // Notify only this thread's callbacks - do NOT set global status to 'closed'
-      // since other threads may still have active browsers
-      this.notifyBrowserClosed(threadId);
-    } else {
-      // For 'shared' scope or default thread, the shared stagehand is gone
-      this.sharedManager = null;
-      this.threadManager.clearSharedManager();
-      // Call base class which notifies all callbacks
-      super.handleBrowserDisconnected();
-    }
-  }
-
   /**
    * Create an error response from an exception.
    * Extends base class to add Stagehand-specific error handling.

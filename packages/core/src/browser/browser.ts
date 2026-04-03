@@ -286,6 +286,13 @@ export abstract class MastraBrowser extends MastraBase {
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
 
+  /**
+   * Shared manager instance for 'shared' scope mode.
+   * Type varies by provider (e.g., BrowserManager for agent-browser, Stagehand for stagehand).
+   * Providers should cast this to their specific type when accessing.
+   */
+  protected sharedManager: unknown = null;
+
   /** Configuration */
   protected readonly config: BrowserConfig;
 
@@ -631,13 +638,33 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Handle browser disconnection by updating status and notifying listeners.
    * Called when browser is detected as externally closed.
-   * Subclasses should call this and also clear their internal instance references.
+   *
+   * For 'thread' scope: clears only the specific thread's session (other threads unaffected)
+   * For 'shared' scope: clears the shared manager and updates global status
    */
   handleBrowserDisconnected(): void {
-    if (this.status !== 'closed') {
-      this.status = 'closed';
-      this.logger.debug?.('Browser was externally closed, status set to closed');
-      this.notifyBrowserClosed();
+    const scope = this.threadManager?.getScope();
+    const threadId = this.getCurrentThread();
+
+    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
+      // Only clear the specific thread's session - other threads have independent browsers
+      this.threadManager!.clearSession(threadId);
+      this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+      // Notify only this thread's callbacks - do NOT set global status to 'closed'
+      // since other threads may still have active browsers
+      this.notifyBrowserClosed(threadId);
+    } else {
+      // For 'shared' scope or default thread, the shared browser is gone
+      this.sharedManager = null;
+      // Also clear the shared manager in the thread manager so getManagerForThread
+      // doesn't return the dead manager
+      this.threadManager?.clearSharedManager();
+      // Update global status and notify all callbacks
+      if (this.status !== 'closed') {
+        this.status = 'closed';
+        this.logger.debug?.('Browser was externally closed, status set to closed');
+        this.notifyBrowserClosed();
+      }
     }
   }
 

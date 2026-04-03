@@ -44,8 +44,8 @@ export class AgentBrowser extends MastraBrowser {
   override readonly name = 'AgentBrowser';
   override readonly provider = 'vercel-labs/agent-browser';
 
-  /** Shared browser manager instance (for 'shared' scope) */
-  private sharedManager: BrowserManager | null = null;
+  /** Shared browser manager instance (for 'shared' scope) - narrowed type from base class */
+  declare protected sharedManager: BrowserManager | null;
   private defaultTimeout = 30000;
 
   /** Thread manager - narrowed type from base class */
@@ -295,32 +295,6 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
-   * Handle browser disconnection by clearing internal state.
-   * For 'thread' scope, only notifies the specific thread's callbacks.
-   * For 'shared' scope, notifies all callbacks.
-   */
-  override handleBrowserDisconnected(): void {
-    const scope = this.threadManager.getScope();
-    const threadId = this.getCurrentThread();
-
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
-      // Only clear the specific thread's session - other threads have independent browsers
-      this.threadManager.clearSession(threadId);
-      this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
-      // Notify only this thread's callbacks - do NOT set global status to 'closed'
-      // since other threads may still have active browsers
-      this.notifyBrowserClosed(threadId);
-    } else {
-      // For 'shared' scope or default thread, the shared browser is gone
-      this.sharedManager = null;
-      // Also clear the shared manager in the thread manager so getManagerForThread
-      // doesn't return the dead manager
-      this.threadManager.clearSharedManager();
-      // Call base class which notifies all callbacks
-      super.handleBrowserDisconnected();
-    }
-  }
-
   /**
    * Set up close event listener for a thread's browser manager.
    * This handles the case where a thread's browser is closed externally.
