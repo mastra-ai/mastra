@@ -163,18 +163,6 @@ export async function createHonoServer(
     }
   }
 
-  // Browser stream WebSocket setup - MUST be before CORS middleware
-  // to avoid "can't modify immutable headers" error on WebSocket upgrade
-  // This is async because it dynamically imports @hono/node-ws to avoid
-  // bundling ws into user code. Returns null if ws is not available.
-  const browserStreamSetup = await setupBrowserStream(app, {
-    getToolset: (agentId: string) => {
-      // Look up agent and return its browser toolset if configured
-      const agent = mastra.getAgentById(agentId);
-      return agent?.browser;
-    },
-  });
-
   //Global cors config
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
@@ -484,16 +472,24 @@ export async function createHonoServer(
     );
   }
 
-  // Attach injectWebSocket to app for backwards compatibility
-  // Consumers can use app directly, and optionally call app.injectWebSocket(server) for browser streaming
-  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket;
-
   return app;
 }
 
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
-  const injectWebSocket = (app as any).injectWebSocket;
+
+  // Browser stream WebSocket setup - Node.js only
+  // This is placed here (not in createHonoServer) so that non-Node deployers
+  // like Cloudflare don't attempt to bundle @hono/node-ws and ws
+  const browserStreamSetup = await setupBrowserStream(app, {
+    getToolset: (agentId: string) => {
+      // Look up agent and return its browser toolset if configured
+      const agent = mastra.getAgentById(agentId);
+      return agent?.browser;
+    },
+  });
+  const injectWebSocket = browserStreamSetup?.injectWebSocket;
+
   const serverOptions = mastra.getServer();
   const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
