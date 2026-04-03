@@ -18,6 +18,7 @@ export interface HeadlessArgs {
   thread?: string;
   title?: string;
   cloneThread: boolean;
+  resourceId?: string;
 }
 
 /** Returns true if argv contains --prompt or -p, indicating headless mode. */
@@ -31,6 +32,7 @@ const headlessOptions = {
   thread: { type: 'string', short: 't' },
   title: { type: 'string' },
   'clone-thread': { type: 'boolean', default: false },
+  'resource-id': { type: 'string' },
   timeout: { type: 'string' }, // parsed to number after validation
   format: { type: 'string', default: 'default' },
   help: { type: 'boolean', short: 'h', default: false },
@@ -64,13 +66,10 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const thread = typeof values.thread === 'string' ? values.thread : undefined;
   const title = typeof values.title === 'string' ? values.title : undefined;
   const cloneThread = Boolean(values['clone-thread']);
+  const resourceId = typeof values['resource-id'] === 'string' ? values['resource-id'] : undefined;
 
   if (values.continue && thread) {
     throw new Error('--continue and --thread cannot be used together');
-  }
-
-  if (values.continue) {
-    process.stderr.write('[deprecated] --continue/-c is deprecated and will be removed. Auto-continue is now the default behavior.\n');
   }
 
   return {
@@ -81,6 +80,7 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
     thread,
     title,
     cloneThread,
+    resourceId,
   };
 }
 
@@ -95,15 +95,18 @@ Usage: mastracode --prompt <text> [options]
 
 Headless (non-interactive) mode options:
   --prompt, -p <text>     The task to execute (required, or pipe via stdin)
+  --continue, -c          Resume the most recent thread instead of creating a new one
   --thread, -t <id|title> Resume a specific thread by ID or title
   --title <title>         Set or rename the thread title
   --clone-thread          Clone the current thread before running (work on a copy)
+  --resource-id <id>      Set the resource ID for thread scoping
   --timeout <seconds>     Exit with code 2 if not complete within timeout
   --format <type>         Output format: "default" or "json" (default: "default")
 
 Thread behavior:
-  By default, the most recent thread is resumed automatically.
-  Use --thread to target a specific thread, --clone-thread to branch off.
+  By default, a new thread is created for each run.
+  Use --continue to resume the most recent thread, or --thread to target a specific one.
+  Use --clone-thread to branch off a copy before running.
 
 Exit codes:
   0  Agent completed successfully
@@ -113,11 +116,12 @@ Exit codes:
 Examples:
   mastracode --prompt "Fix the bug in auth.ts"
   mastracode --prompt "Add tests" --timeout 300
-  mastracode --prompt "Continue where you left off"
+  mastracode -c --prompt "Continue where you left off"
   mastracode -t "feature-auth" --prompt "Keep working on this"
   mastracode --thread abc123 --clone-thread --prompt "Try a different approach"
   mastracode --prompt "Refactor utils" --title "utils-refactor"
   mastracode --prompt "Refactor utils" --format json
+  mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
 Run without --prompt for the interactive TUI.
@@ -271,6 +275,12 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     });
   });
 
+  // --- Resource ID ---
+  if (args.resourceId) {
+    harness.setResourceId({ resourceId: args.resourceId });
+    if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
+  }
+
   // --- Thread selection ---
   try {
     if (args.thread) {
@@ -284,10 +294,17 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
       }
       await harness.switchThread({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
-    } else {
-      const thread = await harness.selectOrCreateThread();
-      if (!emit) process.stderr.write(`[thread] ${thread.id}\n`);
+    } else if (args.continue_) {
+      const threads = await harness.listThreads();
+      if (threads.length > 0) {
+        const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        await harness.switchThread({ threadId: sorted[0]!.id });
+        if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
+      } else if (!emit) {
+        process.stderr.write(`[info] No existing threads found, starting new thread\n`);
+      }
     }
+    // else: no thread selection — sendMessage will auto-create a new thread
   } catch (err) {
     const msg = `Failed to select thread: ${(err as Error).message}`;
     if (emit) emit({ type: 'error', error: { message: msg } });

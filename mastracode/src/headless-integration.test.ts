@@ -421,11 +421,12 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
+    await harness.createThread({ title: 'original-title' });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
-      continue_: false,
+      continue_: true,
       cloneThread: false,
       title: 'my-new-title',
     });

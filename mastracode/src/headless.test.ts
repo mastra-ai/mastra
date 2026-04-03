@@ -105,6 +105,8 @@ describe('parseHeadlessArgs', () => {
       '--title',
       'My Title',
       '--clone-thread',
+      '--resource-id',
+      'my-project',
       '--timeout',
       '600',
       '--format',
@@ -114,6 +116,7 @@ describe('parseHeadlessArgs', () => {
     expect(args.thread).toBe('my-thread');
     expect(args.title).toBe('My Title');
     expect(args.cloneThread).toBe(true);
+    expect(args.resourceId).toBe('my-project');
     expect(args.timeout).toBe(600);
     expect(args.format).toBe('json');
   });
