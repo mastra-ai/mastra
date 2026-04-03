@@ -725,7 +725,6 @@ interface InteractivePromptArgs {
     showBanner?: boolean;
   };
   skip?: {
-    connectionMethod?: boolean;
     directory?: boolean;
     connectionMethod?: boolean;
     llmProvider?: boolean;

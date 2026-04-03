@@ -52,7 +52,6 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.1.0",
-    "archiver": "^7.0.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
@@ -89,7 +88,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
-    "openapi-typescript": "^7.13.0",
     "memfs": "^4.56.11",
     "openapi-typescript": "^7.13.0",
     "rollup": "^4.59.0",
