@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fixed observational memory buffering so sealed assistant chunks stay split instead of being merged back into one persisted message during long tool runs. ([#14995](https://github.com/mastra-ai/mastra/pull/14995))
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a)]:
+  - @mastra/core@1.23.0-alpha.0
+
 ## 1.13.1
 
 ### Patch Changes

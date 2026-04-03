@@ -124,5 +124,14 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "auth-studio-refresh",
+    "green-birds-knock",
+    "green-impalas-slide",
+    "playground-ui-fetch-refresh",
+    "public-turtles-speak",
+    "puny-clubs-push",
+    "quick-paths-eat",
+    "server-auth-refresh"
+  ]
 }
