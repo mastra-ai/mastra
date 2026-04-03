@@ -73,7 +73,8 @@ async function main() {
   console.log(chalk.bold.cyan('=== Memory Demo Complete ===\n'));
 }
 
-main().catch((err) => {
-  console.error(chalk.red(`Fatal error: ${err.message}`));
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(chalk.red(`Fatal error: ${message}`));
   process.exit(1);
 });

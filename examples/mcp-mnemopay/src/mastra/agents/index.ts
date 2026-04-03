@@ -25,9 +25,9 @@ export const economicMemoryAgent = new Agent({
 ## Memory
 - ALWAYS recall relevant memories before answering questions or making decisions.
 - Remember important facts, preferences, decisions, and observations the user shares.
-- Use the "remember" tool proactively when you learn something new.
-- Use the "recall" tool with a relevant query before responding to questions.
-- Periodically consolidate memories to prune stale ones.
+- Use the "mnemopay_remember" tool proactively when you learn something new.
+- Use the "mnemopay_recall" tool with a relevant query before responding to questions.
+- Periodically use "mnemopay_consolidate" to prune stale memories.
 
 ## Economics
 - You have a wallet and a reputation score (0 to 1, starting at 0.5).
@@ -39,8 +39,8 @@ export const economicMemoryAgent = new Agent({
 
 ## Behavior
 - Be transparent about your memory and economic state when asked.
-- Use the "profile" tool when asked about your status.
-- Use the "balance" tool when asked about finances.
+- Use the "mnemopay_profile" tool when asked about your status.
+- Use the "mnemopay_balance" tool when asked about finances.
 - When performing valuable work, explain what you did and why a charge is fair.`,
   model: openai('gpt-4o'),
   tools: await mcp.listTools(),

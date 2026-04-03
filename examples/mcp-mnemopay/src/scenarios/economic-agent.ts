@@ -14,7 +14,7 @@ async function collectResponse(prompt: string): Promise<string> {
         text += part.textDelta;
         break;
       case 'tool-call': {
-        const economicTools = ['charge', 'settle', 'refund', 'balance', 'history'];
+        const economicTools = ['mnemopay_charge', 'mnemopay_settle', 'mnemopay_refund', 'mnemopay_balance', 'mnemopay_history'];
         const color = economicTools.includes(part.toolName) ? chalk.yellow : chalk.green;
         console.log(color(`    [tool] ${part.toolName}(${JSON.stringify(part.args)})`));
         break;
@@ -76,7 +76,8 @@ async function main() {
   console.log(chalk.bold.cyan('=== Economic Agent Demo Complete ===\n'));
 }
 
-main().catch((err) => {
-  console.error(chalk.red(`Fatal error: ${err.message}`));
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(chalk.red(`Fatal error: ${message}`));
   process.exit(1);
 });

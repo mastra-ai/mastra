@@ -4,9 +4,9 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "npx bun src/index.ts",
-    "demo:memory": "npx bun src/scenarios/memory-demo.ts",
-    "demo:economic": "npx bun src/scenarios/economic-agent.ts",
+    "start": "tsx src/index.ts",
+    "demo:memory": "tsx src/scenarios/memory-demo.ts",
+    "demo:economic": "tsx src/scenarios/economic-agent.ts",
     "dev": "mastra dev"
   },
   "keywords": [],

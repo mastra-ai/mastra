@@ -13,9 +13,9 @@ const rl = readline.createInterface({
 console.log(chalk.bold.cyan('\n=== MnemoPay + Mastra: Economic Memory Agent ===\n'));
 console.log(chalk.white('This agent has persistent memory and an economic system.'));
 console.log(chalk.white('It can remember facts, charge for valuable work, and build reputation.\n'));
-console.log(chalk.dim('Memory tools:   ') + chalk.green('remember, recall, forget, reinforce, consolidate'));
-console.log(chalk.dim('Economic tools: ') + chalk.yellow('charge, settle, refund, balance'));
-console.log(chalk.dim('Status tools:   ') + chalk.blue('profile, logs, history'));
+console.log(chalk.dim('Memory tools:   ') + chalk.green('mnemopay_remember, mnemopay_recall, mnemopay_forget, mnemopay_reinforce, mnemopay_consolidate'));
+console.log(chalk.dim('Economic tools: ') + chalk.yellow('mnemopay_charge, mnemopay_settle, mnemopay_refund, mnemopay_balance'));
+console.log(chalk.dim('Status tools:   ') + chalk.blue('mnemopay_profile, mnemopay_logs, mnemopay_history'));
 console.log(chalk.dim('\nType "exit" or "quit" to end the session.\n'));
 
 function prompt() {
@@ -46,8 +46,8 @@ function prompt() {
             process.stdout.write(chalk.white(part.textDelta));
             break;
           case 'tool-call': {
-            const memoryTools = ['remember', 'recall', 'forget', 'reinforce', 'consolidate'];
-            const economicTools = ['charge', 'settle', 'refund', 'balance'];
+            const memoryTools = ['mnemopay_remember', 'mnemopay_recall', 'mnemopay_forget', 'mnemopay_reinforce', 'mnemopay_consolidate'];
+            const economicTools = ['mnemopay_charge', 'mnemopay_settle', 'mnemopay_refund', 'mnemopay_balance'];
             const color = memoryTools.includes(part.toolName)
               ? chalk.green
               : economicTools.includes(part.toolName)
