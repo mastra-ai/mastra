@@ -11,7 +11,13 @@ export const MastraReactProvider = ({
   customFetch,
 }: MastraReactProviderProps) => {
   return (
-    <MastraClientProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} credentials={credentials} customFetch={customFetch}>
+    <MastraClientProvider
+      baseUrl={baseUrl}
+      headers={headers}
+      apiPrefix={apiPrefix}
+      credentials={credentials}
+      customFetch={customFetch}
+    >
       {children}
     </MastraClientProvider>
   );

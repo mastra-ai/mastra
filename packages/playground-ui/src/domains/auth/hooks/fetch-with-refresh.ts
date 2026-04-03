@@ -68,10 +68,7 @@ export async function fetchWithRefresh(
  * @param apiPrefix - The API prefix (defaults to '/api')
  * @returns A fetch-compatible function that handles 401 refresh
  */
-export function createFetchWithRefresh(
-  baseUrl: string,
-  apiPrefix: string = '/api',
-): typeof fetch {
+export function createFetchWithRefresh(baseUrl: string, apiPrefix: string = '/api'): typeof fetch {
   let localRefreshPromise: Promise<boolean> | null = null;
 
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
