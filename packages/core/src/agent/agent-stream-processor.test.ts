@@ -1,5 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import type { Processor } from '../processors/index';
 import type { MastraDBMessage } from './message-list';
 import { Agent } from './index';
@@ -440,5 +441,110 @@ describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
         wordCount: 4,
       });
     }
+  });
+});
+
+describe('Structured output stream + output processors', () => {
+  it('should not append raw structured JSON after processOutputResult text modifications', async () => {
+    class StructuredHydrationProcessor implements Processor {
+      readonly id = 'structured-hydration-processor';
+      readonly name = 'Structured Hydration Processor';
+
+      async processOutputResult({ messages }: { messages: MastraDBMessage[] }) {
+        return messages.map(message => {
+          if (message.role !== 'assistant') {
+            return message;
+          }
+
+          return {
+            ...message,
+            content: {
+              ...message.content,
+              parts: message.content.parts.map(part => {
+                if (part.type !== 'text') {
+                  return part;
+                }
+
+                try {
+                  const parsed = JSON.parse(part.text);
+                  return { ...part, text: JSON.stringify({ ...parsed, hydrated: true }) };
+                } catch {
+                  return part;
+                }
+              }),
+            },
+          } as MastraDBMessage;
+        });
+      }
+    }
+
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"winner":"Barack' },
+            { type: 'text-delta', id: 'text-1', delta: ' Obama","year":"2012"}' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'structured-output-stream-processor-test-agent',
+      name: 'Structured Output Stream Processor Test Agent',
+      instructions: 'Return election results as structured JSON',
+      model: mockModel as any,
+      outputProcessors: [new StructuredHydrationProcessor()],
+    });
+
+    const stream = await agent.stream('Who won the 2012 US election?', {
+      structuredOutput: {
+        schema: z.object({
+          winner: z.string(),
+          year: z.string(),
+          hydrated: z.boolean().optional(),
+        }),
+      },
+    });
+
+    await stream.consumeStream();
+
+    const text = await stream.text;
+    expect(text).not.toContain('[object Object]');
+
+    const parsedText = JSON.parse(text);
+    expect(parsedText).toMatchObject({
+      winner: 'Barack Obama',
+      year: '2012',
+      hydrated: true,
+    });
+
+    const responseMessages = stream.messageList.get.response.db();
+    const assistantTextParts = responseMessages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message =>
+        message.content.parts.filter(
+          (part): part is Extract<(typeof message.content.parts)[number], { type: 'text' }> =>
+            part.type === 'text' && part.text.length > 0,
+        ),
+      );
+
+    expect(assistantTextParts).toHaveLength(1);
+    expect(JSON.parse(assistantTextParts[0]!.text)).toMatchObject({
+      winner: 'Barack Obama',
+      year: '2012',
+      hydrated: true,
+    });
   });
 });

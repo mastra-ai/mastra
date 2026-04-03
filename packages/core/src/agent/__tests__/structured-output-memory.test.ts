@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
+import type { Processor } from '../../processors';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
 /**
@@ -328,5 +330,113 @@ describe('Structured output with memory - assistant message in final position (#
         `assistant response is not supported." ` +
         `Message roles in prompt: ${prompt.map((m: any) => m.role).join(', ')}`,
     ).not.toBe('assistant');
+  });
+});
+
+describe('Structured output stream memory persistence with output processors (#14659)', () => {
+  it('should persist only processor-modified structured text without appending raw JSON', async () => {
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const mockMemory = new MockMemory();
+
+    class StructuredHydrationProcessor implements Processor {
+      readonly id = 'structured-hydration-processor';
+      readonly name = 'Structured Hydration Processor';
+
+      async processOutputResult({ messages }: { messages: MastraDBMessage[] }) {
+        return messages.map(message => {
+          if (message.role !== 'assistant') {
+            return message;
+          }
+
+          return {
+            ...message,
+            content: {
+              ...message.content,
+              parts: message.content.parts.map(part => {
+                if (part.type !== 'text') {
+                  return part;
+                }
+
+                try {
+                  const parsed = JSON.parse(part.text);
+                  return { ...part, text: JSON.stringify({ ...parsed, hydrated: true }) };
+                } catch {
+                  return part;
+                }
+              }),
+            },
+          } as MastraDBMessage;
+        });
+      }
+    }
+
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-14659', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: '{"winner":"Barack' },
+          { type: 'text-delta', id: 'text-1', delta: ' Obama","year":"2012"}' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'structured-output-memory-processor-test-agent',
+      name: 'Structured Output Memory Processor Test Agent',
+      instructions: 'Return election results as structured JSON',
+      model: mockModel,
+      memory: mockMemory,
+      outputProcessors: [new StructuredHydrationProcessor()],
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+
+    const stream = await agent.stream('Who won the 2012 US election?', {
+      memory: { thread: threadId, resource: resourceId },
+      structuredOutput: {
+        schema: z.object({
+          winner: z.string(),
+          year: z.string(),
+          hydrated: z.boolean().optional(),
+        }),
+      },
+    });
+
+    await stream.consumeStream();
+
+    const streamText = await stream.text;
+    expect(streamText).not.toContain('[object Object]');
+    expect(JSON.parse(streamText)).toMatchObject({
+      winner: 'Barack Obama',
+      year: '2012',
+      hydrated: true,
+    });
+
+    const recalled = await mockMemory.recall({ threadId, resourceId });
+    const recalledAssistantTextParts = recalled.messages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => {
+        const content = message.content as any;
+        const parts = Array.isArray(content?.parts) ? content.parts : [];
+        return parts.filter((part: any) => part.type === 'text' && part.text.length > 0).map((part: any) => part.text);
+      });
+
+    expect(recalledAssistantTextParts).toHaveLength(1);
+    expect(JSON.parse(recalledAssistantTextParts[0]!)).toMatchObject({
+      winner: 'Barack Obama',
+      year: '2012',
+      hydrated: true,
+    });
   });
 });
