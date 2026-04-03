@@ -1,3 +1,4 @@
+import type { BrowserConfig } from '@mastra/core/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
@@ -173,11 +174,12 @@ describe('AgentBrowser', () => {
 
     it('throws error when cdpUrl and scope: "thread" are both provided', () => {
       // cdpUrl and scope: 'thread' are mutually exclusive
+      // TypeScript prevents this at compile time, but we test runtime validation
       expect(() => {
         new AgentBrowser({
           cdpUrl: 'ws://localhost:9222',
           scope: 'thread',
-        });
+        } as BrowserConfig);
       }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
     });
 
@@ -197,6 +199,16 @@ describe('AgentBrowser', () => {
       });
 
       expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
+    });
+
+    it('defaults to shared scope when cdpUrl is provided without explicit scope', () => {
+      // When cdpUrl is provided without scope, it should default to 'shared'
+      // since cdpUrl connects to an existing browser that can't be isolated
+      const browserWithCdp = new AgentBrowser({
+        cdpUrl: 'ws://localhost:9222',
+      });
+
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
     });
   });
 

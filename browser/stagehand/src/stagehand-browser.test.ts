@@ -61,6 +61,7 @@ vi.mock('@browserbasehq/stagehand', () => ({
 // Import AFTER vi.mock
 import { StagehandBrowser } from './stagehand-browser';
 import { createStagehandTools, STAGEHAND_TOOLS } from './tools';
+import type { StagehandBrowserConfig } from './types';
 
 describe('StagehandBrowser', () => {
   let browser: StagehandBrowser;
@@ -124,11 +125,12 @@ describe('StagehandBrowser', () => {
 
     it('throws error when cdpUrl and scope: "thread" are both provided', () => {
       // cdpUrl and scope: 'thread' are mutually exclusive
+      // TypeScript prevents this at compile time, but we test runtime validation
       expect(() => {
         new StagehandBrowser({
           cdpUrl: 'ws://localhost:9222',
           scope: 'thread',
-        });
+        } as StagehandBrowserConfig);
       }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
     });
 
@@ -148,6 +150,16 @@ describe('StagehandBrowser', () => {
       });
 
       expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
+    });
+
+    it('defaults to shared scope when cdpUrl is provided without explicit scope', () => {
+      // When cdpUrl is provided without scope, it should default to 'shared'
+      // since cdpUrl connects to an existing browser that can't be isolated
+      const browserWithCdp = new StagehandBrowser({
+        cdpUrl: 'ws://localhost:9222',
+      });
+
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
     });
   });
 

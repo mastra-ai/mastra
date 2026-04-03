@@ -58,7 +58,9 @@ export class AgentBrowser extends MastraBrowser {
       this.defaultTimeout = config.timeout;
     }
 
-    const effectiveScope = config.scope ?? 'thread';
+    // Default to 'shared' when cdpUrl is provided (connecting to existing browser)
+    // Default to 'thread' otherwise (launching new browsers per thread)
+    const effectiveScope = config.cdpUrl ? (config.scope ?? 'shared') : (config.scope ?? 'thread');
 
     // Initialize thread manager
     this.threadManager = new AgentBrowserThreadManager({

@@ -56,7 +56,9 @@ export class StagehandBrowser extends MastraBrowser {
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
 
-    const effectiveScope = config.scope ?? 'thread';
+    // Default to 'shared' when cdpUrl is provided (connecting to existing browser)
+    // Default to 'thread' otherwise (launching new browsers per thread)
+    const effectiveScope = config.cdpUrl ? (config.scope ?? 'shared') : (config.scope ?? 'thread');
 
     // Initialize thread manager
     this.threadManager = new StagehandThreadManager({
