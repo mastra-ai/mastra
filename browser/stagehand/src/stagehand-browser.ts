@@ -501,8 +501,6 @@ export class StagehandBrowser extends MastraBrowser {
     return null;
   }
 
-
-
   /**
    * Get a CDP session for a specific page.
    */

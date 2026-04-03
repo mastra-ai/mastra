@@ -61,8 +61,6 @@ export class StagehandThreadManager extends ThreadManager<V3> {
     this.createStagehand = factory;
   }
 
-
-
   /**
    * Get the page for a specific thread, creating session if needed.
    */
