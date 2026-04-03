@@ -15,7 +15,7 @@
 
 import type { AuthResult, AuthProviderType } from './types';
 
-const AUTH_PROVIDER: AuthProviderType = (process.env.AUTH_PROVIDER as AuthProviderType) || 'simple';
+const AUTH_PROVIDER: AuthProviderType = (process.env.AUTH_PROVIDER as AuthProviderType);
 
 async function initAuth(): Promise<AuthResult> {
   switch (AUTH_PROVIDER) {
