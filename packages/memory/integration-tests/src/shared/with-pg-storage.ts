@@ -79,8 +79,7 @@ function isPureOmMessage(message: any): boolean {
  * What we're checking:
  * 1. Tool invocations exist at all (not lost)
  * 2. Messages are in chronological order (createdAt monotonic)
- * 3. data-om-* bookkeeping parts are NOT mixed with visible content in the same message
- * 4. Sealed buffered chunks produce separate assistant messages, not one mega-row
+ * 3. Sealed buffered chunks produce separate assistant messages, not one mega-row
  */
 function analyzeDbMessages(messages: any[]) {
   let toolInvocationCount = 0;
@@ -1167,7 +1166,10 @@ CRITICAL RULES:
         for await (const _ of stream.fullStream) {
         }
 
-        await new Promise(resolve => setTimeout(resolve, 5_000));
+        const om = (await (memory as any).createOMProcessor([], requestContext)) as {
+          waitForBuffering?: (threadId: string, resourceId: string) => Promise<void>;
+        } | null;
+        await om?.waitForBuffering?.(threadId, testResourceId);
 
         const rawDb = await memoryStore.listMessages({ threadId, perPage: false as any });
         const rawMessages = rawDb.messages as MastraDBMessage[];
