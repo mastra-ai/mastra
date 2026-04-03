@@ -3,6 +3,8 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { MastraBrowser } from '../browser';
+import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -49,6 +51,9 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { MastraBrowser } from '../browser/browser';
+// Screencast types now on MastraBrowser directly
+export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
@@ -292,9 +297,40 @@ export interface AgentConfig<
    */
   skillsFormat?: SkillFormat;
   /**
+   * Browser for web automation capabilities.
+   * When configured, browser tools are automatically injected into the agent.
+   * Accessible via agent.browser for server-side features like screencast.
+   */
+  browser?: MastraBrowser;
+  /**
    * Voice settings for speech input and output.
    */
   voice?: MastraVoice;
+  /**
+   * Messaging channels the agent communicates over (e.g. Slack, Discord).
+   *
+   * @example
+   * ```ts
+   * channels: {
+   *   adapters: {
+   *     discord: createDiscordAdapter(),
+   *     slack: { adapter: createSlackAdapter(), cards: false },
+   *   },
+   *   handlers: {
+   *     // Wrap default DM handler with logging
+   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Disable mention handling
+   *     onMention: false,
+   *   },
+   * }
+   * ```
+   *
+   * For full control, pass an `AgentChannels` instance directly.
+   */
+  channels?: ChannelConfig | AgentChannels;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

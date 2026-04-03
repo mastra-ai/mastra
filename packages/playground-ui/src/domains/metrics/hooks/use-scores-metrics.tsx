@@ -67,7 +67,7 @@ export function useScoresMetrics() {
 
       const interval = '1h';
 
-      // Fetch time series only for active scorers
+      // Fetch hourly time series from the full period for active scorers
       const timeSeriesResults = await Promise.all(
         scorerNames.map(scorerId =>
           client.getScoreTimeSeries({
@@ -79,9 +79,9 @@ export function useScoresMetrics() {
         ),
       );
 
-      // Merge time series into flat Recharts format
-      const bucketMap = new Map<string, ScoresOverTimePoint>();
-      const rangeSpansDays = timestamp.end.toDateString() !== timestamp.start.toDateString();
+      // Collapse all days into a single 24-hour view (00:00–23:00).
+      // For each hour-of-day, average the values across all days in the range.
+      const hourBuckets = new Map<string, Map<string, { sum: number; count: number }>>();
 
       for (let i = 0; i < scorerNames.length; i++) {
         const scorerId = scorerNames[i];
@@ -89,32 +89,35 @@ export function useScoresMetrics() {
         for (const s of series) {
           for (const point of s.points) {
             const ts = new Date(point.timestamp);
-            const key = ts.toISOString();
-            if (!bucketMap.has(key)) {
-              bucketMap.set(key, {
-                time: rangeSpansDays
-                  ? ts.toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    })
-                  : ts.toLocaleTimeString('en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    }),
-              });
+            const hourKey = ts.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+            if (!hourBuckets.has(hourKey)) {
+              hourBuckets.set(hourKey, new Map());
             }
-            bucketMap.get(key)![scorerId] = +point.value.toFixed(2);
+            const scorerMap = hourBuckets.get(hourKey)!;
+            if (!scorerMap.has(scorerId)) {
+              scorerMap.set(scorerId, { sum: 0, count: 0 });
+            }
+            const acc = scorerMap.get(scorerId)!;
+            acc.sum += point.value;
+            acc.count += 1;
           }
         }
       }
 
-      const overTimeData = Array.from(bucketMap.entries())
+      // Build sorted 24h chart data
+      const overTimeData: ScoresOverTimePoint[] = Array.from(hourBuckets.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([, point]) => point);
+        .map(([hourKey, scorerMap]) => {
+          const point: ScoresOverTimePoint = { time: hourKey };
+          for (const [scorerId, acc] of scorerMap) {
+            point[scorerId] = +(acc.sum / acc.count).toFixed(2);
+          }
+          return point;
+        });
 
       return {
         summaryData,

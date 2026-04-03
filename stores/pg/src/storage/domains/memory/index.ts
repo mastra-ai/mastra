@@ -2379,6 +2379,7 @@ export class MemoryPG extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Append chunk to existing array using JSONB concatenation
