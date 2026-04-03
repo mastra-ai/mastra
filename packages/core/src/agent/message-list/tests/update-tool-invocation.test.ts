@@ -124,7 +124,7 @@ describe('MessageList.updateToolInvocation', () => {
     expect(unsaved[0]?.id).toBe(msg.id);
   });
 
-  it('should not mutate a sealed memory message after response-id rotation', () => {
+  it('should re-save a sealed memory message when its tool invocation completes after response-id rotation', () => {
     const messageList = new MessageList();
 
     const sealedMessage = makeAssistantMessage(
@@ -151,18 +151,16 @@ describe('MessageList.updateToolInvocation', () => {
     messageList.add(sealedMessage, 'memory');
     messageList.drainUnsavedMessages();
 
-    messageList.add(
-      makeAssistantMessage(
-        [
-          {
-            type: 'text',
-            text: 'post-seal continuation',
-          },
-        ],
-        'rotated-assistant-id',
-      ),
-      'response',
+    const rotatedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'text',
+          text: 'post-seal continuation',
+        },
+      ],
+      'rotated-assistant-id',
     );
+    messageList.add(rotatedMessage, 'response');
 
     const updated = messageList.updateToolInvocation({
       type: 'tool-invocation',
@@ -175,9 +173,19 @@ describe('MessageList.updateToolInvocation', () => {
       },
     });
 
-    expect(updated).toBe(false);
-    expect((sealedMessage.content.parts[1] as any).toolInvocation.state).toBe('call');
-    expect(messageList.drainUnsavedMessages().map(message => message.id)).toEqual(['rotated-assistant-id']);
+    expect(updated).toBe(true);
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.state).toBe('result');
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.args).toEqual({ query: 'hello' });
+
+    const unsaved = messageList.drainUnsavedMessages();
+    expect(unsaved.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+
+    const persistedSealed = unsaved.find(message => message.id === 'sealed-assistant-id');
+    expect((persistedSealed?.content.parts[1] as any).toolInvocation.state).toBe('result');
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+    expect((allMessages[1]?.content.parts[0] as any).text).toBe('post-seal continuation');
   });
 
   it('should not move a response message (already in response source)', () => {
