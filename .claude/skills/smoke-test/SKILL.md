@@ -180,7 +180,7 @@ Based on the selected LLM provider, check for the required API key:
 
 ### Step 4: Start the Development Server
 
-Navigate to the project directory and start the dev server:
+Navigate to the generated project directory and start the dev server:
 
 ```sh
 cd <directory>/<project-name>
@@ -188,6 +188,44 @@ cd <directory>/<project-name>
 ```
 
 The server typically starts on `http://localhost:4111`. Wait for the server to be ready before proceeding.
+
+### Step 4.5: Use the Persistent Smoke Runner
+
+Do **not** install Playwright into each generated `create-mastra` app.
+
+Instead, keep a reusable harness in:
+
+```sh
+.mastracode/smoke-runner/
+```
+
+Install it once:
+
+```sh
+cd .mastracode/smoke-runner
+npm install
+npx playwright install chromium
+```
+
+Prefer the automated orchestrator for full end-to-end runs:
+
+```sh
+cd .mastracode/smoke-runner && \
+SMOKE_AUTOMATION_CONFIG='{"domains":["agents","networks"],"provider":"openai","packageManager":"npm","tag":"latest","openScreenshots":true}' \
+node run-smoke.mjs
+```
+
+This flow creates the app inside `.mastracode/tmp-smoke/runs/<run-id>/app`, injects the network test fixtures, starts the dev server, runs Playwright, opens the screenshots in Finder, and cleans up only the generated app when the run passes.
+
+The lower-level harness is still available when the app is already running:
+
+```sh
+cd .mastracode/smoke-runner && \
+SMOKE_RUN_CONFIG='{"baseUrl":"http://localhost:4111","domains":["agents","networks"],"screenshotDir":"../tmp-smoke/runs/<run-id>/screenshots"}' \
+node smoke-test.mjs
+```
+
+Only the generated app under `.mastracode/tmp-smoke/runs/<run-id>/app` is disposable.
 
 ### Step 5: Smoke Test the Studio
 
@@ -318,9 +356,10 @@ After completing all tests, provide a summary:
 | Step           | Action                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
 | Create Project | `cd <directory> && npx create-mastra@<tag> <name> -c agents,tools,workflows,scorers -l <provider> -e` |
-| Install Deps   | Automatic during creation                                                                             |
+| Install Deps   | Automatic during creation for the generated app; Playwright stays installed in `.mastracode/smoke-runner` |
 | Set Env Vars   | Check global env first, then `.env`, ask user only if needed                                          |
 | Start Server   | `cd <directory>/<name> && npm run dev`                                                                |
+| Run Harness    | `cd .mastracode/smoke-runner && SMOKE_RUN_CONFIG='{"baseUrl":"http://localhost:4111",...}' node smoke-test.mjs` |
 | Studio URL     | `http://localhost:4111`                                                                               |
 
 ## Troubleshooting

@@ -1,0 +1,12 @@
+{
+  "name": "mastra-smoke-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node smoke-test.mjs",
+    "run": "node run-smoke.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}

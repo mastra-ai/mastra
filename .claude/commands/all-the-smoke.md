@@ -1,0 +1,1 @@
+../../.mastracode/commands/all-the-smoke.md
