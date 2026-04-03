@@ -4,6 +4,30 @@ import type { paths } from '../platform-api.js';
 
 export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.staging.mastra.ai';
 
+/**
+ * Derive the gateway URL from the platform URL when not explicitly set.
+ * If the platform points at staging, the gateway defaults to staging too.
+ */
+function deriveGatewayUrl(): string {
+  if (process.env.MASTRA_GATEWAY_URL) return process.env.MASTRA_GATEWAY_URL;
+  if (MASTRA_PLATFORM_API_URL.includes('staging')) return 'https://gateway-api.staging.mastra.ai/v1';
+  return 'https://gateway-api.mastra.ai/v1';
+}
+
+export const MASTRA_GATEWAY_URL = deriveGatewayUrl();
+
+/**
+ * Derive the studio URL from the platform URL when not explicitly set.
+ * If the platform points at staging, the studio defaults to staging too.
+ */
+function deriveStudioUrl(): string {
+  if (process.env.MASTRA_STUDIO_URL) return process.env.MASTRA_STUDIO_URL;
+  if (MASTRA_PLATFORM_API_URL.includes('staging')) return 'https://studio.staging.mastra.ai';
+  return 'https://studio.mastra.ai';
+}
+
+export const MASTRA_STUDIO_URL = deriveStudioUrl();
+
 export const SESSION_EXPIRED_MESSAGE = 'Session expired. Run: mastra auth login';
 
 /**

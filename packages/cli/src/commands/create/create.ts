@@ -11,6 +11,7 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
+import { MASTRA_GATEWAY_URL } from '../auth/client.js';
 import { login } from '../auth/credentials.js';
 import { provisionGatewayProject } from '../gateway/platform-api.js';
 import { init } from '../init/init';
@@ -85,7 +86,7 @@ export const create = async (args: {
     if (connectionMethod === 'gateway') {
       await setupGateway(projectName);
     }
-    
+
     const interactiveComponents: Component[] = ['agents', 'tools', 'workflows', 'scorers'];
 
     if (analytics) {
@@ -162,9 +163,8 @@ async function setupGateway(projectName: string) {
 
     const result = await provisionGatewayProject(creds.token, orgId, projectName);
 
-    const gatewayUrl = process.env.MASTRA_GATEWAY_URL || 'https://gateway.mastra.ai/v1';
     const escapedKey = shellQuote.quote([result.apiKey]);
-    const escapedUrl = shellQuote.quote([gatewayUrl]);
+    const escapedUrl = shellQuote.quote([MASTRA_GATEWAY_URL]);
 
     await exec(`echo GATEWAY_URL=${escapedUrl} >> .env`);
     await exec(`echo GATEWAY_API_KEY=${escapedKey} >> .env`);
