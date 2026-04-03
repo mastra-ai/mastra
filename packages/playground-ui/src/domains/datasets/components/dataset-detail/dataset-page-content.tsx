@@ -7,7 +7,7 @@ import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useDataset } from '../../hooks/use-datasets';
-import { getExperimentsTabCount, getItemsTabCount } from '../../utils/tab-counts';
+import { getItemsTabCount } from '../../utils/tab-counts';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -110,10 +110,6 @@ export function DatasetPageContent({
 
   const experiments = experimentsData?.experiments ?? [];
   const allExperiments = allExperimentsData?.experiments ?? [];
-  const experimentsTotal = getExperimentsTabCount({
-    experimentsLength: experiments.length,
-    experimentsTotal: allExperimentsData?.pagination?.total,
-  });
   const itemsTabCount = getItemsTabCount({
     hasSearchQuery: Boolean(debouncedSearch),
     filteredItemsLength: items.length,
@@ -241,7 +237,7 @@ export function DatasetPageContent({
                   </Tab>
                   <Tab value="experiments">
                     Experiments
-                    <Chip color="gray">{experimentsTotal}</Chip>
+                    <Chip color="gray">{experiments.length}</Chip>
                   </Tab>
                   <Tab value="review">
                     Review

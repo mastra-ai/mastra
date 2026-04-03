@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getExperimentsTabCount, getItemsTabCount } from '../tab-counts';
+import { getItemsTabCount } from '../tab-counts';
 
 describe('dataset tab counts', () => {
   describe('getItemsTabCount', () => {
@@ -54,35 +54,6 @@ describe('dataset tab counts', () => {
           filteredItemsLength: 20,
           unfilteredItemsTotal: 0,
           itemsTotal: 0,
-        }),
-      ).toBe(0);
-    });
-  });
-
-  describe('getExperimentsTabCount', () => {
-    it('uses pagination total when present', () => {
-      expect(
-        getExperimentsTabCount({
-          experimentsLength: 20,
-          experimentsTotal: 35,
-        }),
-      ).toBe(35);
-    });
-
-    it('falls back to loaded experiments length when total is unavailable', () => {
-      expect(
-        getExperimentsTabCount({
-          experimentsLength: 20,
-          experimentsTotal: undefined,
-        }),
-      ).toBe(20);
-    });
-
-    it('preserves a valid zero total', () => {
-      expect(
-        getExperimentsTabCount({
-          experimentsLength: 5,
-          experimentsTotal: 0,
         }),
       ).toBe(0);
     });

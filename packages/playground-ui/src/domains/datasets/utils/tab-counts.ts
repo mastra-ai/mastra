@@ -4,16 +4,10 @@ export function getItemsTabCount(params: {
   unfilteredItemsTotal?: number | null;
   itemsTotal?: number | null;
 }): number {
+  // During active search, mirror visible rows instead of an unfiltered total.
   if (params.hasSearchQuery) {
     return params.filteredItemsLength;
   }
 
   return params.unfilteredItemsTotal ?? params.itemsTotal ?? params.filteredItemsLength;
-}
-
-export function getExperimentsTabCount(params: {
-  experimentsLength: number;
-  experimentsTotal?: number | null;
-}): number {
-  return params.experimentsTotal ?? params.experimentsLength;
 }
