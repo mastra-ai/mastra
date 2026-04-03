@@ -44,7 +44,7 @@ export class AgentBrowser extends MastraBrowser {
   override readonly name = 'AgentBrowser';
   override readonly provider = 'vercel-labs/agent-browser';
 
-  /** Primary browser manager (for 'none' mode, also used as fallback) */
+  /** Primary browser manager (for 'shared' scope, also used as fallback) */
   private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
@@ -80,14 +80,14 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // Thread Isolation (delegated to ThreadManager)
+  // Thread Scope (delegated to ThreadManager)
   // ---------------------------------------------------------------------------
 
   /**
    * Ensure browser is ready and thread session exists.
    * Creates a new page/context for the current thread if needed.
    *
-   * For 'browser' isolation, we need to create the thread session BEFORE
+   * For 'thread' scope, we need to create the thread session BEFORE
    * calling super.ensureReady() because the base class's ensureReady() will
    * call checkBrowserAlive(), which needs at least one thread browser to exist.
    */
@@ -96,7 +96,7 @@ export class AgentBrowser extends MastraBrowser {
     const threadId = this.getCurrentThread();
     const existingSession = this.threadManager.hasSession(threadId);
 
-    // For 'browser' isolation, create the thread session first
+    // For 'thread' scope, create the thread session first
     // This ensures checkBrowserAlive() has a browser to check
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && !existingSession) {
       await this.getManagerForThread(threadId);
@@ -104,7 +104,7 @@ export class AgentBrowser extends MastraBrowser {
 
     await super.ensureReady();
 
-    // For 'browser' isolation with existing session, just verify it's accessible
+    // For 'thread' scope with existing session, just verify it's accessible
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && existingSession) {
       await this.getManagerForThread(threadId);
     }
@@ -112,13 +112,13 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Get the browser manager for the current thread.
-   * Delegates to ThreadManager for isolation handling.
+   * Delegates to ThreadManager for scope handling.
    */
   async getManagerForThread(threadId?: string): Promise<BrowserManager> {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const scope = this.threadManager.getScope();
 
-    // In 'browser' isolation, if no specific threadId, use the shared manager
+    // In 'thread' scope, if no specific threadId, use the shared manager
     // (which IS launched, unlike in DEFAULT_THREAD_ID case which would return placeholder)
     if (scope === 'thread' && (!effectiveThreadId || effectiveThreadId === DEFAULT_THREAD_ID)) {
       // Check if we have any active thread sessions
@@ -139,7 +139,7 @@ export class AgentBrowser extends MastraBrowser {
   protected override async doLaunch(): Promise<void> {
     const scope = this.threadManager.getScope();
 
-    // For 'browser' isolation, don't launch a shared browser.
+    // For 'thread' scope, don't launch a shared browser.
     // Each thread will get its own dedicated browser via createSession().
     if (scope === 'thread') {
       // Create a placeholder manager that's never launched.
@@ -151,7 +151,7 @@ export class AgentBrowser extends MastraBrowser {
       return;
     }
 
-    // For 'none' isolation, launch the shared browser
+    // For 'shared' scope, launch the shared browser
     this.browserManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
@@ -171,14 +171,14 @@ export class AgentBrowser extends MastraBrowser {
     this.threadManager.setSharedManager(this.browserManager);
 
     // Set up close listeners to detect external browser closure
-    this.setupCloseListenerForNoneIsolation(this.browserManager);
+    this.setupCloseListenerForSharedScope(this.browserManager);
   }
 
   /**
-   * Set up close event listeners for 'none' isolation shared browser.
+   * Set up close event listeners for 'shared' scope browser.
    * This handles the case where the shared browser is closed externally.
    */
-  private setupCloseListenerForNoneIsolation(manager: BrowserManager): void {
+  private setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
       let disconnectHandled = false;
       const handleDisconnect = () => {
@@ -213,7 +213,7 @@ export class AgentBrowser extends MastraBrowser {
     await this.threadManager.destroyAllSessions();
     this.setCurrentThread(undefined); // Reset to default thread
 
-    // Close the main browser manager (only for 'none' isolation where it's actually launched)
+    // Close the main browser manager (only for 'shared' scope where it's actually launched)
     const scope = this.threadManager.getScope();
     if (scope === 'shared' && this.browserManager) {
       await this.browserManager.close();
@@ -233,7 +233,7 @@ export class AgentBrowser extends MastraBrowser {
       return this.threadManager.hasActiveThreadManagers();
     }
 
-    // For 'none' isolation, check the shared browser
+    // For 'shared' scope, check the shared browser
     if (!this.browserManager) {
       return false;
     }
@@ -441,7 +441,7 @@ export class AgentBrowser extends MastraBrowser {
       const effectiveThreadId = threadId ?? this.getCurrentThread();
       const scope = this.threadManager.getScope();
 
-      // For 'browser' isolation, check if we have an existing session first
+      // For 'thread' scope, check if we have an existing session first
       // Don't create a new session just to get the URL
       if (scope === 'thread' && effectiveThreadId) {
         const manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
@@ -459,7 +459,7 @@ export class AgentBrowser extends MastraBrowser {
         return url;
       }
 
-      // For 'none' isolation, use the shared manager
+      // For 'shared' scope, use the shared manager
       const manager = await this.getManagerForThread(threadId);
       const url = manager.getPage().url();
       // Save browser state for potential restore on relaunch (before external close)
@@ -1144,7 +1144,7 @@ export class AgentBrowser extends MastraBrowser {
           }
           await browser.switchTo(input.index!);
           // Reconnect screencast to show the new active tab
-          await this.reconnectScreencast('tab switch');
+          await this.reconnectScreencastForThread(threadId, 'tab switch');
           const page = browser.getPage();
           const pageUrl = page.url();
           // Emit URL directly after switch
@@ -1174,7 +1174,7 @@ export class AgentBrowser extends MastraBrowser {
           }
           await browser.closeTab(input.index);
           // Reconnect screencast - it may now be pointing to a different tab
-          await this.reconnectScreencast('tab close');
+          await this.reconnectScreencastForThread(threadId, 'tab close');
           // Save state AFTER close (remaining tabs)
           this.updateSessionBrowserState(threadId);
           const tabsList = (await browser.listTabs?.()) ?? [];
@@ -1305,35 +1305,49 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   /**
-   * Trigger a screencast reconnect after tab changes.
+   * Reconnect the active screencast for a specific thread.
    * Called internally when tabs are switched or closed.
    */
-  private async reconnectScreencast(_reason: string): Promise<void> {
-    const threadId = this.getCurrentThread();
+  private async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
     const streamKey = this.getStreamKey(threadId);
     const stream = this.activeScreencastStreams.get(streamKey);
+    if (!stream || !stream.isActive()) {
+      return;
+    }
 
-    if (stream?.isActive()) {
+    // Check if browser is still running before attempting reconnect
+    if (!this.isBrowserRunning()) {
+      this.logger.debug?.('Skipping screencast reconnect - browser not running');
+      return;
+    }
+
+    // For thread scope, also check if this specific thread still has a session
+    const scope = this.getScope();
+    if (scope === 'thread' && threadId && !this.threadManager.getExistingManagerForThread(threadId)) {
+      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
+      return;
+    }
+
+    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
+
+    try {
       // Small delay to let agent-browser update its internal state (activePageIndex, CDP session)
       await new Promise(resolve => setTimeout(resolve, 150));
-      if (stream?.isActive()) {
-        try {
-          await stream.reconnect();
+      await stream.reconnect();
 
-          // Emit the URL of the new active page after reconnecting
-          // Use thread-specific manager in browser isolation mode
-          const manager = this.threadManager.getExistingManagerForThread(threadId) ?? this.browserManager;
-          const activePage = manager?.getPage();
-          if (activePage) {
-            const url = activePage.url();
-            if (url) {
-              stream.emitUrl(url);
-            }
-          }
-        } catch (err) {
-          console.error('[AgentBrowser] Failed to reconnect screencast:', err);
+      // Emit the URL of the new active page after reconnecting
+      // Use thread-specific manager in 'thread' scope
+      const manager =
+        threadId !== undefined ? this.threadManager.getExistingManagerForThread(threadId) : this.browserManager;
+      const activePage = manager?.getPage();
+      if (activePage) {
+        const url = activePage.url();
+        if (url) {
+          stream.emitUrl(url);
         }
       }
+    } catch (error) {
+      this.logger.debug?.('Screencast reconnect failed', error);
     }
   }
 
@@ -1495,7 +1509,7 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   override async injectKeyboardEvent(event: KeyboardEventParams, threadId?: string): Promise<void> {
-    // Get the appropriate manager based on isolation mode
+    // Get the appropriate manager based on scope
     // Use passed threadId (from input handler) or fall back to current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const manager = await this.getManagerForThread(effectiveThreadId);

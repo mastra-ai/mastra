@@ -1,5 +1,5 @@
 /**
- * AgentBrowserThreadManager - Thread isolation for AgentBrowser
+ * AgentBrowserThreadManager - Thread scope management for AgentBrowser
  *
  * Manages thread-scoped browser sessions using agent-browser's
  * BrowserManager capabilities (newWindow, switchTo, closeTab).
@@ -73,7 +73,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     };
 
     if (this.scope === 'thread') {
-      // Full thread isolation - create a new browser manager
+      // Thread scope - create a new browser manager for this thread
       const manager = new BrowserManager();
 
       const launchOptions: BrowserLaunchOptions = {

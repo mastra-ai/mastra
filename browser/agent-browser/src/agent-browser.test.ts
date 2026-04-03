@@ -140,7 +140,7 @@ describe('AgentBrowser', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Use 'none' isolation to get simpler shared browser behavior for unit tests
+    // Use 'shared' scope to get simpler shared browser behavior for unit tests
     browser = new AgentBrowser({ scope: 'shared' });
   });
 

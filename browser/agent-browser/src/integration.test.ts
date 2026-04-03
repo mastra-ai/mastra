@@ -47,7 +47,7 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
   let browser: AgentBrowser;
 
   beforeAll(async () => {
-    // Use 'none' isolation for simpler shared browser behavior in integration tests
+    // Use 'shared' scope for simpler shared browser behavior in integration tests
     browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared' });
     await browser.ensureReady();
   });

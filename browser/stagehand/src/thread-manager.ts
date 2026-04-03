@@ -1,5 +1,5 @@
 /**
- * StagehandThreadManager - Thread isolation for StagehandBrowser
+ * StagehandThreadManager - Thread scope management for StagehandBrowser
  *
  * Supports two scope modes:
  * - 'shared': All threads share the same Stagehand instance and page
@@ -174,10 +174,11 @@ export class StagehandThreadManager extends ThreadManager<V3> {
   }
 
   /**
-   * Clean up all thread sessions.
+   * Destroy all sessions (called during browser close).
+   * Closes all dedicated Stagehand instances before clearing sessions.
    */
-  async destroyAll(): Promise<void> {
-    // Close all dedicated Stagehand instances
+  override async destroyAllSessions(): Promise<void> {
+    // Close all dedicated Stagehand instances before base class clears them
     for (const [threadId, stagehand] of this.threadManagers) {
       try {
         await stagehand.close();
@@ -185,15 +186,8 @@ export class StagehandThreadManager extends ThreadManager<V3> {
         this.logger?.debug?.(`Failed to close Stagehand for thread: ${threadId}`);
       }
     }
-    // Use base class to clear tracking
-    this.clearAllSessions();
-  }
 
-  /**
-   * Check if any thread Stagehands are still running.
-   * @deprecated Use hasActiveThreadManagers() from base class
-   */
-  hasActiveThreadStagehands(): boolean {
-    return this.hasActiveThreadManagers();
+    // Base class clears threadManagers and sessions
+    await super.destroyAllSessions();
   }
 }

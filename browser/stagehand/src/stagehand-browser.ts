@@ -33,9 +33,9 @@ type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePa
  * Unlike AgentBrowser which uses refs ([ref=e1]), StagehandBrowser uses
  * natural language instructions for all interactions.
  *
- * Supports thread isolation via the scope config:
- * - 'none': All threads share the same Stagehand instance
- * - 'browser': Each thread gets its own Stagehand instance (separate browser)
+ * Supports thread scope via the scope config:
+ * - 'shared': All threads share the same Stagehand instance
+ * - 'thread': Each thread gets its own Stagehand instance (separate browser)
  */
 export class StagehandBrowser extends MastraBrowser {
   override readonly id: string;
@@ -177,7 +177,7 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Create a new Stagehand instance with the current config.
-   * Used by thread manager for 'browser' isolation mode.
+   * Used by thread manager for 'thread' scope.
    */
   private async createStagehandInstance(): Promise<Stagehand> {
     const stagehandOptions = await this.buildStagehandOptions();
@@ -193,28 +193,28 @@ export class StagehandBrowser extends MastraBrowser {
     this.threadManager.setCreateStagehand(() => this.createStagehandInstance());
 
     if (scope === 'thread') {
-      // For 'browser' isolation, don't launch a shared browser here.
+      // For 'thread' scope, don't launch a shared browser here.
       // Each thread will get its own Stagehand instance via getManagerForThread().
       // We still need a placeholder so the base class knows we're "launched".
 
       return;
     }
 
-    // For 'none' isolation, launch a shared Stagehand instance
+    // For 'shared' scope, launch a shared Stagehand instance
     this.stagehand = await this.createStagehandInstance();
 
     // Register the Stagehand instance with the thread manager
     this.threadManager.setSharedManager(this.stagehand as any);
 
     // Listen for browser/context close events to detect external closure
-    this.setupCloseListener(this.stagehand);
+    this.setupCloseListenerForSharedScope(this.stagehand);
   }
 
   /**
-   * Set up close event listener for a Stagehand instance.
+   * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.
    */
-  private setupCloseListener(stagehand: Stagehand): void {
+  private setupCloseListenerForSharedScope(stagehand: Stagehand): void {
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
@@ -309,7 +309,7 @@ export class StagehandBrowser extends MastraBrowser {
 
   protected override async doClose(): Promise<void> {
     // Clean up all thread Stagehand instances first
-    await this.threadManager.destroyAll();
+    await this.threadManager.destroyAllSessions();
 
     // Close the shared Stagehand instance if it exists
     if (this.stagehand) {
@@ -333,7 +333,7 @@ export class StagehandBrowser extends MastraBrowser {
       return this.threadManager.hasActiveThreadManagers();
     }
 
-    // For 'none' isolation, check the shared Stagehand instance
+    // For 'shared' scope, check the shared Stagehand instance
     if (!this.stagehand) {
       return false;
     }
@@ -430,7 +430,7 @@ export class StagehandBrowser extends MastraBrowser {
       return this.stagehand;
     }
 
-    // For 'browser' isolation, get or create the thread's Stagehand instance
+    // For 'thread' scope, get or create the thread's Stagehand instance
     let stagehand = this.threadManager.getExistingManagerForThread(threadId);
     if (!stagehand) {
       // Create session which creates the Stagehand instance
@@ -459,7 +459,7 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-   * Get the current page from Stagehand v3, respecting thread isolation.
+   * Get the current page from Stagehand v3, respecting thread scope.
    * @param explicitThreadId - Optional thread ID to use instead of getCurrentThread()
    *                           Use this to avoid race conditions in concurrent tool calls.
    */
@@ -467,7 +467,7 @@ export class StagehandBrowser extends MastraBrowser {
     const scope = this.getScope();
     const threadId = explicitThreadId ?? this.getCurrentThread();
 
-    // For 'browser' isolation, get the thread's Stagehand's active page
+    // For 'thread' scope, get the thread's Stagehand's active page
     if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
       const stagehand = this.threadManager.getExistingManagerForThread(threadId);
       if (stagehand?.context) {
@@ -476,7 +476,7 @@ export class StagehandBrowser extends MastraBrowser {
       return null;
     }
 
-    // For 'none' isolation, use the shared Stagehand instance
+    // For 'shared' scope, use the shared Stagehand instance
     if (!this.stagehand) return null;
 
     try {
@@ -547,7 +547,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.act(instruction, options?)
-      // Pass page for thread isolation support
+      // Pass page for thread scope support
       const result = await stagehand.act(input.instruction, {
         variables: input.variables,
         timeout: input.timeout,
@@ -581,7 +581,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.extract(instruction, schema?, options?)
-      // Pass page for thread isolation support
+      // Pass page for thread scope support
       const options: any = { page: page ?? undefined };
       const result = input.schema
         ? await stagehand.extract(input.instruction, input.schema as any, options)
@@ -613,7 +613,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     try {
       // v3 API: stagehand.observe() or stagehand.observe(instruction, options?)
-      // Pass page for thread isolation support
+      // Pass page for thread scope support
       const options: any = { page: page ?? undefined };
       const actions = input.instruction
         ? await stagehand.observe(input.instruction, options)
@@ -823,7 +823,7 @@ export class StagehandBrowser extends MastraBrowser {
     // Use the thread-specific page if provided
     const effectiveThreadId = threadId ?? this.getCurrentThread();
 
-    // For 'browser' isolation, check if we have an existing session first
+    // For 'thread' scope, check if we have an existing session first
     // Don't create a new session just to get the URL
     const scope = this.threadManager.getScope();
     if (scope === 'thread' && effectiveThreadId) {
@@ -843,7 +843,7 @@ export class StagehandBrowser extends MastraBrowser {
       return url;
     }
 
-    // For 'none' isolation, use the shared page
+    // For 'shared' scope, use the shared page
     const page = this.getPage();
     if (!page) return null;
 
