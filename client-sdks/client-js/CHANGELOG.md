@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.13.0-alpha.3
+
+### Patch Changes
+
+- Added browser tools to the Agent details UI in Playground. Agents configured with browser support now show a "Browser Tools" section in metadata. ([#14998](https://github.com/mastra-ai/mastra/pull/14998))
+
+- Updated dependencies:
+  - @mastra/core@1.22.0-alpha.3
+
 ## 1.13.0-alpha.2
 
 ### Minor Changes
