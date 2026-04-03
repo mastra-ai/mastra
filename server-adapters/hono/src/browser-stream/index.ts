@@ -46,10 +46,8 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     const honoNodeWs = await import(/* @vite-ignore */ /* webpackIgnore: true */ mod);
     createNodeWebSocket = honoNodeWs.createNodeWebSocket;
   } catch {
-    console.warn(
-      '[Browser Streaming] Disabled - @hono/node-ws not available. ' +
-        'Install ws package to enable browser streaming in Studio.',
-    );
+    // @hono/node-ws is not available (e.g. no ws package installed).
+    // This is expected in non-Node environments — silently disable browser streaming.
     return null;
   }
 
