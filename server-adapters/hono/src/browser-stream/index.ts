@@ -1,3 +1,4 @@
+import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
 import type { Env, Hono, Schema } from 'hono';
@@ -37,10 +38,12 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   app: Hono<E, S, B>,
   config: BrowserStreamConfig,
 ): Promise<BrowserStreamResult | null> {
-  // Dynamic import to avoid bundling ws into user code
-  let createNodeWebSocket;
+  // Dynamic import to avoid bundling ws into non-Node environments (e.g. Cloudflare Workers).
+  // The variable-based specifier prevents bundlers from resolving the module at build time.
+  let createNodeWebSocket: typeof CreateNodeWebSocket;
   try {
-    const honoNodeWs = await import('@hono/node-ws');
+    const mod = '@hono/node-ws';
+    const honoNodeWs = await import(/* @vite-ignore */ /* webpackIgnore: true */ mod);
     createNodeWebSocket = honoNodeWs.createNodeWebSocket;
   } catch {
     console.warn(
