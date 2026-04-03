@@ -120,10 +120,9 @@ export class AgentBrowser extends MastraBrowser {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const scope = this.threadManager.getScope();
 
-    // In 'thread' scope, if no specific threadId, use the shared manager
-    // (which IS launched, unlike in DEFAULT_THREAD_ID case which would return placeholder)
+    // In 'thread' scope with no specific threadId, check for an existing manager first
+    // to avoid creating a new session unnecessarily
     if (scope === 'thread' && (!effectiveThreadId || effectiveThreadId === DEFAULT_THREAD_ID)) {
-      // Check if we have any active thread sessions
       const existingManager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
       if (existingManager) {
         return existingManager;
@@ -285,9 +284,8 @@ export class AgentBrowser extends MastraBrowser {
   private async getPage(explicitThreadId?: string): Promise<Page> {
     const scope = this.getScope();
     const threadId = explicitThreadId ?? this.getCurrentThread();
-    // For thread scope, always use threadManager.getPageForThread even for default thread
-    // For shared scope with non-default thread, also use threadManager.getPageForThread
-    if (scope === 'thread' || (scope !== 'shared' && threadId !== DEFAULT_THREAD_ID)) {
+    // For thread scope, always use threadManager.getPageForThread
+    if (scope === 'thread') {
       return this.threadManager.getPageForThread(threadId);
     }
     if (!this.sharedManager) throw new Error('Browser not launched');

@@ -119,10 +119,12 @@ export abstract class ThreadManager<TManager = unknown> {
 
   /**
    * Get the manager for an existing thread session without creating a new one.
-   * Returns null if no session exists for the thread.
+   *
+   * For 'thread' scope: Returns the thread-specific manager, or null if no session exists.
+   * For 'shared' scope: Returns the shared manager (all threads use the same instance).
    *
    * @param threadId - Thread identifier
-   * @returns The manager for the thread, or null if not found
+   * @returns The manager for the thread, or null if not found (thread scope only)
    */
   getExistingManagerForThread(threadId: string): TManager | null {
     if (this.scope === 'thread') {
@@ -145,6 +147,7 @@ export abstract class ThreadManager<TManager = unknown> {
   clearAllSessions(): void {
     this.threadManagers.clear();
     this.sessions.clear();
+    this.activeThreadId = DEFAULT_THREAD_ID;
   }
 
   /**
@@ -293,6 +296,10 @@ export abstract class ThreadManager<TManager = unknown> {
     }
     this.threadManagers.delete(threadId);
     this.sessions.delete(threadId);
+    // Reset activeThreadId if we just cleared it
+    if (this.activeThreadId === threadId) {
+      this.activeThreadId = DEFAULT_THREAD_ID;
+    }
   }
 
   // ---------------------------------------------------------------------------
