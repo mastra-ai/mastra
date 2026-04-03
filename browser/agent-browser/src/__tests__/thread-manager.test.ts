@@ -146,7 +146,7 @@ describe('AgentBrowserThreadManager', () => {
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
       expect(threadManager.hasSession('thread-2')).toBe(false);
-      expect(threadManager.hasActiveThreadBrowsers()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
     });
   });
 
@@ -203,17 +203,17 @@ describe('AgentBrowserThreadManager', () => {
       expect(mockManager.launch).toHaveBeenCalledTimes(2);
     });
 
-    it('hasActiveThreadBrowsers returns true when browsers exist', async () => {
+    it('hasActiveThreadManagers returns true when browsers exist', async () => {
       const threadManager = new AgentBrowserThreadManager({
         scope: 'thread',
         browserConfig: { headless: true },
       });
 
-      expect(threadManager.hasActiveThreadBrowsers()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
 
       await threadManager.getManagerForThread('thread-1');
 
-      expect(threadManager.hasActiveThreadBrowsers()).toBe(true);
+      expect(threadManager.hasActiveThreadManagers()).toBe(true);
     });
 
     it('destroySession closes browser in browser mode', async () => {
@@ -226,7 +226,7 @@ describe('AgentBrowserThreadManager', () => {
       await threadManager.destroySession('thread-1');
 
       expect(mockManager.close).toHaveBeenCalled();
-      expect(threadManager.hasActiveThreadBrowsers()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
     });
 
     it('onBrowserCreated callback is called', async () => {
@@ -257,7 +257,7 @@ describe('AgentBrowserThreadManager', () => {
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
       expect(threadManager.hasSession('thread-2')).toBe(false);
-      expect(threadManager.hasActiveThreadBrowsers()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
       // close should NOT have been called
       expect(mockManager.close).not.toHaveBeenCalled();
     });

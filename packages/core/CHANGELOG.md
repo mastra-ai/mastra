@@ -1,5 +1,110 @@
 # @mastra/core
 
+## 1.22.0
+
+### Minor Changes
+
+- Add browser integration support for agents ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `browser` property on agents for browser automation toolsets
+  - `MastraBrowser` base class with screencast streaming, input injection, and state management
+  - `ThreadManager` for browser session isolation per thread
+  - Browser tools are automatically available when a browser is configured on an agent
+  - New `@mastra/core/browser` export with browser types and utilities
+
+- Added agent-level chat channels via Vercel Chat SDK adapters. ([#14642](https://github.com/mastra-ai/mastra/pull/14642))
+
+  Agents can now communicate over messaging platforms like Slack, Discord, and Telegram using the `channels` configuration option. Each agent manages its own adapters and automatically handles event routing, thread mapping, tool generation, and streaming responses.
+
+  **Key features:**
+  - Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
+  - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
+  - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
+  - Multi-user thread awareness with author prefixes for group conversations
+  - Thread subscriptions persisted via Mastra storage (survives restarts)
+
+  **New exports from `@mastra/core/channels`:**
+  - `AgentChannels` — internal class managing Chat SDK instance and event handlers
+  - `ChatChannelProcessor` — input processor injecting channel context into prompts
+  - `MastraStateAdapter` — StateAdapter backed by Mastra storage
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+- Added Mastra Gateway as a model router provider. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+  The Mastra Gateway enables access to multiple LLM providers through a unified endpoint at server.mastra.ai, supporting both API key and OAuth authentication flows.
+
+  **New exports:**
+  - `MastraGateway` — gateway provider class for routing models through the Mastra Gateway service
+  - `MastraGatewayConfig` — configuration type with `apiKey`, `baseUrl`, and `customFetch` options
+  - `GATEWAY_AUTH_HEADER` — constant for the custom gateway authentication header (`X-Memory-Gateway-Authorization`)
+  - `GatewayRegistry` — manages gateway-based provider discovery with atomic file caching
+  - `parseModelString` — utility to parse provider/model ID strings
+
+  ```ts
+  import { MastraGateway } from '@mastra/core/llm';
+
+  const gateway = new MastraGateway({
+    apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7))
+
+- **Fixed streamed finish metadata being dropped from final model results** ([#13914](https://github.com/mastra-ai/mastra/pull/13914))
+
+  Provider-specific metadata from streamed `finish` events is now preserved consistently across final output results, buffered steps, and `onFinish` callbacks. This improves compatibility with providers like Anthropic and Google/Gemini when they attach cache, reasoning, or other finish-time metadata during streaming.
+
+- Fixed providerMetadata (e.g. Gemini thoughtSignature) being lost on assistant file parts during multi-turn conversations. This resolves 'Image part is missing a thought_signature' errors when round-tripping model-generated images with Gemini 3.x models. ([#14972](https://github.com/mastra-ai/mastra/pull/14972))
+
+- Fixed `LocalSandbox` `execute_command` with a relative `cwd` (e.g. `"."` or `"./subdir"`) resolving against the server's working directory instead of the sandbox's configured `workingDirectory`. ([#14964](https://github.com/mastra-ai/mastra/pull/14964))
+
+- Fixed tool result persistence so savePerStep keeps raw tool output while prompt messages still use stored model output. ([#14966](https://github.com/mastra-ai/mastra/pull/14966))
+
+- Fixed skill path resolution when disambiguating same-named skills. The `skill` tool now correctly resolves skills by path when the location includes the `/SKILL.md` suffix. Fixes #14918. ([#14951](https://github.com/mastra-ai/mastra/pull/14951))
+
+- Fixed thread titles not persisting when generated during async buffered observation. Titles now update immediately when the observer produces them, rather than being lost until activation. ([#14992](https://github.com/mastra-ai/mastra/pull/14992))
+
+## 1.22.0-alpha.3
+
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Add browser integration support for agents ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `browser` property on agents for browser automation toolsets
+  - `MastraBrowser` base class with screencast streaming, input injection, and state management
+  - `ThreadManager` for browser session isolation per thread
+  - Browser tools are automatically available when a browser is configured on an agent
+  - New `@mastra/core/browser` export with browser types and utilities
+
+- Added agent-level chat channels via Vercel Chat SDK adapters. ([#14642](https://github.com/mastra-ai/mastra/pull/14642))
+
+  Agents can now communicate over messaging platforms like Slack, Discord, and Telegram using the `channels` configuration option. Each agent manages its own adapters and automatically handles event routing, thread mapping, tool generation, and streaming responses.
+
+  **Key features:**
+  - Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
+  - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
+  - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
+  - Multi-user thread awareness with author prefixes for group conversations
+  - Thread subscriptions persisted via Mastra storage (survives restarts)
+
+  **New exports from `@mastra/core/channels`:**
+  - `AgentChannels` — internal class managing Chat SDK instance and event handlers
+  - `ChatChannelProcessor` — input processor injecting channel context into prompts
+  - `MastraStateAdapter` — StateAdapter backed by Mastra storage
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Fixed providerMetadata (e.g. Gemini thoughtSignature) being lost on assistant file parts during multi-turn conversations. This resolves 'Image part is missing a thought_signature' errors when round-tripping model-generated images with Gemini 3.x models. ([#14972](https://github.com/mastra-ai/mastra/pull/14972))
+
+- Fixed skill path resolution when disambiguating same-named skills. The `skill` tool now correctly resolves skills by path when the location includes the `/SKILL.md` suffix. Fixes #14918. ([#14951](https://github.com/mastra-ai/mastra/pull/14951))
+
+- Fixed thread titles not persisting when generated during async buffered observation. Titles now update immediately when the observer produces them, rather than being lost until activation. ([#14992](https://github.com/mastra-ai/mastra/pull/14992))
+
 ## 1.22.0-alpha.1
 
 ### Patch Changes

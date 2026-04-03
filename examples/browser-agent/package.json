@@ -6,6 +6,7 @@
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
+    "@hono/node-ws": "^1.3.0",
     "@mastra/agent-browser": "latest",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
@@ -13,6 +14,7 @@
     "@mastra/stagehand": "latest",
     "agent-browser": "^0.22.2",
     "mastra": "latest",
+    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "pnpm": {
