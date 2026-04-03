@@ -54,7 +54,7 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
   });
 
   const items = query.data?.pages.flatMap(page => page?.items ?? []) ?? [];
-  const total = query.data?.pages[0]?.pagination?.total ?? 0;
+  const total = query.data?.pages[0]?.pagination?.total;
 
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {

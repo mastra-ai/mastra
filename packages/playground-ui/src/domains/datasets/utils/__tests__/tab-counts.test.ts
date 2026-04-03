@@ -30,10 +30,21 @@ describe('dataset tab counts', () => {
         getItemsTabCount({
           hasSearchQuery: false,
           filteredItemsLength: 20,
-          unfilteredItemsTotal: 0,
+          unfilteredItemsTotal: undefined,
           itemsTotal: 35,
         }),
       ).toBe(35);
+    });
+
+    it('preserves a valid zero total', () => {
+      expect(
+        getItemsTabCount({
+          hasSearchQuery: false,
+          filteredItemsLength: 20,
+          unfilteredItemsTotal: 0,
+          itemsTotal: 0,
+        }),
+      ).toBe(0);
     });
   });
 

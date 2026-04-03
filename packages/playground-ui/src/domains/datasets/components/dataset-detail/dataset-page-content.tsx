@@ -85,7 +85,7 @@ export function DatasetPageContent({
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
     data: items = [],
-    total: itemsTotal = 0,
+    total: itemsTotal,
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
@@ -93,7 +93,7 @@ export function DatasetPageContent({
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
   // Unfiltered query (no search) to determine if dataset has any items — avoids
   // incorrectly disabling the experiment button when a search yields no matches.
-  const { data: unfilteredItems = [], total: unfilteredItemsTotal = 0, isLoading: isUnfilteredLoading } = useDatasetItems(
+  const { data: unfilteredItems = [], total: unfilteredItemsTotal, isLoading: isUnfilteredLoading } = useDatasetItems(
     datasetId,
     undefined,
     activeDatasetVersion,
