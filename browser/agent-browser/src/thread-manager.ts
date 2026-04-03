@@ -1,5 +1,5 @@
 /**
- * AgentBrowserThreadManager - Thread isolation for AgentBrowser
+ * AgentBrowserThreadManager - Thread scope management for AgentBrowser
  *
  * Manages thread-scoped browser sessions using agent-browser's
  * BrowserManager capabilities (newWindow, switchTo, closeTab).
@@ -9,6 +9,7 @@ import { ThreadManager } from '@mastra/core/browser';
 import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
+import type { Page } from 'playwright-core';
 import type { BrowserConfig } from './types';
 
 /**
@@ -39,13 +40,9 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
  * - 'thread': Each thread gets a dedicated browser manager instance
  */
 export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
-  private sharedManager: BrowserManager | null = null;
   private readonly browserConfig: BrowserConfig;
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   private readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
-
-  /** Map of thread ID to dedicated browser manager (for 'thread' scope) */
-  private readonly threadBrowsers = new Map<string, BrowserManager>();
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
@@ -55,27 +52,11 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   }
 
   /**
-   * Set the shared browser manager (called after browser launch).
+   * Get the page for a specific thread, creating session if needed.
    */
-  setSharedManager(manager: BrowserManager): void {
-    this.sharedManager = manager;
-  }
-
-  /**
-   * Clear the shared browser manager (called when browser disconnects).
-   */
-  clearSharedManager(): void {
-    this.sharedManager = null;
-  }
-
-  /**
-   * Get the shared browser manager.
-   */
-  protected getSharedManager(): BrowserManager {
-    if (!this.sharedManager) {
-      throw new Error('Browser not launched');
-    }
-    return this.sharedManager;
+  async getPageForThread(threadId?: string): Promise<Page> {
+    const manager = await this.getManagerForThread(threadId);
+    return manager.getPage();
   }
 
   /**
@@ -92,7 +73,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     };
 
     if (this.scope === 'thread') {
-      // Full thread isolation - create a new browser manager
+      // Thread scope - create a new browser manager for this thread
       const manager = new BrowserManager();
 
       const launchOptions: BrowserLaunchOptions = {
@@ -117,7 +98,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       }
 
       session.manager = manager;
-      this.threadBrowsers.set(threadId, manager);
+      this.threadManagers.set(threadId, manager);
 
       try {
         // Restore browser state if available (before notifying parent to avoid screencast race)
@@ -131,7 +112,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
         this.onBrowserCreated?.(manager, threadId);
       } catch (error) {
         // Roll back: remove from tracking and close the manager
-        this.threadBrowsers.delete(threadId);
+        this.threadManagers.delete(threadId);
         session.manager = undefined;
         try {
           await manager.close();
@@ -183,15 +164,6 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   }
 
   /**
-   * Switch to an existing session.
-   * For 'thread' scope, no switching needed - each thread has its own manager.
-   * For 'shared' scope, nothing to switch.
-   */
-  protected async switchToSession(_session: AgentBrowserSession): Promise<void> {
-    // No-op for both scopes - 'thread' has separate managers, 'shared' shares everything
-  }
-
-  /**
    * Get the browser manager for a specific session.
    */
   protected getManagerForSession(session: AgentBrowserSession): BrowserManager {
@@ -208,69 +180,15 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     if (this.scope === 'thread' && session.manager) {
       // Close the dedicated browser manager
       await session.manager.close();
-      this.threadBrowsers.delete(session.threadId);
     }
     // For 'shared' scope, nothing to clean up - all threads share the manager
   }
 
   /**
    * Destroy all sessions (called during browser close).
+   * doDestroySession handles closing individual browser managers.
    */
   override async destroyAllSessions(): Promise<void> {
-    // Close all dedicated browser managers
-    for (const [threadId, manager] of this.threadBrowsers) {
-      try {
-        await manager.close();
-      } catch {
-        this.logger?.debug?.(`Failed to close browser for thread: ${threadId}`);
-      }
-    }
-    this.threadBrowsers.clear();
-
-    // Clear context sessions (contexts are closed when shared browser closes)
     await super.destroyAllSessions();
-  }
-
-  /**
-   * Check if any thread browsers are still running.
-   */
-  hasActiveThreadBrowsers(): boolean {
-    return this.threadBrowsers.size > 0;
-  }
-
-  /**
-   * Get the browser manager for an existing thread session without creating a new one.
-   * Returns null if no session exists for the thread.
-   */
-  getExistingManagerForThread(threadId: string): BrowserManager | null {
-    if (this.scope === 'thread') {
-      return this.threadBrowsers.get(threadId) ?? null;
-    }
-    return this.sharedManager;
-  }
-
-  /**
-   * Clear all session tracking without closing browsers.
-   * Used when browsers have been externally closed and we just need to reset state.
-   */
-  clearAllSessions(): void {
-    this.threadBrowsers.clear();
-    this.sessions.clear();
-  }
-
-  /**
-   * Clear a specific thread's session without closing the browser.
-   * Used when a thread's browser has been externally closed.
-   * Preserves the browser state for potential restoration.
-   * @param threadId - The thread ID to clear
-   */
-  clearSession(threadId: string): void {
-    // Save the browser state before clearing so it can be restored on relaunch
-    const session = this.sessions.get(threadId);
-    if (session?.browserState) {
-      this.savedBrowserStates.set(threadId, session.browserState);
-    }
-    this.threadBrowsers.delete(threadId);
-    this.sessions.delete(threadId);
   }
 }

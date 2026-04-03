@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { BrowserContextProcessor } from '@mastra/core/browser';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { Memory } from '@mastra/memory';
 
@@ -35,5 +34,4 @@ IMPORTANT: After any interaction that changes the page, take a new snapshot sinc
   model: 'openai/gpt-5.2',
   browser: agentBrowserToolset,
   memory,
-  inputProcessors: [new BrowserContextProcessor()],
 });
