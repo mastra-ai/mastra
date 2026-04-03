@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.19.0",
+  "version": "1.22.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -89,6 +89,16 @@
       "require": {
         "types": "./dist/vector/filter/index.d.ts",
         "default": "./dist/vector/filter/index.cjs"
+      }
+    },
+    "./observability/context-storage": {
+      "import": {
+        "types": "./dist/observability/context-storage.d.ts",
+        "default": "./dist/observability/context-storage.js"
+      },
+      "require": {
+        "types": "./dist/observability/context-storage.d.ts",
+        "default": "./dist/observability/context-storage.cjs"
       }
     },
     "./utils": {
@@ -231,6 +241,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.18.0",
+    "chat": "^4.23.0",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "gray-matter": "^4.0.3",
@@ -253,7 +264,6 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
-    "@internal/core": "workspace:*",
     "@ai-sdk/azure": "^2.0.101",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.36",
     "@ai-sdk/deepinfra-v5": "npm:@ai-sdk/deepinfra@1.0.35",
@@ -275,6 +285,7 @@
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
+    "@internal/core": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",

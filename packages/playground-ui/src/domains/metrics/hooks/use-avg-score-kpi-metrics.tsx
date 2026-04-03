@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useMetricsFilters } from './use-metrics-filters';
 
-/** Avg Score — average score from the old scores storage */
+/** Avg Score — average score across all scorers via aggregate API */
 export function useAvgScoreKpiMetrics() {
   const client = useMastraClient();
   const { datePreset, customRange, timestamp } = useMetricsFilters();
@@ -18,27 +18,29 @@ export function useAvgScoreKpiMetrics() {
         return { value: null, previousValue: null, changePercent: null };
       }
 
-      const allResults = await Promise.all(
-        scorerIds.map(scorerId => client.listScoresByScorerId({ scorerId, perPage: 100 })),
+      const filters = {
+        timestamp: { start: timestamp.start, end: timestamp.end },
+      };
+
+      const results = await Promise.all(
+        scorerIds.map(async scorerId => {
+          const [avg, count] = await Promise.all([
+            client.getScoreAggregate({ scorerId, aggregation: 'avg', filters }),
+            client.getScoreAggregate({ scorerId, aggregation: 'count', filters }),
+          ]);
+          return { avg: avg.value ?? 0, count: count.value ?? 0 };
+        }),
       );
 
-      const startMs = timestamp.start.getTime();
-      const endMs = timestamp.end.getTime();
-      const allScoreValues: number[] = [];
-      for (const result of allResults) {
-        for (const s of result?.scores ?? []) {
-          const ts = new Date(s.createdAt).getTime();
-          if (ts >= startMs && ts <= endMs) {
-            allScoreValues.push(s.score);
-          }
-        }
-      }
+      const withData = results.filter(r => r.count > 0);
 
-      if (allScoreValues.length === 0) {
+      if (withData.length === 0) {
         return { value: null, previousValue: null, changePercent: null };
       }
 
-      const avg = allScoreValues.reduce((sum, v) => sum + v, 0) / allScoreValues.length;
+      const totalCount = withData.reduce((sum, r) => sum + r.count, 0);
+      const weightedSum = withData.reduce((sum, r) => sum + r.avg * r.count, 0);
+      const avg = weightedSum / totalCount;
       return { value: Math.round(avg * 100) / 100, previousValue: null, changePercent: null };
     },
   });

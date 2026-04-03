@@ -64,11 +64,22 @@ export function SearchFieldBlock({
             placeholder={placeholder}
             onChange={onChange}
             size={size}
-            className="pl-10"
+            className={cn(
+              size === 'sm' && 'pl-8',
+              size === 'md' && 'pl-9',
+              (!size || size === 'default') && 'pl-10',
+              size === 'lg' && 'pl-11',
+            )}
           />
           <SearchIcon
             aria-hidden="true"
-            className="text-neutral4 opacity-50 group-has-focus:opacity-100 absolute top-2 left-3 w-5 h-5"
+            className={cn(
+              'text-neutral4 opacity-50 group-has-focus:opacity-100 absolute left-3 top-1/2 -translate-y-1/2',
+              size === 'sm' && 'w-3.5 h-3.5',
+              size === 'md' && 'w-4 h-4',
+              (!size || size === 'default') && 'w-[1.125rem] h-[1.125rem]',
+              size === 'lg' && 'w-5 h-5',
+            )}
           />
           {onReset && value && (
             <button

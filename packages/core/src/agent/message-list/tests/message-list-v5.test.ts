@@ -2,6 +2,7 @@ import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 
 import { isToolUIPart } from '@internal/ai-sdk-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
+import { AIV5Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
@@ -1756,6 +1757,61 @@ describe('MessageList V5 Support', () => {
       const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
       const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+    });
+
+    it('should preserve modelOutput metadata across db to model to db conversion', () => {
+      const list = new MessageList({ threadId, resourceId });
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool-roundtrip',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-roundtrip',
+                toolName: 'fetchData',
+                state: 'result',
+                args: { url: 'https://example.com' },
+                result: { status: 200, body: 'lots of data here' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Data fetched successfully' },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const modelMessages = list.get.all.aiV5.model();
+      const toolModelMessage = modelMessages.find(message => message.role === 'tool') as any;
+      const toolModelPart = toolModelMessage.content.find((part: any) => part.type === 'tool-result');
+      expect(toolModelPart.output).toEqual({
+        type: 'json',
+        value: { status: 200, body: 'lots of data here' },
+      });
+      expect(toolModelPart.providerOptions?.mastra?.modelOutput).toEqual({
+        type: 'text',
+        value: 'Data fetched successfully',
+      });
+
+      const roundTrippedDbMessage = AIV5Adapter.fromModelMessage(toolModelMessage);
+      const roundTrippedToolPart = roundTrippedDbMessage.content.parts?.find(
+        (part: any) => part.type === 'tool-invocation',
+      ) as any;
+      expect(roundTrippedToolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+      expect(roundTrippedToolPart.providerMetadata?.mastra?.modelOutput).toEqual({
+        type: 'text',
+        value: 'Data fetched successfully',
+      });
     });
 
     it('should only override output for tool results that have stored modelOutput', async () => {

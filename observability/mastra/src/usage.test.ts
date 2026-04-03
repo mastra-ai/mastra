@@ -150,6 +150,42 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails?.cacheRead).toBeUndefined();
       expect(result.outputDetails?.text).toBe(50);
     });
+
+    it('should not double count Anthropic cache tokens when v6 usage already includes them', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 106,
+        outputTokens: 20,
+        cachedInputTokens: 94,
+        raw: {
+          inputTokens: {
+            total: 106,
+            noCache: 6,
+            cacheRead: 94,
+            cacheWrite: 6,
+          },
+          outputTokens: {
+            total: 20,
+            text: 20,
+            reasoning: undefined,
+          },
+        },
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 94,
+          cacheCreationInputTokens: 6,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(106);
+      expect(result.outputTokens).toBe(20);
+      expect(result.inputDetails?.text).toBe(6);
+      expect(result.inputDetails?.cacheRead).toBe(94);
+      expect(result.inputDetails?.cacheWrite).toBe(6);
+    });
   });
 
   describe('Google/Gemini cache and thought tokens', () => {

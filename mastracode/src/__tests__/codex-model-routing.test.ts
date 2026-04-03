@@ -20,6 +20,15 @@ describe('remapOpenAIModelForCodexOAuth', () => {
     expect(remapOpenAIModelForCodexOAuth('openai/gpt-5-nano')).toBe('openai/gpt-5-nano');
     expect(remapOpenAIModelForCodexOAuth('anthropic/claude-sonnet-4-5')).toBe('anthropic/claude-sonnet-4-5');
   });
+
+  it('preserves the mastra gateway prefix when remapping GPT-5 models', () => {
+    expect(remapOpenAIModelForCodexOAuth('mastra/openai/gpt-5')).toBe('mastra/openai/gpt-5-codex');
+    expect(remapOpenAIModelForCodexOAuth('mastra/openai/gpt-5.3')).toBe('mastra/openai/gpt-5.3-codex');
+    expect(remapOpenAIModelForCodexOAuth('mastra/openai/gpt-5.4-mini')).toBe('mastra/openai/gpt-5.4-mini');
+    expect(remapOpenAIModelForCodexOAuth('mastra/anthropic/claude-sonnet-4-5')).toBe(
+      'mastra/anthropic/claude-sonnet-4-5',
+    );
+  });
 });
 
 describe('getEffectiveThinkingLevel', () => {

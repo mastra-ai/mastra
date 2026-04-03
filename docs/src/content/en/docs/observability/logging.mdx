@@ -44,7 +44,7 @@ No code changes are required. Mastra wraps the configured logger so that it writ
 
 You can control which log levels reach observability storage independently from your console logger. Add a `logging` option to your observability instance configuration:
 
-```typescript {13-16} title="src/mastra/index.ts"
+```typescript {12-15} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
 import { Observability, DefaultExporter } from '@mastra/observability'

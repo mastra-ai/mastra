@@ -79,6 +79,7 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         hasMemory={memory}
         agentId={agentId}
+        threadId={threadId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
       />
