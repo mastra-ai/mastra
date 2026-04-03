@@ -36,6 +36,17 @@ describe('dataset tab counts', () => {
       ).toBe(35);
     });
 
+    it('falls back to filtered row count when both totals are unavailable', () => {
+      expect(
+        getItemsTabCount({
+          hasSearchQuery: false,
+          filteredItemsLength: 12,
+          unfilteredItemsTotal: undefined,
+          itemsTotal: undefined,
+        }),
+      ).toBe(12);
+    });
+
     it('preserves a valid zero total', () => {
       expect(
         getItemsTabCount({
