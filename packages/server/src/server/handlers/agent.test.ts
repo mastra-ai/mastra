@@ -571,6 +571,33 @@ describe('Agent Handlers', () => {
         }),
       );
     });
+
+    it('should return serialized agent with browser tools when browser is configured', async () => {
+      const mockBrowser = {
+        getTools: () => ({
+          navigate: { name: 'navigate' },
+          click: { name: 'click' },
+          screenshot: { name: 'screenshot' },
+        }),
+      };
+
+      const agentWithBrowser = makeMockAgent({
+        name: 'browser-agent',
+        browser: mockBrowser as any,
+      });
+
+      const mastraWithBrowser = makeMastraMock({
+        agents: { 'browser-agent': agentWithBrowser },
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBrowser }),
+        agentId: 'browser-agent',
+        requestContext,
+      });
+
+      expect(result?.browserTools).toEqual(['navigate', 'click', 'screenshot']);
+    });
   });
 
   describe('generateHandler', () => {

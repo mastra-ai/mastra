@@ -394,14 +394,15 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
  * Get the list of browser tool names for an agent.
  * Returns the tool names from the agent's browser provider if configured.
  */
-export function getBrowserToolsFromAgent(agent: Agent): string[] {
+export function getBrowserToolsFromAgent(agent: Agent, onError?: (error: unknown) => void): string[] {
   try {
     const browser = agent.browser;
     if (!browser) {
       return [];
     }
     return Object.keys(browser.getTools());
-  } catch {
+  } catch (error) {
+    onError?.(error);
     return [];
   }
 }
@@ -501,7 +502,9 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
-  const browserTools = getBrowserToolsFromAgent(agent);
+  const browserTools = getBrowserToolsFromAgent(agent, error =>
+    logger.warn('Failed to get browser tools for agent', { agentId: agent.id, error }),
+  );
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -758,7 +761,9 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
-  const browserTools = getBrowserToolsFromAgent(agent);
+  const browserTools = getBrowserToolsFromAgent(agent, error =>
+    mastra.getLogger().warn('Failed to get browser tools for agent', { agentId: agent.id, error }),
+  );
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
