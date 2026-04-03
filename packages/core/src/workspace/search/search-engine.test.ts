@@ -627,7 +627,8 @@ describe('splitIntoChunks', () => {
     }
   });
 
-  it('should handle a single very long line', () => {
+  it('should not split a single very long line (splits only on line boundaries)', () => {
+    // Splits only on line boundaries; single-line files stay as one chunk.
     const text = 'x'.repeat(10000);
     const chunks = splitIntoChunks(text, { maxChunkChars: 4000 });
 

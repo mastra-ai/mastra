@@ -310,10 +310,12 @@ export class SearchEngine {
    * Used to remove all chunks belonging to a single source document.
    */
   async removeByPrefix(prefix: string): Promise<void> {
+    const matchedIds: string[] = [];
+
     if (this.#bm25Index) {
-      const ids = this.#bm25Index.documentIds;
-      for (const id of ids) {
+      for (const id of this.#bm25Index.documentIds) {
         if (id.startsWith(prefix)) {
+          matchedIds.push(id);
           this.#bm25Index.remove(id);
         }
       }
@@ -323,9 +325,17 @@ export class SearchEngine {
       if (this.#lazyVectorIndex) {
         this.#pendingVectorDocs = this.#pendingVectorDocs.filter(d => !d.id.startsWith(prefix));
       }
-      // Vector stores don't support prefix deletion natively, so we
-      // rely on the fact that chunk IDs are deterministic. Individual
-      // deleteVector calls are best-effort.
+
+      for (const id of matchedIds) {
+        try {
+          await this.#vectorConfig.vectorStore.deleteVector({
+            indexName: this.#vectorConfig.indexName,
+            id,
+          });
+        } catch {
+          // Vector may not exist, ignore
+        }
+      }
     }
   }
 

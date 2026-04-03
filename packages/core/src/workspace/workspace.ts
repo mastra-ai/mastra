@@ -855,6 +855,9 @@ export class Workspace<
       return;
     }
 
+    // Clear stale chunks from a previous indexing pass.
+    await this._searchEngine!.removeByPrefix(`${filePath}#chunk-`);
+
     const chunks = splitIntoChunks(content);
 
     if (chunks.length === 1) {
@@ -865,6 +868,9 @@ export class Workspace<
       }
       return;
     }
+
+    // Clear the single-doc entry in case the file grew into multiple chunks.
+    await this._searchEngine!.remove(filePath);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]!;
