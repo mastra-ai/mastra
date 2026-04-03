@@ -7,7 +7,7 @@ packages:
 
 # Stagehand
 
-The `@mastra/stagehand` package provides browser automation using the Stagehand SDK from Browserbase. Stagehand uses AI to understand page context and locate elements, enabling natural language descriptions instead of explicit selectors.
+The `@mastra/stagehand` package provides browser automation using the [Stagehand SDK](https://docs.browserbase.com/stagehand/introduction) from Browserbase. Stagehand uses AI to understand page context and locate elements, enabling natural language descriptions instead of explicit selectors.
 
 ## When to use Stagehand
 
@@ -66,50 +66,44 @@ Stagehand provides 6 tools for browser control:
 
 ## Natural language actions
 
-The `stagehand_act` tool accepts natural language descriptions of actions:
+When the agent uses the `stagehand_act` tool, it accepts natural language descriptions of actions:
 
-```typescript
-// Click a button
-await browser.act({ action: 'Click the Sign In button' })
-
-// Fill a form field
-await browser.act({ action: 'Type "user@example.com" in the email field' })
-
-// Complex interactions
-await browser.act({ action: 'Select "United States" from the country dropdown' })
-```
+- "Press the Sign In button"
+- "Type '[user@example.com](mailto:user@example.com)' in the email field"
+- "Select 'United States' from the country dropdown"
 
 Stagehand's AI interprets the action and finds the appropriate element on the page.
 
 ## Data extraction
 
-The `stagehand_extract` tool pulls structured data from pages:
+When the agent uses the `stagehand_extract` tool, it can pull structured data from pages.
 
-```typescript
-// Extract product information
-const result = await browser.extract({
-  instruction: 'Extract the product name, price, and availability',
-})
+Example instruction: "Extract the product name, price, and availability"
 
-// Returns structured data based on page content
-// { name: "Widget Pro", price: "$29.99", availability: "In Stock" }
+The tool returns structured data based on page content:
+
+```json
+{
+  "name": "Widget Pro",
+  "price": "$29.99",
+  "availability": "In Stock"
+}
 ```
 
 ## Observing actions
 
-The `stagehand_observe` tool analyzes the current page and returns possible actions:
+When the agent uses the `stagehand_observe` tool, it analyzes the current page and returns possible actions.
 
-```typescript
-const actions = await browser.observe({
-  instruction: 'What actions can I take on this login form?',
-})
+Example instruction: "What actions can I take on this login form?"
 
-// Returns a list of available actions
-// [
-//   { action: "Click 'Sign In' button", element: "button" },
-//   { action: "Type in 'Email' field", element: "input" },
-//   { action: "Click 'Forgot Password' link", element: "a" }
-// ]
+Returns a list of available actions:
+
+```json
+[
+  { "action": "Press 'Sign In' button", "element": "button" },
+  { "action": "Type in 'Email' field", "element": "input" },
+  { "action": "Open 'Forgot Password' link", "element": "a" }
+]
 ```
 
 ## Configuration

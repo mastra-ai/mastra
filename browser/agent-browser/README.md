@@ -50,7 +50,8 @@ const browser = new AgentBrowser({
   // CDP URL for connecting to existing browser
   cdpUrl: 'ws://localhost:9222',
 
-  // Browser instance scope (default: 'thread')
+  // Browser instance scope
+  // Default: 'thread' for local launch, 'shared' when cdpUrl is provided
   // 'thread': Each thread gets its own browser
   // 'shared': All threads share one browser
   scope: 'thread',

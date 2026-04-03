@@ -110,7 +110,8 @@ Use stagehand_extract to get data from pages.`,
   {
     name: 'cdpUrl',
     type: 'string | (() => string | Promise<string>)',
-    description: 'CDP WebSocket URL for connecting to an existing browser.',
+    description:
+      'CDP WebSocket URL or HTTP endpoint for connecting to an existing browser. HTTP endpoints are resolved to WebSocket internally.',
     isOptional: true,
   },
   {
@@ -231,6 +232,7 @@ Extract structured data from a page using natural language instructions.
 interface ExtractResult<T = unknown> {
   success: boolean;
   data?: T;
+  hint?: string;
   error?: string;
   url?: string;
 }

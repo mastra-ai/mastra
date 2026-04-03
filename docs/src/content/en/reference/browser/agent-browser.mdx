@@ -70,7 +70,7 @@ then interact with elements using their refs (e.g., @e5).`,
     description:
       "Browser instance scope. 'shared' shares one browser across all threads. 'thread' gives each thread its own browser.",
     isOptional: true,
-    defaultValue: "'thread'",
+    defaultValue: "'thread' (or 'shared' when cdpUrl is provided)",
   },
   {
     name: 'onLaunch',

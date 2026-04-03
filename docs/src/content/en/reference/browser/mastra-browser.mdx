@@ -64,7 +64,7 @@ export const browserAgent = new Agent({
     name: 'cdpUrl',
     type: 'string | (() => string | Promise<string>)',
     description:
-      'CDP WebSocket URL or async provider function. When provided, connects to an existing browser instead of launching a new one. Useful for cloud providers (Browserbase, Browserless, etc.).',
+      "CDP WebSocket URL or async provider function. When provided, connects to an existing browser instead of launching a new one. Can't be used with scope: 'thread' (automatically uses shared scope). Useful for cloud providers (Browserbase, Browserless, etc.).",
     isOptional: true,
   },
   {
@@ -73,7 +73,7 @@ export const browserAgent = new Agent({
     description:
       "Browser instance scope across threads. 'shared' means all threads share a single browser instance. 'thread' means each thread gets its own browser instance (full isolation).",
     isOptional: true,
-    defaultValue: "'thread'",
+    defaultValue: "'thread' (or 'shared' when cdpUrl is provided)",
   },
   {
     name: 'onLaunch',
@@ -138,22 +138,26 @@ export const browserAgent = new Agent({
 
 ## Properties
 
+The following properties (`id`, `name`, `provider`) are abstract and must be defined by concrete provider implementations:
+
 <PropertiesTable
   content={[
   {
     name: 'id',
     type: 'string',
-    description: 'Unique identifier for this browser instance.',
+    description: 'Unique identifier for this browser instance. Abstract - defined by provider.',
   },
   {
     name: 'name',
     type: 'string',
-    description: "Human-readable name of the browser provider (e.g., 'AgentBrowser', 'StagehandBrowser').",
+    description:
+      "Human-readable name of the browser provider (e.g., 'AgentBrowser', 'StagehandBrowser'). Abstract - defined by provider.",
   },
   {
     name: 'provider',
     type: 'string',
-    description: "Provider identifier (e.g., 'vercel-labs/agent-browser', 'browserbase/stagehand').",
+    description:
+      "Provider identifier (e.g., 'vercel-labs/agent-browser', 'browserbase/stagehand'). Abstract - defined by provider.",
   },
   {
     name: 'headless',
@@ -174,7 +178,7 @@ export const browserAgent = new Agent({
 
 #### `ensureReady()`
 
-Ensures the browser is launched and ready for use. Automatically called before tool execution.
+Ensures the browser is launched and ready for use. Automatically called before tool execution. Implemented in the base class.
 
 ```typescript
 await browser.ensureReady()
@@ -182,7 +186,7 @@ await browser.ensureReady()
 
 #### `close()`
 
-Closes the browser and cleans up all resources.
+Closes the browser and cleans up all resources. Implemented in the base class with race-condition-safe handling.
 
 ```typescript
 await browser.close()

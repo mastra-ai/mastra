@@ -34,8 +34,8 @@ Each provider offers a different set of tools optimized for its approach:
 
 | Provider | Approach | Tools |
 | - | - | - |
-| agent-browser | Accessibility tree refs | `goto`, `click`, `type`, `snapshot`, `scroll`, `select`, `press`, `hover`, `back`, `wait`, `tabs`, `drag`, `dialog`, `evaluate`, `close` |
-| Stagehand | AI-powered selectors | `navigate`, `act`, `extract`, `observe`, `tabs`, `close` |
+| agent-browser | Accessibility tree refs | `browser_goto`, `browser_click`, `browser_type`, `browser_snapshot`, `browser_scroll`, `browser_select`, `browser_press`, `browser_hover`, `browser_back`, `browser_wait`, `browser_tabs`, `browser_drag`, `browser_dialog`, `browser_evaluate`, `browser_close` |
+| Stagehand | AI-powered selectors | `stagehand_navigate`, `stagehand_act`, `stagehand_extract`, `stagehand_observe`, `stagehand_tabs`, `stagehand_close` |
 
 ## Usage
 
@@ -107,7 +107,7 @@ const browser = new AgentBrowser({
 })
 ```
 
-This works with Browser-Use, Browserless, Steel.dev, or any CDP-compatible service.
+This works with [Browserless](https://browserless.io), [Steel.dev](https://steel.dev), or any [CDP-compatible](https://chromedevtools.github.io/devtools-protocol/) service.
 
 ## Configuration
 
@@ -119,7 +119,7 @@ Both providers share these base configuration options:
 | - | - | - | - |
 | `headless` | `boolean` | `true` | Run browser without visible window |
 | `timeout` | `number` | `30000` | Default timeout for operations (ms) |
-| `cdpUrl` | `string \| () => Promise<string>` | — | CDP endpoint URL for remote browsers |
+| `cdpUrl` | `string \| (() => string \| Promise<string>)` | — | CDP endpoint URL for remote browsers |
 | `viewport` | `{ width: number; height: number }` | — | Browser viewport dimensions |
 | `scope` | `'shared' \| 'thread'` | `'thread'` | Browser instance scope |
 
