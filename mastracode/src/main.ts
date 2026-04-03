@@ -4,9 +4,12 @@
  */
 import fs from 'node:fs';
 
+import type { MastraBrowser } from '@mastra/core/browser';
+
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { loadSettings } from './onboarding/settings.js';
+import type { BrowserSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -14,6 +17,35 @@ import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
+
+/**
+ * Load browser provider from settings.
+ * Returns undefined if browser is disabled.
+ */
+async function loadBrowserFromSettings(browserSettings: BrowserSettings): Promise<MastraBrowser | undefined> {
+  if (!browserSettings.enabled) return undefined;
+
+  const { provider, headless, viewport, cdpUrl, stagehand } = browserSettings;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    return new StagehandBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey,
+      projectId: stagehand?.projectId,
+    });
+  } else {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return new AgentBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+    });
+  }
+}
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -33,7 +65,11 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain() {
-  const result = await createMastraCode();
+  // Load browser from settings (before creating harness)
+  const settings = loadSettings();
+  const browser = await loadBrowserFromSettings(settings.browser);
+
+  const result = await createMastraCode({ browser });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
@@ -41,6 +77,10 @@ async function tuiMain() {
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
+  }
+
+  if (browser) {
+    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that

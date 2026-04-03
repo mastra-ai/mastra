@@ -65,6 +65,35 @@ export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
+/** Browser provider type. */
+export type BrowserProvider = 'stagehand' | 'agent-browser';
+
+/** Stagehand environment type. */
+export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
+
+/** Stagehand-specific browser settings. */
+export interface StagehandSettings {
+  env: StagehandEnv;
+  apiKey?: string;
+  projectId?: string;
+}
+
+/** Browser configuration persisted in global settings. */
+export interface BrowserSettings {
+  /** Whether browser automation is enabled. */
+  enabled: boolean;
+  /** Which browser provider to use. */
+  provider: BrowserProvider;
+  /** Whether to run headless (no visible browser window). */
+  headless: boolean;
+  /** Browser viewport dimensions. */
+  viewport?: { width: number; height: number };
+  /** CDP URL for connecting to an existing browser. */
+  cdpUrl?: string;
+  /** Stagehand-specific settings. */
+  stagehand?: StagehandSettings;
+}
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -125,6 +154,8 @@ export interface GlobalSettings {
   memoryGateway: { baseUrl?: string };
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
+  // Browser automation configuration
+  browser: BrowserSettings;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -163,6 +194,13 @@ const DEFAULTS: GlobalSettings = {
   updateDismissedVersion: null,
   memoryGateway: {},
   lsp: {},
+  browser: {
+    enabled: false,
+    provider: 'stagehand',
+    headless: false,
+    viewport: { width: 1280, height: 720 },
+    stagehand: { env: 'LOCAL' },
+  },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -291,6 +329,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        browser: { ...DEFAULTS.browser, ...raw.browser },
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -408,6 +447,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      browser: { ...DEFAULTS.browser, ...raw.browser },
     };
 
     // Migrate legacy omModelId → omModelOverride

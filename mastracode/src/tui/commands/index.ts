@@ -24,6 +24,7 @@ export { handleCustomProvidersCommand } from './custom-providers.js';
 export { handleSubagentsCommand } from './subagents.js';
 export { handleOMCommand } from './om.js';
 export { handleSettingsCommand } from './settings.js';
+export { handleSetupBrowserCommand } from './setup-browser.js';
 export { handleLoginCommand } from './login.js';
 export { handleReviewCommand } from './review.js';
 export { handleReportIssueCommand } from './report-issue.js';
