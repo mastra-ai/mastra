@@ -1118,8 +1118,8 @@ export class AgentBrowser extends MastraBrowser {
           await this.reconnectScreencastForThread(threadId, 'tab switch');
           const page = browser.getPage();
           const pageUrl = page.url();
-          // Emit URL directly after switch
-          const streamKey = this.getStreamKey(this.getCurrentThread());
+          // Emit URL directly after switch using the same threadId
+          const streamKey = this.getStreamKey(threadId);
           const stream = this.activeScreencastStreams.get(streamKey);
           if (pageUrl && stream?.isActive()) {
             stream.emitUrl(pageUrl);
@@ -1276,13 +1276,19 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
-    const threadId = _options?.threadId;
+    const requestedThreadId = _options?.threadId;
+    // For 'thread' scope, use the requested threadId or fall back to current thread
+    // For 'shared' scope, threadId is only used for stream keying
+    const effectiveThreadId =
+      this.getScope() === 'thread'
+        ? (requestedThreadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID)
+        : requestedThreadId;
 
     // For 'thread' scope, each thread has its own BrowserManager
     // For 'shared' scope, we use the shared manager
     let browserManager: BrowserManager;
-    if (this.getScope() === 'thread' && threadId) {
-      browserManager = await this.getManagerForThread(threadId);
+    if (this.getScope() === 'thread') {
+      browserManager = await this.getManagerForThread(effectiveThreadId);
     } else {
       if (!this.sharedManager) throw new Error('Browser not launched');
       browserManager = this.sharedManager;
@@ -1306,7 +1312,7 @@ export class AgentBrowser extends MastraBrowser {
     const stream = new ScreencastStreamImpl(provider, _options);
 
     // Store reference so tabs() can trigger reconnects - keyed by thread
-    const streamKey = this.getStreamKey(threadId);
+    const streamKey = this.getStreamKey(effectiveThreadId);
     this.activeScreencastStreams.set(streamKey, stream);
 
     // Set up tab change listener to reconnect screencast when a new tab opens
@@ -1340,7 +1346,7 @@ export class AgentBrowser extends MastraBrowser {
           if (!frame.parentFrame()) {
             stream.emitUrl(frame.url());
             // Update session state on navigation
-            this.updateSessionBrowserState(threadId);
+            this.updateSessionBrowserState(effectiveThreadId);
           }
         };
         page.on('framenavigated', onFrameNavigated);

@@ -232,14 +232,12 @@ export abstract class ThreadManager<TManager = unknown> {
 
   /**
    * Destroy all thread sessions.
-   * Also clears the threadManagers map after closing all managers.
    */
   async destroyAllSessions(): Promise<void> {
     const threadIds = Array.from(this.sessions.keys());
     for (const threadId of threadIds) {
       await this.destroySession(threadId);
     }
-    this.threadManagers.clear();
     this.activeThreadId = DEFAULT_THREAD_ID;
   }
 

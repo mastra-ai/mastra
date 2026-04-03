@@ -173,19 +173,9 @@ export class StagehandThreadManager extends ThreadManager<V3> {
 
   /**
    * Destroy all sessions (called during browser close).
-   * Closes all dedicated Stagehand instances before clearing sessions.
+   * doDestroySession handles closing individual Stagehand instances.
    */
   override async destroyAllSessions(): Promise<void> {
-    // Close all dedicated Stagehand instances before base class clears them
-    for (const [threadId, stagehand] of this.threadManagers) {
-      try {
-        await stagehand.close();
-      } catch {
-        this.logger?.debug?.(`Failed to close Stagehand for thread: ${threadId}`);
-      }
-    }
-
-    // Base class clears threadManagers and sessions
     await super.destroyAllSessions();
   }
 }

@@ -2448,7 +2448,9 @@ export class Agent<
       this.#inputProcessors ||
       this.#memory ||
       this.#workspace ||
-      this.#mastra?.getWorkspace()
+      this.#mastra?.getWorkspace() ||
+      this.#browser ||
+      this.#agentChannels
     ) {
       const runner = await this.getProcessorRunner({
         requestContext,

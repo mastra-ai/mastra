@@ -186,19 +186,9 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
 
   /**
    * Destroy all sessions (called during browser close).
-   * Closes all dedicated browser managers before clearing sessions.
+   * doDestroySession handles closing individual browser managers.
    */
   override async destroyAllSessions(): Promise<void> {
-    // Close all dedicated browser managers before base class clears them
-    for (const [threadId, manager] of this.threadManagers) {
-      try {
-        await manager.close();
-      } catch {
-        this.logger?.debug?.(`Failed to close browser for thread: ${threadId}`);
-      }
-    }
-
-    // Base class clears threadManagers and sessions
     await super.destroyAllSessions();
   }
 }
