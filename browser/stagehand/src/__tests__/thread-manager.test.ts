@@ -65,7 +65,7 @@ describe('StagehandThreadManager', () => {
 
       threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
+      expect(threadManager.getExistingManagerForThread('any-thread')).toBe(mockStagehand);
     });
 
     it('clearSharedManager removes the instance', () => {
@@ -76,17 +76,19 @@ describe('StagehandThreadManager', () => {
       threadManager.setSharedManager(mockStagehand as any);
       threadManager.clearSharedManager();
 
-      expect(threadManager.getStagehandForThread('any-thread')).toBeUndefined();
+      expect(threadManager.getExistingManagerForThread('any-thread')).toBeNull();
     });
 
-    it('getStagehandForThread returns shared instance', () => {
+    it('getExistingManagerForThread returns shared instance for any thread', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
       threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
+      // In shared mode, any thread ID returns the shared instance
+      expect(threadManager.getExistingManagerForThread('thread-1')).toBe(mockStagehand);
+      expect(threadManager.getExistingManagerForThread('thread-2')).toBe(mockStagehand);
     });
 
     it('getPageForThread returns active page from shared instance', async () => {

@@ -61,14 +61,7 @@ export class StagehandThreadManager extends ThreadManager<V3> {
     this.createStagehand = factory;
   }
 
-  /**
-   * Get the Stagehand instance for a specific thread (synchronous lookup, no creation).
-   * In 'shared' mode, returns the shared instance.
-   * In 'thread' mode, returns the thread's dedicated instance.
-   */
-  getStagehandForThread(threadId: string): V3 | undefined {
-    return this.getExistingManagerForThread(threadId) ?? undefined;
-  }
+
 
   /**
    * Get the page for a specific thread, creating session if needed.

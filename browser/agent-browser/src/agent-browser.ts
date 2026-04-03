@@ -132,14 +132,6 @@ export class AgentBrowser extends MastraBrowser {
     return this.threadManager.getManagerForThread(effectiveThreadId);
   }
 
-  /**
-   * Get the page for a specific thread.
-   * For thread-isolated modes, ensures we're on the correct context/page.
-   */
-  async getPageForThread(threadId?: string): Promise<Page> {
-    return this.threadManager.getPageForThread(threadId);
-  }
-
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -291,10 +283,10 @@ export class AgentBrowser extends MastraBrowser {
   private async getPage(explicitThreadId?: string): Promise<Page> {
     const scope = this.getScope();
     const threadId = explicitThreadId ?? this.getCurrentThread();
-    // For thread scope, always use getPageForThread even for default thread
-    // For shared scope with non-default thread, also use getPageForThread
+    // For thread scope, always use threadManager.getPageForThread even for default thread
+    // For shared scope with non-default thread, also use threadManager.getPageForThread
     if (scope === 'thread' || (scope !== 'shared' && threadId !== DEFAULT_THREAD_ID)) {
-      return this.getPageForThread(threadId);
+      return this.threadManager.getPageForThread(threadId);
     }
     if (!this.browserManager) throw new Error('Browser not launched');
     return this.browserManager.getPage();

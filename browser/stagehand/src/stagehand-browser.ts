@@ -92,7 +92,7 @@ export class StagehandBrowser extends MastraBrowser {
     const threadId = this.getCurrentThread();
     if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
       // This will create the Stagehand instance for this thread if needed
-      await this.getStagehandForThread(threadId);
+      await this.getManagerForThread(threadId);
     }
   }
 
@@ -194,7 +194,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     if (scope === 'thread') {
       // For 'browser' isolation, don't launch a shared browser here.
-      // Each thread will get its own Stagehand instance via getStagehandForThread().
+      // Each thread will get its own Stagehand instance via getManagerForThread().
       // We still need a placeholder so the base class knows we're "launched".
 
       return;
@@ -416,10 +416,10 @@ export class StagehandBrowser extends MastraBrowser {
 
   /**
    * Get the Stagehand instance for a thread, creating it if needed.
-   * For 'browser' isolation, this creates a dedicated Stagehand instance.
-   * For 'none' isolation, returns the shared instance.
+   * For 'thread' scope, this creates a dedicated Stagehand instance.
+   * For 'shared' scope, returns the shared instance.
    */
-  private async getStagehandForThread(threadId: string | undefined): Promise<Stagehand | null> {
+  async getManagerForThread(threadId?: string): Promise<Stagehand | null> {
     const scope = this.getScope();
 
     if (scope === 'shared') {
@@ -431,12 +431,12 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // For 'browser' isolation, get or create the thread's Stagehand instance
-    let stagehand = this.threadManager.getStagehandForThread(threadId);
+    let stagehand = this.threadManager.getExistingManagerForThread(threadId);
     if (!stagehand) {
       // Create session which creates the Stagehand instance
       // The onBrowserCreated callback will set up the close listener
       await this.threadManager.getManagerForThread(threadId);
-      stagehand = this.threadManager.getStagehandForThread(threadId);
+      stagehand = this.threadManager.getExistingManagerForThread(threadId);
     }
 
     return stagehand ?? null;
@@ -450,7 +450,7 @@ export class StagehandBrowser extends MastraBrowser {
    */
   private requireStagehand(explicitThreadId?: string): Stagehand {
     const threadId = explicitThreadId ?? this.getCurrentThread();
-    const stagehand = this.threadManager.getStagehandForThread(threadId ?? '') ?? this.stagehand;
+    const stagehand = this.threadManager.getExistingManagerForThread(threadId ?? '') ?? this.stagehand;
 
     if (!stagehand) {
       throw new Error('Browser not launched');
@@ -469,7 +469,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     // For 'browser' isolation, get the thread's Stagehand's active page
     if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
-      const stagehand = this.threadManager.getStagehandForThread(threadId);
+      const stagehand = this.threadManager.getExistingManagerForThread(threadId);
       if (stagehand?.context) {
         return stagehand.context.activePage() as V3Page | null;
       }
@@ -499,12 +499,7 @@ export class StagehandBrowser extends MastraBrowser {
     return null;
   }
 
-  /**
-   * Get the page for a specific thread, creating session if needed.
-   */
-  async getPageForThread(threadId: string): Promise<V3Page | null> {
-    return this.threadManager.getPageForThread(threadId);
-  }
+
 
   /**
    * Get a CDP session for a specific page.
@@ -832,7 +827,7 @@ export class StagehandBrowser extends MastraBrowser {
     // Don't create a new session just to get the URL
     const scope = this.threadManager.getScope();
     if (scope === 'thread' && effectiveThreadId) {
-      const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+      const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
       if (!stagehand?.context) {
         return null; // No session yet, don't create one
       }
@@ -896,7 +891,7 @@ export class StagehandBrowser extends MastraBrowser {
       const effectiveThreadId = threadId ?? this.getCurrentThread();
 
       if (scope === 'thread' && effectiveThreadId) {
-        const stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+        const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
         if (!stagehand) return null;
         return this.getBrowserStateFromStagehand(stagehand);
       }
@@ -961,7 +956,7 @@ export class StagehandBrowser extends MastraBrowser {
 
       let stagehand: Stagehand | null | undefined = null;
       if (scope === 'thread') {
-        stagehand = this.threadManager.getStagehandForThread(effectiveThreadId);
+        stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
       } else {
         stagehand = this.stagehand;
       }
@@ -989,7 +984,7 @@ export class StagehandBrowser extends MastraBrowser {
     // On reconnect, this will get a fresh CDP session for whatever page is currently active
     const provider = {
       getCdpSession: async () => {
-        const page = await this.getPageForThread(threadId ?? '');
+        const page = await this.threadManager.getPageForThread(threadId ?? '');
         if (!page) {
           throw new Error('No page available for screencast');
         }
@@ -1037,7 +1032,7 @@ export class StagehandBrowser extends MastraBrowser {
    * Uses CDP Target events since Stagehand doesn't expose page lifecycle events.
    */
   private async setupTabChangeDetection(threadId: string | undefined, stream: ScreencastStreamImpl): Promise<void> {
-    const stagehand = await this.getStagehandForThread(threadId);
+    const stagehand = await this.getManagerForThread(threadId);
     if (!stagehand?.context) return;
 
     // Use Stagehand's public CDP connection API
@@ -1285,7 +1280,7 @@ export class StagehandBrowser extends MastraBrowser {
 
     // For thread scope, also check if this specific thread still has a session
     const scope = this.getScope();
-    if (scope === 'thread' && threadId && !this.threadManager.getStagehandForThread(threadId)) {
+    if (scope === 'thread' && threadId && !this.threadManager.getExistingManagerForThread(threadId)) {
       this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
       return;
     }
@@ -1298,7 +1293,7 @@ export class StagehandBrowser extends MastraBrowser {
       await stream.reconnect();
 
       // Emit the URL of the new active page after reconnecting
-      const stagehand = await this.getStagehandForThread(threadId);
+      const stagehand = await this.getManagerForThread(threadId);
       const activePage = stagehand?.context?.activePage();
       if (activePage) {
         const url = activePage.url();
@@ -1331,7 +1326,7 @@ export class StagehandBrowser extends MastraBrowser {
   override async injectMouseEvent(event: MouseEventParams, threadId?: string): Promise<void> {
     // Use the provided threadId, or fall back to the current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const page = await this.getPageForThread(effectiveThreadId ?? '');
+    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? '');
     const cdpSession = this.getCdpSessionForPage(page);
 
     if (!cdpSession) {
@@ -1365,7 +1360,7 @@ export class StagehandBrowser extends MastraBrowser {
   override async injectKeyboardEvent(event: KeyboardEventParams, threadId?: string): Promise<void> {
     // Use the provided threadId, or fall back to the current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const page = await this.getPageForThread(effectiveThreadId ?? '');
+    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? '');
     const cdpSession = this.getCdpSessionForPage(page);
 
     if (!cdpSession) {
