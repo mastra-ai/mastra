@@ -12,6 +12,8 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   MainContentLayout,
+  BrowserToolCallsProvider,
+  BrowserSessionProvider,
 } from '@mastra/playground-ui';
 import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -100,30 +102,34 @@ function AgentSession() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider>
-                  <MainContentLayout>
-                    <SessionHeader />
-                    <div className="grid overflow-y-auto relative bg-surface1 h-full pt-6">
-                      <AgentChat
-                        key={actualThreadId}
-                        agentId={agentId!}
-                        agentName={agent?.name}
-                        modelVersion={agent?.modelVersion}
-                        threadId={actualThreadId}
-                        memory={hasMemory}
-                        refreshThreadList={handleRefreshThreadList}
-                        modelList={agent?.modelList}
-                        messageId={messageId}
-                        isNewThread={isNewThread}
-                        hideModelSwitcher
-                      />
-                    </div>
-                  </MainContentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
+            <BrowserToolCallsProvider key={`browser-${actualThreadId}`}>
+              <BrowserSessionProvider key={`session-${actualThreadId}`} agentId={agentId!} threadId={actualThreadId}>
+                <ThreadInputProvider>
+                  <ObservationalMemoryProvider>
+                    <ActivatedSkillsProvider>
+                      <MainContentLayout>
+                        <SessionHeader />
+                        <div className="grid overflow-y-auto relative bg-surface1 h-full pt-6">
+                          <AgentChat
+                            key={actualThreadId}
+                            agentId={agentId!}
+                            agentName={agent?.name}
+                            modelVersion={agent?.modelVersion}
+                            threadId={actualThreadId}
+                            memory={hasMemory}
+                            refreshThreadList={handleRefreshThreadList}
+                            modelList={agent?.modelList}
+                            messageId={messageId}
+                            isNewThread={isNewThread}
+                            hideModelSwitcher
+                          />
+                        </div>
+                      </MainContentLayout>
+                    </ActivatedSkillsProvider>
+                  </ObservationalMemoryProvider>
+                </ThreadInputProvider>
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
           </WorkingMemoryProvider>
         </SchemaRequestContextProvider>
       </AgentSettingsProvider>
