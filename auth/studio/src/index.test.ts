@@ -520,8 +520,50 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('refreshSession', () => {
-    it('should delegate to validateSession', async () => {
-      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+    it('should call shared API refresh endpoint and return new session', async () => {
+      // Mock the refresh endpoint response with Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Set-Cookie': 'wos-session=new-sealed-token; HttpOnly; SameSite=Lax; Path=/' },
+      });
+      // Mock the subsequent validation of the new session
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('old-sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.id).toBe('new-sealed-token');
+      expect(session!.userId).toBe('user-1');
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        `${SHARED_API}/auth/refresh`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Cookie: 'wos-session=old-sealed-token',
+          }),
+        }),
+      );
+    });
+
+    it('should fall back to validateSession when refresh fails', async () => {
+      // Mock refresh failure, then validation success
+      const refreshResponse = new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.userId).toBe('user-1');
+    });
+
+    it('should fall back to validateSession when refresh returns no cookie', async () => {
+      // Mock refresh success but no Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), { status: 200 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
 
       const session = await auth.refreshSession('sealed-token');
 
