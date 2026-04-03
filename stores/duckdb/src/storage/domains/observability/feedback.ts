@@ -162,7 +162,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
 
   return {
     timestamp: toDate(row.timestamp),
-    traceId: row.traceId as string,
+    traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as string) ?? null,

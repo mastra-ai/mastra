@@ -102,6 +102,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
+    expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
     expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
   });

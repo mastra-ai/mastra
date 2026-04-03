@@ -1893,6 +1893,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically

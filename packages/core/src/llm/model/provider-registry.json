@@ -94,6 +94,7 @@
       "apiKeyEnvVar": "OPENAI_API_KEY",
       "name": "OpenAI",
       "models": [
+        "chatgpt-image-latest",
         "codex-mini-latest",
         "gpt-3.5-turbo",
         "gpt-4",
@@ -128,6 +129,9 @@
         "gpt-5.4-mini",
         "gpt-5.4-nano",
         "gpt-5.4-pro",
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
         "o1",
         "o1-mini",
         "o1-preview",
@@ -382,7 +386,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
@@ -396,7 +401,6 @@
         "claude-3-5-sonnet-20240620",
         "claude-3-5-sonnet-20241022",
         "claude-3-7-sonnet-20250219",
-        "claude-3-7-sonnet-latest",
         "claude-3-haiku-20240307",
         "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
@@ -567,7 +571,8 @@
         "glm-4.7-flash",
         "glm-4.7-flashx",
         "glm-5",
-        "glm-5-turbo"
+        "glm-5-turbo",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -633,6 +638,7 @@
         "elevenlabs/elevenlabs-music",
         "elevenlabs/elevenlabs-v2.5-turbo",
         "elevenlabs/elevenlabs-v3",
+        "fireworks-ai/kimi-k2.5-fw",
         "google/gemini-2.0-flash",
         "google/gemini-2.0-flash-lite",
         "google/gemini-2.5-flash",
@@ -702,6 +708,7 @@
         "openai/gpt-5.2-instant",
         "openai/gpt-5.2-pro",
         "openai/gpt-5.3-codex",
+        "openai/gpt-5.3-codex-spark",
         "openai/gpt-5.3-instant",
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini",
@@ -774,8 +781,6 @@
         "gpt-5.4-nano",
         "gpt-5.4-pro",
         "kimi-k2.5",
-        "mimo-v2-omni-free",
-        "mimo-v2-pro-free",
         "minimax-m2.5",
         "minimax-m2.5-free",
         "nemotron-3-super-free",
@@ -826,7 +831,8 @@
         "glm-4.7",
         "glm-4.7-flash",
         "glm-4.7-flashx",
-        "glm-5"
+        "glm-5",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
@@ -1527,6 +1533,7 @@
         "glm-4.5-air",
         "glm-4.7",
         "glm-4.7-flash",
+        "glm-5",
         "gpt-4.1",
         "gpt-oss-120b",
         "intellect-3",
@@ -2171,6 +2178,7 @@
         "qwen/qwen3.5-397b-a17b",
         "qwen/qwen3.5-plus-02-15",
         "qwen/qwen3.6-plus-preview:free",
+        "qwen/qwen3.6-plus:free",
         "sourceful/riverflow-v2-fast-preview",
         "sourceful/riverflow-v2-max-preview",
         "sourceful/riverflow-v2-standard-preview",
@@ -2197,7 +2205,8 @@
         "z-ai/glm-4.6:exacto",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash",
-        "z-ai/glm-5"
+        "z-ai/glm-5",
+        "z-ai/glm-5-turbo"
       ],
       "docUrl": "https://openrouter.ai/models",
       "gateway": "models.dev",
@@ -3106,6 +3115,15 @@
         "veo-3.1-generate-preview"
       ],
       "docUrl": "https://llmgateway.io/docs",
+      "gateway": "models.dev"
+    },
+    "the-grid-ai": {
+      "url": "https://api.thegrid.ai/v1",
+      "apiKeyEnvVar": "THEGRIDAI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "The Grid AI",
+      "models": ["text-max", "text-prime", "text-standard"],
+      "docUrl": "https://thegrid.ai/docs",
       "gateway": "models.dev"
     },
     "groq": {
@@ -4213,7 +4231,8 @@
         "glm-4.7-flashx",
         "glm-5",
         "glm-5-turbo",
-        "glm-5.1"
+        "glm-5.1",
+        "glm-5v-turbo"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
@@ -4264,7 +4283,7 @@
       "apiKeyEnvVar": "OPENCODE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Go",
-      "models": ["glm-5", "kimi-k2.5", "minimax-m2.5", "minimax-m2.7"],
+      "models": ["glm-5", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
     },
@@ -4467,6 +4486,7 @@
     ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "openai": [
+      "chatgpt-image-latest",
       "codex-mini-latest",
       "gpt-3.5-turbo",
       "gpt-4",
@@ -4501,6 +4521,9 @@
       "gpt-5.4-mini",
       "gpt-5.4-nano",
       "gpt-5.4-pro",
+      "gpt-image-1",
+      "gpt-image-1-mini",
+      "gpt-image-1.5",
       "o1",
       "o1-mini",
       "o1-preview",
@@ -4689,7 +4712,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
@@ -4697,7 +4721,6 @@
       "claude-3-5-sonnet-20240620",
       "claude-3-5-sonnet-20241022",
       "claude-3-7-sonnet-20250219",
-      "claude-3-7-sonnet-latest",
       "claude-3-haiku-20240307",
       "claude-3-opus-20240229",
       "claude-3-sonnet-20240229",
@@ -4812,7 +4835,8 @@
       "glm-4.7-flash",
       "glm-4.7-flashx",
       "glm-5",
-      "glm-5-turbo"
+      "glm-5-turbo",
+      "glm-5v-turbo"
     ],
     "xai": [
       "grok-2",
@@ -4863,6 +4887,7 @@
       "elevenlabs/elevenlabs-music",
       "elevenlabs/elevenlabs-v2.5-turbo",
       "elevenlabs/elevenlabs-v3",
+      "fireworks-ai/kimi-k2.5-fw",
       "google/gemini-2.0-flash",
       "google/gemini-2.0-flash-lite",
       "google/gemini-2.5-flash",
@@ -4932,6 +4957,7 @@
       "openai/gpt-5.2-instant",
       "openai/gpt-5.2-pro",
       "openai/gpt-5.3-codex",
+      "openai/gpt-5.3-codex-spark",
       "openai/gpt-5.3-instant",
       "openai/gpt-5.4",
       "openai/gpt-5.4-mini",
@@ -4996,8 +5022,6 @@
       "gpt-5.4-nano",
       "gpt-5.4-pro",
       "kimi-k2.5",
-      "mimo-v2-omni-free",
-      "mimo-v2-pro-free",
       "minimax-m2.5",
       "minimax-m2.5-free",
       "nemotron-3-super-free",
@@ -5024,7 +5048,8 @@
       "glm-4.7",
       "glm-4.7-flash",
       "glm-4.7-flashx",
-      "glm-5"
+      "glm-5",
+      "glm-5v-turbo"
     ],
     "nvidia": [
       "black-forest-labs/flux.1-dev",
@@ -5606,6 +5631,7 @@
       "glm-4.5-air",
       "glm-4.7",
       "glm-4.7-flash",
+      "glm-5",
       "gpt-4.1",
       "gpt-oss-120b",
       "intellect-3",
@@ -6203,6 +6229,7 @@
       "qwen/qwen3.5-397b-a17b",
       "qwen/qwen3.5-plus-02-15",
       "qwen/qwen3.6-plus-preview:free",
+      "qwen/qwen3.6-plus:free",
       "sourceful/riverflow-v2-fast-preview",
       "sourceful/riverflow-v2-max-preview",
       "sourceful/riverflow-v2-standard-preview",
@@ -6229,7 +6256,8 @@
       "z-ai/glm-4.6:exacto",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash",
-      "z-ai/glm-5"
+      "z-ai/glm-5",
+      "z-ai/glm-5-turbo"
     ],
     "zenmux": [
       "anthropic/claude-3.5-haiku",
@@ -7001,6 +7029,7 @@
       "veo-3.1-fast-generate-preview",
       "veo-3.1-generate-preview"
     ],
+    "the-grid-ai": ["text-max", "text-prime", "text-standard"],
     "groq": [
       "allam-2-7b",
       "canopylabs/orpheus-arabic-saudi",
@@ -7931,7 +7960,8 @@
       "glm-4.7-flashx",
       "glm-5",
       "glm-5-turbo",
-      "glm-5.1"
+      "glm-5.1",
+      "glm-5v-turbo"
     ],
     "moonshotai-cn": [
       "kimi-k2-0711-preview",
@@ -7957,7 +7987,7 @@
       "accounts/fireworks/models/minimax-m2p5",
       "accounts/fireworks/routers/kimi-k2p5-turbo"
     ],
-    "opencode-go": ["glm-5", "kimi-k2.5", "minimax-m2.5", "minimax-m2.7"],
+    "opencode-go": ["glm-5", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
     "abacus": [
       "Qwen/QwQ-32B",
       "Qwen/Qwen2.5-72B-Instruct",

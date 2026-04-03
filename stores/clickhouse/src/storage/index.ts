@@ -5,11 +5,19 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
+import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
+export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageClickhouse, ObservabilityStorageClickhouse, ScoresStorageClickhouse, WorkflowsStorageClickhouse };
+export {
+  MemoryStorageClickhouse,
+  ObservabilityStorageClickhouse,
+  ObservabilityStorageClickhouseVNext,
+  ScoresStorageClickhouse,
+  WorkflowsStorageClickhouse,
+};
 export type { ClickhouseDomainConfig } from './db';
 
 type IntervalUnit =

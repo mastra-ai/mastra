@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -170,6 +170,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -388,6 +390,30 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
   }
 }
 
+/**
+ * Get the list of browser tool names for an agent.
+ * Returns the tool names from the agent's browser provider if configured.
+ */
+export function getBrowserToolsFromAgent(agent: Agent, onError?: (error: unknown) => void): string[] {
+  try {
+    const browser = agent.browser;
+    if (!browser) {
+      return [];
+    }
+    return Object.keys(browser.getTools());
+  } catch (error) {
+    onError?.(error);
+    return [];
+  }
+}
+
+function createBrowserToolsErrorLogger(
+  logger: ReturnType<Context['mastra']['getLogger']>,
+  agentId: string,
+): (error: unknown) => void {
+  return error => logger.warn('Failed to get browser tools for agent', { agentId, error });
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -483,6 +509,7 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(logger, agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -524,11 +551,15 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultOptions,
     modelList,
@@ -735,6 +766,7 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -764,11 +796,15 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     modelList,
     defaultOptions,
@@ -1192,16 +1228,19 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       const allProviders: Record<string, ProviderConfig> = {};
 
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider;
+        allProviders[id] = provider as ProviderConfig;
       }
 
+      // Include gateway providers (defaults + user-registered)
       if (mastra) {
-        const customGateways = mastra.listGateways();
-        if (customGateways) {
-          for (const gateway of Object.values(customGateways)) {
+        const allGateways = mastra.listGateways();
+        if (allGateways) {
+          for (const gateway of Object.values(allGateways)) {
+            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+            if (gateway.id === 'models.dev') continue;
             try {
-              const customProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(customProviders)) {
+              const gatewayProviders = await gateway.fetchProviders();
+              for (const [providerId, config] of Object.entries(gatewayProviders)) {
                 allProviders[providerId] = config;
               }
             } catch (error) {

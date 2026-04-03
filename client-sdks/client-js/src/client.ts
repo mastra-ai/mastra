@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -71,6 +71,7 @@ import {
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
   StoredAgent,
   StoredPromptBlock,
@@ -80,6 +81,7 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -171,9 +173,13 @@ import { base64RequestContext, parseClientRequestContext, requestContextQueryStr
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
   }
 
   /**
@@ -876,6 +882,11 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
   }
 
   /**

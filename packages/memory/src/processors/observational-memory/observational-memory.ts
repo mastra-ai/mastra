@@ -1515,7 +1515,7 @@ export class ObservationalMemory {
    * In resource scope mode, loads messages for the entire resource (all threads).
    * In thread scope mode, loads messages for just the current thread.
    */
-  private async loadUnobservedMessages(
+  private async loadMessagesFromStorage(
     threadId: string,
     resourceId: string | undefined,
     lastObservedAt?: Date,
@@ -2470,7 +2470,7 @@ ${formattedMessages}
     if (opts.messages) {
       unobservedMessages = this.getUnobservedMessages(opts.messages, record);
     } else {
-      const rawMessages = await this.loadUnobservedMessages(
+      const rawMessages = await this.loadMessagesFromStorage(
         threadId,
         resourceId,
         record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
@@ -2625,6 +2625,28 @@ ${formattedMessages}
   }
 
   /**
+   * Load unobserved messages from storage for a thread/resource.
+   *
+   * Fetches the OM record, queries storage for messages after the
+   * lastObservedAt cursor, then applies part-level filtering so
+   * partially-observed messages only include their unobserved parts.
+   *
+   * Use this when you need to load stored conversation history that
+   * hasn't been observed yet (e.g. in a stateless gateway proxy that
+   * only receives the latest message from the HTTP request).
+   */
+  async loadUnobservedMessages(opts: { threadId: string; resourceId?: string }): Promise<MastraDBMessage[]> {
+    const { threadId, resourceId } = opts;
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const rawMessages = await this.loadMessagesFromStorage(
+      threadId,
+      resourceId,
+      record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+    );
+    return this.getUnobservedMessages(rawMessages, record);
+  }
+
+  /**
    * Create a buffered observation chunk without merging into active observations.
    *
    * Loads unobserved messages from storage (filtered by the buffer cursor to avoid
@@ -2731,7 +2753,7 @@ ${formattedMessages}
       if (opts.messages) {
         candidateMessages = this.getUnobservedMessages(opts.messages, record, { excludeBuffered: true });
       } else {
-        const rawMessages = await this.loadUnobservedMessages(
+        const rawMessages = await this.loadMessagesFromStorage(
           threadId,
           resourceId,
           record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
@@ -3004,13 +3026,18 @@ ${formattedMessages}
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
       const lastActivated = activatedChunks[activatedChunks.length - 1];
       if (lastActivated) {
+        const chunkThreadTitle = lastActivated.threadTitle;
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: lastActivated.suggestedContinuation,
           currentTask: lastActivated.currentTask,
+          threadTitle: chunkThreadTitle,
         });
+        const oldTitle = thread.title?.trim();
+        const newTitle = chunkThreadTitle?.trim();
+        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
         await this.storage.updateThread({
           id: threadId,
-          title: thread.title ?? '',
+          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
           metadata: newMetadata,
         });
       }
@@ -3062,7 +3089,7 @@ ${formattedMessages}
 
       const unobservedMessages = messages
         ? this.getUnobservedMessages(messages, freshRecord)
-        : await this.loadUnobservedMessages(
+        : await this.loadMessagesFromStorage(
             threadId,
             resourceId,
             freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,

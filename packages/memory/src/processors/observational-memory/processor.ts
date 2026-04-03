@@ -240,6 +240,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             postContextTokenCount: finalTotalPending,
             messageList,
             details: {},
+            observerExchange: ctx.observerExchange,
           });
         }
       }

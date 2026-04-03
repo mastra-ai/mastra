@@ -2,7 +2,7 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
 import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Sections } from '@/ds/components/Sections';
 import { SideDialog } from '@/ds/components/SideDialog';
@@ -29,6 +29,7 @@ export function DatasetItemPage({ item }: DatasetItemPageProps) {
  */
 function DatasetItemContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
 
   return (
     <>
@@ -69,6 +70,10 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
+        )}
+
+        {trajectoryDisplay && (
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
         )}
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}

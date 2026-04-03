@@ -45,9 +45,7 @@ export async function fetchWithRefresh(
   if (res.status !== 401) return res;
 
   // Don't intercept the refresh call itself to avoid infinite loops
-  if (request.url.includes('/auth/refresh')) {
-    return res;
-  }
+  if (new URL(request.url).pathname.endsWith('/auth/refresh')) return res;
 
   if (!refreshPromise) {
     refreshPromise = refreshSession(baseUrl, '/api').finally(() => {
@@ -70,14 +68,10 @@ export async function fetchWithRefresh(
  * @param apiPrefix - The API prefix (defaults to '/api')
  * @returns A fetch-compatible function that handles 401 refresh
  */
-export function createFetchWithRefresh(
-  baseUrl: string,
-  apiPrefix: string = '/api',
-): typeof fetch {
+export function createFetchWithRefresh(baseUrl: string, apiPrefix: string = '/api'): typeof fetch {
   let localRefreshPromise: Promise<boolean> | null = null;
 
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    // Normalize into a Request so we can clone it for retry (body streams are single-use)
     const request = new Request(input, init);
     const retry = request.clone();
 
@@ -86,9 +80,7 @@ export function createFetchWithRefresh(
     if (res.status !== 401) return res;
 
     // Don't intercept the refresh call itself to avoid infinite loops
-    if (request.url.includes('/auth/refresh')) {
-      return res;
-    }
+    if (request.url.includes('/auth/refresh')) return res;
 
     if (!localRefreshPromise) {
       localRefreshPromise = refreshSession(baseUrl, apiPrefix).finally(() => {
