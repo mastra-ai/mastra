@@ -201,7 +201,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
 
-    case 'file':
+    case 'file': {
+      const pm = (value as any).providerMetadata;
       return {
         type: 'file',
         runId: ctx.runId,
@@ -210,8 +211,10 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           data: value.data,
           base64: typeof value.data === 'string' ? value.data : undefined,
           mimeType: value.mediaType,
+          ...(pm != null ? { providerMetadata: pm } : {}),
         },
       };
+    }
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
@@ -434,24 +437,30 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           providerMetadata: chunk.payload.providerMetadata,
         };
       }
-    case 'file':
-      if (mode === 'generate') {
-        return {
-          type: 'file',
-          file: new DefaultGeneratedFile({
-            data: chunk.payload.data,
-            mediaType: chunk.payload.mimeType,
-          }),
-        };
+    case 'file': {
+      const filePart =
+        mode === 'generate'
+          ? {
+              type: 'file' as const,
+              file: new DefaultGeneratedFile({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            }
+          : {
+              type: 'file' as const,
+              file: new DefaultGeneratedFileWithType({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            };
+
+      if (chunk.payload.providerMetadata) {
+        (filePart as any).providerMetadata = chunk.payload.providerMetadata;
       }
 
-      return {
-        type: 'file',
-        file: new DefaultGeneratedFileWithType({
-          data: chunk.payload.data,
-          mediaType: chunk.payload.mimeType,
-        }),
-      };
+      return filePart;
+    }
     case 'tool-call':
       return {
         type: 'tool-call',

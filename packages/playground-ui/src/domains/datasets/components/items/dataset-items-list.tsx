@@ -158,6 +158,19 @@ export function DatasetItemsList({
                     {columns.some(col => col.name === 'groundTruth') && (
                       <ItemList.TextCell className="font-mono">{listItem.groundTruth}</ItemList.TextCell>
                     )}
+                    {columns.some(col => col.name === 'trajectory') && (
+                      <ItemList.TextCell>
+                        {item.expectedTrajectory ? (
+                          <span className="text-xs">
+                            {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
+                              ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
+                              : 'Yes'}
+                          </span>
+                        ) : (
+                          <span className="text-neutral4">—</span>
+                        )}
+                      </ItemList.TextCell>
+                    )}
                     <ItemList.DateCell date={listItem.date} withTime />
                   </ItemList.RowButton>
                 </ItemList.Row>

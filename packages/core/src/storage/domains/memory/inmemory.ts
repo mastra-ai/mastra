@@ -890,6 +890,7 @@ export class InMemoryMemory extends MemoryStorage {
       createdAt: new Date(),
       suggestedContinuation: chunk.suggestedContinuation,
       currentTask: chunk.currentTask,
+      threadTitle: chunk.threadTitle,
     };
 
     // Add chunk to the array

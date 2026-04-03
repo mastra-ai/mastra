@@ -15,6 +15,12 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
+        {
+          type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: { tags: ['new'] },
+        },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
