@@ -2,7 +2,12 @@ import { createTool } from '@mastra/core/tools';
 import Sendly from '@sendly/node';
 import { z } from 'zod';
 
-const sendly = new Sendly(process.env.SENDLY_API_KEY!);
+const SENDLY_API_KEY = process.env.SENDLY_API_KEY;
+if (!SENDLY_API_KEY) {
+  throw new Error("Missing SENDLY_API_KEY environment variable. Get one at https://sendly.live/api-keys");
+}
+
+const sendly = new Sendly(SENDLY_API_KEY);
 
 export const sendSmsTool = createTool({
   id: "send-sms",
@@ -144,16 +149,18 @@ export const searchMessagesTool = createTool({
     count: z.number(),
   }),
   execute: async ({ query, limit }) => {
-    const baseUrl = "https://sendly.live/api/v1";
     const res = await fetch(
-      `${baseUrl}/messages?q=${encodeURIComponent(query)}&limit=${limit}`,
+      `https://sendly.live/api/v1/messages?q=${encodeURIComponent(query)}&limit=${limit}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.SENDLY_API_KEY}`,
+          Authorization: `Bearer ${SENDLY_API_KEY}`,
           "Content-Type": "application/json",
         },
       },
     );
+    if (!res.ok) {
+      throw new Error(`Search failed: ${res.status} ${res.statusText}`);
+    }
     const response = (await res.json()) as {
       data: Array<{
         id: string;

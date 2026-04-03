@@ -33,7 +33,7 @@ cp .env.example .env
 
 Edit `.env` and add your keys:
 
-```
+```ini
 SENDLY_API_KEY=sk_test_v1_...
 OPENAI_API_KEY=sk-...
 ```
@@ -58,9 +58,9 @@ This starts the Mastra dev server with the Playground UI. Open the URL shown in 
 Use a **test API key** (prefix `sk_test_`) to send messages without using real credits or delivering real SMS. Sandbox mode is perfect for development and testing.
 
 **Magic test numbers:**
-- `+15555550100` — always succeeds (delivered)
-- `+15555550101` — always fails (undeliverable)
-- `+15555550102` — always queued (pending)
+- `+15005550000` — always succeeds (delivered)
+- `+15005550001` — invalid number error
+- `+15005550006` — carrier rejected
 
 Verification codes in sandbox mode are returned in the API response, so you can complete the full verify flow without a real phone.
 
@@ -68,16 +68,16 @@ Verification codes in sandbox mode are returned in the API response, so you can 
 
 Try these prompts in the Mastra Playground:
 
-- "Send a message to +15555550100 saying 'Hello from my AI agent!'"
+- "Send a message to +15005550000 saying 'Hello from my AI agent!'"
 - "What's my current credit balance?"
 - "Show me my last 5 messages"
-- "Start phone verification for +15555550100"
+- "Start phone verification for +15005550000"
 - "Search my messages for 'appointment reminder'"
-- "Send an appointment reminder to +15555550100 for tomorrow at 3pm"
+- "Send an appointment reminder to +15005550000 for tomorrow at 3pm"
 
 ## Project Structure
 
-```
+```text
 src/mastra/
   index.ts              # Mastra configuration
   agents/
