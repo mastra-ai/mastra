@@ -260,10 +260,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+              const outputText =
+                options.structuredOutput?.schema && payload.object != null
+                  ? JSON.stringify(payload.object)
+                  : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,

@@ -4636,7 +4636,18 @@ export class Agent<
     }
 
     if (responseMessages?.length) {
-      messageList.add(responseMessages, 'response');
+      // Skip re-adding messages that output processors already placed in the
+      // messageList (e.g. via processOutputResult). Re-adding them causes
+      // MessageMerger.merge to append duplicate text parts, corrupting the
+      // processor-modified content. Only add genuinely new messages.
+      const existingIds = new Set(messageList.get.response.db().map(m => m.id));
+      const newMessages = responseMessages.filter(m => {
+        const id = (m as Record<string, unknown>).id as string | undefined;
+        return !id || !existingIds.has(id);
+      });
+      if (newMessages.length > 0) {
+        messageList.add(newMessages, 'response');
+      }
     }
 
     if (memory && resourceId && thread && !readOnlyMemory) {
