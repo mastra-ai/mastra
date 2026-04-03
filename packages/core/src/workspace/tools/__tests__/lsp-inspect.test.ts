@@ -62,7 +62,7 @@ describe('workspace_lsp_inspect', () => {
       name: 'Test No LSP',
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const toolsNoLsp = createWorkspaceTools(wsNoLsp);
+    const toolsNoLsp = await createWorkspaceTools(wsNoLsp);
 
     const result = await toolsNoLsp[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
