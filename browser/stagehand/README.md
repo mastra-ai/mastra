@@ -11,28 +11,26 @@ npm install @mastra/stagehand
 ## Usage
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { StagehandBrowser } from "@mastra/stagehand";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { StagehandBrowser } from '@mastra/stagehand';
+import { openai } from '@ai-sdk/openai';
 
 // Create a Stagehand browser
 const browser = new StagehandBrowser({
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   headless: true,
 });
 
 // Create an agent with the browser
 const agent = new Agent({
-  name: "web-agent",
-  instructions: "You are a helpful web assistant.",
-  model: openai("gpt-4o"),
+  name: 'web-agent',
+  instructions: 'You are a helpful web assistant.',
+  model: openai('gpt-4o'),
   browser,
 });
 
 // Use the agent to browse the web with natural language
-const result = await agent.generate(
-  'Go to google.com and search for "Mastra AI"'
-);
+const result = await agent.generate('Go to google.com and search for "Mastra AI"');
 ```
 
 ## Configuration
@@ -40,13 +38,13 @@ const result = await agent.generate(
 ```typescript
 const browser = new StagehandBrowser({
   // Environment: 'LOCAL' or 'BROWSERBASE'
-  env: "LOCAL",
+  env: 'LOCAL',
 
   // Model for AI operations (default: 'openai/gpt-4o')
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   // Or with custom config:
   model: {
-    modelName: "gpt-4o",
+    modelName: 'gpt-4o',
     apiKey: process.env.OPENAI_API_KEY,
   },
 
@@ -57,7 +55,7 @@ const browser = new StagehandBrowser({
   viewport: { width: 1280, height: 720 },
 
   // CDP URL for connecting to existing browser
-  cdpUrl: "ws://localhost:9222",
+  cdpUrl: 'ws://localhost:9222',
 
   // Browserbase config (when env: 'BROWSERBASE')
   apiKey: process.env.BROWSERBASE_API_KEY,
@@ -73,7 +71,7 @@ const browser = new StagehandBrowser({
   verbose: 1,
 
   // Custom system prompt for AI operations
-  systemPrompt: "Focus on finding interactive elements",
+  systemPrompt: 'Focus on finding interactive elements',
 });
 ```
 
@@ -95,13 +93,13 @@ StagehandBrowser exposes 6 AI-powered tools:
 
 ## Comparison with AgentBrowser
 
-| Feature     | AgentBrowser                | StagehandBrowser             |
-| ----------- | --------------------------- | ---------------------------- |
-| Approach    | Deterministic refs (@e1)    | Natural language             |
-| Token cost  | Low                         | Higher (LLM calls)           |
-| Speed       | Fast                        | Slower                       |
-| Reliability | High (exact refs)           | Variable (AI interpretation) |
-| Best for    | Structured workflows        | Unknown/dynamic pages        |
+| Feature     | AgentBrowser             | StagehandBrowser             |
+| ----------- | ------------------------ | ---------------------------- |
+| Approach    | Deterministic refs (@e1) | Natural language             |
+| Token cost  | Low                      | Higher (LLM calls)           |
+| Speed       | Fast                     | Slower                       |
+| Reliability | High (exact refs)        | Variable (AI interpretation) |
+| Best for    | Structured workflows     | Unknown/dynamic pages        |
 
 ## Documentation
 
