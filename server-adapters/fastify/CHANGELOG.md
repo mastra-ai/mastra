@@ -1,5 +1,13 @@
 # @mastra/fastify
 
+## 1.3.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d87e6e6`](https://github.com/mastra-ai/mastra/commit/d87e6e61c42475a7b57768e71dfa12964326a632)]:
+  - @mastra/server@1.22.0-alpha.3
+  - @mastra/core@1.22.0-alpha.3
+
 ## 1.3.5-alpha.2
 
 ### Patch Changes
