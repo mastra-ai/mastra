@@ -89,14 +89,14 @@ describe('StagehandThreadManager', () => {
       expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
     });
 
-    it('getPageForThread returns active page from shared instance', () => {
+    it('getPageForThread returns active page from shared instance', async () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
       threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getPageForThread('any-thread')).toBe(mockPage);
+      expect(await threadManager.getPageForThread('any-thread')).toBe(mockPage);
     });
   });
 
@@ -196,18 +196,18 @@ describe('StagehandThreadManager', () => {
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
 
-    it('hasActiveThreadStagehands returns true when instances exist', async () => {
+    it('hasActiveThreadManagers returns true when instances exist', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
         scope: 'thread',
         createStagehand,
       });
 
-      expect(threadManager.hasActiveThreadStagehands()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
 
       await threadManager.getManagerForThread('thread-1');
 
-      expect(threadManager.hasActiveThreadStagehands()).toBe(true);
+      expect(threadManager.hasActiveThreadManagers()).toBe(true);
     });
   });
 
@@ -229,7 +229,7 @@ describe('StagehandThreadManager', () => {
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
       expect(threadManager.hasSession('thread-2')).toBe(false);
-      expect(threadManager.hasActiveThreadStagehands()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
     });
   });
 

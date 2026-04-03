@@ -137,8 +137,7 @@ export class AgentBrowser extends MastraBrowser {
    * For thread-isolated modes, ensures we're on the correct context/page.
    */
   async getPageForThread(threadId?: string): Promise<Page> {
-    const manager = await this.getManagerForThread(threadId);
-    return manager.getPage();
+    return this.threadManager.getPageForThread(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -237,9 +236,9 @@ export class AgentBrowser extends MastraBrowser {
   protected async checkBrowserAlive(): Promise<boolean> {
     const scope = this.threadManager.getScope();
 
-    // For 'browser' isolation, check if any thread browsers are running
+    // For 'thread' scope, check if any thread browsers are running
     if (scope === 'thread') {
-      return this.threadManager.hasActiveThreadBrowsers();
+      return this.threadManager.hasActiveThreadManagers();
     }
 
     // For 'none' isolation, check the shared browser

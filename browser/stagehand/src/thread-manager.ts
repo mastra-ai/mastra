@@ -2,8 +2,8 @@
  * StagehandThreadManager - Thread isolation for StagehandBrowser
  *
  * Supports two scope modes:
- * - 'none': All threads share the same Stagehand instance and page
- * - 'browser': Each thread gets its own Stagehand instance (separate browser)
+ * - 'shared': All threads share the same Stagehand instance and page
+ * - 'thread': Each thread gets its own Stagehand instance (separate browser)
  *
  * @see AgentBrowserThreadManager for the equivalent implementation.
  */
@@ -39,16 +39,13 @@ export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
  * Thread manager for StagehandBrowser.
  *
  * Supports two scope modes:
- * - 'none': All threads share the shared Stagehand instance
- * - 'browser': Each thread gets a dedicated Stagehand instance
+ * - 'shared': All threads share the shared Stagehand instance
+ * - 'thread': Each thread gets a dedicated Stagehand instance
  */
-export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
+export class StagehandThreadManager extends ThreadManager<V3> {
   protected override sessions: Map<string, StagehandThreadSession> = new Map();
   private createStagehand?: () => Promise<V3>;
   private onBrowserCreated?: (stagehand: V3, threadId: string) => void;
-
-  /** Map of thread ID to dedicated Stagehand instance (for 'thread' mode) */
-  private readonly threadStagehands = new Map<string, V3>();
 
   constructor(config: StagehandThreadManagerConfig) {
     super(config);
@@ -58,40 +55,27 @@ export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
 
   /**
    * Set the factory function for creating new Stagehand instances.
-   * Required for 'browser' scope mode.
+   * Required for 'thread' scope mode.
    */
   setCreateStagehand(factory: () => Promise<V3>): void {
     this.createStagehand = factory;
   }
 
   /**
-   * Get the Stagehand instance for a specific thread.
+   * Get the Stagehand instance for a specific thread (synchronous lookup, no creation).
    * In 'shared' mode, returns the shared instance.
    * In 'thread' mode, returns the thread's dedicated instance.
    */
   getStagehandForThread(threadId: string): V3 | undefined {
-    if (this.scope === 'thread') {
-      const session = this.sessions.get(threadId);
-      return session?.stagehand;
-    }
-    return (this.sharedManager as V3) ?? undefined;
+    return this.getExistingManagerForThread(threadId) ?? undefined;
   }
 
   /**
-   * Get the Stagehand page for a thread.
-   * Returns the active page from the thread's Stagehand instance.
+   * Get the page for a specific thread, creating session if needed.
    */
-  getPageForThread(threadId: string): V3Page | undefined {
-    const stagehand = this.getStagehandForThread(threadId);
-    return stagehand?.context?.activePage();
-  }
-
-  /**
-   * Get the shared manager - returns the active page or the Stagehand instance.
-   */
-  protected override getSharedManager(): V3Page | V3 {
-    const stagehand = super.getSharedManager() as V3;
-    return stagehand.context.activePage() ?? stagehand;
+  async getPageForThread(threadId: string): Promise<V3Page | null> {
+    const stagehand = await this.getManagerForThread(threadId);
+    return stagehand?.context?.activePage() ?? null;
   }
 
   /**
@@ -116,7 +100,7 @@ export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
       this.logger?.debug?.(`Creating dedicated Stagehand instance for thread ${threadId}`);
       const stagehand = await this.createStagehand();
       session.stagehand = stagehand;
-      this.threadStagehands.set(threadId, stagehand);
+      this.threadManagers.set(threadId, stagehand);
 
       // Restore browser state if available (before notifying parent to avoid screencast race)
       if (savedState && savedState.tabs.length > 0) {
@@ -171,20 +155,11 @@ export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
   }
 
   /**
-   * Switch to an existing session.
-   * For 'thread' mode, no switching needed - each thread has its own instance.
-   * For 'shared' mode, nothing to switch.
+   * Get the manager (Stagehand instance) for a specific session.
    */
-  protected override async switchToSession(_session: StagehandThreadSession): Promise<void> {
-    // No-op for both modes - 'browser' has separate instances, 'none' shares everything
-  }
-
-  /**
-   * Get the manager for a specific session.
-   */
-  protected override getManagerForSession(session: StagehandThreadSession): V3Page | V3 {
+  protected override getManagerForSession(session: StagehandThreadSession): V3 {
     if (this.scope === 'thread' && session.stagehand) {
-      return session.stagehand.context.activePage() ?? session.stagehand;
+      return session.stagehand;
     }
     return this.getSharedManager();
   }
@@ -201,7 +176,6 @@ export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
       } catch (error) {
         this.logger?.warn?.(`Failed to close Stagehand for thread ${session.threadId}: ${error}`);
       }
-      this.threadStagehands.delete(session.threadId);
     }
     // For 'shared' mode, nothing to clean up - all threads share the instance
   }
@@ -211,43 +185,22 @@ export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
    */
   async destroyAll(): Promise<void> {
     // Close all dedicated Stagehand instances
-    for (const [threadId, stagehand] of this.threadStagehands) {
+    for (const [threadId, stagehand] of this.threadManagers) {
       try {
         await stagehand.close();
       } catch {
         this.logger?.debug?.(`Failed to close Stagehand for thread: ${threadId}`);
       }
     }
-    this.threadStagehands.clear();
-
-    // Clear sessions
-    this.sessions.clear();
+    // Use base class to clear tracking
+    this.clearAllSessions();
   }
 
   /**
    * Check if any thread Stagehands are still running.
+   * @deprecated Use hasActiveThreadManagers() from base class
    */
   hasActiveThreadStagehands(): boolean {
-    return this.threadStagehands.size > 0;
-  }
-
-  /**
-   * Clear all session tracking without closing browsers.
-   * Used when browsers have been externally closed and we just need to reset state.
-   */
-  clearAllSessions(): void {
-    this.threadStagehands.clear();
-    this.sessions.clear();
-  }
-
-  /**
-   * Clear a specific thread's session without closing the browser.
-   * Used when a thread's browser has been externally closed.
-   * Preserves the browser state for potential restoration.
-   * @param threadId - The thread ID to clear
-   */
-  override clearSession(threadId: string): void {
-    this.threadStagehands.delete(threadId);
-    super.clearSession(threadId);
+    return this.hasActiveThreadManagers();
   }
 }

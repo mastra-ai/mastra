@@ -329,8 +329,8 @@ export class StagehandBrowser extends MastraBrowser {
     const scope = this.getScope();
 
     if (scope === 'thread') {
-      // For 'browser' isolation, check if any thread browsers are running
-      return this.threadManager.hasActiveThreadStagehands();
+      // For 'thread' scope, check if any thread browsers are running
+      return this.threadManager.hasActiveThreadManagers();
     }
 
     // For 'none' isolation, check the shared Stagehand instance
@@ -503,19 +503,7 @@ export class StagehandBrowser extends MastraBrowser {
    * Get the page for a specific thread, creating session if needed.
    */
   async getPageForThread(threadId: string): Promise<V3Page | null> {
-    const scope = this.threadManager.getScope();
-
-    if (scope === 'shared') {
-      return this.getPage();
-    }
-
-    // For 'browser' isolation, get the thread's Stagehand instance
-    const stagehand = await this.getStagehandForThread(threadId);
-    if (stagehand?.context) {
-      return stagehand.context.activePage() as V3Page | null;
-    }
-
-    return null;
+    return this.threadManager.getPageForThread(threadId);
   }
 
   /**
