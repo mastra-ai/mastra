@@ -6,6 +6,7 @@ export const PROJECT_CONFIG_FILE = '.mastra-project.json';
 export interface ProjectConfig {
   projectId: string;
   projectName: string;
+  projectSlug?: string;
   organizationId: string;
 }
 

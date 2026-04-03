@@ -2154,6 +2154,7 @@ export interface operations {
             projects: {
               id: string;
               name: string;
+              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
@@ -2212,6 +2213,7 @@ export interface operations {
             project: {
               id: string;
               name: string;
+              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
@@ -2266,6 +2268,7 @@ export interface operations {
             project: {
               id: string;
               name: string;
+              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;

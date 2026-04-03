@@ -193,21 +193,24 @@ async function resolveOrg(
 async function resolveProject(
   token: string,
   orgId: string,
-  projectConfig: { projectId?: string; projectName?: string; organizationId?: string } | null,
+  projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
-): Promise<{ projectId: string; projectName: string }> {
+): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
   // 0. MASTRA_PROJECT_ID env var (CI/CD headless path)
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    return { projectId: envProjectId, projectName: envProjectId };
+    return { projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
-  // 1. CLI flag
+  // 1. CLI flag — match by slug first, then id
   if (flagProject) {
     const projects = await fetchProjects(token, orgId);
-    const match = projects.find(proj => proj.id === flagProject);
-    return { projectId: flagProject, projectName: match?.name ?? flagProject };
+    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    if (match) {
+      return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+    }
+    return { projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
   }
 
   // 2. project.json (only if same org)
@@ -215,6 +218,7 @@ async function resolveProject(
     return {
       projectId: projectConfig.projectId,
       projectName: projectConfig.projectName ?? projectConfig.projectId,
+      projectSlug: projectConfig.projectSlug ?? projectConfig.projectName ?? projectConfig.projectId,
     };
   }
 
@@ -225,7 +229,7 @@ async function resolveProject(
   }
 
   const project = await createProject(token, orgId, name);
-  return { projectId: project.id, projectName: project.name };
+  return { projectId: project.id, projectName: project.name, projectSlug: project.slug ?? project.name };
 }
 
 /* ------------------------------------------------------------------ */
@@ -260,7 +264,13 @@ export async function deployAction(
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project (pass packageName as default for new project creation)
-  const { projectId, projectName } = await resolveProject(token, orgId, projectConfig, opts.project, packageName);
+  const { projectId, projectName, projectSlug } = await resolveProject(
+    token,
+    orgId,
+    projectConfig,
+    opts.project,
+    packageName,
+  );
 
   // Step 5: Confirmation — show settings and let user verify (skipped with -y or if already linked)
   const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
@@ -294,6 +304,7 @@ export async function deployAction(
       {
         projectId,
         projectName,
+        projectSlug,
         organizationId: orgId,
       },
       opts.config,

@@ -130,28 +130,29 @@ async function resolveOrg(
 async function resolveProject(
   token: string,
   orgId: string,
-  projectConfig: { projectId?: string; projectName?: string; organizationId?: string } | null,
+  projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
-): Promise<{ projectId: string; projectName: string }> {
+): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    return { projectId: envProjectId, projectName: envProjectId };
+    return { projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
   if (flagProject) {
     const projects = await fetchServerProjects(token, orgId);
     const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
     if (match) {
-      return { projectId: match.id, projectName: match.name };
+      return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
-    return { projectId: flagProject, projectName: flagProject };
+    return { projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
     return {
       projectId: projectConfig.projectId,
       projectName: projectConfig.projectName ?? projectConfig.projectId,
+      projectSlug: projectConfig.projectSlug ?? projectConfig.projectName ?? projectConfig.projectId,
     };
   }
 
@@ -162,7 +163,7 @@ async function resolveProject(
   }
 
   const project = await createServerProject(token, orgId, name);
-  return { projectId: project.id, projectName: project.name };
+  return { projectId: project.id, projectName: project.name, projectSlug: project.slug ?? project.name };
 }
 
 /* ------------------------------------------------------------------ */
@@ -200,7 +201,13 @@ export async function serverDeployAction(
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project
-  const { projectId, projectName } = await resolveProject(token, orgId, projectConfig, opts.project, packageName);
+  const { projectId, projectName, projectSlug } = await resolveProject(
+    token,
+    orgId,
+    projectConfig,
+    opts.project,
+    packageName,
+  );
 
   // Step 5: Confirmation
   const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
@@ -227,6 +234,7 @@ export async function serverDeployAction(
       {
         projectId,
         projectName,
+        projectSlug,
         organizationId: orgId,
       },
       opts.config,

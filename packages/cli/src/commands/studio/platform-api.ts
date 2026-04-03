@@ -3,6 +3,7 @@ import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, t
 export interface Project {
   id: string;
   name: string;
+  slug: string | null;
   organizationId: string;
   latestDeployId: string | null;
   latestDeployStatus: string | null;

@@ -6,12 +6,15 @@ let refreshPromise: Promise<boolean> | null = null;
  */
 async function refreshSession(baseUrl: string): Promise<boolean> {
   try {
+    console.info('[fetchWithRefresh] calling refresh:', `${baseUrl}/api/auth/refresh`);
     const res = await fetch(`${baseUrl}/api/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
+    console.info('[fetchWithRefresh] refresh response:', res.status, res.ok);
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.info('[fetchWithRefresh] refresh error:', err);
     return false;
   }
 }
@@ -42,11 +45,16 @@ export async function fetchWithRefresh(
 
   const res = await fetch(request);
 
+  console.info('[fetchWithRefresh] initial response:', request.url, res.status);
   if (res.status !== 401) return res;
 
   // Don't intercept the refresh call itself to avoid infinite loops
-  if (request.url.includes('/auth/refresh')) return res;
+  if (request.url.includes('/auth/refresh')) {
+    console.info('[fetchWithRefresh] skipping refresh for refresh endpoint');
+    return res;
+  }
 
+  console.info('[fetchWithRefresh] got 401, attempting refresh...');
   if (!refreshPromise) {
     refreshPromise = refreshSession(baseUrl).finally(() => {
       refreshPromise = null;
@@ -54,8 +62,10 @@ export async function fetchWithRefresh(
   }
 
   const refreshed = await refreshPromise;
+  console.info('[fetchWithRefresh] refresh result:', refreshed);
   if (!refreshed) return res;
 
   // Retry with the cloned request (body intact)
+  console.info('[fetchWithRefresh] retrying original request...');
   return fetch(retry);
 }

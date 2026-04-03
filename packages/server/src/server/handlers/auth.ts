@@ -447,19 +447,24 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
 
     try {
       const auth = getAuthProvider(mastra);
+      console.info('[auth/refresh] auth provider:', auth?.constructor?.name);
 
       if (!auth || !implementsInterface<ISessionProvider>(auth, 'refreshSession')) {
+        console.info('[auth/refresh] no refreshSession method');
         throw new HTTPException(404, { message: 'Session refresh not configured' });
       }
 
       // Get session ID from request
       const sessionId = auth.getSessionIdFromRequest(request);
+      console.info('[auth/refresh] sessionId present:', !!sessionId);
       if (!sessionId) {
         throw new HTTPException(401, { message: 'No session' });
       }
 
       // Refresh the session
+      console.info('[auth/refresh] calling refreshSession...');
       const newSession = await auth.refreshSession(sessionId);
+      console.info('[auth/refresh] newSession:', !!newSession, newSession?.id?.slice(0, 20));
       if (!newSession) {
         throw new HTTPException(401, { message: 'Session expired' });
       }
@@ -468,6 +473,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
       const headers = new Headers({ 'Content-Type': 'application/json' });
       if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
         const sessionHeaders = auth.getSessionHeaders(newSession);
+        console.info('[auth/refresh] session headers:', Object.keys(sessionHeaders));
         for (const [key, value] of Object.entries(sessionHeaders)) {
           headers.append(key, value);
         }
@@ -478,6 +484,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
         headers,
       });
     } catch (error) {
+      console.info('[auth/refresh] error:', error);
       if (error instanceof HTTPException) throw error;
       return handleError(error, 'Error refreshing session');
     }

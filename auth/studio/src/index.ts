@@ -269,6 +269,7 @@ export class MastraAuthStudio
   async refreshSession(sessionId: string): Promise<Session | null> {
     try {
       // Call the shared API's /auth/refresh endpoint to get a fresh access token
+      console.info('[MastraAuthStudio.refreshSession] calling:', `${this.sharedApiUrl}/auth/refresh`);
       const res = await fetch(`${this.sharedApiUrl}/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -276,24 +277,33 @@ export class MastraAuthStudio
         },
       });
 
+      console.info('[MastraAuthStudio.refreshSession] response:', res.status, res.statusText);
       if (!res.ok) {
         // Refresh failed, fall back to validation (will likely also fail)
+        console.info('[MastraAuthStudio.refreshSession] not ok, falling back to validateSession');
         return this.validateSession(sessionId);
       }
 
       // Parse the new sealed session from Set-Cookie header
       const setCookie = res.headers.get('Set-Cookie');
+      console.info('[MastraAuthStudio.refreshSession] Set-Cookie header present:', !!setCookie);
       const newSessionId = setCookie ? parseCookieFromHeader(setCookie, COOKIE_NAME) : null;
 
       if (!newSessionId) {
         // No new cookie returned, fall back to validation with original
+        console.info('[MastraAuthStudio.refreshSession] no new cookie, falling back to validateSession');
         return this.validateSession(sessionId);
       }
 
       // Verify the new session works and return it
+      console.info('[MastraAuthStudio.refreshSession] verifying new session...');
       const user = await this.verifySessionCookie(newSessionId);
-      if (!user) return null;
+      if (!user) {
+        console.info('[MastraAuthStudio.refreshSession] verification failed');
+        return null;
+      }
 
+      console.info('[MastraAuthStudio.refreshSession] success, user:', user.id);
       const now = new Date();
       return {
         id: newSessionId,
@@ -301,8 +311,9 @@ export class MastraAuthStudio
         expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
         createdAt: now,
       };
-    } catch {
+    } catch (err) {
       // On error, fall back to validation
+      console.info('[MastraAuthStudio.refreshSession] error:', err);
       return this.validateSession(sessionId);
     }
   }
