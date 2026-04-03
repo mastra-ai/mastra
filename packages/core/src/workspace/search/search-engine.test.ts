@@ -627,13 +627,15 @@ describe('splitIntoChunks', () => {
     }
   });
 
-  it('should not split a single very long line (splits only on line boundaries)', () => {
-    // Splits only on line boundaries; single-line files stay as one chunk.
+  it('should split a single very long line by character boundaries', () => {
     const text = 'x'.repeat(10000);
     const chunks = splitIntoChunks(text, { maxChunkChars: 4000 });
 
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0]?.content).toBe(text);
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]?.content).toBe('x'.repeat(4000));
+    expect(chunks[1]?.content).toBe('x'.repeat(4000));
+    expect(chunks[2]?.content).toBe('x'.repeat(2000));
+    expect(chunks.every(c => c.startLine === 1)).toBe(true);
   });
 
   it('should handle empty text', () => {

@@ -159,16 +159,25 @@ export function splitIntoChunks(text: string, options: ChunkOptions = {}): TextC
     let charCount = 0;
 
     while (end < lines.length) {
-      const lineLen = lines[end]!.length + (end > start ? 1 : 0); // +1 for newline separator
+      const lineLen = lines[end]!.length + (end > start ? 1 : 0);
       if (charCount + lineLen > maxChars && end > start) break;
       charCount += lineLen;
       end++;
     }
 
-    chunks.push({
-      content: lines.slice(start, end).join('\n'),
-      startLine: start + 1, // 1-indexed
-    });
+    const chunkContent = lines.slice(start, end).join('\n');
+
+    if (chunkContent.length <= maxChars) {
+      chunks.push({ content: chunkContent, startLine: start + 1 });
+    } else {
+      // Single line exceeds maxChars — split by character boundaries.
+      for (let offset = 0; offset < chunkContent.length; offset += maxChars) {
+        chunks.push({
+          content: chunkContent.slice(offset, offset + maxChars),
+          startLine: start + 1,
+        });
+      }
+    }
 
     const nextStart = end - overlapLines;
     start = nextStart <= start ? end : nextStart;
@@ -213,6 +222,9 @@ export class SearchEngine {
   /** Whether to use lazy vector indexing */
   #lazyVectorIndex: boolean;
 
+  /** All indexed document IDs (used for prefix-based removal across backends) */
+  #indexedIds: Set<string> = new Set();
+
   /** Documents pending vector indexing (for lazy mode) */
   #pendingVectorDocs: IndexDocument[] = [];
 
@@ -250,6 +262,8 @@ export class SearchEngine {
       metadata._startLineOffset = doc.startLineOffset;
     }
 
+    this.#indexedIds.add(doc.id);
+
     // BM25 indexing (always synchronous and immediate)
     if (this.#bm25Index) {
       this.#bm25Index.add(doc.id, doc.content, metadata);
@@ -282,6 +296,8 @@ export class SearchEngine {
    * Remove a document from the index
    */
   async remove(id: string): Promise<void> {
+    this.#indexedIds.delete(id);
+
     // Remove from BM25
     if (this.#bm25Index) {
       this.#bm25Index.remove(id);
@@ -310,14 +326,15 @@ export class SearchEngine {
    * Used to remove all chunks belonging to a single source document.
    */
   async removeByPrefix(prefix: string): Promise<void> {
-    const matchedIds: string[] = [];
+    const matchedIds = [...this.#indexedIds].filter(id => id.startsWith(prefix));
+
+    for (const id of matchedIds) {
+      this.#indexedIds.delete(id);
+    }
 
     if (this.#bm25Index) {
-      for (const id of this.#bm25Index.documentIds) {
-        if (id.startsWith(prefix)) {
-          matchedIds.push(id);
-          this.#bm25Index.remove(id);
-        }
+      for (const id of matchedIds) {
+        this.#bm25Index.remove(id);
       }
     }
 
@@ -343,6 +360,7 @@ export class SearchEngine {
    * Clear all indexed documents
    */
   clear(): void {
+    this.#indexedIds.clear();
     if (this.#bm25Index) {
       this.#bm25Index.clear();
     }
