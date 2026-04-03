@@ -15,7 +15,7 @@ tools: {
   },
   [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
     enabled: async ({ requestContext }) => {
-      return requestContext.get('allowExecution') === 'true'
+      return requestContext['allowExecution'] === 'true'
     },
   },
 }
