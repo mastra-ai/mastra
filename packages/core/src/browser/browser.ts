@@ -413,7 +413,7 @@ export abstract class MastraBrowser extends MastraBase {
           '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
           '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
           'To fix this, either:\n' +
-          '1. Remove cdpUrl to let the browser spawn instances locally (supports thread isolation)\n' +
+          '1. Remove cdpUrl to let the provider spawn separate browser instances (supports thread isolation)\n' +
           '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
       );
     }
