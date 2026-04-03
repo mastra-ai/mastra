@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 22.0.0-alpha.3
+
+### Patch Changes
+
+- Consolidated Tab button styles into the Tab component, removing duplicated child selectors from TabList. Removed unused alignment prop. Active underline now uses the neutral4 design token. ([#15004](https://github.com/mastra-ai/mastra/pull/15004))
+
+- Matched tooltip panel background to dropdown and default button surface in Studio. ([#15009](https://github.com/mastra-ai/mastra/pull/15009))
+
+- Fixed Scores Over Time chart to always show a 24-hour view by collapsing multi-day ranges into hourly averages across all days in the selected period ([#14981](https://github.com/mastra-ai/mastra/pull/14981))
+
+- Aligned dropdown menu panel background with default button styling in Studio. ([#15009](https://github.com/mastra-ai/mastra/pull/15009))
+
+- Refactored chat error messages to use the Alert design system component instead of inline hardcoded styles, fixing text overflow on long error messages ([#15012](https://github.com/mastra-ai/mastra/pull/15012))
+
 ## 22.0.0-alpha.2
 
 ### Minor Changes
