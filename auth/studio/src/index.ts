@@ -270,7 +270,7 @@ export class MastraAuthStudio
     try {
       // Call the shared API's /auth/refresh endpoint to get a fresh access token
       const res = await fetch(`${this.sharedApiUrl}/auth/refresh`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionId}`,
         },

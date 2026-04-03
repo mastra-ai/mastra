@@ -4,9 +4,9 @@ let refreshPromise: Promise<boolean> | null = null;
  * Attempt to refresh the session via the Mastra server's auth refresh endpoint.
  * Returns true if the refresh succeeded (new cookie is set).
  */
-async function refreshSession(baseUrl: string): Promise<boolean> {
+async function refreshSession(baseUrl: string, apiPrefix: string): Promise<boolean> {
   try {
-    const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+    const res = await fetch(`${baseUrl}${apiPrefix}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
@@ -48,7 +48,7 @@ export async function fetchWithRefresh(
   if (request.url.includes('/auth/refresh')) return res;
 
   if (!refreshPromise) {
-    refreshPromise = refreshSession(baseUrl).finally(() => {
+    refreshPromise = refreshSession(baseUrl, '/api').finally(() => {
       refreshPromise = null;
     });
   }
@@ -58,4 +58,43 @@ export async function fetchWithRefresh(
 
   // Retry with the cloned request (body intact)
   return fetch(retry);
+}
+
+/**
+ * Creates a fetch function that automatically refreshes the session on 401 errors.
+ * This can be passed to MastraClient as the `fetch` option.
+ *
+ * @param baseUrl - The base URL of the Mastra server
+ * @param apiPrefix - The API prefix (defaults to '/api')
+ * @returns A fetch-compatible function that handles 401 refresh
+ */
+export function createFetchWithRefresh(
+  baseUrl: string,
+  apiPrefix: string = '/api',
+): typeof fetch {
+  let localRefreshPromise: Promise<boolean> | null = null;
+
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, init);
+    const retry = request.clone();
+
+    const res = await fetch(request);
+
+    if (res.status !== 401) return res;
+
+    // Don't intercept the refresh call itself to avoid infinite loops
+    if (request.url.includes('/auth/refresh')) return res;
+
+    if (!localRefreshPromise) {
+      localRefreshPromise = refreshSession(baseUrl, apiPrefix).finally(() => {
+        localRefreshPromise = null;
+      });
+    }
+
+    const refreshed = await localRefreshPromise;
+    if (!refreshed) return res;
+
+    // Retry with the cloned request (body intact)
+    return fetch(retry);
+  };
 }
