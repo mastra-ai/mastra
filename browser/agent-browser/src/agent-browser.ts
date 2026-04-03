@@ -48,12 +48,6 @@ export class AgentBrowser extends MastraBrowser {
   private browserManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
-  /** Active screencast streams per thread (for triggering reconnects on tab changes) */
-  private activeScreencastStreams = new Map<string, ScreencastStreamImpl>();
-
-  /** Default key for shared scope */
-  private static readonly SHARED_STREAM_KEY = '__shared__';
-
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
 
@@ -62,22 +56,6 @@ export class AgentBrowser extends MastraBrowser {
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
-    }
-
-    // Validate configuration: cdpUrl and scope: 'thread' are mutually exclusive
-    // When connecting to an external browser via cdpUrl, we connect to a single existing browser.
-    // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
-    // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
-    // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
-    if (config.cdpUrl && (config as { scope?: string }).scope === 'thread') {
-      throw new Error(
-        'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
-          '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
-          '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
-          'To fix this, either:\n' +
-          '1. Remove cdpUrl to let the browser spawn instances locally (supports thread isolation)\n' +
-          '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
-      );
     }
 
     const effectiveScope = config.scope ?? 'thread';
@@ -161,16 +139,6 @@ export class AgentBrowser extends MastraBrowser {
   async getPageForThread(threadId?: string): Promise<Page> {
     const manager = await this.getManagerForThread(threadId);
     return manager.getPage();
-  }
-
-  /**
-   * Close a specific thread's browser session.
-   * Delegates to ThreadManager and notifies registered callbacks.
-   */
-  async closeThreadSession(threadId: string): Promise<void> {
-    await this.threadManager.destroySession(threadId);
-    // Notify callbacks registered for this specific thread
-    this.notifyBrowserClosed(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -392,17 +360,6 @@ export class AgentBrowser extends MastraBrowser {
     } catch {
       // Ignore errors setting up close listener
     }
-  }
-
-  /**
-   * Handle browser disconnection for a specific thread.
-   * Called when a thread's browser is closed externally.
-   */
-  private handleThreadBrowserDisconnected(threadId: string): void {
-    this.threadManager.clearSession(threadId);
-    this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
-    // Notify only the callbacks registered for this specific thread
-    this.notifyBrowserClosed(threadId);
   }
 
   /**
@@ -1355,13 +1312,6 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
   // Screencast (for Studio live view)
   // ---------------------------------------------------------------------------
-
-  /**
-   * Get the stream key for a thread (or shared key for shared scope).
-   */
-  private getStreamKey(threadId?: string): string {
-    return threadId || AgentBrowser.SHARED_STREAM_KEY;
-  }
 
   /**
    * Trigger a screencast reconnect after tab changes.

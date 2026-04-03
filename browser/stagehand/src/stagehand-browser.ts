@@ -48,35 +48,13 @@ export class StagehandBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: StagehandThreadManager;
 
-  /** Active screencast streams per thread (for reconnection on tab changes) */
-  private activeScreencastStreams = new Map<string, ScreencastStreamImpl>();
-
   /** Debounce timers per thread for tab change reconnection */
   private tabChangeDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-  /** Default key for shared scope */
-  private static readonly SHARED_STREAM_KEY = '__shared__';
 
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
     this.id = `stagehand-${Date.now()}`;
     this.stagehandConfig = config;
-
-    // Validate configuration: cdpUrl and scope: 'thread' are mutually exclusive
-    // When connecting to an external browser via cdpUrl, we connect to a single existing browser.
-    // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
-    // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
-    // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
-    if (config.cdpUrl && (config as { scope?: string }).scope === 'thread') {
-      throw new Error(
-        'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
-          '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
-          '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
-          'To fix this, either:\n' +
-          '1. Remove cdpUrl to let the browser spawn instances locally (supports thread isolation)\n' +
-          '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
-      );
-    }
 
     const effectiveScope = config.scope ?? 'thread';
 
@@ -95,17 +73,6 @@ export class StagehandBrowser extends MastraBrowser {
         this.setupCloseListenerForThread(stagehand, threadId);
       },
     });
-  }
-
-  /**
-   * Close a specific thread's browser session.
-   * For 'thread' scope, this closes only that thread's Stagehand instance.
-   * For 'shared' scope, this is a no-op (use close() to close the shared browser).
-   */
-  async closeThreadSession(threadId: string): Promise<void> {
-    await this.threadManager.destroySession(threadId);
-    // Notify callbacks registered for this specific thread
-    this.notifyBrowserClosed(threadId);
   }
 
   /**
@@ -338,17 +305,6 @@ export class StagehandBrowser extends MastraBrowser {
     } catch {
       // Ignore errors setting up close listener
     }
-  }
-
-  /**
-   * Handle browser disconnection for a specific thread.
-   * Called when a thread's browser is closed externally.
-   */
-  private handleThreadBrowserDisconnected(threadId: string): void {
-    this.threadManager.clearSession(threadId);
-    this.logger.debug?.(`Cleared Stagehand session for thread: ${threadId}`);
-    // Notify only the callbacks registered for this specific thread
-    this.notifyBrowserClosed(threadId);
   }
 
   protected override async doClose(): Promise<void> {
@@ -1037,13 +993,6 @@ export class StagehandBrowser extends MastraBrowser {
   // Screencast (for Studio live view)
   // Uses Stagehand v3's native CDP access
   // ---------------------------------------------------------------------------
-
-  /**
-   * Get the stream key for a thread (or shared key for shared scope).
-   */
-  private getStreamKey(threadId?: string): string {
-    return threadId || StagehandBrowser.SHARED_STREAM_KEY;
-  }
 
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
     const threadId = options?.threadId;

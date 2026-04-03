@@ -271,13 +271,8 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
    * Preserves the browser state for potential restoration.
    * @param threadId - The thread ID to clear
    */
-  clearSession(threadId: string): void {
-    // Save the browser state before clearing so it can be restored on relaunch
-    const session = this.sessions.get(threadId);
-    if (session?.browserState) {
-      this.savedBrowserStates.set(threadId, session.browserState);
-    }
+  override clearSession(threadId: string): void {
     this.threadStagehands.delete(threadId);
-    this.sessions.delete(threadId);
+    super.clearSession(threadId);
   }
 }

@@ -199,6 +199,8 @@ export interface ScreencastStream {
   stop(): Promise<void>;
   /** Check if screencast is active */
   isActive(): boolean;
+  /** Reconnect the screencast (e.g., after tab change) */
+  reconnect(): Promise<void>;
   /** Register event handlers */
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): this;
   on(event: 'stop', handler: (reason: string) => void): this;
@@ -300,6 +302,25 @@ export abstract class MastraBrowser extends MastraBase {
   protected currentThreadId: string = DEFAULT_THREAD_ID;
 
   // ---------------------------------------------------------------------------
+  // Screencast State
+  // ---------------------------------------------------------------------------
+
+  /** Default key for shared scope screencast streams */
+  protected static readonly SHARED_STREAM_KEY = '__shared__';
+
+  /** Active screencast streams per thread (for triggering reconnects on tab changes) */
+  protected activeScreencastStreams = new Map<string, ScreencastStream>();
+
+  /**
+   * Get the stream key for a thread (or shared key for shared scope).
+   * @param threadId - Optional thread ID
+   * @returns The stream key to use for the screencast streams map
+   */
+  protected getStreamKey(threadId?: string): string {
+    return threadId || MastraBrowser.SHARED_STREAM_KEY;
+  }
+
+  // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
 
@@ -313,6 +334,22 @@ export abstract class MastraBrowser extends MastraBase {
   constructor(config: BrowserConfig = {}) {
     super({ name: 'MastraBrowser', component: RegisteredLogger.BROWSER });
     this.config = config;
+
+    // Validate configuration: cdpUrl and scope: 'thread' are mutually exclusive
+    // When connecting to an external browser via cdpUrl, we connect to a single existing browser.
+    // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
+    // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
+    // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
+    if (config.cdpUrl && (config as { scope?: string }).scope === 'thread') {
+      throw new Error(
+        'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
+          '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
+          '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
+          'To fix this, either:\n' +
+          '1. Remove cdpUrl to let the browser spawn instances locally (supports thread isolation)\n' +
+          '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -956,6 +993,41 @@ export abstract class MastraBrowser extends MastraBase {
 
     // Check if this thread has an actual session
     return this.threadManager.hasSession(threadId);
+  }
+
+  /**
+   * Close a specific thread's browser session.
+   * Delegates to ThreadManager and notifies registered callbacks.
+   *
+   * For 'thread' scope, this closes only that thread's browser instance.
+   * For 'shared' scope, this is a no-op (use close() to close the shared browser).
+   *
+   * @param threadId - The thread ID whose session should be closed
+   */
+  async closeThreadSession(threadId: string): Promise<void> {
+    if (!this.threadManager) {
+      return;
+    }
+    await this.threadManager.destroySession(threadId);
+    // Notify callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
+  }
+
+  /**
+   * Handle browser disconnection for a specific thread.
+   * Called when a thread's browser is closed externally (e.g., user closes browser window).
+   * Clears the thread session and notifies registered callbacks.
+   *
+   * @param threadId - The thread ID whose session was disconnected
+   */
+  protected handleThreadBrowserDisconnected(threadId: string): void {
+    if (!this.threadManager) {
+      return;
+    }
+    this.threadManager.clearSession(threadId);
+    this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+    // Notify only the callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
   }
 
   /**

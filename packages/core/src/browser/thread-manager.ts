@@ -230,6 +230,24 @@ export abstract class ThreadManager<TManager = unknown> {
     return this.savedBrowserStates.get(threadId);
   }
 
+  /**
+   * Clear a specific thread's session without closing the browser.
+   * Used when a thread's browser has been externally closed.
+   * Preserves the browser state for potential restoration.
+   *
+   * Subclasses should override this to also clear their browser instance tracking.
+   *
+   * @param threadId - The thread ID to clear
+   */
+  clearSession(threadId: string): void {
+    // Save the browser state before clearing so it can be restored on relaunch
+    const session = this.sessions.get(threadId);
+    if (session?.browserState) {
+      this.savedBrowserStates.set(threadId, session.browserState);
+    }
+    this.sessions.delete(threadId);
+  }
+
   // ---------------------------------------------------------------------------
   // Abstract methods to be implemented by subclasses
   // ---------------------------------------------------------------------------
