@@ -1,6 +1,6 @@
 ---
 title: "Browser overview"
-description: "Give agents browser control through SDK providers like agent-browser and Stagehand."
+description: "Give agents browser control through SDK providers like AgentBrowser and Stagehand."
 packages:
   - "@mastra/core"
   - "@mastra/agent-browser"
@@ -13,7 +13,7 @@ Browser support enables agents to navigate websites, interact with page elements
 
 Mastra supports two browser SDK providers:
 
-- [**agent-browser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
+- [**AgentBrowser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
 - [**Stagehand**](/docs/browser/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
 
 ## When to use browser
@@ -34,7 +34,7 @@ Each provider offers a different set of tools optimized for its approach:
 
 | Provider | Approach | Tools |
 | - | - | - |
-| agent-browser | Accessibility tree refs | `browser_goto`, `browser_click`, `browser_type`, `browser_snapshot`, `browser_scroll`, `browser_select`, `browser_press`, `browser_hover`, `browser_back`, `browser_wait`, `browser_tabs`, `browser_drag`, `browser_dialog`, `browser_evaluate`, `browser_close` |
+| AgentBrowser | Accessibility tree refs | `browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_select`, `browser_press`, `browser_hover`, `browser_back`, `browser_wait`, `browser_tabs`, `browser_drag`, `browser_dialog`, `browser_evaluate`, `browser_close` |
 | Stagehand | AI-powered selectors | `stagehand_navigate`, `stagehand_act`, `stagehand_extract`, `stagehand_observe`, `stagehand_tabs`, `stagehand_close` |
 
 ## Usage
@@ -42,7 +42,7 @@ Each provider offers a different set of tools optimized for its approach:
 ### Install a provider
 
 ```bash
-# For agent-browser (Playwright-based)
+# For AgentBrowser (Playwright-based)
 npm install @mastra/agent-browser
 
 # For Stagehand (Browserbase)
@@ -152,6 +152,6 @@ const browser = new AgentBrowser({
 
 ## Next steps
 
-- [agent-browser](/docs/browser/agent-browser)
+- [AgentBrowser](/docs/browser/agent-browser)
 - [Stagehand](/docs/browser/stagehand)
-- [MastraBrowser API reference](/reference/browser/mastra-browser)
+- [MastraBrowser reference](/reference/browser/mastra-browser)

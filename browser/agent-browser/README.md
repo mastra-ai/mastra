@@ -101,7 +101,7 @@ AgentBrowser uses accessibility tree refs for precise element targeting:
 2. Find the element you want to interact with
 3. Use its ref with other tools
 
-```
+```text
 [document] Example Page
   [banner]
     [link @e1] Home

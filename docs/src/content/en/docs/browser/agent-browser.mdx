@@ -1,17 +1,17 @@
 ---
-title: "agent-browser | Browser"
-description: "Use the agent-browser provider for Playwright-based web automation with accessibility-first element targeting."
+title: "AgentBrowser | Browser"
+description: "Use the AgentBrowser provider for Playwright-based web automation with accessibility-first element targeting."
 packages:
   - "@mastra/agent-browser"
 ---
 
-# agent-browser
+# AgentBrowser
 
 The `@mastra/agent-browser` package provides browser automation using Playwright with accessibility-first element targeting. Elements are identified by refs from the page's accessibility tree, making interactions reliable across different page layouts.
 
-## When to use agent-browser
+## When to use AgentBrowser
 
-Use agent-browser when you need:
+Use AgentBrowser when you need:
 
 - Reliable element targeting through accessibility refs
 - Fine-grained control over browser actions
@@ -51,7 +51,7 @@ When interacting with pages:
 
 ## Tools
 
-agent-browser provides 15 tools for browser control:
+AgentBrowser provides 15 tools for browser control:
 
 ### Navigation
 
@@ -90,119 +90,16 @@ agent-browser provides 15 tools for browser control:
 
 ## Element refs
 
-agent-browser uses accessibility tree refs to identify elements. When you call `browser_snapshot`, the tool returns a text representation of the page with refs like `@e1`, `@e2`, etc:
+AgentBrowser uses accessibility tree refs to identify elements. When an agent calls `browser_snapshot`, it receives a text representation of the page with refs like `@e1`, `@e2`, etc. The agent then uses these refs with other tools to interact with elements.
 
-```
-@e1: button "Submit"
-@e2: textbox "Email" value=""
-@e3: link "Sign up"
-```
+:::note
 
-Use these refs in other tools:
+See [AgentBrowser reference](/reference/browser/agent-browser) for all configuration options and tool details.
 
-```typescript
-// Click the submit button
-await browser.click({ ref: '@e1' })
-
-// Type into the email field
-await browser.type({ ref: '@e2', text: 'user@example.com' })
-```
-
-Refs are stable within a page state but may change after navigation or DOM updates. Take a new snapshot after significant actions.
-
-## Configuration
-
-```typescript
-import { AgentBrowser } from '@mastra/agent-browser'
-
-const browser = new AgentBrowser({
-  // Run with visible browser window
-  headless: false,
-
-  // Default timeout for operations (ms)
-  timeout: 30000,
-
-  // Browser viewport size
-  viewport: { width: 1280, height: 720 },
-
-  // Browser instance scope ('thread' or 'shared')
-  scope: 'thread',
-
-  // Screencast settings
-  screencast: {
-    enabled: true,
-    format: 'jpeg',
-    quality: 80,
-  },
-})
-```
-
-## Cloud browsers
-
-### CDP URL
-
-Connect to any CDP-compatible browser service:
-
-```typescript
-const browser = new AgentBrowser({
-  cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN',
-  headless: true,
-})
-```
-
-The `cdpUrl` option accepts:
-
-- A WebSocket URL (`ws://` or `wss://`)
-- An HTTP endpoint (`http://` or `https://`) that returns the WebSocket URL
-- An async function that returns either format
-
-When `cdpUrl` is provided, scope is automatically set to `'shared'`.
-
-### Supported services
-
-- **Browserless**: `wss://chrome.browserless.io?token=YOUR_TOKEN`
-- **Browser-Use**: `https://YOUR_ID.cdp0.browser-use.com`
-- **Steel.dev**: Use the CDP URL from your Steel session
-
-## Handling dialogs
-
-Browser dialogs (alerts, confirms, prompts) require special handling. The `browser_dialog` tool clicks an element that triggers a dialog and handles it atomically:
-
-```typescript
-// Click a button that shows an alert, then accept it
-await browser.dialog({
-  triggerRef: '@e5',
-  action: 'accept',
-})
-
-// Handle a prompt dialog with input text
-await browser.dialog({
-  triggerRef: '@e6',
-  action: 'accept',
-  text: 'My response',
-})
-```
-
-## Drag and drop
-
-The `browser_drag` tool supports both accessibility refs and CSS selectors:
-
-```typescript
-// Using refs (preferred)
-await browser.drag({
-  sourceRef: '@e10',
-  targetRef: '@e15',
-})
-
-// Using CSS selectors (fallback for elements not in accessibility tree)
-await browser.drag({
-  sourceSelector: '#draggable',
-  targetSelector: '#droppable',
-})
-```
+:::
 
 ## Related
 
 - [Browser overview](/docs/browser/overview)
 - [Stagehand](/docs/browser/stagehand)
-- [AgentBrowser API reference](/reference/browser/agent-browser)
+- [AgentBrowser reference](/reference/browser/agent-browser)

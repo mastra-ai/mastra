@@ -64,7 +64,7 @@ export const browserAgent = new Agent({
     name: 'cdpUrl',
     type: 'string | (() => string | Promise<string>)',
     description:
-      "CDP WebSocket URL or async provider function. When provided, connects to an existing browser instead of launching a new one. Can't be used with scope: 'thread' (automatically uses shared scope). Useful for cloud providers (Browserbase, Browserless, etc.).",
+      "CDP WebSocket URL, HTTP endpoint, or sync/async provider function. When provided, connects to an existing browser instead of launching a new one. HTTP endpoints are resolved to WebSocket internally. Can't be used with scope: 'thread' (automatically uses shared scope).",
     isOptional: true,
   },
   {

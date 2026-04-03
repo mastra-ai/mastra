@@ -119,7 +119,7 @@ Use stagehand_extract to get data from pages.`,
     type: "'shared' | 'thread'",
     description: 'Browser instance scope across threads.',
     isOptional: true,
-    defaultValue: "'thread'",
+    defaultValue: "'thread' (or 'shared' when cdpUrl is provided)",
   },
   {
     name: 'timeout',

@@ -330,7 +330,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'browser/agent-browser',
-          label: 'agent-browser',
+          label: 'AgentBrowser',
         },
         {
           type: 'doc',

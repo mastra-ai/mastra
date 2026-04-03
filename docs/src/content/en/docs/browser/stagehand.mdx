@@ -106,53 +106,9 @@ Returns a list of available actions:
 ]
 ```
 
-## Configuration
+## Browserbase
 
-```typescript
-import { StagehandBrowser } from '@mastra/stagehand'
-
-const browser = new StagehandBrowser({
-  // Environment: 'LOCAL' or 'BROWSERBASE'
-  env: 'LOCAL',
-
-  // AI model for element detection
-  model: 'openai/gpt-4o',
-
-  // Run with visible browser window
-  headless: false,
-
-  // Default timeout for operations (ms)
-  timeout: 30000,
-
-  // Browser viewport size
-  viewport: { width: 1280, height: 720 },
-
-  // Browser instance scope ('thread' or 'shared')
-  scope: 'thread',
-
-  // DOM settle timeout (ms) - wait for dynamic content
-  domSettleTimeout: 3000,
-
-  // Enable self-healing for failed actions
-  selfHeal: true,
-
-  // Verbose logging level (0-2)
-  verbose: 0,
-
-  // Screencast settings
-  screencast: {
-    enabled: true,
-    format: 'jpeg',
-    quality: 80,
-  },
-})
-```
-
-## Cloud browsers
-
-### Browserbase (native)
-
-Stagehand has native Browserbase integration:
+Stagehand has native Browserbase integration for cloud browser infrastructure:
 
 ```typescript
 const browser = new StagehandBrowser({
@@ -163,38 +119,14 @@ const browser = new StagehandBrowser({
 })
 ```
 
-Browserbase provides:
+:::note
 
-- Managed browser infrastructure
-- Automatic session handling
-- Per-thread browser isolation
+See [StagehandBrowser reference](/reference/browser/stagehand-browser) for all configuration options.
 
-### CDP URL
-
-Connect to other CDP-compatible services:
-
-```typescript
-const browser = new StagehandBrowser({
-  cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN',
-  headless: true,
-  model: 'openai/gpt-4o',
-})
-```
-
-When `cdpUrl` is provided, scope is automatically set to `'shared'`.
-
-## Self-healing
-
-When `selfHeal` is enabled, Stagehand attempts to recover from failed actions by:
-
-1. Re-analyzing the page state
-1. Finding alternative elements that match the intent
-1. Retrying the action with the new target
-
-This helps handle dynamic pages where element positions or attributes change.
+:::
 
 ## Related
 
 - [Browser overview](/docs/browser/overview)
-- [agent-browser](/docs/browser/agent-browser)
-- [StagehandBrowser API reference](/reference/browser/stagehand-browser)
+- [AgentBrowser](/docs/browser/agent-browser)
+- [StagehandBrowser reference](/reference/browser/stagehand-browser)
