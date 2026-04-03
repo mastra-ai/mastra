@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { createApiClient, MASTRA_PLATFORM_API_URL } from './client.js';
+import { MASTRA_PLATFORM_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
@@ -71,12 +71,17 @@ export async function tryRefreshToken(creds: Credentials): Promise<string | null
   if (!creds.refreshToken) return null;
 
   try {
-    const client = createApiClient(creds.token);
-    const { data, error } = await client.POST('/v1/auth/refresh-token', {
-      body: { refreshToken: creds.refreshToken },
+    // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
+    // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
+    // so if this request also 401s we'd infinitely recurse.
+    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: creds.refreshToken }),
     });
-    if (error) return null;
+    if (!res.ok) return null;
 
+    const data = (await res.json()) as { accessToken: string; refreshToken: string };
     creds.token = data.accessToken;
     creds.refreshToken = data.refreshToken;
     await saveCredentials(creds);
@@ -183,11 +188,14 @@ export async function getToken(): Promise<string> {
     return newCreds.token;
   }
 
-  // Try a quick verify to see if the token is still valid
+  // Try a quick verify to see if the token is still valid.
+  // Use plain fetch to avoid authenticatedFetch's 401 interceptor
+  // which would trigger a redundant refresh cycle.
   try {
-    const client = createApiClient(creds.token);
-    const { error } = await client.GET('/v1/auth/verify');
-    if (!error) return creds.token;
+    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/verify`, {
+      headers: { Authorization: `Bearer ${creds.token}` },
+    });
+    if (res.ok) return creds.token;
   } catch {
     // Network error — try refresh
   }
