@@ -1,0 +1,30 @@
+{
+  "name": "sendly-sms-agent",
+  "version": "1.0.0",
+  "description": "Mastra AI agent with Sendly SMS tools — send messages, verify phones, manage conversations.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": ["sendly", "sms", "mastra", "ai-agents", "otp", "phone-verification"],
+  "author": "Sendly <support@sendly.live>",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
+    "@sendly/node": "latest",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.7",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
