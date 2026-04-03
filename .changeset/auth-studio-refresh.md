@@ -2,4 +2,4 @@
 "@mastra/auth-studio": patch
 ---
 
-Fix refreshSession() to call shared API's /auth/refresh endpoint to get a fresh access token instead of just validating
+Fix session refresh for studio-deployed instances. Sessions now properly refresh when expired, preventing users from being logged out every 5 minutes.

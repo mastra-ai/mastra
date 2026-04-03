@@ -2,4 +2,4 @@
 "@mastra/server": patch
 ---
 
-Add POST /auth/refresh endpoint that calls ISessionProvider.refreshSession() and returns new session headers
+Add session refresh endpoint. Expired sessions can now be refreshed automatically, keeping users signed in longer.
