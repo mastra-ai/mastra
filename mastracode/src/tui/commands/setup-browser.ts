@@ -1,5 +1,7 @@
 import { Spacer } from '@mariozechner/pi-tui';
 
+import type { MastraBrowser } from '@mastra/core/browser';
+
 import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -41,12 +43,53 @@ function askInline(
 }
 
 /**
+ * Create a browser instance from settings.
+ */
+async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+  if (!settings.enabled) {
+    return undefined;
+  }
+
+  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    return new StagehandBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
+      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+    });
+  } else {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return new AgentBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+    });
+  }
+}
+
+/**
+ * Apply browser settings to all mode agents.
+ */
+function applyBrowserToAgents(ctx: SlashCommandContext, browser: MastraBrowser | undefined): void {
+  const modes = ctx.harness.listModes();
+  for (const mode of modes) {
+    const agent = typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent;
+    agent.setBrowser(browser);
+  }
+}
+
+/**
  * /setup-browser — Configure browser automation settings.
  *
  * Interactive flow to set up browser provider (Stagehand or AgentBrowser),
  * headless mode, and provider-specific options.
  *
- * Changes require a restart to take effect.
+ * Changes are applied immediately to the current session.
  */
 export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   const settings = loadSettings();
@@ -76,15 +119,22 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
   if (arg === 'off' || arg === 'disable') {
     settings.browser.enabled = false;
     saveSettings(settings);
-    ctx.showInfo('Browser disabled. Restart to apply changes.');
+    await applyBrowserToAgents(ctx, undefined);
+    ctx.showInfo('Browser disabled.');
     return;
   }
 
   if (arg === 'on' || arg === 'enable') {
     settings.browser.enabled = true;
     saveSettings(settings);
-    const providerLabel = browser.provider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
-    ctx.showInfo(`Browser enabled (${providerLabel}). Restart to apply changes.`);
+    try {
+      const browserInstance = await createBrowserFromSettings(settings.browser);
+      await applyBrowserToAgents(ctx, browserInstance);
+      const providerLabel = browser.provider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
+      ctx.showInfo(`Browser enabled (${providerLabel}).`);
+    } catch (err) {
+      ctx.showError(`Failed to enable browser: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return;
   }
 
@@ -98,7 +148,8 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     if (browser.enabled) {
       settings.browser.enabled = false;
       saveSettings(settings);
-      ctx.showInfo('Browser automation disabled. Restart to apply changes.');
+      await applyBrowserToAgents(ctx, undefined);
+      ctx.showInfo('Browser automation disabled.');
     } else {
       ctx.showInfo('Browser automation remains disabled.');
     }
@@ -148,7 +199,7 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
 
     if (env === 'BROWSERBASE') {
       ctx.showInfo(
-        'For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables before restarting.',
+        'For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables.',
       );
     }
 
@@ -166,6 +217,15 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
   };
   saveSettings(settings);
 
+  // Apply browser to agents
+  try {
+    const browserInstance = await createBrowserFromSettings(settings.browser);
+    await applyBrowserToAgents(ctx, browserInstance);
+  } catch (err) {
+    ctx.showError(`Failed to create browser: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+
   // Summary
   const summary = [
     'Browser automation enabled:',
@@ -180,9 +240,6 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
   if (provider === 'agent-browser') {
     summary.push("  Note: Run 'pnpm exec playwright install chromium' if not already installed");
   }
-
-  summary.push('');
-  summary.push('Restart MastraCode to apply changes.');
 
   ctx.showInfo(summary.join('\n'));
 }

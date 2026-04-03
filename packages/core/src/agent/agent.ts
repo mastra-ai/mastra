@@ -367,6 +367,17 @@ export class Agent<
   }
 
   /**
+   * Sets or updates the browser instance for this agent.
+   * This allows hot-swapping browser configuration without recreating the agent.
+   * Browser tools will be automatically updated on the next execution.
+   *
+   * @param browser - The new browser instance, or undefined to disable browser tools
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.#browser = browser;
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */
