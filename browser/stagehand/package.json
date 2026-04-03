@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stagehand",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "AI-powered browser automation for Mastra agents using Stagehand",
   "type": "module",
   "files": [
