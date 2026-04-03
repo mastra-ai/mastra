@@ -448,7 +448,11 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
     try {
       const auth = getAuthProvider(mastra);
 
-      if (!auth || !implementsInterface<ISessionProvider>(auth, 'refreshSession')) {
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
         throw new HTTPException(404, { message: 'Session refresh not configured' });
       }
 

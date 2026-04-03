@@ -45,7 +45,7 @@ export async function fetchWithRefresh(
   if (res.status !== 401) return res;
 
   // Don't intercept the refresh call itself to avoid infinite loops
-  if (request.url.includes('/auth/refresh')) return res;
+  if (new URL(request.url).pathname.endsWith('/auth/refresh')) return res;
 
   if (!refreshPromise) {
     refreshPromise = refreshSession(baseUrl, '/api').finally(() => {
