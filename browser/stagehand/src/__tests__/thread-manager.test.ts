@@ -58,25 +58,25 @@ describe('StagehandThreadManager', () => {
   });
 
   describe('shared stagehand (shared scope)', () => {
-    it('setStagehand stores the instance', () => {
+    it('setSharedManager stores the instance', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getSharedStagehand()).toBe(mockStagehand);
+      expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
     });
 
-    it('clearStagehand removes the instance', () => {
+    it('clearSharedManager removes the instance', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
-      threadManager.clearStagehand();
+      threadManager.setSharedManager(mockStagehand as any);
+      threadManager.clearSharedManager();
 
-      expect(() => threadManager.getSharedStagehand()).toThrow('Stagehand not initialized');
+      expect(threadManager.getStagehandForThread('any-thread')).toBeUndefined();
     });
 
     it('getStagehandForThread returns shared instance', () => {
@@ -84,7 +84,7 @@ describe('StagehandThreadManager', () => {
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
       expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
     });
@@ -94,7 +94,7 @@ describe('StagehandThreadManager', () => {
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
       expect(threadManager.getPageForThread('any-thread')).toBe(mockPage);
     });
@@ -113,7 +113,7 @@ describe('StagehandThreadManager', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
       await threadManager.getManagerForThread('thread-1');
 

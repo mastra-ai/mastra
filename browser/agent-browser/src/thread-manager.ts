@@ -39,7 +39,6 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
  * - 'thread': Each thread gets a dedicated browser manager instance
  */
 export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
-  private sharedManager: BrowserManager | null = null;
   private readonly browserConfig: BrowserConfig;
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   private readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
@@ -52,30 +51,6 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     this.browserConfig = config.browserConfig;
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
-  }
-
-  /**
-   * Set the shared browser manager (called after browser launch).
-   */
-  setSharedManager(manager: BrowserManager): void {
-    this.sharedManager = manager;
-  }
-
-  /**
-   * Clear the shared browser manager (called when browser disconnects).
-   */
-  clearSharedManager(): void {
-    this.sharedManager = null;
-  }
-
-  /**
-   * Get the shared browser manager.
-   */
-  protected getSharedManager(): BrowserManager {
-    if (!this.sharedManager) {
-      throw new Error('Browser not launched');
-    }
-    return this.sharedManager;
   }
 
   /**

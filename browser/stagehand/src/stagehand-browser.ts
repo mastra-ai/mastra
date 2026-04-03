@@ -204,7 +204,7 @@ export class StagehandBrowser extends MastraBrowser {
     this.stagehand = await this.createStagehandInstance();
 
     // Register the Stagehand instance with the thread manager
-    this.threadManager.setStagehand(this.stagehand as any);
+    this.threadManager.setSharedManager(this.stagehand as any);
 
     // Listen for browser/context close events to detect external closure
     this.setupCloseListener(this.stagehand);
@@ -384,7 +384,7 @@ export class StagehandBrowser extends MastraBrowser {
     } else {
       // For 'shared' scope or default thread, the shared stagehand is gone
       this.stagehand = null;
-      this.threadManager.clearStagehand();
+      this.threadManager.clearSharedManager();
       // Call base class which notifies all callbacks
       super.handleBrowserDisconnected();
     }

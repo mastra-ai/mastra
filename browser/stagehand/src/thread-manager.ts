@@ -42,8 +42,7 @@ export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
  * - 'none': All threads share the shared Stagehand instance
  * - 'browser': Each thread gets a dedicated Stagehand instance
  */
-export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
-  private sharedStagehand: V3 | null = null;
+export class StagehandThreadManager extends ThreadManager<V3 | V3Page> {
   protected override sessions: Map<string, StagehandThreadSession> = new Map();
   private createStagehand?: () => Promise<V3>;
   private onBrowserCreated?: (stagehand: V3, threadId: string) => void;
@@ -58,35 +57,11 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   }
 
   /**
-   * Set the shared Stagehand instance (called after browser launch).
-   */
-  setStagehand(instance: V3): void {
-    this.sharedStagehand = instance;
-  }
-
-  /**
-   * Clear the shared Stagehand instance (called when browser disconnects).
-   */
-  clearStagehand(): void {
-    this.sharedStagehand = null;
-  }
-
-  /**
    * Set the factory function for creating new Stagehand instances.
    * Required for 'browser' scope mode.
    */
   setCreateStagehand(factory: () => Promise<V3>): void {
     this.createStagehand = factory;
-  }
-
-  /**
-   * Get the shared Stagehand instance.
-   */
-  getSharedStagehand(): V3 {
-    if (!this.sharedStagehand) {
-      throw new Error('Stagehand not initialized');
-    }
-    return this.sharedStagehand;
   }
 
   /**
@@ -99,7 +74,7 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
       const session = this.sessions.get(threadId);
       return session?.stagehand;
     }
-    return this.sharedStagehand ?? undefined;
+    return (this.sharedManager as V3) ?? undefined;
   }
 
   /**
@@ -114,8 +89,8 @@ export class StagehandThreadManager extends ThreadManager<V3Page | V3> {
   /**
    * Get the shared manager - returns the active page or the Stagehand instance.
    */
-  protected getSharedManager(): V3Page | V3 {
-    const stagehand = this.getSharedStagehand();
+  protected override getSharedManager(): V3Page | V3 {
+    const stagehand = super.getSharedManager() as V3;
     return stagehand.context.activePage() ?? stagehand;
   }
 

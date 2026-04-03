@@ -73,6 +73,9 @@ export abstract class ThreadManager<TManager = unknown> {
   /** Preserved browser state that survives session clears (for browser restore) */
   protected readonly savedBrowserStates = new Map<string, BrowserState>();
 
+  /** Shared manager instance (used for 'shared' scope) */
+  protected sharedManager: TManager | null = null;
+
   private readonly onSessionCreated?: (session: ThreadSession) => void;
   private readonly onSessionDestroyed?: (threadId: string) => void;
 
@@ -95,6 +98,20 @@ export abstract class ThreadManager<TManager = unknown> {
    */
   getActiveThreadId(): string {
     return this.activeThreadId;
+  }
+
+  /**
+   * Set the shared manager instance (called after browser launch).
+   */
+  setSharedManager(manager: TManager): void {
+    this.sharedManager = manager;
+  }
+
+  /**
+   * Clear the shared manager instance (called when browser disconnects).
+   */
+  clearSharedManager(): void {
+    this.sharedManager = null;
   }
 
   /**
@@ -254,8 +271,14 @@ export abstract class ThreadManager<TManager = unknown> {
 
   /**
    * Get the shared browser manager (used for 'shared' scope and default thread).
+   * @throws Error if shared manager is not initialized
    */
-  protected abstract getSharedManager(): TManager;
+  protected getSharedManager(): TManager {
+    if (!this.sharedManager) {
+      throw new Error('Browser not launched');
+    }
+    return this.sharedManager;
+  }
 
   /**
    * Create a new session for a thread.
