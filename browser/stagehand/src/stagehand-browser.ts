@@ -428,7 +428,7 @@ export class StagehandBrowser extends MastraBrowser {
    */
   private requireStagehand(explicitThreadId?: string): Stagehand {
     const threadId = explicitThreadId ?? this.getCurrentThread();
-    const stagehand = this.threadManager.getExistingManagerForThread(threadId ?? '') ?? this.sharedManager;
+    const stagehand = this.threadManager.getExistingManagerForThread(threadId ?? DEFAULT_THREAD_ID) ?? this.sharedManager;
 
     if (!stagehand) {
       throw new Error('Browser not launched');
@@ -950,7 +950,7 @@ export class StagehandBrowser extends MastraBrowser {
     // On reconnect, this will get a fresh CDP session for whatever page is currently active
     const provider = {
       getCdpSession: async () => {
-        const page = await this.threadManager.getPageForThread(threadId ?? '');
+        const page = await this.threadManager.getPageForThread(threadId ?? DEFAULT_THREAD_ID);
         if (!page) {
           throw new Error('No page available for screencast');
         }
@@ -1239,7 +1239,7 @@ export class StagehandBrowser extends MastraBrowser {
   override async injectMouseEvent(event: MouseEventParams, threadId?: string): Promise<void> {
     // Use the provided threadId, or fall back to the current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? '');
+    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? DEFAULT_THREAD_ID);
     const cdpSession = this.getCdpSessionForPage(page);
 
     if (!cdpSession) {
@@ -1273,7 +1273,7 @@ export class StagehandBrowser extends MastraBrowser {
   override async injectKeyboardEvent(event: KeyboardEventParams, threadId?: string): Promise<void> {
     // Use the provided threadId, or fall back to the current thread
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? '');
+    const page = await this.threadManager.getPageForThread(effectiveThreadId ?? DEFAULT_THREAD_ID);
     const cdpSession = this.getCdpSessionForPage(page);
 
     if (!cdpSession) {
