@@ -307,7 +307,6 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
-  /**
    * Set up close event listener for a thread's browser manager.
    * This handles the case where a thread's browser is closed externally.
    */

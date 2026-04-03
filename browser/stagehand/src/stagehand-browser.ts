@@ -369,7 +369,6 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
-  /**
    * Create an error response from an exception.
    * Extends base class to add Stagehand-specific error handling.
    */
