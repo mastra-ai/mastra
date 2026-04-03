@@ -30,20 +30,21 @@ const browserlessCdpUrl = BROWSERLESS_TOKEN
 
 export const stagehandBrowserToolset = new StagehandBrowser({
   // Environment selection
-  env: useBrowserbase ? 'BROWSERBASE' : 'LOCAL',
+  // env: useBrowserbase ? 'BROWSERBASE' : 'LOCAL',
 
-  // Browserbase credentials (only used when env = 'BROWSERBASE')
-  apiKey: BROWSERBASE_API_KEY,
-  projectId: BROWSERBASE_PROJECT_ID,
+  // // Browserbase credentials (only used when env = 'BROWSERBASE')
+  // apiKey: BROWSERBASE_API_KEY,
+  // projectId: BROWSERBASE_PROJECT_ID,
 
-  // CDP URL for Browserless or other cloud providers (only used when env = 'LOCAL')
-  cdpUrl: useBrowserless ? browserlessCdpUrl : useCdpUrl ? CDP_URL : undefined,
+  // // CDP URL for Browserless or other cloud providers (only used when env = 'LOCAL')
+  // cdpUrl: useBrowserless ? browserlessCdpUrl : useCdpUrl ? CDP_URL : undefined,
 
   // AI model for act/extract/observe
   model: 'anthropic/claude-sonnet-4-20250514',
 
   // Headless mode: false for cloud providers (we want to see the browser)
-  headless: useBrowserbase || useBrowserless || useCdpUrl ? false : true,
+  // headless: useBrowserbase || useBrowserless || useCdpUrl ? false : true,
+  headless: false,
 
   verbose: 0,
 });

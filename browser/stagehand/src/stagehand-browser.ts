@@ -891,15 +891,9 @@ export class StagehandBrowser extends MastraBrowser {
    * Sync version that uses existing manager lookup without creating sessions.
    */
   protected getBrowserStateForThread(threadId?: string): BrowserState | null {
-    const scope = this.threadManager.getScope();
     const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
-
-    if (scope === 'thread' && effectiveThreadId) {
-      const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
-      return this.getBrowserStateFromStagehand(stagehand);
-    }
-
-    return this.getBrowserStateFromStagehand(this.sharedManager);
+    const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+    return this.getBrowserStateFromStagehand(stagehand);
   }
 
   /**
