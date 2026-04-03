@@ -170,6 +170,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -388,6 +390,22 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
   }
 }
 
+/**
+ * Get the list of browser tool names for an agent.
+ * Returns the tool names from the agent's browser provider if configured.
+ */
+export function getBrowserToolsFromAgent(agent: Agent): string[] {
+  try {
+    const browser = agent.browser;
+    if (!browser) {
+      return [];
+    }
+    return Object.keys(browser.getTools());
+  } catch {
+    return [];
+  }
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -483,6 +501,7 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+  const browserTools = getBrowserToolsFromAgent(agent);
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -524,6 +543,7 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -738,6 +758,7 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const browserTools = getBrowserToolsFromAgent(agent);
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -767,6 +788,7 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,

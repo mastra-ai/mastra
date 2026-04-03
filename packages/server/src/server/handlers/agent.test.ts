@@ -111,6 +111,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
@@ -137,6 +138,7 @@ describe('Agent Handlers', () => {
           requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -481,6 +483,8 @@ describe('Agent Handlers', () => {
         },
         skills: [],
         workspaceTools: [],
+        browserTools: [],
+        workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -490,6 +494,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        requestContextSchema: undefined,
         source: 'code',
       });
     });
