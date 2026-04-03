@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { fetchOrgs } from '../auth/api.js';
+import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
@@ -106,7 +107,7 @@ async function resolveOrg(
   }
 
   if (orgs.length === 0) {
-    throw new Error('No organizations found. Create one at https://platform.mastra.ai');
+    throw new Error(`No organizations found. Create one at ${MASTRA_STUDIO_URL}`);
   }
 
   const selected = await p.select({

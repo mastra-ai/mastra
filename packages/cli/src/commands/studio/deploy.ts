@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { fetchOrgs } from '../auth/api.js';
+import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
 import { loadProjectConfig, saveProjectConfig } from './project-config.js';
@@ -169,7 +170,7 @@ async function resolveOrg(
 
   // 5. Interactive picker
   if (orgs.length === 0) {
-    throw new Error('You have no organizations. Please create one at https://app.mastra.ai');
+    throw new Error(`You have no organizations. Please create one at ${MASTRA_STUDIO_URL}`);
   }
 
   const selected = await p.select({
