@@ -42,7 +42,8 @@ export class StagehandBrowser extends MastraBrowser {
   override readonly name = 'StagehandBrowser';
   override readonly provider = 'browserbase/stagehand';
 
-  private stagehand: Stagehand | null = null;
+  /** Shared Stagehand instance (for 'shared' scope) */
+  private sharedManager: Stagehand | null = null;
   private stagehandConfig: StagehandBrowserConfig;
 
   /** Thread manager - narrowed type from base class */
@@ -203,13 +204,13 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // For 'shared' scope, launch a shared Stagehand instance
-    this.stagehand = await this.createStagehandInstance();
+    this.sharedManager = await this.createStagehandInstance();
 
     // Register the Stagehand instance with the thread manager
-    this.threadManager.setSharedManager(this.stagehand as any);
+    this.threadManager.setSharedManager(this.sharedManager as any);
 
     // Listen for browser/context close events to detect external closure
-    this.setupCloseListenerForSharedScope(this.stagehand);
+    this.setupCloseListenerForSharedScope(this.sharedManager);
   }
 
   /**
@@ -314,9 +315,9 @@ export class StagehandBrowser extends MastraBrowser {
     await this.threadManager.destroyAllSessions();
 
     // Close the shared Stagehand instance if it exists
-    if (this.stagehand) {
-      await this.stagehand.close();
-      this.stagehand = null;
+    if (this.sharedManager) {
+      await this.sharedManager.close();
+      this.sharedManager = null;
     }
 
     // Reset thread state
@@ -336,11 +337,11 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // For 'shared' scope, check the shared Stagehand instance
-    if (!this.stagehand) {
+    if (!this.sharedManager) {
       return false;
     }
     try {
-      const context = this.stagehand.context;
+      const context = this.sharedManager.context;
       if (!context) {
         return false;
       }
@@ -352,7 +353,7 @@ export class StagehandBrowser extends MastraBrowser {
       const url = pages[0]?.url();
       // Save browser state for potential restore on relaunch
       if (url && url !== 'about:blank') {
-        const state = this.getBrowserStateFromStagehand(this.stagehand);
+        const state = this.getBrowserStateFromStagehand(this.sharedManager);
         if (state) {
           this.lastBrowserState = state;
         }
@@ -385,7 +386,7 @@ export class StagehandBrowser extends MastraBrowser {
       this.notifyBrowserClosed(threadId);
     } else {
       // For 'shared' scope or default thread, the shared stagehand is gone
-      this.stagehand = null;
+      this.sharedManager = null;
       this.threadManager.clearSharedManager();
       // Call base class which notifies all callbacks
       super.handleBrowserDisconnected();
@@ -425,11 +426,11 @@ export class StagehandBrowser extends MastraBrowser {
     const scope = this.getScope();
 
     if (scope === 'shared') {
-      return this.stagehand;
+      return this.sharedManager;
     }
 
     if (!threadId || threadId === DEFAULT_THREAD_ID) {
-      return this.stagehand;
+      return this.sharedManager;
     }
 
     // For 'thread' scope, get or create the thread's Stagehand instance
@@ -452,7 +453,7 @@ export class StagehandBrowser extends MastraBrowser {
    */
   private requireStagehand(explicitThreadId?: string): Stagehand {
     const threadId = explicitThreadId ?? this.getCurrentThread();
-    const stagehand = this.threadManager.getExistingManagerForThread(threadId ?? '') ?? this.stagehand;
+    const stagehand = this.threadManager.getExistingManagerForThread(threadId ?? '') ?? this.sharedManager;
 
     if (!stagehand) {
       throw new Error('Browser not launched');
@@ -479,10 +480,10 @@ export class StagehandBrowser extends MastraBrowser {
     }
 
     // For 'shared' scope, use the shared Stagehand instance
-    if (!this.stagehand) return null;
+    if (!this.sharedManager) return null;
 
     try {
-      const context = this.stagehand.context;
+      const context = this.sharedManager.context;
       if (context) {
         const activePage = context.activePage();
         if (activePage) {
@@ -851,7 +852,7 @@ export class StagehandBrowser extends MastraBrowser {
       const url = page.url();
       // Save browser state for potential restore on relaunch (before external close)
       if (url && url !== 'about:blank') {
-        const state = this.getBrowserStateFromStagehand(this.stagehand);
+        const state = this.getBrowserStateFromStagehand(this.sharedManager);
         if (state) {
           this.lastBrowserState = state;
         }
@@ -896,7 +897,7 @@ export class StagehandBrowser extends MastraBrowser {
         return this.getBrowserStateFromStagehand(stagehand);
       }
 
-      return this.getBrowserStateFromStagehand(this.stagehand);
+      return this.getBrowserStateFromStagehand(this.sharedManager);
     } catch {
       return null;
     }
@@ -958,7 +959,7 @@ export class StagehandBrowser extends MastraBrowser {
       if (scope === 'thread') {
         stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
       } else {
-        stagehand = this.stagehand;
+        stagehand = this.sharedManager;
       }
 
       if (stagehand) {

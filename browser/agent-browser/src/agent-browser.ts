@@ -44,8 +44,8 @@ export class AgentBrowser extends MastraBrowser {
   override readonly name = 'AgentBrowser';
   override readonly provider = 'vercel-labs/agent-browser';
 
-  /** Primary browser manager (for 'shared' scope, also used as fallback) */
-  private browserManager: BrowserManager | null = null;
+  /** Shared browser manager instance (for 'shared' scope) */
+  private sharedManager: BrowserManager | null = null;
   private defaultTimeout = 30000;
 
   /** Thread manager - narrowed type from base class */
@@ -146,15 +146,15 @@ export class AgentBrowser extends MastraBrowser {
     if (scope === 'thread') {
       // Create a placeholder manager that's never launched.
       // Thread-specific browsers are created in ThreadManager.createSession().
-      this.browserManager = new BrowserManager();
-      this.threadManager.setSharedManager(this.browserManager);
+      this.sharedManager = new BrowserManager();
+      this.threadManager.setSharedManager(this.sharedManager);
       // Don't call notifyBrowserReady() here - that happens in onSessionCreated
       // when the first thread creates its dedicated browser.
       return;
     }
 
     // For 'shared' scope, launch the shared browser
-    this.browserManager = new BrowserManager();
+    this.sharedManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions = {
@@ -167,13 +167,13 @@ export class AgentBrowser extends MastraBrowser {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
     }
 
-    await this.browserManager.launch(launchOptions);
+    await this.sharedManager.launch(launchOptions);
 
     // Register the shared manager with ThreadManager
-    this.threadManager.setSharedManager(this.browserManager);
+    this.threadManager.setSharedManager(this.sharedManager);
 
     // Set up close listeners to detect external browser closure
-    this.setupCloseListenerForSharedScope(this.browserManager);
+    this.setupCloseListenerForSharedScope(this.sharedManager);
   }
 
   /**
@@ -217,10 +217,10 @@ export class AgentBrowser extends MastraBrowser {
 
     // Close the main browser manager (only for 'shared' scope where it's actually launched)
     const scope = this.threadManager.getScope();
-    if (scope === 'shared' && this.browserManager) {
-      await this.browserManager.close();
+    if (scope === 'shared' && this.sharedManager) {
+      await this.sharedManager.close();
     }
-    this.browserManager = null;
+    this.sharedManager = null;
   }
 
   /**
@@ -236,11 +236,11 @@ export class AgentBrowser extends MastraBrowser {
     }
 
     // For 'shared' scope, check the shared browser
-    if (!this.browserManager) {
+    if (!this.sharedManager) {
       return false;
     }
     try {
-      const page = this.browserManager.getPage();
+      const page = this.sharedManager.getPage();
       // Will throw if browser is disconnected
       const url = page.url();
       // Save browser state for potential restore on relaunch
@@ -290,8 +290,8 @@ export class AgentBrowser extends MastraBrowser {
     if (scope === 'thread' || (scope !== 'shared' && threadId !== DEFAULT_THREAD_ID)) {
       return this.threadManager.getPageForThread(threadId);
     }
-    if (!this.browserManager) throw new Error('Browser not launched');
-    return this.browserManager.getPage();
+    if (!this.sharedManager) throw new Error('Browser not launched');
+    return this.sharedManager.getPage();
   }
 
   /**
@@ -312,7 +312,7 @@ export class AgentBrowser extends MastraBrowser {
       this.notifyBrowserClosed(threadId);
     } else {
       // For 'shared' scope or default thread, the shared browser is gone
-      this.browserManager = null;
+      this.sharedManager = null;
       // Also clear the shared manager in the thread manager so getManagerForThread
       // doesn't return the dead manager
       this.threadManager.clearSharedManager();
@@ -567,7 +567,7 @@ export class AgentBrowser extends MastraBrowser {
       if (scope === 'thread') {
         manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
       } else {
-        manager = this.browserManager;
+        manager = this.sharedManager;
       }
 
       if (manager) {
@@ -1340,7 +1340,7 @@ export class AgentBrowser extends MastraBrowser {
       // Emit the URL of the new active page after reconnecting
       // Use thread-specific manager in 'thread' scope
       const manager =
-        threadId !== undefined ? this.threadManager.getExistingManagerForThread(threadId) : this.browserManager;
+        threadId !== undefined ? this.threadManager.getExistingManagerForThread(threadId) : this.sharedManager;
       const activePage = manager?.getPage();
       if (activePage) {
         const url = activePage.url();
@@ -1362,8 +1362,8 @@ export class AgentBrowser extends MastraBrowser {
     if (this.getScope() === 'thread' && threadId) {
       browserManager = await this.getManagerForThread(threadId);
     } else {
-      if (!this.browserManager) throw new Error('Browser not launched');
-      browserManager = this.browserManager;
+      if (!this.sharedManager) throw new Error('Browser not launched');
+      browserManager = this.sharedManager;
     }
 
     // Create CDP session provider adapter
