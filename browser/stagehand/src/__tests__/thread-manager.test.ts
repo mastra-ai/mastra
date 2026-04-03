@@ -58,45 +58,47 @@ describe('StagehandThreadManager', () => {
   });
 
   describe('shared stagehand (shared scope)', () => {
-    it('setStagehand stores the instance', () => {
+    it('setSharedManager stores the instance', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getSharedStagehand()).toBe(mockStagehand);
+      expect(threadManager.getExistingManagerForThread('any-thread')).toBe(mockStagehand);
     });
 
-    it('clearStagehand removes the instance', () => {
+    it('clearSharedManager removes the instance', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
-      threadManager.clearStagehand();
+      threadManager.setSharedManager(mockStagehand as any);
+      threadManager.clearSharedManager();
 
-      expect(() => threadManager.getSharedStagehand()).toThrow('Stagehand not initialized');
+      expect(threadManager.getExistingManagerForThread('any-thread')).toBeNull();
     });
 
-    it('getStagehandForThread returns shared instance', () => {
+    it('getExistingManagerForThread returns shared instance for any thread', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getStagehandForThread('any-thread')).toBe(mockStagehand);
+      // In shared mode, any thread ID returns the shared instance
+      expect(threadManager.getExistingManagerForThread('thread-1')).toBe(mockStagehand);
+      expect(threadManager.getExistingManagerForThread('thread-2')).toBe(mockStagehand);
     });
 
-    it('getPageForThread returns active page from shared instance', () => {
+    it('getPageForThread returns active page from shared instance', async () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
 
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
-      expect(threadManager.getPageForThread('any-thread')).toBe(mockPage);
+      expect(await threadManager.getPageForThread('any-thread')).toBe(mockPage);
     });
   });
 
@@ -113,7 +115,7 @@ describe('StagehandThreadManager', () => {
       const threadManager = new StagehandThreadManager({
         scope: 'shared',
       });
-      threadManager.setStagehand(mockStagehand as any);
+      threadManager.setSharedManager(mockStagehand as any);
 
       await threadManager.getManagerForThread('thread-1');
 
@@ -196,18 +198,18 @@ describe('StagehandThreadManager', () => {
       expect(threadManager.hasSession('thread-1')).toBe(false);
     });
 
-    it('hasActiveThreadStagehands returns true when instances exist', async () => {
+    it('hasActiveThreadManagers returns true when instances exist', async () => {
       const createStagehand = vi.fn().mockResolvedValue(mockStagehand);
       const threadManager = new StagehandThreadManager({
         scope: 'thread',
         createStagehand,
       });
 
-      expect(threadManager.hasActiveThreadStagehands()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
 
       await threadManager.getManagerForThread('thread-1');
 
-      expect(threadManager.hasActiveThreadStagehands()).toBe(true);
+      expect(threadManager.hasActiveThreadManagers()).toBe(true);
     });
   });
 
@@ -229,7 +231,7 @@ describe('StagehandThreadManager', () => {
 
       expect(threadManager.hasSession('thread-1')).toBe(false);
       expect(threadManager.hasSession('thread-2')).toBe(false);
-      expect(threadManager.hasActiveThreadStagehands()).toBe(false);
+      expect(threadManager.hasActiveThreadManagers()).toBe(false);
     });
   });
 

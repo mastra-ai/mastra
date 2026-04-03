@@ -669,16 +669,22 @@ export class Agent<
     // Get channel input processors (with deduplication)
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
+    // Get browser context processors (with deduplication)
+    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
+
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
-    // Skills processors run after workspace but before user-configured processors
+    // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
+    // Browser processors run after channel processors to inject browser context
+    // User-configured processors run last to allow customization
     const allProcessors = [
       ...memoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
+      ...browserProcessors,
       ...configuredProcessors,
     ];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
@@ -2421,7 +2427,9 @@ export class Agent<
       this.#inputProcessors ||
       this.#memory ||
       this.#workspace ||
-      this.#mastra?.getWorkspace()
+      this.#mastra?.getWorkspace() ||
+      this.#browser ||
+      this.#agentChannels
     ) {
       const runner = await this.getProcessorRunner({
         requestContext,

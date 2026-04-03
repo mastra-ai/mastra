@@ -1,3 +1,4 @@
+import type { BrowserConfig } from '@mastra/core/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
@@ -133,14 +134,14 @@ vi.mock('agent-browser', () => ({
 }));
 
 // Import AFTER vi.mock
-import { AgentBrowser } from './agent-browser';
+import { AgentBrowser } from '../agent-browser';
 
 describe('AgentBrowser', () => {
   let browser: AgentBrowser;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Use 'none' isolation to get simpler shared browser behavior for unit tests
+    // Use 'shared' scope to get simpler shared browser behavior for unit tests
     browser = new AgentBrowser({ scope: 'shared' });
   });
 
@@ -171,19 +172,25 @@ describe('AgentBrowser', () => {
       expect(custom.status).toBe('pending');
     });
 
-    it('forces scope to "shared" when cdpUrl is provided', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('throws error when cdpUrl and scope: "thread" are both provided', () => {
+      // cdpUrl and scope: 'thread' are mutually exclusive
+      // TypeScript prevents this at compile time, but we test runtime validation
+      expect(() => {
+        new AgentBrowser({
+          cdpUrl: 'ws://localhost:9222',
+          scope: 'thread',
+        } as BrowserConfig);
+      }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
+    });
 
-      // Create browser with cdpUrl and thread scope (should be forced to 'shared')
+    it('allows cdpUrl with scope: "shared"', () => {
+      // This should not throw
       const browserWithCdp = new AgentBrowser({
         cdpUrl: 'ws://localhost:9222',
-        scope: 'thread',
+        scope: 'shared',
       });
 
-      // The thread manager should have 'shared' scope, not 'thread'
       expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
-
-      warnSpy.mockRestore();
     });
 
     it('respects scope when no cdpUrl is provided', () => {
@@ -192,6 +199,16 @@ describe('AgentBrowser', () => {
       });
 
       expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
+    });
+
+    it('defaults to shared scope when cdpUrl is provided without explicit scope', () => {
+      // When cdpUrl is provided without scope, it should default to 'shared'
+      // since cdpUrl connects to an existing browser that can't be isolated
+      const browserWithCdp = new AgentBrowser({
+        cdpUrl: 'ws://localhost:9222',
+      });
+
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
     });
   });
 

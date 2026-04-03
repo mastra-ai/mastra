@@ -21,7 +21,7 @@ import {
   tabsInputSchema,
   dragInputSchema,
   evaluateInputSchema,
-} from './schemas';
+} from '../schemas';
 
 // =============================================================================
 // Core Tools (9)
