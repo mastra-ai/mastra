@@ -1,12 +1,14 @@
 ---
 name: smoke-test
-description: Create a Mastra project using create-mastra and smoke test the studio in Chrome
+description: Create a Mastra project using create-mastra and smoke test the studio in Chrome using Chrome MCP server
 model: claude-opus-4-5
 ---
 
 # Smoke Test Skill
 
 Creates a new Mastra project using `create-mastra@<tag>` and performs smoke testing of the Mastra Studio in Chrome.
+
+**This skill is for Claude Code with Chrome MCP server.** For MastraCode with built-in Stagehand browser, use `mastracode-smoke-test` instead.
 
 ## Usage
 
@@ -62,7 +64,9 @@ Creates a new Mastra project using `create-mastra@<tag>` and performs smoke test
 
 ## Prerequisites
 
-This skill requires the Claude-in-Chrome MCP server for browser automation. Ensure it's configured and running.
+This skill requires the **Chrome MCP server** (Claude-in-Chrome) for browser automation. Ensure it's configured and running.
+
+The Chrome MCP server provides tools like `tabs_create_mcp`, `tabs_context_mcp`, `navigate_mcp`, `click_mcp`, `type_mcp`, and `screenshot_mcp`.
 
 ## Execution Steps
 
@@ -284,15 +288,15 @@ Perform the following smoke tests using the Chrome automation tools:
 - [ ] Verify timeline view shows steps and timing
 - [ ] Take a screenshot
 
-**Scorers Page** (`/scorers`)
+**Scorers Page** (`/evaluation?tab=scorers`)
 
-- [ ] Navigate to scorers page
+- [ ] Navigate to `/evaluation?tab=scorers` (NOT `/scorers` - that route doesn't exist)
 - [ ] Verify scorers list loads (shows 3 example scorers)
 - [ ] Take a screenshot
 
 **Scorer Detail** (use direct URL navigation)
 
-- [ ] Navigate directly to `/scorers/completeness-scorer` (don't click - use URL navigation)
+- [ ] Navigate directly to `/evaluation?tab=scorers&scorer=completeness-scorer` (don't click - use URL navigation)
 - [ ] Verify scorer detail page loads with name, description, and scores table
 - [ ] Take a screenshot
 - [ ] Note: Use direct URL navigation for scorer details due to client-side routing timing issues
@@ -345,18 +349,20 @@ After completing all tests, provide a summary:
 
 ## Studio Routes
 
-| Feature         | Route              |
-| --------------- | ------------------ |
-| Agents          | `/agents`          |
-| Workflows       | `/workflows`       |
-| Tools           | `/tools`           |
-| Scorers         | `/scorers`         |
-| Observability   | `/observability`   |
-| MCP Servers     | `/mcps`            |
-| Processors      | `/processors`      |
-| Templates       | `/templates`       |
-| Request Context | `/request-context` |
-| Settings        | `/settings`        |
+| Feature         | Route                    |
+| --------------- | ------------------------ |
+| Agents          | `/agents`                |
+| Workflows       | `/workflows`             |
+| Tools           | `/tools`                 |
+| Evaluation      | `/evaluation`            |
+| Scorers         | `/evaluation?tab=scorers`|
+| Observability   | `/observability/traces`  |
+| Logs            | `/observability/logs`    |
+| MCP Servers     | `/mcps`                  |
+| Processors      | `/processors`            |
+| Templates       | `/templates`             |
+| Request Context | `/request-context`       |
+| Settings        | `/settings`              |
 
 ## Notes
 
