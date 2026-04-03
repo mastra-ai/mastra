@@ -260,10 +260,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText =
-                options.structuredOutput?.schema && payload.object != null
-                  ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+              // For structured output, outputText must be empty. The assistant
+              // message text was already set during streaming (and potentially
+              // modified by output processors). #executeOnFinish creates a
+              // synthetic message with outputText when result.response has no
+              // messages; if outputText carries the raw JSON, MessageMerger
+              // appends it as a second text part alongside the processor-
+              // modified text, corrupting the output.
+              const outputText = options.structuredOutput?.schema ? '' : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,
