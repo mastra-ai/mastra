@@ -4,17 +4,14 @@ let refreshPromise: Promise<boolean> | null = null;
  * Attempt to refresh the session via the Mastra server's auth refresh endpoint.
  * Returns true if the refresh succeeded (new cookie is set).
  */
-async function refreshSession(baseUrl: string): Promise<boolean> {
+async function refreshSession(baseUrl: string, apiPrefix: string): Promise<boolean> {
   try {
-    console.info('[fetchWithRefresh] calling refresh:', `${baseUrl}/api/auth/refresh`);
-    const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+    const res = await fetch(`${baseUrl}${apiPrefix}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
-    console.info('[fetchWithRefresh] refresh response:', res.status, res.ok);
     return res.ok;
-  } catch (err) {
-    console.info('[fetchWithRefresh] refresh error:', err);
+  } catch {
     return false;
   }
 }
@@ -45,27 +42,64 @@ export async function fetchWithRefresh(
 
   const res = await fetch(request);
 
-  console.info('[fetchWithRefresh] initial response:', request.url, res.status);
   if (res.status !== 401) return res;
 
   // Don't intercept the refresh call itself to avoid infinite loops
   if (request.url.includes('/auth/refresh')) {
-    console.info('[fetchWithRefresh] skipping refresh for refresh endpoint');
     return res;
   }
 
-  console.info('[fetchWithRefresh] got 401, attempting refresh...');
   if (!refreshPromise) {
-    refreshPromise = refreshSession(baseUrl).finally(() => {
+    refreshPromise = refreshSession(baseUrl, '/api').finally(() => {
       refreshPromise = null;
     });
   }
 
   const refreshed = await refreshPromise;
-  console.info('[fetchWithRefresh] refresh result:', refreshed);
   if (!refreshed) return res;
 
   // Retry with the cloned request (body intact)
-  console.info('[fetchWithRefresh] retrying original request...');
   return fetch(retry);
+}
+
+/**
+ * Creates a fetch function that automatically refreshes the session on 401 errors.
+ * This can be passed to MastraClient as the `fetch` option.
+ *
+ * @param baseUrl - The base URL of the Mastra server
+ * @param apiPrefix - The API prefix (defaults to '/api')
+ * @returns A fetch-compatible function that handles 401 refresh
+ */
+export function createFetchWithRefresh(
+  baseUrl: string,
+  apiPrefix: string = '/api',
+): typeof fetch {
+  let localRefreshPromise: Promise<boolean> | null = null;
+
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    // Normalize into a Request so we can clone it for retry (body streams are single-use)
+    const request = new Request(input, init);
+    const retry = request.clone();
+
+    const res = await fetch(request);
+
+    if (res.status !== 401) return res;
+
+    // Don't intercept the refresh call itself to avoid infinite loops
+    if (request.url.includes('/auth/refresh')) {
+      return res;
+    }
+
+    if (!localRefreshPromise) {
+      localRefreshPromise = refreshSession(baseUrl, apiPrefix).finally(() => {
+        localRefreshPromise = null;
+      });
+    }
+
+    const refreshed = await localRefreshPromise;
+    if (!refreshed) return res;
+
+    // Retry with the cloned request (body intact)
+    return fetch(retry);
+  };
 }
