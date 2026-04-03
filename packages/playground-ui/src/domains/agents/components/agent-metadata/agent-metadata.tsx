@@ -2,7 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
-import { GaugeIcon, Folder } from 'lucide-react';
+import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
@@ -85,6 +85,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const skills = agent.skills ?? [];
   const workspaceTools = agent.workspaceTools ?? [];
+  const browserTools = agent.browserTools ?? [];
   const workspaceId = agent.workspaceId;
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
@@ -188,6 +189,18 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           }}
         >
           <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
+        </AgentMetadataSection>
+      )}
+
+      {browserTools.length > 0 && (
+        <AgentMetadataSection
+          title="Browser Tools"
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+            title: 'Browser tools documentation',
+          }}
+        >
+          <AgentMetadataBrowserToolsList tools={browserTools} />
         </AgentMetadataSection>
       )}
 
@@ -396,6 +409,26 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
           <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataBrowserToolsListProps {
+  tools: string[];
+}
+
+export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToolsListProps) => {
+  if (tools.length === 0) {
+    return <AgentMetadataListEmpty>No browser tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {tools.map(tool => (
+        <AgentMetadataListItem key={tool}>
+          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

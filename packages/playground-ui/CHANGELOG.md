@@ -1,5 +1,40 @@
 # @mastra/playground-ui
 
+## 22.0.0-alpha.3
+
+### Patch Changes
+
+- Consolidated Tab button styles into the Tab component, removing duplicated child selectors from TabList. Removed unused alignment prop. Active underline now uses the neutral4 design token. ([#15004](https://github.com/mastra-ai/mastra/pull/15004))
+
+- Matched tooltip panel background to dropdown and default button surface in Studio. ([#15009](https://github.com/mastra-ai/mastra/pull/15009))
+
+- Fixed Scores Over Time chart to always show a 24-hour view by collapsing multi-day ranges into hourly averages across all days in the selected period ([#14981](https://github.com/mastra-ai/mastra/pull/14981))
+
+- Aligned dropdown menu panel background with default button styling in Studio. ([#15009](https://github.com/mastra-ai/mastra/pull/15009))
+
+- Refactored chat error messages to use the Alert design system component instead of inline hardcoded styles, fixing text overflow on long error messages ([#15012](https://github.com/mastra-ai/mastra/pull/15012))
+
+## 22.0.0-alpha.2
+
+### Minor Changes
+
+- Add browser view UI components for agent threads ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - Browser thumbnail with expandable preview in chat
+  - Full-screen modal and sidebar browser views
+  - Real-time screencast display with mouse/keyboard interaction
+  - Browser tool call history visualization
+  - URL bar and tab information display
+
+- Added trajectory support to the playground UI. Expected trajectory is now visible and editable across all dataset views — item list, item detail panels, item dialogs, and standalone item pages. Trajectory scorers are visually distinguished in scorer lists and experiment results. Saving a trace as a dataset item auto-extracts the trajectory. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`8791bb3`](https://github.com/mastra-ai/mastra/commit/8791bb358bef4daaa8a9413560c45b726edbdc66), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+  - @mastra/client-js@1.13.0-alpha.2
+  - @mastra/ai-sdk@1.3.1-alpha.0
+  - @mastra/react@0.2.22-alpha.2
+
 ## 21.0.1-alpha.1
 
 ### Patch Changes
