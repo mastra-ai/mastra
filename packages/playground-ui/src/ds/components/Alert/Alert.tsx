@@ -1,9 +1,10 @@
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
-import { Txt, TxtProps } from '../Txt';
+import type { TxtProps } from '../Txt';
+import { Txt } from '../Txt';
+import { Icon } from '@/ds/icons';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 type AlertVariant = 'warning' | 'destructive' | 'info';
 
@@ -38,7 +39,7 @@ export const Alert = ({ children, variant = 'destructive', className }: AlertPro
       )}
     >
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 flex-shrink-0">
+        <Icon className="mt-0.5 shrink-0">
           <Ico />
         </Icon>
         <div className="text-neutral4">{children}</div>

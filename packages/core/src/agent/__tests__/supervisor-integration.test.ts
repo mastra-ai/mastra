@@ -2,13 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MessageFilterContext, DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
+import type { MastraDBMessage } from '../message-list/state/types';
 
 // Helper: create a sub-agent with a fixed text response
 function makeSubAgent(id: string, responseText: string) {
@@ -3536,6 +3538,154 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
         }
       }
     }
+  });
+});
+
+/**
+ * Output processor propagation in streaming delegation.
+ * Tests that when a sub-agent has an output processor that modifies text via processOutputResult,
+ * the supervisor receives the processed text (not the raw LLM output).
+ */
+describe('Supervisor Pattern - Output processor propagation in streaming delegation', () => {
+  const mockStorage = new InMemoryStore();
+
+  afterEach(async () => {
+    const workflowsStore = await mockStorage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should propagate processOutputResult modifications to supervisor in streaming delegation', async () => {
+    const RAW_SUB_AGENT_TEXT = 'raw sub-agent response';
+    const PROCESSED_SUB_AGENT_TEXT = 'PROCESSED: raw sub-agent response';
+
+    // Output processor that prepends "PROCESSED: " to the assistant message text
+    const textTransformProcessor: Processor<'text-transform'> = {
+      id: 'text-transform',
+      async processOutputResult(args: ProcessOutputResultArgs) {
+        const transformed: MastraDBMessage[] = args.messages.map(msg => {
+          if (msg.role !== 'assistant') return msg;
+          const parts = msg.content?.parts ?? [];
+          return {
+            ...msg,
+            content: {
+              ...msg.content,
+              format: msg.content?.format ?? 2,
+              parts: parts.map((part: any) => {
+                if (part.type === 'text') {
+                  return { ...part, text: `PROCESSED: ${part.text}` };
+                }
+                return part;
+              }),
+            },
+          };
+        });
+        return transformed;
+      },
+    };
+
+    // Sub-agent streams raw text, but has an output processor that modifies it
+    const subAgentModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: RAW_SUB_AGENT_TEXT },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'processor-sub-agent',
+      name: 'Processor Sub Agent',
+      description: 'A sub-agent with an output processor.',
+      instructions: 'You respond with text.',
+      model: subAgentModel,
+      outputProcessors: [textTransformProcessor],
+    });
+
+    // Supervisor delegates to sub-agent on first call, then returns final text on second call
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'supervisor-call-1',
+                toolName: 'agent-processorSubAgent',
+                input: JSON.stringify({ prompt: 'do something' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Supervisor final response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'processor-supervisor',
+      name: 'Processor Supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: supervisorModel,
+      agents: { processorSubAgent: subAgent },
+    });
+
+    new Mastra({
+      agents: { processorSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    const stream = await supervisorAgent.stream('Test prompt', { maxSteps: 5 });
+
+    // Collect tool-result chunks to verify the sub-agent result text seen by the supervisor
+    let subAgentResultText = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-result') {
+        const payload = chunk.payload;
+        if (payload.toolName === 'agent-processorSubAgent' && payload.result?.text) {
+          subAgentResultText = payload.result.text;
+        }
+      }
+    }
+
+    // The supervisor should see the processed text, not the raw LLM output
+    expect(subAgentResultText).toBe(PROCESSED_SUB_AGENT_TEXT);
+    expect(subAgentResultText).not.toBe(RAW_SUB_AGENT_TEXT);
   });
 });
 

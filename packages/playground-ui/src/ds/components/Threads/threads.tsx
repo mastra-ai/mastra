@@ -1,9 +1,8 @@
-import { IconButton } from '@/ds/components/IconButton';
-import { Icon } from '@/ds/icons/Icon';
+import type { ElementType } from 'react';
 import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ElementType } from 'react';
+import { IconButton } from '@/ds/components/IconButton';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface ThreadsProps {
   children: React.ReactNode;

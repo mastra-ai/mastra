@@ -128,6 +128,24 @@ export interface DatadogExporterConfig extends BaseExporterConfig {
    * Defaults to false to avoid unexpected instrumentation.
    */
   integrationsEnabled?: boolean;
+
+  /**
+   * Keys from the request context (set via `requestContextKeys` in the Mastra
+   * Observability config) that should be promoted to flat Datadog LLM Observability
+   * tags instead of being nested inside `annotations.metadata`.
+   *
+   * Flat tags are indexable and filterable in the Datadog LLM Observability UI,
+   * which makes them suitable for multi-tenant filtering (e.g. tenantId, agentId).
+   *
+   * @example
+   * ```typescript
+   * new DatadogExporter({
+   *   mlApp: 'my-app',
+   *   requestContextKeys: ['tenantId', 'agentId'],
+   * })
+   * ```
+   */
+  requestContextKeys?: string[];
 }
 
 /**
@@ -256,6 +274,18 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
+   * Sets native dd-trace error tags required by Datadog's Error Tracking UI.
+   */
+  private setErrorTags(ddSpan: any, errorInfo: NonNullable<AnyExportedSpan['errorInfo']>): void {
+    ddSpan.setTag('error', true);
+    ddSpan.setTag('error.message', errorInfo.message);
+    ddSpan.setTag('error.type', errorInfo.name ?? errorInfo.category ?? 'Error');
+    if (errorInfo.stack) {
+      ddSpan.setTag('error.stack', errorInfo.stack);
+    }
+  }
+
+  /**
    * Builds annotations object for llmobs.annotate().
    * Uses dd-trace's expected property names: inputData, outputData, metadata, tags, metrics.
    */
@@ -286,19 +316,58 @@ export class DatadogExporter extends BaseExporter {
     const knownFields = ['usage', 'model', 'provider', 'parameters'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
-    // Merge span.metadata + remaining attributes into metadata
-    const combinedMetadata = {
-      ...span.metadata,
-      ...otherAttributes,
+    // Separate requestContextKeys from span.metadata AND span.attributes:
+    // - Keys listed in this.config.requestContextKeys are promoted to flat LLM Obs tags,
+    //   making them indexable and filterable in the Datadog UI (e.g. tenantId, agentId).
+    // - All remaining keys stay nested in annotations.metadata as before.
+    const contextKeySet = new Set(this.config.requestContextKeys ?? []);
+    const flatContextTags: Record<string, any> = {};
+    const remainingMetadata: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(span.metadata ?? {})) {
+      if (contextKeySet.has(key)) {
+        flatContextTags[key] = value;
+      } else {
+        remainingMetadata[key] = value;
+      }
+    }
+
+    // Also promote matching keys from span.attributes so requestContextKeys
+    // are consistently elevated regardless of where the caller stored them.
+    const remainingAttributes: Record<string, any> = {};
+    for (const [key, value] of Object.entries(otherAttributes)) {
+      if (contextKeySet.has(key)) {
+        // Only promote if not already set from span.metadata (metadata wins)
+        if (!(key in flatContextTags)) {
+          flatContextTags[key] = value;
+        }
+      } else {
+        remainingAttributes[key] = value;
+      }
+    }
+
+    // Merge remaining span.metadata + span attributes into metadata
+    // Error message goes into metadata (not tags) because tags get normalized/truncated
+    // which mangles free-form error text (e.g. colons split into key/value, spaces become underscores)
+    const combinedMetadata: Record<string, any> = {
+      ...remainingMetadata,
+      ...remainingAttributes,
     };
+    if (span.errorInfo) {
+      combinedMetadata['error.message'] = span.errorInfo.message;
+    }
     if (Object.keys(combinedMetadata).length > 0) {
       annotations.metadata = combinedMetadata;
     }
 
-    // Build tags from span.tags (user-provided string[] converted to object) and error info
-    // Datadog annotation tags accept Record<string, any>, so we use proper types
+    // Build tags from span.tags (user-provided string[] converted to object),
+    // promoted requestContextKeys values (flat, indexable in Datadog), and error info.
+    // Datadog annotation tags accept Record<string, any>, so we use proper types.
     // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
-    const tags: Record<string, any> = {};
+    const tags: Record<string, any> = {
+      // Promote requestContextKeys values to flat, searchable LLM Observability tags
+      ...flatContextTags,
+    };
 
     // Convert span.tags (string[]) to object format
     // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }
@@ -314,15 +383,19 @@ export class DatadogExporter extends BaseExporter {
       }
     }
 
-    // Add error info as consolidated tags
+    // Add error status and structured error fields as tags (short, structured values that survive normalization)
+    // The error message itself is in metadata above to avoid tag normalization/truncation
     if (span.errorInfo) {
       tags.error = true;
-      tags.errorInfo = {
-        message: span.errorInfo.message,
-        ...(span.errorInfo.id ? { id: span.errorInfo.id } : {}),
-        ...(span.errorInfo.domain ? { domain: span.errorInfo.domain } : {}),
-        ...(span.errorInfo.category ? { category: span.errorInfo.category } : {}),
-      };
+      if (span.errorInfo.id) {
+        tags['error.id'] = span.errorInfo.id;
+      }
+      if (span.errorInfo.domain) {
+        tags['error.domain'] = span.errorInfo.domain;
+      }
+      if (span.errorInfo.category) {
+        tags['error.category'] = span.errorInfo.category;
+      }
     }
 
     if (Object.keys(tags).length > 0) {
@@ -621,9 +694,9 @@ export class DatadogExporter extends BaseExporter {
         tracer.llmobs.annotate(ddSpan, annotations);
       }
 
-      // Set native Datadog error status for proper UI highlighting
+      // Set native Datadog error tags for proper Error Tracking UI
       if (span.errorInfo) {
-        ddSpan.setTag('error', true);
+        this.setErrorTags(ddSpan, span.errorInfo);
       }
 
       // Store context for potential evaluation submissions
@@ -660,9 +733,9 @@ export class DatadogExporter extends BaseExporter {
           tracer.llmobs.annotate(ddSpan, annotations);
         }
 
-        // Set native Datadog error status for proper UI highlighting
+        // Set native Datadog error tags for proper Error Tracking UI
         if (span.errorInfo) {
-          ddSpan.setTag('error', true);
+          this.setErrorTags(ddSpan, span.errorInfo);
         }
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;

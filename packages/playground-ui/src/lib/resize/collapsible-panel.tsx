@@ -1,9 +1,10 @@
-import { PanelProps, Panel, usePanelRef, PanelImperativeHandle } from 'react-resizable-panels';
-import { useEffect, useState } from 'react';
-import { Button } from '@/ds/components/Button/Button';
-import { Icon } from '@/ds/icons';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { PanelProps, PanelImperativeHandle } from 'react-resizable-panels';
+import { Panel, usePanelRef } from 'react-resizable-panels';
+import { Button } from '@/ds/components/Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons';
 
 export interface CollapsiblePanelTriggerProps {
   tooltip?: string;
@@ -65,7 +66,7 @@ export const CollapsiblePanel = ({
           <Tooltip>
             <div className="flex items-center justify-center h-full">
               <TooltipTrigger asChild>
-                <Button onClick={expand} className="!h-48 border-none">
+                <Button onClick={expand} className="h-48! border-none">
                   <Icon>{collapsedTrigger?.icon ?? defaultIcon}</Icon>
                 </Button>
               </TooltipTrigger>

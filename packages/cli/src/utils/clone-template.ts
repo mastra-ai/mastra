@@ -132,7 +132,7 @@ async function updatePackageJson(projectPath: string, projectName: string): Prom
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
   } catch (error) {
     // It's okay if package.json doesn't exist or can't be updated
-    logger.warn(`Could not update package.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    logger.warn('Could not update package.json', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
 
@@ -142,7 +142,7 @@ async function updateEnvFile(envPath: string, llmProvider: LLMProvider): Promise
     const modelString = getModelIdentifier(llmProvider);
 
     if (!modelString) {
-      logger.warn(`Could not get model identifier for provider: ${llmProvider}`);
+      logger.warn('Could not get model identifier for provider', { provider: llmProvider });
       return;
     }
 
@@ -153,10 +153,10 @@ async function updateEnvFile(envPath: string, llmProvider: LLMProvider): Promise
     const updatedContent = envContent.replace(/^MODEL=.*/m, `MODEL=${modelValue}`);
 
     await fs.writeFile(envPath, updatedContent, 'utf-8');
-    logger.info(`Updated MODEL in .env to ${modelValue}`);
+    logger.info('Updated MODEL in .env', { model: modelValue });
   } catch (error) {
     // It's okay if .env can't be updated
-    logger.warn(`Could not update .env file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    logger.warn('Could not update .env file', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
 

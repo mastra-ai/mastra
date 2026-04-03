@@ -1,15 +1,17 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
-import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
 
 // Format tokens helper
 const formatTokens = (n: number) => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 100_000) return `${(n / 1000).toFixed(0)}k`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return Math.round(n).toString();
 };
@@ -18,6 +20,12 @@ const formatTokens = (n: number) => {
 const getBarColor = (percentage: number) => {
   if (percentage >= 60) return 'bg-blue-500';
   return 'bg-green-500';
+};
+
+const getModelLabel = (model: unknown, modelRouting?: Array<{ upTo: number; model: string }>) => {
+  if (typeof model === 'string') return model;
+  if (modelRouting?.length) return 'Auto (tiered)';
+  return undefined;
 };
 
 // Hook to track elapsed time when active
@@ -51,6 +59,7 @@ const ProgressBar = ({
   label,
   isActive = false,
   model,
+  modelRouting,
   baseThreshold,
   totalBudget,
 }: {
@@ -59,6 +68,7 @@ const ProgressBar = ({
   label: string;
   isActive?: boolean;
   model?: string;
+  modelRouting?: Array<{ upTo: number; model: string }>;
   baseThreshold?: number; // When adaptive, shows the configured base threshold
   totalBudget?: number; // Total shared budget in adaptive mode
 }) => {
@@ -101,10 +111,23 @@ const ProgressBar = ({
                   <span className="text-neutral4">Model:</span>{' '}
                   <span className="text-neutral5">{model || 'not configured'}</span>
                 </div>
-                <div>
-                  <span className="text-neutral4">Threshold:</span>{' '}
-                  <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span>
-                </div>
+                {modelRouting?.length ? (
+                  <div>
+                    <span className="text-neutral4">Routing:</span>
+                    <div className="mt-0.5 pl-2 space-y-0.5">
+                      {modelRouting.map(route => (
+                        <div key={`${route.upTo}-${route.model}`} className="text-neutral5">
+                          ≤{formatTokens(route.upTo)} → {route.model}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-neutral4">Threshold:</span>{' '}
+                    <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span>
+                  </div>
+                )}
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
@@ -258,26 +281,66 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     configData?.config as {
       observationalMemory?: {
         enabled: boolean;
+        model?: unknown;
         scope?: 'thread' | 'resource';
         messageTokens?: number | { min: number; max: number };
         observationTokens?: number | { min: number; max: number };
+        observation?: {
+          messageTokens?: number | { min: number; max: number };
+          model?: string;
+          routing?: Array<{ upTo: number; model: string }>;
+        };
+        reflection?: {
+          observationTokens?: number | { min: number; max: number };
+          model?: string;
+          routing?: Array<{ upTo: number; model: string }>;
+        };
         observationModel?: string;
         reflectionModel?: string;
+        observationModelRouting?: Array<{ upTo: number; model: string }>;
+        reflectionModelRouting?: Array<{ upTo: number; model: string }>;
       };
     }
   )?.observationalMemory;
   const recordConfig = record?.config as
     | {
-        observation?: { messageTokens?: number };
-        reflection?: { observationTokens?: number };
+        observation?: { messageTokens?: number; model?: string; routing?: Array<{ upTo: number; model: string }> };
+        reflection?: { observationTokens?: number; model?: string; routing?: Array<{ upTo: number; model: string }> };
         observationModel?: string;
         reflectionModel?: string;
+        observationModelRouting?: Array<{ upTo: number; model: string }>;
+        reflectionModelRouting?: Array<{ upTo: number; model: string }>;
       }
     | undefined;
 
+  const observationModelRouting =
+    recordConfig?.observationModelRouting ??
+    recordConfig?.observation?.routing ??
+    omAgentConfig?.observationModelRouting ??
+    omAgentConfig?.observation?.routing;
+  const reflectionModelRouting =
+    recordConfig?.reflectionModelRouting ??
+    recordConfig?.reflection?.routing ??
+    omAgentConfig?.reflectionModelRouting ??
+    omAgentConfig?.reflection?.routing;
+
   // Extract model names from config
-  const observationModel = recordConfig?.observationModel ?? omAgentConfig?.observationModel;
-  const reflectionModel = recordConfig?.reflectionModel ?? omAgentConfig?.reflectionModel;
+  const observationModel = getModelLabel(
+    recordConfig?.observationModel ??
+      recordConfig?.observation?.model ??
+      omAgentConfig?.observationModel ??
+      omAgentConfig?.model ??
+      omAgentConfig?.observation?.model,
+    observationModelRouting,
+  );
+  const reflectionModel = getModelLabel(
+    recordConfig?.reflectionModel ??
+      recordConfig?.reflection?.model ??
+      omAgentConfig?.reflectionModel ??
+      omAgentConfig?.model ??
+      omAgentConfig?.reflection?.model,
+    reflectionModelRouting,
+  );
 
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
@@ -298,12 +361,12 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isAdaptiveMode = omAgentConfig?.messageTokens !== undefined && typeof omAgentConfig.messageTokens !== 'number';
 
   // Get total budget for adaptive mode (stored as max in message tokens threshold)
-  const totalBudget = isAdaptiveMode ? getThresholdValue(omAgentConfig?.messageTokens, 10000) : 0;
+  const totalBudget = isAdaptiveMode ? getThresholdValue(omAgentConfig?.messageTokens, 30000) : 0;
 
   // Base thresholds (configured values, before adaptive adjustment)
-  const baseMessageTokens = isAdaptiveMode ? getBaseThresholdValue(omAgentConfig?.messageTokens, 10000) : undefined;
+  const baseMessageTokens = isAdaptiveMode ? getBaseThresholdValue(omAgentConfig?.messageTokens, 30000) : undefined;
   const baseObservationTokens = isAdaptiveMode
-    ? getBaseThresholdValue(omAgentConfig?.observationTokens, 30000)
+    ? getBaseThresholdValue(omAgentConfig?.observationTokens, 40000)
     : undefined;
 
   // Priority: streamProgress > recordConfig > agentConfig > defaults
@@ -311,11 +374,11 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const messageTokensThreshold =
     streamProgress?.windows?.active?.messages?.threshold ??
     recordConfig?.observation?.messageTokens ??
-    getThresholdValue(omAgentConfig?.messageTokens, 10000);
+    getThresholdValue(omAgentConfig?.messageTokens, 30000);
 
   // For observations bar: use the configured observation tokens threshold (not calculated remaining)
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
-  const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 30000);
+  const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 40000);
   const observationTokensThreshold =
     streamProgress?.windows?.active?.observations?.threshold ??
     recordConfig?.reflection?.observationTokens ??
@@ -449,6 +512,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             label="Messages"
             isActive={isObserving}
             model={observationModel}
+            modelRouting={observationModelRouting}
             baseThreshold={baseMessageTokens}
             totalBudget={totalBudget}
           />
@@ -459,6 +523,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             isActive={isReflecting}
             baseThreshold={baseObservationTokens}
             model={reflectionModel}
+            modelRouting={reflectionModelRouting}
             totalBudget={totalBudget}
           />
         </div>
@@ -505,7 +570,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                     <ObservationRenderer
                       observations={observations}
                       maxHeight={undefined}
-                      className="break-words w-full overflow-hidden"
+                      className="wrap-break-word w-full overflow-hidden"
                     />
                     {isCopied && (
                       <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
@@ -591,7 +656,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               {(streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 && (
                 <div className="flex items-center gap-2">
                   <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
+                    className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
                   />
                   <span className="text-[10px] text-neutral5">
                     {streamProgress.windows.buffered.observations.chunks} buffered chunk
@@ -605,13 +670,13 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               )}
               {streamProgress.windows?.buffered?.reflection?.status === 'running' && (
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-purple-400 animate-pulse" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-purple-400 animate-pulse" />
                   <span className="text-[10px] text-neutral5">Buffering reflection…</span>
                 </div>
               )}
               {streamProgress.windows?.buffered?.reflection?.status === 'complete' && (
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-green-500" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-green-500" />
                   <span className="text-[10px] text-neutral5">Reflection buffered</span>
                   <span className="text-[10px] text-neutral3">
                     {formatTokens(streamProgress.windows.buffered.reflection.inputObservationTokens)} →{' '}

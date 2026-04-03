@@ -1,51 +1,56 @@
 import {
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  MainContentContent,
   ToolsIcon,
-  Icon,
-  HeaderAction,
-  DocsIcon,
-  Button,
-  ToolTable,
+  ButtonWithTooltip,
+  ToolsList,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
   useAgents,
   useTools,
 } from '@mastra/playground-ui';
-
-import { Link } from 'react-router';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
+  const [search, setSearch] = useState('');
 
-  const hasDirectTools = Object.keys(tools).length > 0;
-  const hasToolsFromAgents = Object.values(agentsRecord).some(
-    agent => agent.tools && Object.keys(agent.tools).length > 0,
-  );
-  const isEmpty = !isLoadingTools && !isLoadingAgents && !hasDirectTools && !hasToolsFromAgents;
+  const isLoading = isLoadingAgents || isLoadingTools;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <ToolsIcon />
-          </Icon>
-          Tools
-        </HeaderTitle>
+    <EntityListPageLayout>
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isLoading}>
+              <ToolsIcon /> Tools
+            </MainHeader.Title>
+          </MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/docs/agents/using-tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Tools documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </MainHeader.Column>
+        </MainHeader>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
+        </div>
+      </EntityListPageLayout.Top>
 
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/docs/agents/using-tools" target="_blank" variant="ghost" size="md">
-            <DocsIcon />
-            Tools documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={isEmpty}>
-        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <ToolsList
+        tools={tools}
+        agents={agentsRecord}
+        isLoading={isLoading}
+        error={error}
+        search={search}
+      />
+    </EntityListPageLayout>
   );
 }

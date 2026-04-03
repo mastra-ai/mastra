@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
+import type { ProcessStep } from './shared';
 import { Spinner } from '@/ds/components/Spinner';
-import { type ProcessStep } from './shared';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type ProcessStepProgressBarProps = {
   steps: ProcessStep[];

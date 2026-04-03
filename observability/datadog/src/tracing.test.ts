@@ -214,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'workflow'],
-      [SpanType.MODEL_STEP, 'llm'],
+      [SpanType.MODEL_GENERATION, 'llm'],
+      [SpanType.MODEL_STEP, 'task'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -240,7 +240,7 @@ describe('DatadogExporter', () => {
   });
 
   describe('error handling', () => {
-    it('includes error tags for error spans', async () => {
+    it('includes error tags and error message in metadata for error spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -255,13 +255,13 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something went wrong',
+          }),
           tags: expect.objectContaining({
             error: true,
-            errorInfo: {
-              message: 'Something went wrong',
-              id: 'err-123',
-              category: 'validation',
-            },
+            'error.id': 'err-123',
+            'error.category': 'validation',
           }),
         }),
       );
@@ -281,7 +281,44 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('sets native Datadog error status on ddSpan for error spans', async () => {
+    it('sets native Datadog error tags on ddSpan for error spans', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          name: 'ValidationError',
+          stack: 'ValidationError: Something went wrong\n    at test.ts:1:1',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      // Verify all native Datadog error tags are set for Error Tracking UI
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.message', 'Something went wrong');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'ValidationError');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith(
+        'error.stack',
+        'ValidationError: Something went wrong\n    at test.ts:1:1',
+      );
+    });
+
+    it('uses category as error.type fallback when name is not present', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          category: 'runtime',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'runtime');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
+    });
+
+    it('uses "Error" as error.type fallback when neither name nor category is present', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -291,8 +328,8 @@ describe('DatadogExporter', () => {
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
-      // Verify setTag was called with error: true
-      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'Error');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
     });
 
     it('does not set native error status for non-error spans', async () => {
@@ -327,7 +364,7 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('merges span.tags with error tags when both present', async () => {
+    it('merges span.tags with error tags when both present, error message in metadata', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         tags: ['production', 'critical'],
@@ -342,14 +379,14 @@ describe('DatadogExporter', () => {
       expect(mockAnnotate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          metadata: expect.objectContaining({
+            'error.message': 'Something failed',
+          }),
           tags: {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.category': 'runtime',
           },
         }),
       );
@@ -1050,7 +1087,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1224,7 +1261,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_GENERATION,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)
@@ -1311,6 +1348,135 @@ describe('DatadogExporter', () => {
       if (annotateCall?.metadata) {
         expect(Object.keys(annotateCall.metadata).length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe('requestContextKeys', () => {
+    it('promotes listed metadata keys to flat tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId', 'agentId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123', agentId: 'agent-456', otherKey: 'stays-in-metadata' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // Promoted keys appear as flat tags
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-123', agentId: 'agent-456' });
+      // Promoted keys are NOT duplicated in metadata
+      expect(annotateCall?.metadata).not.toHaveProperty('tenantId');
+      expect(annotateCall?.metadata).not.toHaveProperty('agentId');
+      // Keys not listed remain in metadata
+      expect(annotateCall?.metadata).toMatchObject({ otherKey: 'stays-in-metadata' });
+    });
+
+    it('does not affect metadata when requestContextKeys is not set', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123', someKey: 'some-value' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // All metadata stays in metadata when no requestContextKeys configured
+      expect(annotateCall?.metadata).toMatchObject({ tenantId: 'tenant-123', someKey: 'some-value' });
+    });
+
+    it('merges promoted context keys with existing span tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-abc' },
+        tags: ['production', 'instance_name:api-server'],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      expect(annotateCall?.tags).toMatchObject({
+        tenantId: 'tenant-abc',
+        production: true,
+        instance_name: 'api-server',
+      });
+    });
+
+    it('handles empty requestContextKeys array gracefully', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: [],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        metadata: { tenantId: 'tenant-123' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // All metadata stays in metadata when requestContextKeys is empty
+      expect(annotateCall?.metadata).toMatchObject({ tenantId: 'tenant-123' });
+    });
+
+    it('promotes matching keys from span.attributes to flat tags', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId', 'agentId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        // Keys stored in span.attributes rather than span.metadata
+        attributes: { tenantId: 'tenant-from-attrs', agentId: 'agent-from-attrs', otherAttr: 'stays' },
+        metadata: { someKey: 'some-value' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // Keys from attributes are promoted to flat tags
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-from-attrs', agentId: 'agent-from-attrs' });
+      // Promoted attribute keys are NOT duplicated in metadata
+      expect(annotateCall?.metadata).not.toHaveProperty('tenantId');
+      expect(annotateCall?.metadata).not.toHaveProperty('agentId');
+      // Non-promoted attribute keys and metadata stay in metadata
+      expect(annotateCall?.metadata).toMatchObject({ otherAttr: 'stays', someKey: 'some-value' });
+    });
+
+    it('metadata wins over attributes when both have the same requestContextKey', async () => {
+      const exporter = new DatadogExporter({
+        mlApp: 'test',
+        apiKey: 'test-key',
+        requestContextKeys: ['tenantId'],
+      });
+
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        attributes: { tenantId: 'tenant-from-attrs' },
+        metadata: { tenantId: 'tenant-from-metadata' },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const annotateCall = mockAnnotate.mock.calls[0]?.[1];
+      // metadata value wins
+      expect(annotateCall?.tags).toMatchObject({ tenantId: 'tenant-from-metadata' });
     });
   });
 

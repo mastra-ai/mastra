@@ -3,8 +3,8 @@ import type { Control } from 'react-hook-form';
 
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';
 
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
 import { isActive } from './agent-cms-is-active';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 
 interface NavTarget {

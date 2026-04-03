@@ -1,10 +1,10 @@
 import { Panel, useDefaultLayout, Group, usePanelRef } from 'react-resizable-panels';
+import { useEffect, useState } from 'react';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel, CollapsiblePanelTriggerProps } from '@/lib/resize/collapsible-panel';
 import { Button } from '@/ds/components/Button/Button';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface AgentLayoutProps {

@@ -12,7 +12,6 @@ import {
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
-  SchemaRequestContextProvider,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -118,44 +117,42 @@ function Agent() {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                  <AgentLayout
+        <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+          <ThreadInputProvider>
+            <ObservationalMemoryProvider>
+              <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                <AgentLayout
+                  agentId={agentId!}
+                  rightDefaultCollapsed
+                  leftSlot={
+                    hasMemory && (
+                      <AgentSidebar
+                        agentId={agentId!}
+                        threadId={actualThreadId!}
+                        threads={threads || []}
+                        isLoading={isThreadsLoading}
+                      />
+                    )
+                  }
+                  rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                >
+                  <AgentChat
+                    key={actualThreadId!}
                     agentId={agentId!}
-                    rightDefaultCollapsed
-                    leftSlot={
-                      hasMemory && (
-                        <AgentSidebar
-                          agentId={agentId!}
-                          threadId={actualThreadId!}
-                          threads={threads || []}
-                          isLoading={isThreadsLoading}
-                        />
-                      )
-                    }
-                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                  >
-                    <AgentChat
-                      key={actualThreadId!}
-                      agentId={agentId!}
-                      agentName={agent?.name}
-                      modelVersion={agent?.modelVersion}
-                      threadId={actualThreadId!}
-                      memory={hasMemory}
-                      refreshThreadList={handleRefreshThreadList}
-                      modelList={agent?.modelList}
-                      messageId={messageId}
-                      isNewThread={isNewThread}
-                    />
-                  </AgentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
-          </WorkingMemoryProvider>
-        </SchemaRequestContextProvider>
+                    agentName={agent?.name}
+                    modelVersion={agent?.modelVersion}
+                    threadId={actualThreadId!}
+                    memory={hasMemory}
+                    refreshThreadList={handleRefreshThreadList}
+                    modelList={agent?.modelList}
+                    messageId={messageId}
+                    isNewThread={isNewThread}
+                  />
+                </AgentLayout>
+              </ActivatedSkillsProvider>
+            </ObservationalMemoryProvider>
+          </ThreadInputProvider>
+        </WorkingMemoryProvider>
       </AgentSettingsProvider>
     </TracingSettingsProvider>
   );

@@ -1,22 +1,23 @@
-import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
+import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
+import type { ColumnDef } from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import React, { useMemo, useState } from 'react';
+import { columns } from './columns';
+import type { ToolWithAgents } from '@/domains/tools/utils/prepareToolsTable';
+import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { Icon } from '@/ds/icons/Icon';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
-import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
-import { ToolsIcon } from '@/ds/icons';
-import { prepareToolsTable, ToolWithAgents } from '@/domains/tools/utils/prepareToolsTable';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { ToolsIcon } from '@/ds/icons';
+import { Icon } from '@/ds/icons/Icon';
+import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;

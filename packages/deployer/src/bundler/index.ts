@@ -15,7 +15,7 @@ import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { slash } from '../build/utils';
+import { isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -47,7 +47,7 @@ export abstract class Bundler extends MastraBundler {
     dependencies: Map<string, string>,
     resolutions?: Record<string, string>,
   ) {
-    this.logger.debug(`Writing project's package.json`);
+    this.logger.debug("Writing project's package.json");
 
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
@@ -249,7 +249,7 @@ export abstract class Bundler extends MastraBundler {
 
           // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
           if (!entryFile || (await stat(entryFile)).isDirectory()) {
-            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            this.logger.warn('No entry file found, skipping', { path });
             continue;
           }
 
@@ -258,7 +258,7 @@ export abstract class Bundler extends MastraBundler {
           const normalizedEntryFile = entryFile.replaceAll('\\', '/');
           inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
-          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
+          this.logger.warn('Tool path does not exist, skipping', { path });
         }
       }
     }
@@ -325,7 +325,7 @@ export abstract class Bundler extends MastraBundler {
 
     const dependenciesToInstall = new Map<string, string>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
-      if (analyzedBundleInfo.workspaceMap.has(dep)) {
+      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
@@ -394,8 +394,9 @@ export abstract class Bundler extends MastraBundler {
                 return;
               }
 
-              this.logger.warn(`Circular dependency found:
-\t${warning.message.replace('Circular dependency: ', '')}`);
+              this.logger.warn('Circular dependency found', {
+                dependency: warning.message.replace('Circular dependency: ', ''),
+              });
             }
           },
         },
@@ -458,7 +459,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
-      this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);
+      this.logger.info('Found tools', { count: toolsLength });
     }
   }
 }

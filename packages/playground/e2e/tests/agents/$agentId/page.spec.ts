@@ -26,10 +26,6 @@ test('chat layout exposes relocated controls and actions', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Mastra Studio/);
 
-  await expect(page.getByTestId('agent-tab-actions')).toBeVisible();
-  await expect(page.getByTestId('agent-tab-actions').getByRole('button', { name: /Copy Agent ID/i })).toBeVisible();
-  await expect(page.getByTestId('agent-tab-actions').getByRole('button', { name: /Copy session URL/i })).toBeVisible();
-
   // Left sidebar tabs: Conversations and Memory
   await expect(page.getByRole('tab', { name: /Conversations/i })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Memory/i })).toBeVisible();

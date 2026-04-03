@@ -1,14 +1,14 @@
+import type { StorageThreadType } from '@mastra/core/memory';
+import { Copy, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { IconButton } from '@/ds/components/IconButton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Copy, Plus } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
-import { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useState } from 'react';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -77,7 +77,7 @@ export const ChatThreads = ({
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
                 <ThreadLink as={Link} to={threadLink}>
-                  <ThreadTitle title={thread.title} id={thread.id} />
+                  <ThreadTitle title={thread.title || null} id={thread.id} />
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
@@ -164,7 +164,7 @@ function isDefaultThreadName(name: string): boolean {
   return defaultPattern.test(name);
 }
 
-function ThreadTitle({ title, id }: { title?: string; id?: string }) {
+function ThreadTitle({ title, id }: { title: string | null; id?: string }) {
   if (!title) {
     return null;
   }
@@ -173,7 +173,7 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
     return <span className="text-neutral3">Thread {id ? id.substring(id.length - 5) : null}</span>;
   }
 
-  return <span className="truncate max-w-[14rem] text-neutral3">{title}</span>;
+  return <span className="truncate max-w-56 text-neutral3">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

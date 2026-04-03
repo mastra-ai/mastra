@@ -1,26 +1,29 @@
+import type { DatasetItem } from '@mastra/client-js';
 import { useState } from 'react';
 import { useDebounce } from 'use-debounce';
-import { DatasetItem } from '@mastra/client-js';
-import { useDataset } from '../../hooks/use-datasets';
+import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
+import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetExperiments, type DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
-import { DatasetItems } from '../items/dataset-items';
-import { DatasetExperiments } from '../experiments/dataset-experiments';
-import { DatasetHeader } from './dataset-header';
-import { CSVImportDialog } from '../csv-import';
-import { JSONImportDialog } from '../json-import';
-import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
+import { useDataset } from '../../hooks/use-datasets';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
+import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
+import { CSVImportDialog } from '../csv-import';
 import { DuplicateDatasetDialog } from '../duplicate-dataset-dialog';
-import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
+import { DatasetExperiments } from '../experiments/dataset-experiments';
+import { DatasetItems } from '../items/dataset-items';
+import { JSONImportDialog } from '../json-import';
+import { DatasetHeader } from './dataset-header';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
+import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
 import { AlertDialog } from '@/ds/components/AlertDialog';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
-import { toast } from '@/lib/toast';
-import { useLinkComponent } from '@/lib/framework';
 import { Chip } from '@/ds/components/Chip';
+import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
+import { transitions } from '@/ds/primitives/transitions';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
 export interface DatasetPageContentProps {
   datasetId: string;
@@ -33,9 +36,12 @@ export interface DatasetPageContentProps {
   // Controlled mode: parent manages version state
   activeDatasetVersion?: number | null;
   onVersionSelect?: (version: DatasetVersion | null) => void;
+  // Tab control
+  initialTab?: TabValue;
+  onTabChange?: (tab: TabValue) => void;
 }
 
-type TabValue = 'items' | 'experiments';
+export type TabValue = 'items' | 'experiments' | 'review';
 
 export function DatasetPageContent({
   datasetId,
@@ -47,9 +53,15 @@ export function DatasetPageContent({
   onNavigateToDataset,
   activeDatasetVersion: controlledVersion,
   onVersionSelect: onVersionSelectProp,
+  initialTab,
+  onTabChange,
 }: DatasetPageContentProps) {
   const { navigate } = useLinkComponent();
-  const [activeTab, setActiveTab] = useState<TabValue>('items');
+  const [activeTab, setActiveTab] = useState<TabValue>(initialTab ?? 'items');
+  const handleTabChange = (tab: TabValue) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -96,6 +108,8 @@ export function DatasetPageContent({
 
   const experiments = experimentsData?.experiments ?? [];
   const allExperiments = allExperimentsData?.experiments ?? [];
+  const { data: reviewItems } = useDatasetReviewItems(datasetId);
+  const reviewCount = reviewItems?.length ?? 0;
 
   // Item selection handlers
   const handleItemSelect = (itemId: string) => {
@@ -141,12 +155,12 @@ export function DatasetPageContent({
 
   // Handler for Compare Items action from selection
   const handleCompareItemsClick = (itemIds: string[]) => {
-    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
+    navigate(`/evaluation/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
   // Handler for Compare Versions action from versions panel
   const handleCompareVersionsClick = (versionNumbers: string[]) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
+    navigate(`/evaluation/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
   };
 
   // Handler for bulk delete action from selection
@@ -206,7 +220,7 @@ export function DatasetPageContent({
               <Tabs
                 defaultTab="items"
                 value={activeTab}
-                onValueChange={setActiveTab}
+                onValueChange={handleTabChange}
                 className="grid grid-rows-[auto_1fr] h-full"
               >
                 <TabList>
@@ -216,6 +230,10 @@ export function DatasetPageContent({
                   <Tab value="experiments">
                     Experiments
                     <Chip color="gray">{experiments.length}</Chip>
+                  </Tab>
+                  <Tab value="review">
+                    Review
+                    {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
                   </Tab>
                 </TabList>
 
@@ -257,6 +275,10 @@ export function DatasetPageContent({
                     filters={experimentsFilters}
                     onFiltersChange={setExperimentsFilters}
                   />
+                </TabContent>
+
+                <TabContent value="review" className="overflow-auto mt-0">
+                  <DatasetReview datasetId={datasetId} />
                 </TabContent>
               </Tabs>
             </div>

@@ -1,19 +1,18 @@
-import { Thread } from '@/lib/ai-ui/thread';
-
-import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
-import { ChatProps } from '@/types';
-import { useAgentSettings } from '../context/agent-context';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
-import { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo, useState } from 'react';
 import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { MastraUIMessage } from '@mastra/react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAgentSettings } from '../context/agent-context';
+import { useAgent } from '../hooks/use-agent';
+import { defaultSettings as fallbackAgentSettings } from '../hooks/use-agent-settings-state';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
+import { Thread } from '@/lib/ai-ui/thread';
+import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
+import type { ChatProps } from '@/types';
 import { IconButton } from '@/ds/components/IconButton';
 import { SlidersHorizontal } from 'lucide-react';
 import { AgentChatSettingsDialog } from './agent-chat-settings-dialog';
-import { useAgent } from '../hooks/use-agent';
-import { defaultSettings as fallbackAgentSettings } from '../hooks/use-agent-settings-state';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { cn } from '@/lib/utils';
 
 export const AgentChat = ({
@@ -23,6 +22,7 @@ export const AgentChat = ({
   memory,
   refreshThreadList,
   modelVersion,
+  agentVersionId,
   modelList,
   messageId,
   isNewThread,
@@ -97,6 +97,7 @@ export const AgentChat = ({
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
+      agentVersionId={agentVersionId}
       threadId={threadId}
       initialMessages={v5Messages}
       initialLegacyMessages={v4Messages}

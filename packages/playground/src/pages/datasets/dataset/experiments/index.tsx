@@ -37,7 +37,7 @@ function CompareDatasetExperimentsPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
+            <Crumb as={Link} to="/evaluation?tab=datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -68,13 +68,13 @@ function CompareDatasetExperimentsPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name ?? datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -100,7 +100,7 @@ function CompareDatasetExperimentsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
+              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

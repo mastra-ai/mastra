@@ -1,12 +1,12 @@
-import { cn } from '@/lib/utils';
+import type { SemanticRecall } from '@mastra/core/memory';
+import { ChevronRight, ChevronDown, InfoIcon } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useMemoryConfig } from '@/domains/memory/hooks';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
-import { ChevronRight, ChevronDown, InfoIcon } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useMemoryConfig } from '@/domains/memory/hooks';
-import { SemanticRecall } from '@mastra/core/memory';
+import { cn } from '@/lib/utils';
 
 interface MemoryConfigItem {
   label: string;
@@ -136,8 +136,8 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
             'text-xs font-medium px-2 py-0.5 rounded',
             value
               ? badge === 'info'
-                ? 'bg-blue-500/20 text-blue-400'
-                : 'bg-green-500/20 text-green-400'
+                ? 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600'
+                : 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600'
               : 'text-neutral3',
           )}
         >
@@ -148,9 +148,9 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
     if (badge) {
       const badgeColors = {
-        success: 'bg-green-500/20 text-green-400',
-        info: 'bg-blue-500/20 text-blue-400',
-        warning: 'bg-yellow-500/20 text-yellow-400',
+        success: 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600',
+        info: 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600',
+        warning: 'dark:bg-yellow-500/20 dark:text-yellow-400 bg-yellow-500/10 text-yellow-600',
       };
       return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
     }

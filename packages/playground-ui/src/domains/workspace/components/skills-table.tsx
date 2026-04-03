@@ -1,11 +1,11 @@
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { EntryList } from '@/ds/components/EntryList';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { useLinkComponent } from '@/lib/framework';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
+import { Button } from '@/ds/components/Button';
+import { EntryList } from '@/ds/components/EntryList';
+import { Icon } from '@/ds/icons/Icon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];
@@ -123,7 +123,7 @@ export function SkillsTable({
             <EntryList.Entries>
               {skills.map(skill => {
                 const entry = {
-                  id: skill.name,
+                  id: skill.path,
                   name: skill.name,
                   description: skill.description || '—',
                 };
@@ -131,11 +131,11 @@ export function SkillsTable({
 
                 return (
                   <EntryList.Entry
-                    key={skill.name}
+                    key={skill.path}
                     entry={entry}
                     columns={effectiveColumns}
                     onClick={() => {
-                      const url = `${basePath}/${encodeURIComponent(skill.name)}`;
+                      const url = `${basePath}/${encodeURIComponent(skill.name)}?path=${encodeURIComponent(skill.path)}`;
                       navigate(url);
                     }}
                   >

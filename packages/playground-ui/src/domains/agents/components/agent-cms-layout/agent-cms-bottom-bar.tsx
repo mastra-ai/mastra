@@ -1,10 +1,9 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
-import { useLinkComponent } from '@/lib/framework';
-import { Button } from '@/ds/components/Button';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useAgentCmsNavigation } from '../agent-cms-sidebar/use-agent-cms-navigation';
+import { Button } from '@/ds/components/Button';
+import { useLinkComponent } from '@/lib/framework';
 
 interface AgentCmsBottomBarProps {
   basePath: string;

@@ -6,6 +6,10 @@
 export interface ParsedError {
   /** User-friendly error message */
   message: string;
+  /** Extra diagnostic detail to surface to the user */
+  detail?: string;
+  /** Request URL involved in the failure, when available */
+  requestUrl?: string;
   /** Error type for categorization */
   type: ErrorType;
   /** Whether this error is retryable */
@@ -31,10 +35,68 @@ export type ErrorType =
 /**
  * Parse an error and return a user-friendly representation.
  */
+function summarizeErrorDetail(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    if (error.cause instanceof Error && error.cause.message) {
+      return error.cause.message;
+    }
+
+    if (typeof error.cause === 'string' && error.cause.trim().length > 0) {
+      return error.cause;
+    }
+
+    if (error.message.trim().length > 0) {
+      return error.message;
+    }
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const errorObj = error as Record<string, unknown>;
+    const candidates = [errorObj['message'], errorObj['cause'], errorObj['code'], errorObj['statusText']];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractRequestUrl(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const candidates: unknown[] = [];
+  const errorObj = error as Record<string, unknown>;
+  candidates.push(errorObj['requestUrl'], errorObj['url']);
+
+  if (errorObj['cause'] && typeof errorObj['cause'] === 'object') {
+    const causeObj = errorObj['cause'] as Record<string, unknown>;
+    candidates.push(causeObj['requestUrl'], causeObj['url']);
+  }
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 export function parseError(error: unknown): ParsedError {
   const err = error instanceof Error ? error : new Error(String(error));
   const message = err.message.toLowerCase();
   const errorObj = error as Record<string, unknown>;
+  const detail = summarizeErrorDetail(error);
+  const requestUrl = extractRequestUrl(error);
 
   // Check for rate limiting
   if (
@@ -66,6 +128,8 @@ export function parseError(error: unknown): ParsedError {
   ) {
     return {
       message: 'Authentication failed. Please check your API key or login with /login.',
+      detail,
+      requestUrl,
       type: 'auth',
       retryable: false,
       originalError: err,
@@ -76,6 +140,8 @@ export function parseError(error: unknown): ParsedError {
   if (errorObj.statusCode === 403 || errorObj.status === 403) {
     return {
       message: 'Access denied. You may not have permission to use this model.',
+      detail,
+      requestUrl,
       type: 'auth',
       retryable: false,
       originalError: err,
@@ -91,7 +157,9 @@ export function parseError(error: unknown): ParsedError {
     message.includes('connection')
   ) {
     return {
-      message: 'Network error. Please check your internet connection.',
+      message: 'Network error while contacting the provider or gateway.',
+      detail,
+      requestUrl,
       type: 'network',
       retryable: true,
       retryDelay: 2000,

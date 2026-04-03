@@ -1,5 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -11,6 +11,8 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Individual moderation category score
@@ -33,7 +35,7 @@ export interface ModerationResult {
 /**
  * Configuration options for ModerationInputProcessor
  */
-export interface ModerationOptions {
+export interface ModerationOptions extends LastMessageOnlyOption {
   /**
    * Model configuration for the moderation agent
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
@@ -120,6 +122,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
 
@@ -144,6 +147,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -172,9 +176,15 @@ export class ModerationProcessor implements Processor<'moderation'> {
 
       const results: ModerationResult[] = [];
       const passedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          passedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to moderate

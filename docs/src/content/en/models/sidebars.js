@@ -298,6 +298,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
         },
@@ -480,6 +485,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/the-grid-ai',
+          label: 'The Grid AI',
         },
         {
           type: 'doc',

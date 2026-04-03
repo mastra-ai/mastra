@@ -1,4 +1,4 @@
-import { FieldConfig } from '@autoform/core';
+import type { FieldConfig } from '@autoform/core';
 import { getDef, getStringChecks, hasDateTimeCheck, getUnionOptions, getShape, getLiteralValue } from './compat';
 
 export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
