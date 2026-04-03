@@ -6,10 +6,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const mockGetToken = vi.fn().mockResolvedValue('test-token');
 const mockGetCurrentOrgId = vi.fn().mockResolvedValue('org-1');
+const mockValidateOrgAccess = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../auth/credentials.js', () => ({
   getToken: mockGetToken,
   getCurrentOrgId: mockGetCurrentOrgId,
+  validateOrgAccess: mockValidateOrgAccess,
 }));
 
 const mockFetchProjects = vi.fn();
