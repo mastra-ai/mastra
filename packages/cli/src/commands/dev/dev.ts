@@ -296,21 +296,27 @@ async function checkAndRestart(
 /**
  * Wait for a child process to exit, with a hard SIGKILL timeout as a fallback.
  * Returns a promise that resolves once the process has fully exited.
+ *
+ * Note: `child.killed` only means a signal was *sent*, not that the process has
+ * exited. We rely solely on `exitCode !== null` (already exited) or the `'exit'
+ * event to guarantee the process is done holding the port.
  */
-function waitForProcessExit(child: ChildProcess, timeoutMs = 5000): Promise<void> {
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
   return new Promise<void>(resolve => {
-    if (child.exitCode !== null || child.killed) {
+    // exitCode is set synchronously when the process exits
+    if (child.exitCode !== null) {
       resolve();
       return;
     }
     const timer = setTimeout(() => {
-      // Force-kill if still alive after timeout
+      // Force-kill if still alive after timeout — but still wait for the
+      // 'exit' event so we know the OS has released the port before resolving.
       try {
         child.kill('SIGKILL');
       } catch {
-        // already dead
+        // already dead, resolve immediately
+        resolve();
       }
-      resolve();
     }, timeoutMs);
     child.once('exit', () => {
       clearTimeout(timer);
@@ -521,16 +527,23 @@ export async function dev({
   });
 
   const handleShutdown = async () => {
-    const analytics = getAnalytics();
-    if (analytics && serverStartTime) {
-      const durationMs = Date.now() - serverStartTime;
-      analytics.trackEvent('cli_dev_session_end', {
-        durationMs,
-        durationMinutes: Math.round(durationMs / 60000),
-      });
-    }
-    if (analytics) {
-      await analytics.shutdown();
+    // Wrap analytics in try/catch so a failure here never prevents child cleanup.
+    // If analytics throws and we skip the kill/wait, the child stays alive holding
+    // the port — exactly the bug we are fixing.
+    try {
+      const analytics = getAnalytics();
+      if (analytics && serverStartTime) {
+        const durationMs = Date.now() - serverStartTime;
+        analytics.trackEvent('cli_dev_session_end', {
+          durationMs,
+          durationMinutes: Math.round(durationMs / 60000),
+        });
+      }
+      if (analytics) {
+        await analytics.shutdown();
+      }
+    } catch {
+      // analytics errors must not prevent server teardown
     }
 
     devLogger.shutdown();
