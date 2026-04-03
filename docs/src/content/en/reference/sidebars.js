@@ -86,8 +86,8 @@ const sidebars = {
       collapsed: true,
       customProps: { tags: ['new'] },
       items: [
-        { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
+        { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
     },
