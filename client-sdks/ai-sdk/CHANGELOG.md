@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed nested-agent streaming payload growth that could exhaust memory and crash Node in multi-step runs. Resolves #14932. ([#14986](https://github.com/mastra-ai/mastra/pull/14986))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+
 ## 1.3.0
 
 ### Minor Changes

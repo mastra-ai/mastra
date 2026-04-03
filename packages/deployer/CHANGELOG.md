@@ -1,5 +1,25 @@
 # @mastra/deployer
 
+## 1.22.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d87e6e6`](https://github.com/mastra-ai/mastra/commit/d87e6e61c42475a7b57768e71dfa12964326a632)]:
+  - @mastra/server@1.22.0-alpha.3
+  - @mastra/core@1.22.0-alpha.3
+
+## 1.22.0-alpha.2
+
+### Patch Changes
+
+- Wire up browser streaming WebSocket support in deployed servers ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+
+  Browser streaming is now automatically available when an agent has a browser configured.
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`f03f37a`](https://github.com/mastra-ai/mastra/commit/f03f37a5e5880f2bb2700514405e311f840c53d2), [`eecd0eb`](https://github.com/mastra-ai/mastra/commit/eecd0ebde7b54bbfe32e7ebbf5fe2c59b29dd685), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+  - @mastra/server@1.22.0-alpha.2
+
 ## 1.22.0-alpha.1
 
 ### Patch Changes
