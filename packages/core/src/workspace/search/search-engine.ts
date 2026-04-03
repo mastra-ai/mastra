@@ -143,8 +143,8 @@ export interface TextChunk {
  * Returns the original text as a single chunk when it already fits.
  */
 export function splitIntoChunks(text: string, options: ChunkOptions = {}): TextChunk[] {
-  const maxChars = options.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS;
-  const overlapLines = options.overlapLines ?? DEFAULT_OVERLAP_LINES;
+  const maxChars = Math.max(1, Math.floor(options.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS));
+  const overlapLines = Math.max(0, Math.floor(options.overlapLines ?? DEFAULT_OVERLAP_LINES));
 
   if (text.length <= maxChars) {
     return [{ content: text, startLine: 1 }];

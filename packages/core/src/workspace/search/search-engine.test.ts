@@ -572,6 +572,31 @@ Third line has learning too`;
       const remaining = await engine.search('beta');
       expect(remaining).toHaveLength(1);
     });
+
+    it('should delete matching vectors from the vector store', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one' });
+      await engine.index({ id: 'other.txt', content: 'other' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      expect(mockDeleteVector).toHaveBeenCalledTimes(2);
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+    });
   });
 });
 
