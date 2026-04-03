@@ -539,7 +539,7 @@ describe('MastraAuthStudio', () => {
         1,
         `${SHARED_API}/auth/refresh`,
         expect.objectContaining({
-          method: 'POST',
+          method: 'GET',
           headers: expect.objectContaining({
             Cookie: 'wos-session=old-sealed-token',
           }),
