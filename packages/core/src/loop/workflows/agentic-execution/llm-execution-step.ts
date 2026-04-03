@@ -12,7 +12,8 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, SpanType } from '../../../observability';
+import { executeWithContextSync } from '../../../observability/context-storage';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -118,6 +119,10 @@ async function processOutputStream<OUTPUT = undefined>({
       // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
       // simple solution for now is to not flush text deltas on response-metadata
       chunk.type !== 'response-metadata' &&
+      // Don't flush on source chunks - OpenAI web search interleaves source citations
+      // with text-deltas, all sharing the same itemId. Flushing creates multiple parts
+      // with duplicate itemIds, causing "Duplicate item found" errors on the next request.
+      chunk.type !== 'source' &&
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
@@ -393,6 +398,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
+                  ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
                 },
               ],
               ...buildResponseModelMetadata(runState),
@@ -434,7 +440,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
       case 'finish':
         runState.setState({
-          providerOptions: chunk.payload.metadata.providerMetadata,
+          providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
             logprobs: chunk.payload.logprobs,
@@ -642,6 +648,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
 
+      // Insert a step-start boundary between loop iterations so that
+      // consecutive tool-only turns are not collapsed into a single block
+      // by convertToModelMessages. This ensures the LLM sees them as
+      // sequential steps rather than parallel tool calls.
+      if (currentIteration > 1) {
+        messageList.stepStart();
+      }
+
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
         : inputData.messageId || messageIdPassed;
@@ -746,6 +760,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             Object.assign(currentStep, processInputStepResult);
 
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
+              modelSpanTracker.updateGeneration({
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                attributes: {
+                  ...(modelChanged
+                    ? {
+                        model: currentStep.model.modelId,
+                        provider: currentStep.model.provider,
+                      }
+                    : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
+                },
+              });
+            }
+
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
+              const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
+              if (agentSpan) {
+                const toolNames = activeToolsChanged
+                  ? (processInputStepResult.activeTools as string[])
+                  : currentStep.tools
+                    ? Object.keys(currentStep.tools)
+                    : undefined;
+                if (toolNames !== undefined) {
+                  agentSpan.update({
+                    attributes: {
+                      availableTools: toolNames,
+                    },
+                  });
+                }
+              }
+            }
+
             // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
             // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
             if (processInputStepResult.tools && currentStep.tools) {
@@ -764,6 +819,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       requestContext: requestContext || new RequestContext(),
                       outputWriter,
                       workspace: currentStep.workspace,
+                      requireApproval: (tool as any).requireApproval,
                     },
                     undefined,
                     autoResumeSuspendedTools,
@@ -777,6 +833,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
+              logger?.warn('Streaming input processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
               // Emit tripwire chunk to the stream
               safeEnqueue(controller, {
                 type: 'tripwire',
@@ -932,12 +993,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                // Merge headers: modelConfig headers first, then modelSettings overrides them
-                // Only create object if there are actual headers to avoid passing empty {}
-                headers:
-                  modelHeaders || currentStep.modelSettings?.headers
-                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
-                    : undefined,
+                // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
+                // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                headers: (() => {
+                  const memoryHeaders: Record<string, string> = {};
+                  if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
+                  if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                  const merged = {
+                    ...memoryHeaders,
+                    ...modelHeaders,
+                    ...currentStep.modelSettings?.headers,
+                  };
+                  return Object.keys(merged).length > 0 ? merged : undefined;
+                })(),
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({
@@ -1202,6 +1270,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         } catch (error) {
           if (error instanceof TripWire) {
             processOutputStepTripwire = error;
+            logger?.warn('Output step processor tripwire triggered', {
+              reason: error.message,
+              processorId: error.processorId,
+              retry: error.options?.retry,
+            });
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {
