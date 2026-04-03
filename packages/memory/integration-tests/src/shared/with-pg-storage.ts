@@ -1066,7 +1066,7 @@ CRITICAL RULES:
 
         await storage.init();
 
-        const threadId = `repro-${Date.now()}`;
+        const threadId = 'repro-buffered-output-split';
         const testResourceId = 'test-org_test-engagement_deep';
         const requestContext = new RequestContext();
         const abortController = new AbortController();
@@ -1111,7 +1111,7 @@ CRITICAL RULES:
               toolCallConcurrency: 1,
               requestContext,
               abortSignal: abortController.signal,
-              runId: `run_${threadId}_${Date.now()}`,
+              runId: `run_${threadId}`,
               modelSettings: {
                 maxOutputTokens: 100_000,
                 temperature: 0.2,
