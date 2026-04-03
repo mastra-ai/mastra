@@ -1,5 +1,28 @@
 # @mastra/server
 
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Add browser streaming endpoints and WebSocket handlers ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `/api/agents/:agentId/browser/stream` WebSocket endpoint for screencast streaming
+  - New `/api/agents/:agentId/browser/close` endpoint for closing browser sessions
+  - Input handler for mouse and keyboard event injection
+  - Viewer registry for managing screencast connections per agent/thread
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Fixed Responses and Conversations to resolve stored data through the selected agent's memory store instead of assuming Mastra root memory storage. ([#14977](https://github.com/mastra-ai/mastra/pull/14977))
+
+  Responses and conversation retrieval, deletion, and continuation now follow the agent's configured memory storage, while still using Mastra root storage when that agent memory inherits it.
+
+- Fixed memory endpoints (list threads, get thread, list messages, delete messages, memory status) returning 404 when agentId refers to a stored agent not resolvable via getAgentById(). Endpoints now fall back to storage-based access, matching the behavior when agentId is omitted. Fixes #14765. ([#14784](https://github.com/mastra-ai/mastra/pull/14784))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+
 ## 1.22.0-alpha.1
 
 ### Patch Changes
