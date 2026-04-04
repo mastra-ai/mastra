@@ -1,5 +1,21 @@
 # @mastra/hono
 
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7)]:
+  - @mastra/core@1.23.0-alpha.1
+  - @mastra/server@1.23.0-alpha.1
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`4ed04d1`](https://github.com/mastra-ai/mastra/commit/4ed04d19cf3e98f4e93ded5d2732f759535854f3)]:
+  - @mastra/core@1.23.0-alpha.0
+  - @mastra/server@1.23.0-alpha.0
+
 ## 1.4.0
 
 ### Minor Changes
