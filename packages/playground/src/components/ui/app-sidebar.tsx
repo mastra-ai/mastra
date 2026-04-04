@@ -339,6 +339,10 @@ export function AppSidebar() {
             <MastraVersionFooter collapsed={false} />
           </>
         )}
+        <MainSidebar.NavSeparator />
+        <div className="flex justify-end pb-3">
+          <MainSidebar.Trigger />
+        </div>
       </MainSidebar.Bottom>
     </MainSidebar>
   );

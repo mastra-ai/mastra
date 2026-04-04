@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.22.0-alpha.1",
+  "version": "1.23.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -79,6 +79,16 @@
       "require": {
         "types": "./dist/server/schemas/index.d.ts",
         "default": "./dist/server/schemas/index.cjs"
+      }
+    },
+    "./browser-stream": {
+      "import": {
+        "types": "./dist/server/browser-stream/index.d.ts",
+        "default": "./dist/server/browser-stream/index.js"
+      },
+      "require": {
+        "types": "./dist/server/browser-stream/index.d.ts",
+        "default": "./dist/server/browser-stream/index.cjs"
       }
     },
     "./package.json": "./package.json"

@@ -18,6 +18,8 @@ import {
   messageHasToolInvocation,
   OM_14745_POST_SEAL_ASSISTANT_ID,
   OM_14745_POST_SEAL_TEXT,
+  OM_14745_PRE_SEAL_ASSISTANT_ID,
+  OM_14745_TOOL_CALL_ID,
   omOrderingTestTool,
   runOm14745RotationScenario,
 } from './shared/om-libsql-ordering';
@@ -300,6 +302,19 @@ describe('Memory with LibSQL Integration', () => {
         m => m.id === OM_14745_POST_SEAL_ASSISTANT_ID && getMessageText(m).includes(OM_14745_POST_SEAL_TEXT),
       );
       expect(postSealRow, 'post-seal continuation must be stored under the rotated assistant id').toBeDefined();
+
+      const preSealRow = messages.find(m => m.id === OM_14745_PRE_SEAL_ASSISTANT_ID);
+      expect(preSealRow, 'pre-seal assistant row must still exist').toBeDefined();
+
+      const preSealToolPart = preSealRow?.content.parts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === OM_14745_TOOL_CALL_ID,
+      );
+
+      expect(
+        preSealToolPart?.toolInvocation?.state,
+        'sealed pre-seal tool call must not be mutated after rotation',
+      ).toBe('call');
+      expect(getMessageText(preSealRow!)).not.toContain(OM_14745_POST_SEAL_TEXT);
     });
   });
 });
