@@ -1293,8 +1293,19 @@ export class ProcessorRunner {
       messageList.removeByIds(deletedIds);
     }
 
-    // Re-add messages with correct sources
+    // Build a lookup of messages currently in the list by ID.
+    // Skip the remove/re-add for messages that are already present
+    // with the same object reference — the processor either returned
+    // them unchanged or mutated them in-place (both are already
+    // reflected in the MessageList). This avoids corrupting the
+    // MessageStateManager's source Set tracking during the
+    // removeByIds → add round-trip.
+    const currentMessages = messageList.get.all.db();
+    const currentById = new Map(currentMessages.map(m => [m.id, m]));
     for (const message of messages) {
+      if (currentById.get(message.id) === message) {
+        continue;
+      }
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
         const systemText =
