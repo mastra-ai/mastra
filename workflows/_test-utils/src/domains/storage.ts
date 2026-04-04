@@ -415,9 +415,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
 
         const storage = ctx.getStorage?.();
         const workflowsStore = storage ? await (storage as any).getStore('workflows') : undefined;
-        const persistSpy = workflowsStore
-          ? vi.spyOn(workflowsStore, 'persistWorkflowSnapshot')
-          : undefined;
+        const persistSpy = workflowsStore ? vi.spyOn(workflowsStore, 'persistWorkflowSnapshot') : undefined;
 
         await execute(workflow, { value: 0 }, { runId, resourceId });
 
