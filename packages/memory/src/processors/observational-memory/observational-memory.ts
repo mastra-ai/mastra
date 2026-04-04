@@ -3081,6 +3081,7 @@ ${formattedMessages}
       : undefined;
 
     let observed = false;
+    let observationUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3106,7 +3107,7 @@ ${formattedMessages}
 
       hooks?.onObservationStart?.();
       try {
-        observed = await ObservationStrategy.create(this, {
+        const result = await ObservationStrategy.create(this, {
           record: freshRecord,
           threadId,
           resourceId,
@@ -3116,8 +3117,10 @@ ${formattedMessages}
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();
+        observed = result.observed;
+        observationUsage = result.usage;
       } finally {
-        hooks?.onObservationEnd?.();
+        hooks?.onObservationEnd?.({ usage: observationUsage });
       }
     });
 

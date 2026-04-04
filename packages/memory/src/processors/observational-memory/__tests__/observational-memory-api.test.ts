@@ -367,6 +367,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
 
     it('should not call hooks when below threshold', async () => {
@@ -408,6 +411,8 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      // Observer failed before producing usage, so usage should be undefined
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined });
     });
 
     it('should call reflection hooks when reflection triggers', async () => {
@@ -429,6 +434,9 @@ describe('observe()', () => {
       if (result.reflected) {
         expect(hooks.onReflectionStart).toHaveBeenCalled();
         expect(hooks.onReflectionEnd).toHaveBeenCalled();
+        expect(hooks.onReflectionEnd).toHaveBeenCalledWith({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+        });
       }
     });
   });
