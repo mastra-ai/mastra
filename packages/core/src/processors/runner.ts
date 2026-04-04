@@ -352,17 +352,14 @@ export class ProcessorRunner {
           }
         } else {
           if (processResult) {
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
+            ProcessorRunner.applyMessagesToMessageList(
+              processResult,
+              messageList,
+              idsBeforeProcessing,
+              check,
+              'response',
             );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            processableMessages = processResult || [];
-            for (const message of processResult) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response');
-            }
+            processableMessages = processResult;
           }
         }
 
@@ -1228,27 +1225,7 @@ export class ProcessorRunner {
           }
           // Processor returned the same messageList - mutations have been applied
         } else if (result) {
-          // Processor returned an array - apply changes to messageList
-          const deletedIds = idsBeforeProcessing.filter(
-            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
-          );
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-
-          // Re-add messages with correct sources
-          for (const message of result) {
-            messageList.removeByIds([message.id]);
-            if (message.role === 'system') {
-              const systemText =
-                (message.content.content as string | undefined) ??
-                message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
-              messageList.addSystem(systemText);
-            } else {
-              messageList.add(message, check.getSource(message) || 'response');
-            }
-          }
+          ProcessorRunner.applyMessagesToMessageList(result, messageList, idsBeforeProcessing, check, 'response');
         }
 
         processorSpan?.end({

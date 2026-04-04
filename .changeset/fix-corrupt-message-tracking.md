@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-fix(processors): prevent applyMessagesToMessageList from corrupting response message tracking when processor returns unchanged messages
+Fixed an issue where multi-step assistant responses could disappear after refresh when an output processor returned messages unchanged.
