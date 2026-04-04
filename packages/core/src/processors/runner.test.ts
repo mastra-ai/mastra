@@ -2045,4 +2045,161 @@ describe('ProcessorRunner', () => {
       expect(stateInOutputResult.errorInfo).toEqual({ toolName: 'myTool', error: 'something broke' });
     });
   });
+
+  describe('applyMessagesToMessageList', () => {
+    it('should preserve response message tracking when processor returns unchanged messages', () => {
+      // Simulate: add a response message, then call applyMessagesToMessageList
+      // with the same objects (no-op processor). The response tracking must survive.
+      const msg = createMessage('assistant reply', 'assistant');
+      messageList.add(msg, 'response');
+
+      const allBefore = messageList.get.all.db();
+      expect(allBefore).toHaveLength(1);
+      expect(messageList.get.response.db()).toHaveLength(1);
+
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // Processor returns the exact same array/objects — common no-op case
+      ProcessorRunner.applyMessagesToMessageList(allBefore, messageList, idsBeforeProcessing, check, 'response');
+
+      // Response tracking must still work
+      expect(messageList.get.response.db()).toHaveLength(1);
+      expect(messageList.get.response.db()[0].id).toBe(msg.id);
+    });
+
+    it('should preserve response tracking for merged multi-step messages with same ID', () => {
+      // Simulate the specific bug scenario: step 1 and step 2 content merged into
+      // a single assistant message (same ID), then a processOutputStep processor
+      // returns messages unchanged.
+      const mergedMsg = createMessage('step1 + step2 content', 'assistant');
+      messageList.add(mergedMsg, 'response');
+
+      const allBefore = messageList.get.all.db();
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // No-op processor: returns exact same objects
+      ProcessorRunner.applyMessagesToMessageList(allBefore, messageList, idsBeforeProcessing, check, 'response');
+
+      const responseAfter = messageList.get.response.db();
+      expect(responseAfter).toHaveLength(1);
+      expect(responseAfter[0].id).toBe(mergedMsg.id);
+    });
+
+    it('should still replace messages when processor returns a different object with the same ID', () => {
+      const original = createMessage('original', 'assistant');
+      messageList.add(original, 'response');
+
+      const allBefore = messageList.get.all.db();
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // Processor returns a new object with the same ID but different content
+      const replaced = {
+        ...original,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'replaced content' }],
+        },
+      };
+
+      ProcessorRunner.applyMessagesToMessageList([replaced], messageList, idsBeforeProcessing, check, 'response');
+
+      const allAfter = messageList.get.all.db();
+      expect(allAfter).toHaveLength(1);
+      // The message should have been replaced
+      const textPart = allAfter[0].content.parts?.[0];
+      expect(textPart?.type).toBe('text');
+      expect((textPart as any).text).toBe('replaced content');
+    });
+
+    it('should handle deleted messages correctly', () => {
+      const msg1 = createMessage('msg1', 'user');
+      const msg2 = createMessage('msg2', 'assistant');
+      messageList.add(msg1, 'input');
+      messageList.add(msg2, 'response');
+
+      const allBefore = messageList.get.all.db();
+      expect(allBefore).toHaveLength(2);
+
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // Processor deletes msg1 by omitting it
+      ProcessorRunner.applyMessagesToMessageList([msg2], messageList, idsBeforeProcessing, check, 'response');
+
+      const allAfter = messageList.get.all.db();
+      expect(allAfter).toHaveLength(1);
+      expect(allAfter[0].id).toBe(msg2.id);
+    });
+
+    it('should handle new messages added by processor', () => {
+      const original = createMessage('original', 'user');
+      messageList.add(original, 'input');
+
+      const allBefore = messageList.get.all.db();
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // New message with a different role to avoid MessageMerger merging them
+      const newMsg = createMessage('new from processor', 'assistant');
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [original, newMsg],
+        messageList,
+        idsBeforeProcessing,
+        check,
+        'response',
+      );
+
+      const allAfter = messageList.get.all.db();
+      expect(allAfter).toHaveLength(2);
+      expect(allAfter.map(m => m.id)).toContain(original.id);
+      expect(allAfter.map(m => m.id)).toContain(newMsg.id);
+    });
+
+    it('should preserve input message tracking for unchanged input messages', () => {
+      const userMsg = createMessage('user question', 'user');
+      messageList.add(userMsg, 'input');
+
+      const allBefore = messageList.get.all.db();
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // No-op: return same objects
+      ProcessorRunner.applyMessagesToMessageList(allBefore, messageList, idsBeforeProcessing, check, 'input');
+
+      expect(messageList.get.all.db()).toHaveLength(1);
+      expect(messageList.get.all.db()[0].id).toBe(userMsg.id);
+    });
+
+    it('should handle mixed unchanged and new messages', () => {
+      const existing = createMessage('existing', 'user');
+      messageList.add(existing, 'input');
+
+      const response = createMessage('response', 'assistant');
+      messageList.add(response, 'response');
+
+      const allBefore = messageList.get.all.db();
+      const check = messageList.makeMessageSourceChecker();
+      const idsBeforeProcessing = allBefore.map(m => m.id);
+
+      // Processor keeps both unchanged and adds a new user message
+      const newMsg = createMessage('added by processor', 'user');
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [existing, response, newMsg],
+        messageList,
+        idsBeforeProcessing,
+        check,
+        'response',
+      );
+
+      const allAfter = messageList.get.all.db();
+      expect(allAfter).toHaveLength(3);
+      // Existing response should still be tracked
+      expect(messageList.get.response.db().map(m => m.id)).toContain(response.id);
+    });
+  });
 });
