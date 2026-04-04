@@ -64,6 +64,38 @@ async function zipOutput(projectDir: string): Promise<string> {
   });
 }
 
+export function parseEnvFile(content: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    let key = trimmed.slice(0, eqIdx).trim();
+    if (key.startsWith('export ')) key = key.slice(7).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (key) vars[key] = value;
+  }
+  return vars;
+}
+
+async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
+  const vars: Record<string, string> = {};
+  for (const envFile of ['.env.production', '.env.local', '.env']) {
+    try {
+      const content = await readFile(join(projectDir, envFile), 'utf-8');
+      Object.assign(vars, parseEnvFile(content));
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+  }
+  return vars;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Resolve org                                                       */
 /* ------------------------------------------------------------------ */
@@ -266,10 +298,20 @@ export async function serverDeployAction(
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive`);
 
+  s.start('Reading environment variables...');
+  const envVars = await readEnvVars(targetDir);
+  const envCount = Object.keys(envVars).length;
+  if (envCount > 0) {
+    s.stop(`Found ${envCount} env var(s)`);
+  } else {
+    s.stop('No .env file found');
+  }
+
   s.start('Uploading...');
   const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadServerDeploy(token, orgId, projectId, zipBuffer, {
     projectName,
+    envVars: envCount > 0 ? envVars : undefined,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 
