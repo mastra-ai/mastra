@@ -62,13 +62,13 @@ export async function uploadServerDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { projectName?: string },
+  meta?: { projectName?: string; envVars?: Record<string, string> },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
   // Step 1: Create the deploy — returns upload URL
   const { data, error, response } = await client.POST('/v1/server/deploys', {
-    body: { projectId, projectName: meta?.projectName },
+    body: { projectId, projectName: meta?.projectName, envVars: meta?.envVars },
   });
 
   if (error) {
