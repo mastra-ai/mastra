@@ -10,6 +10,8 @@ import {
   useDatasetExperimentResults,
   ExperimentPageContent,
   ExperimentPageHeader,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database } from 'lucide-react';
 import { useParams, Link } from 'react-router';
@@ -25,7 +27,13 @@ function DatasetExperimentPage() {
     error: experimentError,
   } = useDatasetExperiment(datasetId!, experimentId!);
 
-  const { data: resultsData, isLoading: resultsLoading } = useDatasetExperimentResults({
+  const {
+    data: results,
+    isLoading: resultsLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetExperimentResults({
     datasetId: datasetId!,
     experimentId: experimentId!,
     experimentStatus: experiment?.status,
@@ -45,6 +53,16 @@ function DatasetExperimentPage() {
     );
   }
 
+  if (experimentError && is403ForbiddenError(experimentError)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (experimentError || !experiment) {
     return (
       <MainContentLayout>
@@ -55,19 +73,17 @@ function DatasetExperimentPage() {
     );
   }
 
-  const results = resultsData?.results ?? [];
-
   return (
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -79,7 +95,15 @@ function DatasetExperimentPage() {
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentPageContent experimentId={experimentId!} results={results} isLoading={resultsLoading} />
+          <ExperimentPageContent
+            experimentId={experimentId!}
+            experimentStatus={experiment?.status}
+            results={results ?? []}
+            isLoading={resultsLoading}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+          />
         </div>
       </div>
     </MainContentLayout>

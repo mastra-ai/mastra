@@ -21,11 +21,17 @@ describe('create mastra', () => {
 
       fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
       projectPath = join(fixturePath, 'project');
-      process.env.npm_config_registry = registry;
-      execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`, {
-        cwd: fixturePath,
-        stdio: ['inherit', 'inherit', 'inherit'],
-      });
+      execSync(
+        `pnpm --config.trust-policy=off --config.block-exotic-subdeps=false dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`,
+        {
+          cwd: fixturePath,
+          stdio: ['inherit', 'inherit', 'inherit'],
+          env: {
+            ...process.env,
+            npm_config_registry: registry,
+          },
+        },
+      );
     },
     10 * 60 * 1000,
   );
@@ -57,17 +63,28 @@ describe('create mastra', () => {
 
         await new Promise<void>((resolve, reject) => {
           console.log('waiting for server to start');
+
+          const timeout = setTimeout(() => {
+            reject(new Error('Dev server did not start in time'));
+          }, 30000); // 30s safety
+
           proc!.stderr?.on('data', data => {
             const output = data?.toString() ?? '';
             console.error(output);
-            const errorPatterns = ['Error', 'ERR', 'failed', 'ENOENT', 'MODULE_NOT_FOUND'];
-            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern.toLowerCase()))) {
-              reject(new Error('failed to start dev: ' + data?.toString()));
+
+            const errorPatterns = ['error', 'err', 'failed', 'enoent', 'module_not_found'];
+            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern))) {
+              clearTimeout(timeout);
+              reject(new Error('failed to start dev: ' + output));
             }
           });
+
           proc!.stdout?.on('data', data => {
-            console.log(data?.toString());
-            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            const output = data?.toString() ?? '';
+            console.log(output);
+
+            if (output.includes(`http://localhost:${port}`)) {
+              clearTimeout(timeout);
               resolve();
             }
           });
@@ -78,7 +95,7 @@ describe('create mastra', () => {
 
     afterAll(async () => {
       if (proc) {
-        proc.kill();
+        proc.kill('SIGTERM');
       }
     });
 
@@ -105,6 +122,7 @@ describe('create mastra', () => {
           {
             "weather-agent": {
               "agents": {},
+              "browserTools": [],
               "defaultGenerateOptionsLegacy": {},
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},
@@ -126,7 +144,7 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o",
+              "modelId": "gpt-5-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
               "outputProcessors": [],

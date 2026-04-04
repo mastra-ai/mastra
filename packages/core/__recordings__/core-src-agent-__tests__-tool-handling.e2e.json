@@ -1,0 +1,1668 @@
+{
+  "meta": {
+    "name": "core-src-agent-__tests__-tool-handling.e2e",
+    "testFile": "packages/core/src/agent/__tests__/tool-handling.e2e.test.ts",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-03-09T19:13:03.662Z",
+    "updatedAt": "2026-03-11T10:14:44.569Z"
+  },
+  "recordings": [
+    {
+      "hash": "47d74a3efc5440f4",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": "Use the research agent to find information about TypeScript"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "agent-researchAgent",
+                "description": "Agent: researchAgent",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "prompt": {
+                      "type": "string",
+                      "description": "The prompt to send to the agent"
+                    },
+                    "threadId": {
+                      "description": "Thread ID for conversation continuity for memory messages",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resourceId": {
+                      "description": "Resource/user identifier for memory messages",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "instructions": {
+                      "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "maxSteps": {
+                      "description": "Maximum number of execution steps for the sub-agent",
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 3
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "suspendedToolRunId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "description": "The runId of the suspended tool"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resumeData": {
+                      "anyOf": [
+                        {
+                          "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "prompt",
+                    "threadId",
+                    "resourceId",
+                    "instructions",
+                    "maxSteps",
+                    "suspendedToolRunId",
+                    "resumeData"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1773224058364
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9ca9d5d3e13d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:20 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "2016",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999967",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_bd9c62cee3df4cc3adb2ab16ab0c0ffb"
+        },
+        "body": {
+          "id": "chatcmpl-DIAryRrENFT6AqfudLreK2zuhLoK1",
+          "object": "chat.completion",
+          "created": 1773224058,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+                    "type": "function",
+                    "function": {
+                      "name": "agent-researchAgent",
+                      "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 208,
+            "completion_tokens": 83,
+            "total_tokens": 291,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_1883e75a49"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "567c41276a4ac809",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": "Use the research agent to find information about TypeScript"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+                  "type": "function",
+                  "function": {
+                    "name": "agent-researchAgent",
+                    "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+              "content": "{\"text\":\"Dummy response\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "agent-researchAgent",
+                "description": "Agent: researchAgent",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "prompt": {
+                      "type": "string",
+                      "description": "The prompt to send to the agent"
+                    },
+                    "threadId": {
+                      "description": "Thread ID for conversation continuity for memory messages",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resourceId": {
+                      "description": "Resource/user identifier for memory messages",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "instructions": {
+                      "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "maxSteps": {
+                      "description": "Maximum number of execution steps for the sub-agent",
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 3
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "suspendedToolRunId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "description": "The runId of the suspended tool"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resumeData": {
+                      "anyOf": [
+                        {
+                          "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "prompt",
+                    "threadId",
+                    "resourceId",
+                    "instructions",
+                    "maxSteps",
+                    "suspendedToolRunId",
+                    "resumeData"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1773224060621
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9caab1ca113d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:23 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "2903",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999960",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_596ed93a2ef840058d88f29e54c827a5"
+        },
+        "body": {
+          "id": "chatcmpl-DIAs0ArkaRWj69rETC5UUv9qtOUKe",
+          "object": "chat.completion",
+          "created": 1773224060,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_JY9mZTo9ClItltIfe6GhB68d",
+                    "type": "function",
+                    "function": {
+                      "name": "agent-researchAgent",
+                      "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 307,
+            "completion_tokens": 83,
+            "total_tokens": 390,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_e609550549"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "440146786e1e3213",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the research agent to find information about TypeScript"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "agent-researchAgent",
+              "description": "Agent: researchAgent",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773224063728
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9cabe89e213d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:26 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "2228",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999577",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_6e3d25bcd5ab43509330cb52247c329f"
+        },
+        "body": {
+          "id": "resp_0adeeb50a1e8447e0069b1407fda948197a866235a8af508f0",
+          "object": "response",
+          "created_at": 1773224063,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773224065,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "fc_0adeeb50a1e8447e0069b140808fd8819783982585747915ea",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include details about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_GVf8TIbN5d5r80sys9FYIwkw",
+              "name": "agent-researchAgent"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Agent: researchAgent",
+              "name": "agent-researchAgent",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 206,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 82,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 288
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "02c26d989e9e575f",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the research agent to find information about TypeScript"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0adeeb50a1e8447e0069b140808fd8819783982585747915ea"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_GVf8TIbN5d5r80sys9FYIwkw",
+              "output": "{\"text\":\"Dummy response\",\"subAgentThreadId\":\"00000000-0000-4000-8000-00000000003b\",\"subAgentResourceId\":\"orchestrator-agent-researchAgent\",\"subAgentToolResults\":[]}"
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "agent-researchAgent",
+              "description": "Agent: researchAgent",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773224066134
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9cacd8dc813d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:34 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "7969",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999435",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c2478ca5a7db46d0ba586b639356c43a"
+        },
+        "body": {
+          "id": "resp_0adeeb50a1e8447e0069b1408242148197ad5cca3fb3b96eab",
+          "object": "response",
+          "created_at": 1773224066,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773224074,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_0adeeb50a1e8447e0069b14082d8008197ae7e695ab6967a19",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "It seems there was an issue retrieving the information about TypeScript. However, I can provide a summary based on what I know:\n\n### TypeScript Overview\n- **What is TypeScript?**\n  TypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps catch errors during development rather than at runtime.\n\n### Key Features\n- **Static Typing:** TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent type-related errors.\n- **Interfaces and Enums:** It supports interfaces and enums, enabling better structure and organization of code.\n- **Type Inference:** TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Compatibility:** TypeScript is fully compatible with JavaScript, meaning any valid JavaScript code is also valid TypeScript code.\n\n### Benefits\n- **Improved Code Quality:** The static type system helps catch errors early in the development process.\n- **Enhanced Tooling:** TypeScript offers better tooling support, including autocompletion, navigation, and refactoring capabilities in IDEs.\n- **Large Ecosystem:** It integrates well with existing JavaScript libraries and frameworks, making it easier to adopt in various projects.\n\n### Use Cases\n- **Large Codebases:** TypeScript is particularly beneficial for large applications where maintaining code quality is crucial.\n- **Team Projects:** It helps teams collaborate more effectively by providing clear contracts through types.\n\n### Popularity and Community Support\n- TypeScript has gained significant popularity in recent years, especially among developers using frameworks like Angular, React, and Vue.js.\n- The community is active, with numerous resources, libraries, and tools available to support TypeScript development.\n\nIf you need more specific information or have particular aspects you'd like to explore, let me know!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Agent: researchAgent",
+              "name": "agent-researchAgent",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 347,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 373,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 720
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "02963b1bee89eb73",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the research agent to find information about TypeScript"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "agent-researchAgent",
+              "description": "Agent: researchAgent",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773224074274
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9cb007a5f13d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:36 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "2049",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999577",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f23ff9e63e6943199e1f0fcf0b754a56"
+        },
+        "body": {
+          "id": "resp_08ec8436db1687f40069b1408a66e881909ff908665bca3422",
+          "object": "response",
+          "created_at": 1773224074,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773224076,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "fc_08ec8436db1687f40069b1408b29048190b351679799aaa45e",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include details about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_mDIsU9IrIoV4eIRx3ejSxF0s",
+              "name": "agent-researchAgent"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Agent: researchAgent",
+              "name": "agent-researchAgent",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 206,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 82,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 288
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8854aa45264ea381",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You can delegate research tasks to specialized agents."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the research agent to find information about TypeScript"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_08ec8436db1687f40069b1408b29048190b351679799aaa45e"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_mDIsU9IrIoV4eIRx3ejSxF0s",
+              "output": "{\"text\":\"Dummy response\",\"subAgentThreadId\":\"00000000-0000-4000-8000-00000000003b\",\"subAgentResourceId\":\"orchestrator-agent-researchAgent\",\"subAgentToolResults\":[]}"
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "agent-researchAgent",
+              "description": "Agent: researchAgent",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773224076487
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9da9cb0e4a9813d7-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 11 Mar 2026 10:14:44 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "7921",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999435",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_0dfce9b1bc72457bb0bb1770435be177"
+        },
+        "body": {
+          "id": "resp_08ec8436db1687f40069b1408c9f30819081d11c3371d16e58",
+          "object": "response",
+          "created_at": 1773224076,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773224084,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_08ec8436db1687f40069b1408d19708190b12500da6d7d851d",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "It seems there was an issue retrieving the information about TypeScript. Let me summarize some key points for you:\n\n### What is TypeScript?\nTypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps developers catch errors early in the development process.\n\n### Key Features\n- **Static Typing**: TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent runtime errors.\n- **Interfaces**: It supports interfaces, enabling better structure and organization of code.\n- **Type Inference**: TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Modern JavaScript Features**: TypeScript supports all modern JavaScript features, including async/await, destructuring, and more.\n\n### Benefits\n- **Improved Code Quality**: Static typing helps catch errors during development rather than at runtime.\n- **Better Tooling**: Enhanced IDE support with features like autocompletion, navigation, and refactoring.\n- **Large Community and Ecosystem**: TypeScript has a growing community and a rich ecosystem of libraries and frameworks.\n\n### Use Cases\n- **Large Codebases**: Ideal for large applications where maintainability and scalability are crucial.\n- **Team Projects**: Helps teams collaborate more effectively by providing clear contracts through types.\n\n### Popularity\nTypeScript has gained significant popularity in recent years, especially among developers working with frameworks like Angular, React, and Vue.js. Its adoption is growing due to its ability to improve developer productivity and code quality.\n\n### Community Support\nTypeScript has a vibrant community, with extensive documentation, tutorials, and resources available online. Many popular libraries and frameworks are now written in TypeScript or provide TypeScript definitions.\n\nIf you need more specific information or have any other questions, feel free to ask!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Agent: researchAgent",
+              "name": "agent-researchAgent",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the agent"
+                  },
+                  "threadId": {
+                    "description": "Thread ID for conversation continuity for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resourceId": {
+                    "description": "Resource/user identifier for memory messages",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "description": "Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxSteps": {
+                    "description": "Maximum number of execution steps for the sub-agent",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suspendedToolRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The runId of the suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 347,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 380,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 727
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

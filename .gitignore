@@ -3,6 +3,7 @@ dist/
 test-outputs/
 .vitest-reports/
 .DS_Store
+.mastra-om-repro/
 
 # IDE
 .vscode/
@@ -18,6 +19,7 @@ test-outputs/
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 
@@ -58,3 +60,5 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+.mastracode/
+/packages/core/__recordings__

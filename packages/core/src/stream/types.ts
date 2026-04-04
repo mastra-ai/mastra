@@ -220,6 +220,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
+  providerMetadata?: ProviderMetadata;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
@@ -607,6 +608,8 @@ export type DataChunkType = {
   type: `data-${string}`;
   data: any;
   id?: string;
+  /** When true, the chunk is streamed to the client but not persisted to storage. */
+  transient?: boolean;
 };
 
 export type NetworkChunkType<OUTPUT = undefined> =

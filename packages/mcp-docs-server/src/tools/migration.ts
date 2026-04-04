@@ -104,7 +104,7 @@ async function discoverMigrations(
       }
     }
   } catch (error) {
-    void logger.error(`Failed to discover migrations in ${fullPath}`, error);
+    void logger.error('Failed to discover migrations', { path: fullPath, error });
   }
 
   return migrations;
@@ -198,7 +198,7 @@ async function readMigrationContent(migrationPath: string): Promise<string | nul
     const content = await fs.readFile(filePath, 'utf-8');
     return content;
   } catch (error) {
-    void logger.error(`Failed to read migration: ${migrationPath}`, error);
+    void logger.error('Failed to read migration', { path: migrationPath, error });
     return null;
   }
 }

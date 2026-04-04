@@ -520,8 +520,50 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('refreshSession', () => {
-    it('should delegate to validateSession', async () => {
-      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+    it('should call shared API refresh endpoint and return new session', async () => {
+      // Mock the refresh endpoint response with Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Set-Cookie': 'wos-session=new-sealed-token; HttpOnly; SameSite=Lax; Path=/' },
+      });
+      // Mock the subsequent validation of the new session
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('old-sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.id).toBe('new-sealed-token');
+      expect(session!.userId).toBe('user-1');
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        `${SHARED_API}/auth/refresh`,
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Cookie: 'wos-session=old-sealed-token',
+          }),
+        }),
+      );
+    });
+
+    it('should fall back to validateSession when refresh fails', async () => {
+      // Mock refresh failure, then validation success
+      const refreshResponse = new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.userId).toBe('user-1');
+    });
+
+    it('should fall back to validateSession when refresh returns no cookie', async () => {
+      // Mock refresh success but no Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), { status: 200 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
 
       const session = await auth.refreshSession('sealed-token');
 
@@ -574,6 +616,76 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
     });
+
+    it('should use custom cookieDomain when provided', () => {
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.example.com',
+      });
+
+      const headers = customAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+      expect(headers['Set-Cookie']).not.toContain('.mastra.ai');
+    });
+
+    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+      const headers = envAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should prefer explicit cookieDomain option over env var', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.explicit.com',
+      });
+
+      const headers = customAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Domain=.explicit.com');
+      expect(headers['Set-Cookie']).not.toContain('.env-domain.io');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should not auto-detect mastra.ai from malicious URLs', () => {
+      // Ensure hostname-based detection prevents false positives
+      const maliciousAuth = new MastraAuthStudio({
+        sharedApiUrl: 'https://api.mastra.ai.evil.com/v1',
+      });
+
+      const headers = maliciousAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).not.toContain('Domain=.mastra.ai');
+      expect(headers['Set-Cookie']).not.toContain('Secure');
+    });
   });
 
   describe('getClearSessionHeaders', () => {
@@ -591,6 +703,46 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
+    });
+
+    it('should use custom cookieDomain when provided', () => {
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.example.com',
+      });
+
+      const headers = customAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+    });
+
+    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+      const headers = envAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should prefer explicit cookieDomain option over env var', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.explicit.com',
+      });
+
+      const headers = customAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Domain=.explicit.com');
+      expect(headers['Set-Cookie']).not.toContain('.env-domain.io');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
     });
   });
 

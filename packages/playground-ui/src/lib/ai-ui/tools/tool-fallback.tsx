@@ -1,16 +1,21 @@
-import { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { useEffect } from 'react';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 
-import { ToolBadge } from './badges/tool-badge';
-import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
-import { FileTreeBadge } from './badges/file-tree-badge';
-import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { WorkflowRunProvider } from '@/domains/workflows';
-import { MastraUIMessage } from '@mastra/react';
+import type { MastraUIMessage } from '@mastra/react';
+import { useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
+import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { ToolBadge } from './badges/tool-badge';
+import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
+import {
+  isBrowserTool,
+  isBrowserToolError,
+  useBrowserToolCallsSafe,
+} from '@/domains/agents/context/browser-tool-calls-context';
+import { WorkflowRunProvider } from '@/domains/workflows';
+import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -25,20 +30,48 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
-  // Hooks must be called unconditionally at the top (React Rules of Hooks, issue #12726)
+  // All hooks must be called unconditionally before any conditional returns
+  const browserCtx = useBrowserToolCallsSafe();
+  const isBrowser = isBrowserTool(toolName);
   const { activateSkill } = useActivatedSkills();
 
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.name) {
-      activateSkill(args.name);
+    if (!isBrowser || !browserCtx) return;
+
+    // Determine status: pending if no result, error if result indicates failure, else complete
+    let status: 'pending' | 'complete' | 'error' = 'pending';
+    if (result !== undefined) {
+      status = isBrowserToolError(result) ? 'error' : 'complete';
     }
-  }, [toolName, result, args, activateSkill]);
+
+    browserCtx.registerToolCall({
+      toolCallId,
+      toolName,
+      args: typeof args === 'object' ? args : {},
+      result,
+      status,
+      timestamp: Date.now(),
+    });
+  }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);
+
+  // Detect skill activation tool calls
+  useEffect(() => {
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
 
   // Handle OM observation markers - render as ObservationMarkerBadge
   if (toolName === 'mastra-memory-om-observation') {
     return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
+
+  // Hide browser tools from chat when context is available
+  if (isBrowser && browserCtx) {
+    return null;
   }
 
   // We need to handle the stream data even if the workflow is not resolved yet

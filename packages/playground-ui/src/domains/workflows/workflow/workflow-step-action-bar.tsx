@@ -1,3 +1,11 @@
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { useContext, useMemo, useState } from 'react';
+import type { TripwireData } from '../context/use-current-run';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { CodeDialogContent } from './workflow-code-dialog-content';
+import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Button } from '@/ds/components/Button';
 import {
   Dialog,
@@ -7,15 +15,7 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { CodeDialogContent } from './workflow-code-dialog-content';
-import { useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
-import { WorkflowRunContext } from '../context/workflow-run-context';
-import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import type { TripwireData } from '../context/use-current-run';
-import { WorkflowRunStatus } from '@mastra/core/workflows';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
@@ -110,7 +110,7 @@ export const WorkflowStepActionBar = ({
     return undefined;
   }, [stepKey, stepsFlow, inDebugMode, result]);
 
-  const showDebugMode = inDebugMode && stepPayload && !result?.steps[stepKey];
+  const showDebugMode = inDebugMode && stepPayload && !result?.steps?.[stepKey];
 
   // Check if this step's detail is currently open
   const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
@@ -161,7 +161,7 @@ export const WorkflowStepActionBar = ({
       setDebugMode(false);
     }
 
-    timeTravelWorkflowStream(payload);
+    void timeTravelWorkflowStream(payload);
   };
 
   return (

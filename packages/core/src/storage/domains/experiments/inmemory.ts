@@ -2,9 +2,11 @@ import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -33,6 +35,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       id: input.id ?? crypto.randomUUID(),
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
+      agentVersion: input.agentVersion ?? null,
       targetType: input.targetType,
       targetId: input.targetId,
       name: input.name,
@@ -60,6 +63,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const updated: Experiment = {
       ...existing,
       status: input.status ?? existing.status,
+      totalItems: input.totalItems ?? existing.totalItems,
       succeededCount: input.succeededCount ?? existing.succeededCount,
       failedCount: input.failedCount ?? existing.failedCount,
       skippedCount: input.skippedCount ?? existing.skippedCount,
@@ -131,10 +135,29 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       traceId: input.traceId ?? null,
+      status: input.status ?? null,
+      tags: input.tags ?? null,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);
     return result;
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    const existing = this.db.experimentResults.get(input.id);
+    if (!existing) {
+      throw new Error(`Experiment result not found: ${input.id}`);
+    }
+    if (input.experimentId && existing.experimentId !== input.experimentId) {
+      throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
+    }
+    const updated: ExperimentResult = {
+      ...existing,
+      status: input.status !== undefined ? input.status : existing.status,
+      tags: input.tags !== undefined ? input.tags : existing.tags,
+    };
+    this.db.experimentResults.set(input.id, updated);
+    return updated;
   }
 
   async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
@@ -169,5 +192,23 @@ export class ExperimentsInMemory extends ExperimentsStorage {
         this.db.experimentResults.delete(resultId);
       }
     }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    const counts = new Map<string, ExperimentReviewCounts>();
+
+    for (const result of this.db.experimentResults.values()) {
+      let entry = counts.get(result.experimentId);
+      if (!entry) {
+        entry = { experimentId: result.experimentId, total: 0, needsReview: 0, reviewed: 0, complete: 0 };
+        counts.set(result.experimentId, entry);
+      }
+      entry.total++;
+      if (result.status === 'needs-review') entry.needsReview++;
+      else if (result.status === 'reviewed') entry.reviewed++;
+      else if (result.status === 'complete') entry.complete++;
+    }
+
+    return Array.from(counts.values());
   }
 }

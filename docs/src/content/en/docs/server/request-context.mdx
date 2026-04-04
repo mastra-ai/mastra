@@ -1,11 +1,11 @@
 ---
-title: "Request Context | Server"
+title: "Request context | Server"
 description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
 packages:
   - "@mastra/core"
 ---
 
-# Request Context
+# Request context
 
 Agents, tools, and workflows can all accept `RequestContext` as a parameter, making request-specific values available to the underlying primitives.
 
@@ -15,9 +15,7 @@ Use `RequestContext` when a primitive's behavior should change based on runtime 
 
 :::note
 
-**Note:** `RequestContext` is primarily used for passing data into specific
-requests. It's distinct from agent memory, which handles conversation
-history and state persistence across multiple calls.
+`RequestContext` is primarily used for passing data into specific requests. It's distinct from agent memory, which handles conversation history and state persistence across multiple calls.
 
 :::
 
@@ -99,6 +97,23 @@ Visit [Middleware](/docs/server/middleware) for how to use server middleware.
 
 :::
 
+## Studio
+
+When developing locally, you can define named presets in a JSON file and load them into [Studio](/docs/studio/overview) with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
+
+```bash
+mastra dev --request-context-presets ./presets.json
+```
+
+```json title="presets.json"
+{
+  "development": { "userId": "dev-user", "env": "development" },
+  "production": { "userId": "prod-user", "env": "production" }
+}
+```
+
+When you select a preset from the dropdown, the JSON editor populates with that preset's values. Editing the JSON manually switches the dropdown back to **"Custom"**.
+
 ## Accessing values with agents
 
 You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
@@ -155,7 +170,7 @@ export const dynamicAgent = new Agent({
 
     return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -182,7 +197,7 @@ export const registryAgent = new Agent({
 
     return prompt.content
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -337,7 +352,7 @@ export const validatedAgent = new Agent({
 
     return `You are helping user ${userId}`
   },
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -475,26 +490,9 @@ requestContextSchema: z.object({
 
 **Handle tool validation errors**: Since tools return error objects instead of throwing, check for errors in your agent or workflow logic when tool execution is critical.
 
-## Testing with Studio presets
-
-When developing locally, you can define named presets in a JSON file and load them into Studio with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
-
-```bash
-mastra dev --request-context-presets ./presets.json
-```
-
-```json title="presets.json"
-{
-  "development": { "userId": "dev-user", "env": "development" },
-  "production": { "userId": "prod-user", "env": "production" }
-}
-```
-
-When you select a preset from the dropdown, the JSON editor populates with that preset's values. Editing the JSON manually switches the dropdown back to "Custom".
-
 ## Related
 
-- [Agent Request Context](/docs/agents/overview#using-requestcontext)
+- [Agent Request Context](/docs/memory/overview#switch-memory-per-request)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Server Middleware](/docs/server/middleware)
 - [Authorization Middleware](/docs/server/middleware#authorization-user-isolation)

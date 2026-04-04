@@ -2,16 +2,21 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { createGatewayMock } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
@@ -250,8 +255,18 @@ async function runSingleToolSchemaTest(
           maxSteps: 1,
         });
 
-    const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
-    const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
+    const toolCall = response.toolCalls.find(tr => {
+      if (tr.payload) {
+        return tr.payload.toolName === toolName;
+      }
+      return tr.toolName === toolName;
+    });
+    const toolResult = response.toolResults.find(tr => {
+      if (tr.payload) {
+        return tr.payload.toolCallId === toolCall?.payload?.toolCallId;
+      }
+      return tr.toolCallId === toolCall?.toolCallId;
+    });
 
     if (toolResult?.payload?.result?.success || toolResult?.result?.success) {
       return {
@@ -410,7 +425,7 @@ const modelsByProviderV2 = modelsToTestV2.reduce(
             const schemaName = testTool.id.replace('testTool_', '');
 
             it.concurrent(
-              `should handle ${schemaName} schema`,
+              `should handle ${schemaName} schema (${model.specificationVersion})`,
               {
                 timeout: TEST_TIMEOUT,
                 // add retries here if we find some models are flaky in the future
@@ -592,7 +607,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'tracing-test-tool',
       entityName: 'tracing-test-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify tracingContext was injected with the tool span
@@ -607,7 +625,7 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
+  it('should not inject tracingContext when agentSpan is not available and no observability configured', async () => {
     let receivedTracingContext: any = undefined;
 
     const testTool = createTool({
@@ -639,7 +657,7 @@ describe('Tool Tracing Context Injection', () => {
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
+    // Verify tracingContext was injected but currentSpan is undefined (no observability configured)
     expect(receivedTracingContext).toEqual({ currentSpan: undefined });
     expect(result).toEqual({ result: 'processed: test' });
   });
@@ -698,7 +716,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'vercel-tool',
       entityName: 'vercel-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -768,6 +789,181 @@ describe('Tool Tracing Context Injection', () => {
     expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
   });
 
+  it('should create and end span with error when input validation fails', async () => {
+    const testTool = createTool({
+      id: 'input-validation-span-tool',
+      description: 'Tool with strict input validation',
+      inputSchema: z.object({
+        name: z.string().min(3, 'Name must be at least 3 characters'),
+        age: z.number().min(0, 'Age must be positive'),
+      }),
+      execute: async inputData => ({ result: `Hello ${inputData.name}` }),
+    });
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'input-validation-span-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool with strict input validation',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    // Execute with invalid input (name too short)
+    const result: any = await builtTool.execute!({ name: 'A', age: 25 }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify the result is a validation error
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool input validation failed');
+
+    // Verify tool span was still created despite validation failure
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'input-validation-span-tool'",
+        input: { name: 'A', age: 25 },
+      }),
+    );
+
+    // Verify span was ended with failure attributes
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+
+    // execute function's error path should NOT have been called
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
+  it('should create and end span with error when input has missing required fields', async () => {
+    const testTool = createTool({
+      id: 'missing-fields-span-tool',
+      description: 'Tool that requires specific fields',
+      inputSchema: z.object({
+        required_field: z.string(),
+      }),
+      execute: async inputData => ({ result: inputData.required_field }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'missing-fields-span-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool that requires specific fields',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    // Execute with empty object (missing required field)
+    const result: any = await builtTool.execute!({}, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toHaveProperty('error', true);
+
+    // Span was created and ended with error
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+  });
+
+  it('should end span with error when Vercel tool output validation fails', async () => {
+    // Mock Vercel tool that returns data not matching its output schema
+    const vercelTool = {
+      description: 'Vercel tool with output schema',
+      parameters: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        count: z.number(),
+        label: z.string(),
+      }),
+      execute: async () => {
+        // Return data that doesn't match the output schema
+        return { count: 'not-a-number', label: 123 };
+      },
+    };
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const mockLogger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'vercel-output-fail-tool',
+        logger: mockLogger as any,
+        description: 'Vercel tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    const result: any = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify result is a validation error
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool output validation failed');
+
+    // Verify span was created
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
+
+    // Verify span was ended with failure (not error, since output validation is a soft failure)
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
   it('should create child span with correct logType attribute', async () => {
     const testTool = createTool({
       id: 'toolset-tool',
@@ -818,7 +1014,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'toolset-tool',
       entityName: 'toolset-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
   });
 });
@@ -924,7 +1123,6 @@ describe('Tool Input Validation', () => {
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
     expect(result.message).toContain('Tool input validation failed');
-    expect(result.message).toContain('Required');
     expect(result.message).toContain('- name:');
   });
 
@@ -1098,6 +1296,133 @@ describe('CoreToolBuilder providerOptions', () => {
   });
 });
 
+describe('CoreToolBuilder inputExamples', () => {
+  it('should pass through inputExamples when building a tool', () => {
+    const toolWithExamples = createTool({
+      id: 'example-tool',
+      description: 'A tool with input examples',
+      inputSchema: z.object({ city: z.string() }),
+      inputExamples: [{ input: { city: 'New York' } }, { input: { city: 'London' } }],
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithExamples,
+      options: {
+        name: 'example-tool',
+        logger: console as any,
+        description: 'A tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.inputExamples).toEqual([{ input: { city: 'New York' } }, { input: { city: 'London' } }]);
+  });
+
+  it('should pass through inputExamples via buildV5()', () => {
+    const toolWithExamples = createTool({
+      id: 'v5-example-tool',
+      description: 'A tool with input examples for V5',
+      inputSchema: z.object({ query: z.string() }),
+      inputExamples: [{ input: { query: 'weather in Tokyo' } }],
+      execute: async ({ query }) => ({ result: query }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithExamples,
+      options: {
+        name: 'v5-example-tool',
+        logger: console as any,
+        description: 'A tool with input examples for V5',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.buildV5();
+
+    expect((builtTool as any).inputExamples).toEqual([{ input: { query: 'weather in Tokyo' } }]);
+  });
+
+  it('should have undefined inputExamples when not provided', () => {
+    const toolWithoutExamples = createTool({
+      id: 'no-examples-tool',
+      description: 'A tool without input examples',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithoutExamples,
+      options: {
+        name: 'no-examples-tool',
+        logger: console as any,
+        description: 'A tool without input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.inputExamples).toBeUndefined();
+  });
+
+  it('should pass through inputExamples for provider-defined tools', () => {
+    const providerTool = {
+      type: 'provider-defined' as const,
+      id: 'provider.example-tool',
+      description: 'A provider-defined tool with input examples',
+      parameters: z.object({ query: z.string() }),
+      inputExamples: [{ input: { query: 'test query' } }],
+      execute: async (args: any) => ({ result: args.query }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: providerTool as any,
+      options: {
+        name: 'provider.example-tool',
+        logger: console as any,
+        description: 'A provider-defined tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.type).toBe('provider-defined');
+    expect(builtTool.inputExamples).toEqual([{ input: { query: 'test query' } }]);
+  });
+
+  it('should handle Vercel tools with inputExamples', () => {
+    const vercelToolWithExamples = {
+      description: 'A Vercel tool with input examples',
+      parameters: z.object({ input: z.string() }),
+      inputExamples: [{ input: { input: 'hello world' } }],
+      execute: async (args: any) => ({ result: args.input }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelToolWithExamples as any,
+      options: {
+        name: 'vercel-example-tool',
+        logger: console as any,
+        description: 'A Vercel tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.inputExamples).toEqual([{ input: { input: 'hello world' } }]);
+  });
+});
+
 describe('CoreToolBuilder Output Schema', () => {
   it('should allow ZodTuple in outputSchema', () => {
     const mockModel = {
@@ -1141,5 +1466,76 @@ describe('CoreToolBuilder Output Schema', () => {
 
     const builtTool = builder.build();
     expect(builtTool.outputSchema).toBeDefined();
+  });
+
+  describe('agent-as-tools schema serialization (#13324)', () => {
+    it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', async () => {
+      // Simulate what CoreToolBuilder does: inject resumeData and suspendedToolRunId
+      // into agent tool schemas. The resumeData field uses z.any() which serializes
+      // to {} (no type key) via Zod v4's toJSONSchema. OpenAI rejects schemas
+      // without a type key on every property.
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt for the agent'),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        }),
+        execute: async () => 'result',
+      });
+      const mockModel = {
+        modelId: 'openai/gpt-4.1-mini',
+        provider: 'openrouter',
+        specificationVersion: 'v2',
+        supportsStructuredOutputs: false,
+      } as any;
+
+      const toolDef = new CoreToolBuilder({
+        originalTool: agentTool,
+        options: {
+          name: 'weather-tool',
+          logger: console as any,
+          description: 'Get weather information',
+          requestContext: new RequestContext(),
+          tracingContext: {},
+          model: mockModel,
+        },
+      }).buildV5();
+
+      expect(toolDef.type).toBe('function');
+
+      // The critical assertion: every property in the schema must have a 'type' key.
+      // OpenAI rejects schemas where properties lack a 'type' key.
+      // buildV5() wraps the schema via AI SDK's jsonSchema(), so inputSchema is
+      // an AI SDK Schema object { _type, jsonSchema, validate } — access .jsonSchema directly.
+      const properties = (toolDef.inputSchema as any).jsonSchema.properties;
+      expect(properties).toBeDefined();
+
+      for (const [propName, propSchema] of Object.entries(properties)) {
+        const schema = propSchema as Record<string, any>;
+        const hasTypeKey = 'type' in schema;
+        const hasRef = '$ref' in schema;
+        const hasAnyOf = 'anyOf' in schema;
+        const hasOneOf = 'oneOf' in schema;
+        const hasAllOf = 'allOf' in schema;
+
+        expect(
+          hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
+          `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
+        ).toBe(true);
+
+        // OpenAI requires 'items' when 'array' is in the type union
+        if (Array.isArray(schema.type) && schema.type.includes('array')) {
+          expect(
+            schema.items,
+            `Property '${propName}' includes 'array' in type but is missing 'items'. OpenAI requires 'items' for array types. Got: ${JSON.stringify(schema)}`,
+          ).toBeDefined();
+        }
+      }
+    });
   });
 });

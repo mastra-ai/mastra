@@ -1,3 +1,4 @@
+import { MastraError } from '../../error/index.js';
 import type { Mastra } from '../../mastra';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
@@ -6,8 +7,10 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
+import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
@@ -67,6 +70,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     name,
     description,
     metadata,
+    requestContext: globalRequestContext,
+    agentVersion,
   } = config;
 
   const startedAt = new Date();
@@ -78,96 +83,159 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const datasetsStore = await storage?.getStore('datasets');
   const experimentsStore = await storage?.getStore('experiments');
 
+  // Helper: if the experiment record was pre-created (async path) and we fail
+  // during setup (Phase A/B), mark the experiment as failed so it doesn't stay stuck in 'pending'.
+  const markFailedOnSetupError = async (err: unknown) => {
+    if (providedExperimentId && experimentsStore) {
+      try {
+        await experimentsStore.updateExperiment({
+          id: experimentId,
+          status: 'failed',
+          completedAt: new Date(),
+        });
+      } catch (updateErr) {
+        mastra.getLogger()?.error(`Failed to mark experiment ${experimentId} as failed: ${updateErr}`);
+      }
+    }
+    throw err;
+  };
+
   // Phase A — Resolve items
   let items: ExperimentItem[];
   let datasetVersion: number | null;
+  let datasetRecord: DatasetRecord | null | undefined;
 
-  if (config.data) {
-    // Inline data path — array or factory function
-    const rawData = typeof config.data === 'function' ? await config.data() : config.data;
-    items = rawData.map(dataItem => {
-      const id = dataItem.id ?? crypto.randomUUID();
-      return {
-        id,
-        datasetVersion: null,
-        input: dataItem.input,
-        groundTruth: dataItem.groundTruth,
-        metadata: dataItem.metadata,
-      };
-    });
-    datasetVersion = null;
-  } else if (datasetId) {
-    // Storage-backed data path (existing)
-    if (!datasetsStore) {
-      throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
+  try {
+    if (config.data) {
+      // Inline data path — array or factory function
+      const rawData = typeof config.data === 'function' ? await config.data() : config.data;
+      items = rawData.map(dataItem => {
+        const id = dataItem.id ?? crypto.randomUUID();
+        return {
+          id,
+          datasetVersion: null,
+          input: dataItem.input,
+          groundTruth: dataItem.groundTruth,
+          metadata: dataItem.metadata,
+        };
+      });
+      datasetVersion = null;
+    } else if (datasetId) {
+      // Storage-backed data path (existing)
+      if (!datasetsStore) {
+        throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
+      }
+
+      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!datasetRecord) {
+        throw new MastraError({
+          id: 'DATASET_NOT_FOUND',
+          text: `Dataset not found: ${datasetId}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+
+      datasetVersion = version ?? datasetRecord.version;
+      const versionItems = await datasetsStore.getItemsByVersion({
+        datasetId,
+        version: datasetVersion,
+      });
+
+      if (versionItems.length === 0) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NO_ITEMS',
+          text: `No items in dataset ${datasetId} at version ${datasetVersion}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+
+      items = versionItems.map(v => ({
+        id: v.id,
+        datasetVersion: v.datasetVersion,
+        input: v.input,
+        groundTruth: v.groundTruth,
+        requestContext: v.requestContext,
+        metadata: v.metadata,
+      }));
+    } else {
+      throw new Error('No data source: provide datasetId or data');
     }
-
-    const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-    if (!dataset) {
-      throw new Error(`Dataset not found: ${datasetId}`);
-    }
-
-    datasetVersion = version ?? dataset.version;
-    const versionItems = await datasetsStore.getItemsByVersion({
-      datasetId,
-      version: datasetVersion,
-    });
-
-    if (versionItems.length === 0) {
-      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion}`);
-    }
-
-    items = versionItems.map(v => ({
-      id: v.id,
-      datasetVersion: v.datasetVersion,
-      input: v.input,
-      groundTruth: v.groundTruth,
-      metadata: v.metadata,
-    }));
-  } else {
-    throw new Error('No data source: provide datasetId or data');
+  } catch (err) {
+    await markFailedOnSetupError(err);
+    throw err; // unreachable, but satisfies TS control flow
   }
 
   // Phase B — Resolve task function
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
-  if (config.task) {
-    // Inline task path
-    const taskFn = config.task;
-    execFn = async (item, itemSignal) => {
-      try {
-        const result = await taskFn({
-          input: item.input,
-          mastra,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-          signal: itemSignal,
-        });
-        return { output: result, error: null, traceId: null };
-      } catch (err: unknown) {
-        return {
-          output: null,
-          error: {
-            message: err instanceof Error ? err.message : String(err),
-            stack: err instanceof Error ? err.stack : undefined,
-          },
-          traceId: null,
-        };
+  try {
+    if (config.task) {
+      // Inline task path
+      const taskFn = config.task;
+      execFn = async (item, itemSignal) => {
+        try {
+          const result = await taskFn({
+            input: item.input,
+            mastra,
+            groundTruth: item.groundTruth,
+            metadata: item.metadata,
+            signal: itemSignal,
+          });
+          return { output: result, error: null, traceId: null };
+        } catch (err: unknown) {
+          return {
+            output: null,
+            error: {
+              message: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? err.stack : undefined,
+            },
+            traceId: null,
+          };
+        }
+      };
+    } else if (targetType && targetId) {
+      // Registry-based target path (existing)
+      const target = resolveTarget(mastra, targetType, targetId);
+      if (!target) {
+        throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
-    };
-  } else if (targetType && targetId) {
-    // Registry-based target path (existing)
-    const target = resolveTarget(mastra, targetType, targetId);
-    if (!target) {
-      throw new Error(`Target not found: ${targetType}/${targetId}`);
+      execFn = (item, itemSignal) => {
+        // Merge global request context with per-item request context (item takes precedence)
+        const mergedRequestContext =
+          globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+        return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
+      };
+    } else {
+      throw new Error('No task: provide targetType+targetId or task');
     }
-    execFn = (item, itemSignal) => executeTarget(target, targetType, item, { signal: itemSignal });
-  } else {
-    throw new Error('No task: provide targetType+targetId or task');
+  } catch (err) {
+    await markFailedOnSetupError(err);
+    throw err; // unreachable, but satisfies TS control flow
+  }
+
+  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
+  let mergedScorerInput = scorerInput;
+  const datasetScorerIds = datasetRecord?.scorerIds ?? [];
+  if (datasetScorerIds.length > 0) {
+    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+  }
+  if (mergedScorerInput && mergedScorerInput.length > 0) {
+    const seen = new Set<string>();
+    mergedScorerInput = mergedScorerInput.filter(entry => {
+      if (typeof entry === 'string') {
+        if (seen.has(entry)) return false;
+        seen.add(entry);
+        return true;
+      }
+      // Keep all scorer instances — they are resolved by reference, not by ID
+      return true;
+    });
   }
 
   // Resolve scorers
-  const scorers = resolveScorers(mastra, scorerInput);
+  const scorers = resolveScorers(mastra, mergedScorerInput);
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -183,12 +251,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
         totalItems: items.length,
+        agentVersion,
       });
     }
     // Update status to running (both sync and async paths)
+    // Also set totalItems — needed for the async path where the experiment
+    // was created with totalItems: 0 before items were resolved.
     await experimentsStore.updateExperiment({
       id: experimentId,
       status: 'running',
+      totalItems: items.length,
       startedAt,
     });
   }

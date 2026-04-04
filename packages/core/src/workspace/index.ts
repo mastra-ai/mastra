@@ -37,6 +37,10 @@ export {
   type BackgroundProcessConfig,
   type BackgroundProcessMeta,
   type BackgroundProcessExitMeta,
+  type ToolConfigContext,
+  type ToolConfigWithArgsContext,
+  type DynamicToolConfigValue,
+  type ResolvedToolConfig,
   // Individual standalone tools
   readFileTool,
   writeFileTool,
@@ -122,6 +126,9 @@ export type {
   SkillsResolver,
   SkillsContext,
 } from './skills';
+
+// Skill Tools
+export { createSkillTools } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';

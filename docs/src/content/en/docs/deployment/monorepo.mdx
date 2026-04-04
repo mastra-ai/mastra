@@ -1,5 +1,5 @@
 ---
-title: "Deploy in a Monorepo | Deployment"
+title: "Deploy in a monorepo | Deployment"
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
 packages:
   - "@mastra/deployer"
@@ -8,7 +8,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Deploy in a Monorepo
+# Deploy in a monorepo
 
 Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/deployment/mastra-server).
 
@@ -116,12 +116,6 @@ Store `.env` files in the Mastra application directory (e.g., `apps/api/.env`), 
 When deploying to cloud providers, ensure the correct package is selected as the deploy target. Selecting the monorepo root instead of the application directory (e.g., `apps/api`) is a common mistake.
 
 Most providers let you specify the root directory in their dashboard or configuration file.
-
-### Mastra Cloud
-
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
-
-![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
 ## Dependency management
 

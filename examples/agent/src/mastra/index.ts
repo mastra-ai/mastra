@@ -1,8 +1,9 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
-import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
+import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from '@mastra/duckdb';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
@@ -28,8 +29,8 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  subscriptionOrchestratorAgent,
 } from './agents/model-v2-agent';
-import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
@@ -47,20 +48,26 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
+import { gatewayAgent } from './agents/gateway';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
   url: 'file:./mastra.db',
 });
 
+const duckdbStore = new DuckDBStore({ path: './mastra-observability.duckdb' });
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
   default: libsqlStore,
-  editor: new FilesystemStore({ dir: '.mastra-storage' }),
+  domains: {
+    observability: duckdbStore.observability,
+  },
+  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
 const config = {
   agents: {
+    gatewayAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -79,6 +86,7 @@ const config = {
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    subscriptionOrchestratorAgent,
   },
   processors: {
     moderationProcessor,
@@ -117,6 +125,15 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
     },
   }),
 });

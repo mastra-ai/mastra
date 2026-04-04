@@ -1,9 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -48,9 +50,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // This avoids serialization issues - _internal is a mutable object that preserves execute functions
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
+      const stepActiveTools = _internal?.stepActiveTools;
 
       const tool =
         stepTools?.[inputData.toolName] ||
+        findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       const addToolMetadata = ({
@@ -213,16 +217,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
-        return {
-          ...inputData,
-          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
-        };
+        return inputData;
       }
 
-      if (!tool) {
-        const availableToolNames = Object.keys(stepTools || {});
+      // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)
+      const toolKey = stepTools?.[inputData.toolName]
+        ? inputData.toolName
+        : Object.entries(stepTools || {}).find(([_, t]: [string, any]) => t === tool)?.[0];
+
+      // Reject if tool doesn't exist or isn't in the active set for this step
+      const isHiddenByActiveTools = stepActiveTools && toolKey && !stepActiveTools.includes(toolKey);
+      if (!tool || isHiddenByActiveTools) {
+        const availableToolNames = stepActiveTools ?? Object.keys(stepTools || {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {
@@ -270,12 +279,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // requireApproval can be:
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
-        // If needsApprovalFn exists, evaluate it with the tool args
+        // If needsApprovalFn exists, evaluate it with the tool args and context
         let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
         if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with the parsed args
+          // Evaluate the function with parsed args and available context
           try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
+              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+              workspace: _internal?.stepWorkspace,
+            });
             toolRequiresApproval = needsApprovalResult;
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
@@ -284,6 +296,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolRequiresApproval = true;
           }
         }
+
+        // Schema for tool call approval - used for both streaming and metadata
+        const approvalSchema = toStandardSchema(
+          z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          }),
+        );
 
         if (toolRequiresApproval) {
           if (!resumeData) {
@@ -295,17 +318,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
-                  ),
-                ),
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
               },
             });
 
@@ -315,17 +328,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: JSON.stringify(
-                zodToJsonSchema(
-                  z.object({
-                    approved: z
-                      .boolean()
-                      .describe(
-                        'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                      ),
-                  }),
-                ),
-              ),
+              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -394,14 +397,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                   resumeSchema: JSON.stringify(
-                    zodToJsonSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
+                    standardSchemaToJSONSchema(
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                        }),
+                      ),
                     ),
                   ),
                 },
@@ -415,14 +420,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
+                  standardSchemaToJSONSchema(
+                    toStandardSchema(
+                      z.object({
+                        approved: z
+                          .boolean()
+                          .describe(
+                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                          ),
+                      }),
+                    ),
                   ),
                 ),
               });
@@ -488,7 +495,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
 
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-        if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
+        // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
+        // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
+        const needsRunIdLookup =
+          resumeDataToPassToToolOptions &&
+          (isAgentTool || isWorkflowTool) &&
+          (!isResumeToolCall || !args.suspendedToolRunId);
+        if (needsRunIdLookup) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
@@ -531,12 +544,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (isAgentTool) {
           if (typeof args === 'object' && args !== null && 'prompt' in args) {
-            args.threadId = args.threadId || _internal?.threadId;
-            args.resourceId = args.resourceId || _internal?.resourceId;
+            args.threadId = _internal?.threadId;
+            args.resourceId = _internal?.resourceId;
           }
         }
 
-        const result = await tool.execute(args, toolOptions);
+        const rawResult = await tool.execute(args, toolOptions);
+        const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {

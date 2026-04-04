@@ -50,6 +50,9 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "query": "test query"
             },
@@ -72,6 +75,9 @@
             "entityId": "workflow-agent",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>"
             },
             "input": {
               "prompt": "test query"
@@ -130,7 +136,13 @@
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 10,
-                        "outputTokens": 20
+                        "outputTokens": 20,
+                        "inputDetails": {
+                          "text": 10
+                        },
+                        "outputDetails": {
+                          "text": 20
+                        }
                       }
                     },
                     "metadata": {
@@ -179,12 +191,19 @@
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 10,
-                            "outputTokens": 20
+                            "outputTokens": 20,
+                            "inputDetails": {
+                              "text": 10
+                            },
+                            "outputDetails": {
+                              "text": 20
+                            }
                           },
                           "isContinued": false,
                           "finishReason": "stop"
                         },
                         "metadata": {
+                          "runId": "<runId-2>",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
@@ -214,6 +233,9 @@
                               "chunkType": "text",
                               "sequenceNumber": 0
                             },
+                            "metadata": {
+                              "runId": "<runId-2>"
+                            },
                             "output": {
                               "text": "Test response from agent"
                             }
@@ -241,6 +263,9 @@
             "entityId": "mapping_<mapping-2>",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>"
             },
             "input": {
               "text": "Test response from agent"

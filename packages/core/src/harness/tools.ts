@@ -1,9 +1,10 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createTool } from '../tools/tool';
+import { createWorkspaceTools } from '../workspace/tools/tools';
 
 import type { HarnessRequestContext, HarnessSubagent } from './types';
 
@@ -404,13 +405,32 @@ Use this tool when:
         };
       }
 
+      const workspace = context?.workspace;
+
       const subagent = new Agent({
         id: `subagent-${definition.id}`,
         name: `${definition.name} Subagent`,
         instructions: definition.instructions,
         model,
         tools: mergedTools,
+        workspace,
       });
+
+      // Only resolve workspace tool names when an allowlist is configured,
+      // avoiding unnecessary createWorkspaceTools overhead for subagents
+      // that don't restrict workspace tools.
+      const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
+      const allWorkspaceToolNames =
+        workspace && allowedWs
+          ? new Set(
+              Object.keys(
+                await createWorkspaceTools(workspace, {
+                  requestContext: context?.requestContext ?? {},
+                  workspace,
+                }),
+              ),
+            )
+          : undefined;
 
       const startTime = Date.now();
 
@@ -434,6 +454,14 @@ Use this tool when:
           // Forward the parent's request context so the subagent inherits
           // sandbox allowed paths and other harness state.
           requestContext: context?.requestContext,
+          // When allowedWorkspaceTools is set, hide workspace tools not in
+          // the list. Non-workspace tools always pass through.
+          prepareStep:
+            allowedWs && allWorkspaceToolNames
+              ? ({ tools }) => ({
+                  activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs!.has(k)),
+                })
+              : undefined,
         });
 
         for await (const chunk of response.fullStream) {

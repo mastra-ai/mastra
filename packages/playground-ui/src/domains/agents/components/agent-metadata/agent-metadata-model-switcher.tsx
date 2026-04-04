@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
+import type { UpdateModelParams } from '@mastra/client-js';
 import { RotateCcw } from 'lucide-react';
-import { UpdateModelParams, Provider } from '@mastra/client-js';
+import { useState, useEffect } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { Spinner } from '@/ds/components/Spinner';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -59,7 +59,7 @@ export const AgentMetadataModelSwitcher = ({
           provider: fullProviderId as UpdateModelParams['provider'],
           modelId,
         });
-        console.log('Model updated:', result);
+        console.info('Model updated:', result);
       } catch (error) {
         console.error('Failed to update model:', error);
       } finally {
@@ -169,7 +169,6 @@ export const AgentMetadataModelSwitcher = ({
           <LLMProviders
             value={currentModelProvider}
             onValueChange={handleProviderSelect}
-            variant="default"
             open={providerOpen}
             onOpenChange={setProviderOpen}
           />
@@ -180,7 +179,6 @@ export const AgentMetadataModelSwitcher = ({
             llmId={currentModelProvider}
             value={selectedModel}
             onValueChange={handleModelSelect}
-            variant="default"
             open={modelOpen}
             onOpenChange={setModelOpen}
           />
@@ -191,7 +189,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
+          className="flex items-center gap-1.5 text-xs whitespace-nowrap border-0!"
           title="Reset to original model"
         >
           <RotateCcw className="w-3.5 h-3.5" />

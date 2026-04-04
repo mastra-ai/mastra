@@ -11,10 +11,11 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
+import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
@@ -31,6 +32,7 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 // Agent tool execution context - properties specific when tools are executed by agents
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
+  agentId: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -110,6 +112,16 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
  * If not specified, it defaults to a regular tool.
  */
 export type MCPToolType = 'agent' | 'workflow';
+
+/**
+ * Metadata identifying a tool as originating from an MCP server.
+ * Set automatically by the MCP client when creating tools.
+ * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+ */
+export interface McpMetadata {
+  serverName: string;
+  serverVersion?: string;
+}
 
 /**
  * MCP Tool Annotations for describing tool behavior and UI presentation.
@@ -207,6 +219,13 @@ export type CoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
   onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
@@ -251,6 +270,13 @@ export type InternalCoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
   onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
@@ -289,6 +315,14 @@ export interface ToolExecutionContext<
    */
   workspace?: Workspace;
 
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   *
+   * The browser is lazily initialized - it will be launched on first use.
+   */
+  browser?: MastraBrowser;
+
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
   writer?: ToolStream;
@@ -316,16 +350,16 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  resumeSchema?: SchemaWithValidation<TResume>;
+  inputSchema?: PublicSchema<TSchemaIn>;
+  outputSchema?: PublicSchema<TSchemaOut>;
+  suspendSchema?: PublicSchema<TSuspend>;
+  resumeSchema?: PublicSchema<TResume>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    * If validation fails, a validation error is returned instead of executing the tool.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -360,6 +394,19 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: McpMetadata;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {

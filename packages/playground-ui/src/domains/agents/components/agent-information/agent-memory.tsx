@@ -1,10 +1,8 @@
-import { AgentWorkingMemory } from './agent-working-memory';
+import { ExternalLink, Copy } from 'lucide-react';
+import { useCallback } from 'react';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { AgentObservationalMemory } from './agent-observational-memory';
-import { useCallback } from 'react';
-import { cn } from '@/lib/utils';
-import { ExternalLink, Copy } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
+import { AgentWorkingMemory } from './agent-working-memory';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -13,16 +11,20 @@ import {
   useMemoryWithOMStatus,
   useThread,
 } from '@/domains/memory/hooks';
-import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { MemorySearch } from '@/lib/ai-ui/memory-search';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 interface AgentMemoryProps {
   agentId: string;
   threadId: string;
+  memoryType?: 'local' | 'gateway';
 }
 
-export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
+export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
+  const isGatewayMemory = memoryType === 'gateway';
   const { threadInput: chatInputValue } = useThreadInput();
 
   const { paths, navigate } = useLinkComponent();
@@ -126,59 +128,78 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         </div>
       )}
 
-      {/* Memory Search Section */}
-      <div className="p-4 border-b border-border1">
-        <div className="mb-2">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
-            {searchMemoryData?.searchScope && (
-              <span
-                className={cn(
-                  'text-xs font-medium px-2 py-0.5 rounded',
-                  searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
-                )}
-                title={
-                  searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
-                }
+      {/* Memory Search Section - hidden for gateway memory */}
+      {!isGatewayMemory && (
+        <div className="p-4 border-b border-border1">
+          <div className="mb-2">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
+              {searchMemoryData?.searchScope && (
+                <span
+                  className={cn(
+                    'text-xs font-medium px-2 py-0.5 rounded',
+                    searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                  )}
+                  title={
+                    searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
+                  }
+                >
+                  {searchScope}
+                </span>
+              )}
+            </div>
+          </div>
+          {isSemanticRecallEnabled ? (
+            <MemorySearch
+              searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
+              onResultClick={handleResultClick}
+              currentThreadId={threadId}
+              className="w-full"
+              chatInputValue={chatInputValue}
+            />
+          ) : (
+            <div className="bg-surface3 border border-border1 rounded-lg p-4">
+              <p className="text-sm text-neutral3 mb-3">
+                Semantic recall is not enabled for this agent. Enable it to search through conversation history.
+              </p>
+              <a
+                href="https://mastra.ai/en/docs/memory/semantic-recall"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
               >
-                {searchScope}
-              </span>
-            )}
-          </div>
+                Learn about semantic recall
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
         </div>
-        {isSemanticRecallEnabled ? (
-          <MemorySearch
-            searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
-            onResultClick={handleResultClick}
-            currentThreadId={threadId}
-            className="w-full"
-            chatInputValue={chatInputValue}
-          />
-        ) : (
-          <div className="bg-surface3 border border-border1 rounded-lg p-4">
-            <p className="text-sm text-neutral3 mb-3">
-              Semantic recall is not enabled for this agent. Enable it to search through conversation history.
-            </p>
-            <a
-              href="https://mastra.ai/en/docs/memory/semantic-recall"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Learn about semantic recall
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Working Memory Section */}
-      <div className="flex-1 overflow-y-auto">
-        <AgentWorkingMemory agentId={agentId} />
-        <div className="border-t border-border1">
-          <AgentMemoryConfig agentId={agentId} />
+      {/* Working Memory & Config Section - hidden for gateway memory */}
+      {!isGatewayMemory && (
+        <div className="flex-1 overflow-y-auto">
+          <AgentWorkingMemory agentId={agentId} />
+          <div className="border-t border-border1">
+            <AgentMemoryConfig agentId={agentId} />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Gateway Memory indicator */}
+      {isGatewayMemory && (
+        <div className="p-4 border-b border-border1">
+          <div className="bg-surface3 border border-border1 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400">Gateway</span>
+              <h3 className="text-sm font-medium text-neutral5">Memory Gateway</h3>
+            </div>
+            <p className="text-xs text-neutral3">
+              Memory is managed by the Memory Gateway. Threads and observations are stored remotely.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

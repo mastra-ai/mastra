@@ -15,7 +15,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { GatewayLanguageModel, ProviderConfig } from './base.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -29,6 +29,33 @@ interface ModelsDevProviderInfo {
 
 interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
+}
+
+function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; providerId: string }): string {
+  const fallbackEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+  if (!envVars?.length) return fallbackEnvVar;
+
+  const suffixPreferences = ['_API_TOKEN', '_API_KEY', '_TOKEN', '_KEY', '_PAT'];
+
+  for (const suffix of suffixPreferences) {
+    const preferredEnvVar = envVars.find(envVar => envVar.endsWith(suffix));
+    if (preferredEnvVar) return preferredEnvVar;
+  }
+
+  return envVars[0] || fallbackEnvVar;
+}
+
+function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
+  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
+    const key = envVarName.trim();
+    const value = envVars?.[key] ?? process.env[key];
+
+    if (value === undefined || value === null) {
+      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
+    }
+
+    return value;
+  });
 }
 
 // Provider-specific overrides for URL, npm package, and other config.
@@ -113,9 +140,13 @@ export class ModelsDevGateway extends MastraModelGateway {
           continue;
         }
 
-        // Get the API key env var from the provider info
-        // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        // Prefer auth-like env vars over identifiers already consumed by the URL template.
+        const apiKeyEnvVar =
+          PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
+          selectApiKeyEnvVar({
+            envVars: providerInfo.env,
+            providerId: normalizedId,
+          });
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
@@ -162,7 +193,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
-    return customBaseUrl || config.url;
+    return customBaseUrl || interpolateUrlTemplate(config.url, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {
@@ -198,45 +229,41 @@ export class ModelsDevGateway extends MastraModelGateway {
   }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
+    const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };
+
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey }).responses(modelId);
+        return createOpenAI({ apiKey, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
-        return createGoogleGenerativeAI({
-          apiKey,
-        }).chat(modelId);
+        return createGoogleGenerativeAI({ apiKey, headers: mastraHeaders }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey })(modelId);
+        return createAnthropic({ apiKey, headers: mastraHeaders })(modelId);
       case 'mistral':
-        return createMistral({ apiKey })(modelId);
+        return createMistral({ apiKey, headers: mastraHeaders })(modelId);
       case 'groq':
-        return createGroq({ apiKey })(modelId);
+        return createGroq({ apiKey, headers: mastraHeaders })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers })(modelId);
+        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({
-          apiKey,
-        })(modelId);
+        return createXai({ apiKey, headers: mastraHeaders })(modelId);
       case 'deepseek':
-        return createDeepSeek({
-          apiKey,
-        })(modelId);
+        return createDeepSeek({ apiKey, headers: mastraHeaders })(modelId);
       case 'perplexity':
-        return createPerplexity({ apiKey })(modelId);
+        return createPerplexity({ apiKey, headers: mastraHeaders })(modelId);
       case 'cerebras':
-        return createCerebras({ apiKey })(modelId);
+        return createCerebras({ apiKey, headers: mastraHeaders })(modelId);
       case 'togetherai':
-        return createTogetherAI({ apiKey })(modelId);
+        return createTogetherAI({ apiKey, headers: mastraHeaders })(modelId);
       case 'deepinfra':
-        return createDeepInfra({ apiKey })(modelId);
+        return createDeepInfra({ apiKey, headers: mastraHeaders })(modelId);
       case 'vercel':
-        return createGateway({ apiKey, headers })(modelId);
+        return createGateway({ apiKey, headers: mastraHeaders })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createAnthropic({ apiKey, baseURL })(modelId);
+        return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       }
       default: {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
@@ -245,28 +272,32 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createAnthropic({ apiKey, baseURL })(modelId);
+          return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
         }
 
         if (npm === '@ai-sdk/openai') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createOpenAI({ apiKey, baseURL }).chat(modelId);
+          return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/google') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createGoogleGenerativeAI({ apiKey, baseURL }).chat(modelId);
+          return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/mistral') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createMistral({ apiKey, baseURL })(modelId);
+          return createMistral({ apiKey, baseURL, headers: mastraHeaders })(modelId);
         }
 
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
-          modelId,
-        );
+        return createOpenAICompatible({
+          name: providerId,
+          apiKey,
+          baseURL,
+          headers: mastraHeaders,
+          supportsStructuredOutputs: true,
+        }).chatModel(modelId);
       }
     }
   }

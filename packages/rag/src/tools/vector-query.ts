@@ -47,7 +47,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
-      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
+      const topK: number = requestContext?.get('topK') ?? (inputData.topK as number) ?? 10;
       const filter: unknown = requestContext?.get('filter') ?? inputData.filter;
       const queryText = inputData.queryText;
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
@@ -62,7 +62,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
           if (logger) {
-            logger.error(`Vector store '${vectorStoreName}' not found`);
+            logger.error('Vector store not found', { vectorStore: vectorStoreName });
           }
           // Return empty results for graceful degradation when store is not found
           return { relevantContext: [], sources: [] };

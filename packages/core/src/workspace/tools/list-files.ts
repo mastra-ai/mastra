@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -12,15 +12,17 @@ Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
 
 Examples:
-- List root: { path: "./" }
-- Deep listing: { path: "./src", maxDepth: 5 }
-- Directories only: { path: "./", dirsOnly: true }
-- Exclude node_modules: { path: "./", exclude: "node_modules" }
-- Find TypeScript files: { path: "./src", pattern: "**/*.ts" }
-- Find config files: { path: "./", pattern: "*.config.{js,ts}" }
-- Multiple patterns: { path: "./", pattern: ["**/*.ts", "**/*.tsx"] }`,
+- List workspace root: { path: "." }
+- Deep listing: { path: "src", maxDepth: 5 }
+- Directories only: { path: ".", dirsOnly: true }
+- Exclude node_modules: { path: ".", exclude: "node_modules" }
+- Find TypeScript files: { path: "src", pattern: "**/*.ts" }
+- Find config files: { path: ".", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }
+
+To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
   inputSchema: z.object({
-    path: z.string().default('./').describe('Directory path to list'),
+    path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z
       .number()
       .optional()
@@ -42,7 +44,7 @@ Examples:
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe(
-        'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+        'Glob pattern(s) to filter files. Omit this parameter to list all files (do NOT pass "*"). Use "**/*.ext" to match files recursively across directories. "*" only matches within a single directory level (standard glob). Glob patterns only filter files — directories are always shown to preserve tree structure. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}".',
       ),
     respectGitignore: z
       .boolean()
@@ -51,7 +53,7 @@ Examples:
       .describe('Respect .gitignore in the listed directory (default: true).'),
   }),
   execute: async (
-    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
+    { path = '.', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);

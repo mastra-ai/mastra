@@ -1,11 +1,12 @@
-import { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
-import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
+import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
-import { Icon } from '@/ds/icons';
-import { GripVertical } from 'lucide-react';
 import { Switch } from '@/ds/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 
@@ -106,7 +107,7 @@ const AgentMetadataModelListItem = ({
     <div className="rounded-lg bg-surface1 hover:bg-surface4/50 transition-colors">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing shrink-0">
             <Icon>
               <GripVertical />
             </Icon>
@@ -124,7 +125,7 @@ const AgentMetadataModelListItem = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex-shrink-0">
+                <span className="shrink-0">
                   <Switch checked={enabled} disabled className="pointer-events-none" />
                 </span>
               </TooltipTrigger>
@@ -138,9 +139,9 @@ const AgentMetadataModelListItem = ({
             checked={enabled}
             onCheckedChange={checked => {
               setEnabled(checked);
-              updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
             }}
-            className="flex-shrink-0"
+            className="shrink-0"
           />
         )}
       </div>

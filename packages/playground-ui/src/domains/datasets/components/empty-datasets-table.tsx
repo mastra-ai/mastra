@@ -1,7 +1,7 @@
+import { Plus, Database, BookOpen } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Database, BookOpen } from 'lucide-react';
 
 export interface EmptyDatasetsTableProps {
   onCreateClick?: () => void;
@@ -28,7 +28,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
               size="lg"
               variant="outline"
               as="a"
-              href="https://mastra.ai/docs/evals"
+              href="https://mastra.ai/docs/evals/datasets/overview"
               target="_blank"
               rel="noopener noreferrer"
             >

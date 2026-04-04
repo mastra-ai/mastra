@@ -1,11 +1,11 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { isNull } from '../zodTypes';
+import { isIntersection, isNull } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -45,12 +45,18 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
         .any()
         .refine(v => v === null, { message: 'must be null' })
         .describe(value.description || 'must be null');
+    } else if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
     }
 
     return this.defaultUnsupportedZodTypeHandler(value);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
     // Process based on schema type
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);

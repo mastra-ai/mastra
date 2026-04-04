@@ -1,63 +1,59 @@
 import {
   Button,
-  DocsIcon,
-  HeaderAction,
-  Icon,
-  MainContentContent,
+  ButtonWithTooltip,
   useLinkComponent,
   useIsCmsAvailable,
   useStoredPromptBlocks,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  PromptBlocksTable,
+  PromptsList,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { FileTextIcon, Plus } from 'lucide-react';
+import { BookIcon, FileTextIcon, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 export default function PromptBlocks() {
-  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const { paths } = useLinkComponent();
   const { data, isLoading } = useStoredPromptBlocks();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const [search, setSearch] = useState('');
 
   const promptBlocks = data?.promptBlocks ?? [];
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <FileTextIcon />
-          </Icon>
-          Prompts
-        </HeaderTitle>
-
-        <HeaderAction>
-          {isCmsAvailable && (
-            <Button variant="light" as={FrameworkLink} to={paths.cmsPromptBlockCreateLink()}>
-              <Icon>
+    <EntityListPageLayout>
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isLoading}>
+              <FileTextIcon /> Prompts
+            </MainHeader.Title>
+          </MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Prompts documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+            {isCmsAvailable && (
+              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
                 <Plus />
-              </Icon>
-              Create a prompt block
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            as={Link}
-            to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
-            target="_blank"
-          >
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Documentation
-          </Button>
-        </HeaderAction>
-      </Header>
+                Create Prompt
+              </Button>
+            )}
+          </MainHeader.Column>
+        </MainHeader>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
+        </div>
+      </EntityListPageLayout.Top>
 
-      <MainContentContent isCentered={!isLoading && promptBlocks.length === 0}>
-        <PromptBlocksTable isLoading={isLoading} promptBlocks={promptBlocks} />
-      </MainContentContent>
-    </MainContentLayout>
+      <PromptsList promptBlocks={promptBlocks} isLoading={isLoading} search={search} onSearch={setSearch} />
+    </EntityListPageLayout>
   );
 }

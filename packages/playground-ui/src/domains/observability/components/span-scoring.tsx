@@ -1,11 +1,11 @@
-import { Button } from '@/ds/components/Button/Button';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { InfoIcon } from 'lucide-react';
-import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
-import { Notification } from '@/ds/components/Notification';
-import { SelectField } from '@/ds/components/FormFields';
-import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
-import { type GetScorerResponse } from '@mastra/client-js';
+import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
+import { Button } from '@/ds/components/Button/Button';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { Notification } from '@/ds/components/Notification';
+import { TextAndIcon } from '@/ds/components/Text';
 
 export interface SpanScoringProps {
   traceId?: string;
@@ -89,8 +89,10 @@ export const SpanScoring = ({
     <div>
       <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
         <div className="grid gap-2">
-          <SelectField
-            name={'select-scorer'}
+          <SelectFieldBlock
+            name="select-scorer"
+            label="Select scorer"
+            labelIsHidden={true}
             placeholder="Select a scorer..."
             options={scorerList.map(scorer => ({
               label: scorer.name || scorer.id,
@@ -98,7 +100,7 @@ export const SpanScoring = ({
             }))}
             onValueChange={handleScorerChange}
             value={selectedScorer || ''}
-            className="min-w-[20rem]"
+            className="min-w-80"
             disabled={isWaiting}
           />
           {selectedScorerDescription && (

@@ -3,6 +3,7 @@ import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 async function showSubagentModelListForScope(
@@ -29,6 +30,7 @@ async function showSubagentModelListForScope(
       title: `Select subagent model (${scopeLabel})`,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
           await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
           if (scope === 'global') {
@@ -114,23 +116,30 @@ async function showSubagentScopeThenList(
 }
 
 export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
-  const agentTypes = [
-    {
-      id: 'explore',
-      label: 'Explore',
-      description: 'Read-only codebase exploration',
-    },
-    {
-      id: 'plan',
-      label: 'Plan',
-      description: 'Read-only analysis and planning',
-    },
-    {
-      id: 'execute',
-      label: 'Execute',
-      description: 'Task execution with write access',
-    },
-  ];
+  const configuredSubagents = ctx.state.harness.config?.subagents;
+  const agentTypes: Array<{ id: string; label: string; description: string }> = configuredSubagents?.length
+    ? configuredSubagents.map(subagent => ({
+        id: subagent.id,
+        label: subagent.name,
+        description: subagent.description,
+      }))
+    : [
+        {
+          id: 'explore',
+          label: 'Explore',
+          description: 'Read-only codebase exploration',
+        },
+        {
+          id: 'plan',
+          label: 'Plan',
+          description: 'Read-only analysis and planning',
+        },
+        {
+          id: 'execute',
+          label: 'Execute',
+          description: 'Task execution with write access',
+        },
+      ];
 
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(

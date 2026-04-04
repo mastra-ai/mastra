@@ -1,9 +1,9 @@
 'use client';
 
+import { Pencil } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Label } from '@/ds/components/Label';
-import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
@@ -40,6 +40,8 @@ export interface EditModeContentProps {
   setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  trajectoryValue: string;
+  setTrajectoryValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
   onSave: () => void;
   onCancel: () => void;
@@ -53,6 +55,8 @@ export function EditModeContent({
   setGroundTruthValue,
   metadataValue,
   setMetadataValue,
+  trajectoryValue,
+  setTrajectoryValue,
   validationErrors,
   onSave,
   onCancel,
@@ -87,6 +91,16 @@ export function EditModeContent({
         </div>
 
         <div className="space-y-2">
+          <Label>Expected Trajectory (JSON, optional)</Label>
+          <CodeEditor
+            value={trajectoryValue}
+            onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </div>
+
+        <div className="space-y-2">
           <Label>Metadata (JSON, optional)</Label>
           <CodeEditor
             value={metadataValue}
@@ -97,10 +111,10 @@ export function EditModeContent({
         </div>
 
         <div className="flex gap-2 pt-4">
-          <Button variant="cta" size="default" onClick={onSave} disabled={isSaving}>
+          <Button variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
-          <Button variant="standard" size="default" onClick={onCancel} disabled={isSaving}>
+          <Button onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

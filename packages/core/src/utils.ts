@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
@@ -23,6 +24,46 @@ import type { Workspace } from './workspace/workspace';
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Safely JSON-stringifies a value, replacing circular references with "[Circular]".
+ * Uses a stack-based approach so shared (non-circular) references are preserved.
+ */
+export function safeStringify(value: unknown, space?: string | number): string {
+  const stack: unknown[] = [];
+  return JSON.stringify(
+    value,
+    function (this: unknown, _key: string, val: unknown) {
+      if (typeof val === 'bigint') return val.toString();
+      if (val !== null && typeof val === 'object') {
+        // Trim the stack: pop entries that are no longer ancestors of the current path.
+        // `this` is the parent object containing the current key.
+        while (stack.length > 0 && stack[stack.length - 1] !== this) {
+          stack.pop();
+        }
+        if (stack.includes(val)) return '[Circular]';
+        stack.push(val);
+      }
+      return val;
+    },
+    space,
+  );
+}
+
+/**
+ * Returns a JSON-serializable copy of a value by stripping circular references.
+ * If the value is already serializable, returns it unchanged (no cloning overhead).
+ */
+export function ensureSerializable(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+
+  try {
+    JSON.stringify(value);
+    return value;
+  } catch {
+    return JSON.parse(safeStringify(value));
+  }
+}
 
 /**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
@@ -99,21 +140,39 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-export function generateEmptyFromSchema(schema: string) {
+/**
+ * Generate an empty object from a JSON Schema definition.
+ * Accepts both a JSON string and a pre-parsed object.
+ * Recursively initializes nested object properties and respects default values.
+ */
+export function generateEmptyFromSchema(schema: string | Record<string, unknown>): Record<string, unknown> {
   try {
-    const parsedSchema = JSON.parse(schema);
+    const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
-    const obj: Record<string, any> = {};
-    const TYPE_DEFAULTS = {
-      string: '',
-      array: [],
-      object: {},
-      number: 0,
-      integer: 0,
-      boolean: false,
-    };
-    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
+    const obj: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries<Record<string, unknown>>(
+      parsedSchema.properties as Record<string, Record<string, unknown>>,
+    )) {
+      if (prop.default !== undefined) {
+        obj[key] =
+          typeof prop.default === 'object' && prop.default !== null
+            ? JSON.parse(JSON.stringify(prop.default))
+            : prop.default;
+      } else if (prop.type === 'object' && prop.properties) {
+        obj[key] = generateEmptyFromSchema(prop);
+      } else if (prop.type === 'object') {
+        obj[key] = {};
+      } else if (prop.type === 'string') {
+        obj[key] = '';
+      } else if (prop.type === 'array') {
+        obj[key] = [];
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        obj[key] = 0;
+      } else if (prop.type === 'boolean') {
+        obj[key] = false;
+      } else {
+        obj[key] = null;
+      }
     }
     return obj;
   } catch {
@@ -279,6 +338,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
+  agentId?: string;
   model?: MastraLanguageModel | MastraLegacyLanguageModel;
   /**
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
@@ -295,6 +355,11 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
   workspace?: Workspace;
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   */
+  browser?: MastraBrowser;
 }
 
 /**
@@ -438,32 +503,32 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       }
 
       if (prop === 'logger') {
-        logger.warn(`Please use 'getLogger' instead, logger is deprecated`);
+        logger.warn("Please use 'getLogger' instead, logger is deprecated");
         return Reflect.apply(target.getLogger, target, []);
       }
 
       if (prop === 'storage') {
-        logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
+        logger.warn("Please use 'getStorage' instead, storage is deprecated");
         return Reflect.get(target, 'storage');
       }
 
       if (prop === 'agents') {
-        logger.warn(`Please use 'listAgents' instead, agents is deprecated`);
+        logger.warn("Please use 'listAgents' instead, agents is deprecated");
         return Reflect.apply(target.listAgents, target, []);
       }
 
       if (prop === 'tts') {
-        logger.warn(`Please use 'getTTS' instead, tts is deprecated`);
+        logger.warn("Please use 'getTTS' instead, tts is deprecated");
         return Reflect.apply(target.getTTS, target, []);
       }
 
       if (prop === 'vectors') {
-        logger.warn(`Please use 'getVectors' instead, vectors is deprecated`);
+        logger.warn("Please use 'getVectors' instead, vectors is deprecated");
         return Reflect.apply(target.getVectors, target, []);
       }
 
       if (prop === 'memory') {
-        logger.warn(`Please use 'getMemory' instead, memory is deprecated`);
+        logger.warn("Please use 'getMemory' instead, memory is deprecated");
         return Reflect.get(target, 'memory');
       }
 
@@ -638,7 +703,7 @@ export async function fetchWithRetry(
         break;
       }
 
-      const delay = Math.min(1000 * Math.pow(2, retryCount) * 1000, 10000);
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

@@ -18,7 +18,9 @@ This guide covers deploying the [Mastra server](/docs/server/mastra-server). If 
 
 You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Vercel](https://vercel.com/) account.
 
+:::warning
 Vercel Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+:::
 
 ## Installation
 
@@ -77,7 +79,7 @@ export const mastra = new Mastra({
 
 ## Studio
 
-You can deploy [Studio](/docs/getting-started/studio) alongside your API by enabling the `studio` option. Studio is deployed as static assets served from Vercel's Edge CDN, so it doesn't consume function invocations.
+You can deploy [Studio](/docs/studio/overview) alongside your API by enabling the `studio` option. Studio is deployed as static assets served from Vercel's Edge CDN, so it doesn't consume function invocations.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

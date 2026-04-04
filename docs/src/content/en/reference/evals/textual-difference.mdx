@@ -1,41 +1,40 @@
 ---
-title: "Reference: Textual Difference Scorer | Evals"
+title: "Reference: Textual difference scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Textual Difference Scorer
+# Textual difference scorer
 
 The `createTextualDifferenceScorer()` function uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
 ## Parameters
 
-The `createTextualDifferenceScorer()` function does not take any options.
+The `createTextualDifferenceScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description:
-"Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
-},
-{
-name: "score",
-type: "number",
-description: "Similarity ratio (0-1) where 1 indicates identical texts.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Similarity ratio (0-1) where 1 indicates identical texts.',
+  },
 ]}
 />
 
@@ -54,7 +53,7 @@ description: "Similarity ratio (0-1) where 1 indicates identical texts.",
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 The scorer calculates several measures:
 

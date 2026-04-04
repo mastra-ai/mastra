@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
 import { useAuiState } from '@assistant-ui/react';
-import { cn } from '@/lib/utils';
+import type { MastraUIMessage } from '@mastra/react';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
-import { Badge } from '@/ds/components/Badge';
-import { Icon } from '@/ds/icons';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { useState, useEffect, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
-import { MastraUIMessage } from '@mastra/react';
-import { useLinkComponent } from '@/lib/framework';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
+import { Badge } from '@/ds/components/Badge';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { IconButton } from '@/ds/components/IconButton';
+import { Icon } from '@/ds/icons';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 // Matches the shape returned by workspace.getInfo()
 interface WorkspaceMetadata {
@@ -68,14 +69,14 @@ export const FileTreeBadge = ({
   const { Link } = useLinkComponent();
 
   // Parse args
-  let parsedArgs: ParsedArgs = { path: '/' };
+  let parsedArgs: ParsedArgs = { path: '.' };
   try {
     parsedArgs = typeof args === 'object' ? (args as ParsedArgs) : JSON.parse(args);
   } catch {
     // ignore
   }
 
-  const { path = '/', maxDepth, showHidden, dirsOnly, exclude, extension } = parsedArgs;
+  const { path = '.', maxDepth, showHidden, dirsOnly, exclude, extension } = parsedArgs;
 
   // Build args display string
   const argsDisplay: string[] = [];
@@ -203,7 +204,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="p-3 text-xs font-mono text-mastra-el-6 overflow-x-auto whitespace-pre max-h-[300px] overflow-y-auto">
+              <pre className="p-3 text-xs font-mono text-mastra-el-6 overflow-x-auto whitespace-pre max-h-dropdown-max-height overflow-y-auto">
                 {treeOutput}
               </pre>
             </div>

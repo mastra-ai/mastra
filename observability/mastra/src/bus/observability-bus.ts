@@ -10,59 +10,27 @@
  * events of that type are silently skipped for that handler.
  */
 
-import type {
-  ObservabilityExporter,
-  ObservabilityBridge,
-  TracingEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  ObservabilityEvent,
-} from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent } from '@mastra/core/observability';
 
-import { AutoExtractedMetrics } from '../metrics/auto-extract';
-import type { CardinalityFilter } from '../metrics/cardinality';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
 
 /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
 const MAX_FLUSH_ITERATIONS = 3;
 
-/** Type guard that narrows an ObservabilityEvent to a TracingEvent. */
-function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
-  return (
-    event.type === TracingEventType.SPAN_STARTED ||
-    event.type === TracingEventType.SPAN_UPDATED ||
-    event.type === TracingEventType.SPAN_ENDED
-  );
-}
-
+/**
+ * Unified event bus for all observability signals (tracing, logs, metrics, scores, feedback).
+ * Routes events to registered exporters and an optional bridge.
+ */
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
   private bridge?: ObservabilityBridge;
-  private autoExtractor?: AutoExtractedMetrics;
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
 
   constructor() {
     super({ name: 'ObservabilityBus' });
-  }
-
-  /**
-   * Enable auto-extraction of metrics from tracing, score, and feedback events.
-   * When enabled, span lifecycle events automatically generate counter/histogram
-   * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
-   *
-   * No-ops if auto-extraction is already enabled.
-   *
-   * @param cardinalityFilter - Optional filter applied to auto-extracted metric labels.
-   */
-  enableAutoExtractedMetrics(cardinalityFilter?: CardinalityFilter): void {
-    if (this.autoExtractor) {
-      return;
-    }
-    this.autoExtractor = new AutoExtractedMetrics(this, cardinalityFilter);
   }
 
   /**
@@ -135,8 +103,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Emit an event: route to exporter/bridge handlers, run auto-extraction,
-   * then forward to base class for subscriber delivery.
+   * Emit an event: route to exporter/bridge handlers, then forward to base
+   * class for subscriber delivery.
    *
    * emit() is synchronous — async handler promises are tracked internally
    * and can be drained via flush().
@@ -150,22 +118,6 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // Route to bridge (same routing logic as exporters)
     if (this.bridge) {
       this.trackPromise(routeToHandler(this.bridge, event, this.logger));
-    }
-
-    // Auto-extract metrics from tracing, score, and feedback events.
-    // Wrapped in try-catch so a failing extractor never prevents subscriber delivery.
-    if (this.autoExtractor) {
-      try {
-        if (isTracingEvent(event)) {
-          this.autoExtractor.processTracingEvent(event);
-        } else if (event.type === 'score') {
-          this.autoExtractor.processScoreEvent(event as ScoreEvent);
-        } else if (event.type === 'feedback') {
-          this.autoExtractor.processFeedbackEvent(event as FeedbackEvent);
-        }
-      } catch (err) {
-        this.logger.error('[ObservabilityBus] Auto-extraction error:', err);
-      }
     }
 
     // Deliver to subscribers (base class tracks its own pending promises)

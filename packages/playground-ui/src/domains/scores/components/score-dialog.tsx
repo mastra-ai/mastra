@@ -1,9 +1,5 @@
-import { useState } from 'react';
-import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
+import type { ScoreRowData } from '@mastra/core/evals';
+import { format } from 'date-fns/format';
 import {
   HashIcon,
   GaugeIcon,
@@ -15,12 +11,17 @@ import {
   CalculatorIcon,
   SaveIcon,
 } from 'lucide-react';
-
-import type { ScoreRowData } from '@mastra/core/evals';
-import { useLinkComponent } from '@/lib/framework';
-import { Sections } from '@/index';
-import { format } from 'date-fns/format';
+import { useState } from 'react';
 import { ScoreAsItemDialog } from './score-as-item-dialog';
+import { Button } from '@/ds/components/Button';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { SideDialog } from '@/ds/components/SideDialog';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Icon } from '@/ds/icons/Icon';
+
+import { Sections } from '@/index';
+import { useLinkComponent } from '@/lib/framework';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {
   if (!score) return false;
@@ -55,8 +56,12 @@ export function ScoreDialog({
   usageContext = 'scorerPage',
 }: ScoreDialogProps) {
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
   const isCodeBased = isCodeBasedScorer(score);
+  const scorerDetailHref =
+    score?.scorerId && score?.entityId
+      ? `${paths.scorerLink(score.scorerId)}?entity=${encodeURIComponent(score.entityId)}&scoreId=${encodeURIComponent(score.id)}`
+      : undefined;
 
   return (
     <>
@@ -96,13 +101,7 @@ export function ScoreDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button
-            variant="standard"
-            size="default"
-            className="ml-auto mr-8"
-            disabled={!score}
-            onClick={() => setDatasetDialogOpen(true)}
-          >
+          <Button size="default" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
             <Icon>
               <SaveIcon />
             </Icon>
@@ -127,7 +126,11 @@ export function ScoreDialog({
                   ? [
                       {
                         label: 'Scorer',
-                        value: (score?.scorer?.name as string) || '-',
+                        value: scorerDetailHref ? (
+                          <Link href={scorerDetailHref}>{(score?.scorer?.name as string) || '-'}</Link>
+                        ) : (
+                          (score?.scorer?.name as string) || '-'
+                        ),
                         key: 'scorer-name',
                       },
                     ]
@@ -161,7 +164,6 @@ export function ScoreDialog({
                     ]
                   : []),
               ]}
-              LinkComponent={Link}
             />
 
             <SideDialog.CodeSection

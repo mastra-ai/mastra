@@ -1,16 +1,17 @@
+import type { ColumnDef } from '@tanstack/react-table';
+import { Footprints } from 'lucide-react';
+import type { WorkflowTableData } from './types';
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
 
-import { ColumnDef } from '@tanstack/react-table';
 import { useLinkComponent } from '@/lib/framework';
-import { Footprints } from 'lucide-react';
-import { WorkflowTableData } from './types';
 
 export const columns: ColumnDef<WorkflowTableData>[] = [
   {
     id: 'name',
     header: 'Name',
     cell: ({ row }) => {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       const { Link, paths } = useLinkComponent();
       const workflow = row.original;
 
@@ -36,7 +37,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
       return (
         <Cell>
           <div className="flex justify-end items-center gap-2">
-            <Badge icon={<Footprints />} className="!h-form-sm">
+            <Badge icon={<Footprints />} className="h-form-sm!">
               {stepsCount} step{stepsCount > 1 ? 's' : ''}
             </Badge>
           </div>

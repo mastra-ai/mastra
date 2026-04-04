@@ -83,9 +83,16 @@ export class CloudflareDeployer extends Deployer {
       kvNamespaces?: unknown;
     };
     const loadedEnvVars = await this.loadEnvVars();
+    const envsAsObject = Object.assign({}, userVars);
 
-    // Merge env vars from .env files with user-provided vars
-    const envsAsObject = Object.assign({}, Object.fromEntries(loadedEnvVars.entries()), userVars);
+    if (loadedEnvVars.size > 0) {
+      const envKeys = [...loadedEnvVars.keys()].join(', ');
+      this.logger.warn(
+        `Environment variables from .env (${envKeys}) were not written to wrangler.jsonc.
+Upload them as Cloudflare Secrets instead:
+npx wrangler secret bulk .env`,
+      );
+    }
 
     // Write TypeScript stub to prevent bundling the full TypeScript library (~10MB)
     // The agent-builder package dynamically imports TypeScript for code validation,
@@ -126,6 +133,18 @@ export const $ = execa;
 `;
     await writeFile(join(outputDirectory, this.outputDir, execaStubPath), execaStub);
 
+    // Write readable-stream stub — redirects to native node:stream available via nodejs_compat.
+    // readable-stream is a userland copy of Node.js streams used by packages like elevenlabs.
+    // Bundling it for Workers pulls in Node.js polyfills (abort-controller, process/, string_decoder/)
+    // that are unnecessary and fail to resolve. The native node:stream is API-compatible.
+    const readableStreamStubPath = 'readable-stream-stub.mjs';
+    const readableStreamStub = `// Redirect readable-stream to native node:stream (available via nodejs_compat)
+import stream from 'node:stream';
+export const { Readable, Writable, Duplex, Transform, PassThrough, Stream, pipeline, finished } = stream;
+export default stream;
+`;
+    await writeFile(join(outputDirectory, this.outputDir, readableStreamStubPath), readableStreamStub);
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
       compatibility_date: '2025-04-01',
@@ -142,6 +161,7 @@ export const $ = execa;
       alias: {
         typescript: `./${typescriptStubPath}`,
         execa: `./${execaStubPath}`,
+        'readable-stream': `./${readableStreamStubPath}`,
         ...userAlias,
       },
     };

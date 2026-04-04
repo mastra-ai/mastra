@@ -16,7 +16,7 @@ import type {
   StreamEvent,
 } from '@internal/workflow-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
@@ -49,6 +49,11 @@ createWorkflowTestSuite({
 
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
+
+  beforeAll: async () => {
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
+  },
 
   beforeEach: async () => {
     // Don't reset mocks - they're created at describe time and need to persist

@@ -1,18 +1,23 @@
-// import { llmRecorderPlugin } from '@internal/llm-recorder/vite-plugin';
+import { llmRecorderPlugin } from '@internal/llm-recorder/vite-plugin';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Cast to any to avoid vite version mismatch type errors between workspace packages
   plugins: [
-    // llmRecorderPlugin({
-    //   transformRequest: {
-    //     importPath: './src/transform-request',
-    //     exportName: 'transformRequest',
-    //   },
-    // }) as any,
+    llmRecorderPlugin({
+      transformRequest: {
+        importPath: './src/transform-request',
+        exportName: 'transformRequest',
+      },
+    }) as any,
   ],
   test: {
     //pool: 'forks',
+    poolOptions: {
+      threads: {
+        maxThreads: 2,
+      },
+    },
     globals: true,
     environment: 'node',
     testTimeout: 60000,

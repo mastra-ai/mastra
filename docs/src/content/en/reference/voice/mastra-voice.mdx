@@ -9,7 +9,7 @@ packages:
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality. The class now includes support for real-time speech-to-speech capabilities through WebSocket connections.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { MastraVoice } from '@mastra/core/voice'
@@ -84,98 +84,117 @@ class MyVoiceProvider extends MastraVoice {
 }
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
-{
-name: "config",
-type: "VoiceConfig",
-description: "Configuration object for the voice service",
-isOptional: true,
-},
-{
-name: "config.speechModel",
-type: "BuiltInModelConfig",
-description: "Configuration for the text-to-speech model",
-isOptional: true,
-},
-{
-name: "config.listeningModel",
-type: "BuiltInModelConfig",
-description: "Configuration for the speech-to-text model",
-isOptional: true,
-},
-{
-name: "config.speaker",
-type: "string",
-description: "Default speaker/voice ID to use",
-isOptional: true,
-},
-{
-name: "config.name",
-type: "string",
-description: "Name for the voice provider instance",
-isOptional: true,
-},
-{
-name: "config.realtimeConfig",
-type: "object",
-description: "Configuration for real-time speech-to-speech capabilities",
-isOptional: true,
-},
+  {
+    name: 'config',
+    type: 'VoiceConfig',
+    description: 'Configuration object for the voice service',
+    isOptional: true,
+  },
+  {
+    name: 'config.speechModel',
+    type: 'BuiltInModelConfig',
+    description: 'Configuration for the text-to-speech model',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BuiltInModelConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Name of the model to use',
+            isOptional: false,
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'API key for the model service',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'config.listeningModel',
+    type: 'BuiltInModelConfig',
+    description: 'Configuration for the speech-to-text model',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BuiltInModelConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Name of the model to use',
+            isOptional: false,
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'API key for the model service',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'config.speaker',
+    type: 'string',
+    description: 'Default speaker/voice ID to use',
+    isOptional: true,
+  },
+  {
+    name: 'config.name',
+    type: 'string',
+    description: 'Name for the voice provider instance',
+    isOptional: true,
+  },
+  {
+    name: 'config.realtimeConfig',
+    type: 'object',
+    description: 'Configuration for real-time speech-to-speech capabilities',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'model',
+            type: 'string',
+            description: 'Model to use for real-time speech-to-speech capabilities',
+            isOptional: true,
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'API key for the real-time service',
+            isOptional: true,
+          },
+          {
+            name: 'options',
+            type: 'unknown',
+            description: 'Provider-specific options for real-time capabilities',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
-### BuiltInModelConfig
-
-<PropertiesTable
-  content={[
-{
-name: "name",
-type: "string",
-description: "Name of the model to use",
-isOptional: false,
-},
-{
-name: "apiKey",
-type: "string",
-description: "API key for the model service",
-isOptional: true,
-},
-]}
-/>
-
-### RealtimeConfig
-
-<PropertiesTable
-  content={[
-{
-name: "model",
-type: "string",
-description: "Model to use for real-time speech-to-speech capabilities",
-isOptional: true,
-},
-{
-name: "apiKey",
-type: "string",
-description: "API key for the real-time service",
-isOptional: true,
-},
-{
-name: "options",
-type: "unknown",
-description: "Provider-specific options for real-time capabilities",
-isOptional: true,
-},
-]}
-/>
-
-## Abstract Methods
+## Abstract methods
 
 These methods must be implemented by unknown class extending MastraVoice.
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speech model.
 
@@ -197,7 +216,7 @@ Purpose:
 - Returns a stream of audio data that can be played or saved
 - May return void if the audio is handled by emitting 'speaking' event
 
-### listen()
+### `listen()`
 
 Converts speech to text using the configured listening model.
 
@@ -218,7 +237,7 @@ Purpose:
 - Not all providers support this functionality (e.g., PlayAI, Speechify)
 - May return void if the transcription is handled by emitting 'writing' event
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voices supported by the provider.
 
@@ -233,11 +252,11 @@ Purpose:
 - Providers can include additional metadata about each voice
 - Used to discover available voices for text-to-speech conversion
 
-## Optional Methods
+## Optional methods
 
 These methods have default implementations but can be overridden by voice providers that support speech-to-speech capabilities.
 
-### connect()
+### `connect()`
 
 Establishes a WebSocket or WebRTC connection for communication.
 
@@ -252,7 +271,7 @@ Purpose:
 - Returns a Promise that resolves when the connection is established
 - Configuration is provider-specific
 
-### send()
+### `send()`
 
 Streams audio data in real-time to the voice provider.
 
@@ -267,7 +286,7 @@ Purpose:
 - Supports both ReadableStream and Int16Array audio formats
 - Must be in connected state before calling this method
 
-### answer()
+### `answer()`
 
 Triggers the voice provider to generate a response.
 
@@ -281,7 +300,7 @@ Purpose:
 - Used in real-time conversations to prompt the AI to respond
 - Response will be emitted through the event system (e.g., 'speaking' event)
 
-### addTools()
+### `addTools()`
 
 Equips the voice provider with tools that can be used during conversations.
 
@@ -295,7 +314,7 @@ Purpose:
 - Tools can extend the capabilities of the voice provider
 - Implementation is provider-specific
 
-### close()
+### `close()`
 
 Disconnects from the WebSocket or WebRTC connection.
 
@@ -309,7 +328,7 @@ Purpose:
 - Cleans up resources and stops any ongoing real-time processing
 - Should be called when you're done with the voice instance
 
-### on()
+### `on()`
 
 Registers an event listener for voice events.
 
@@ -327,7 +346,7 @@ Purpose:
 - Providers can emit custom events as well
 - Event data structure depends on the event type
 
-### off()
+### `off()`
 
 Removes an event listener.
 
@@ -343,69 +362,68 @@ Purpose:
 - Removes a previously registered event listener
 - Used to clean up event handlers when they're no longer needed
 
-## Event System
+## Event system
 
 The MastraVoice class includes an event system for real-time communication. Standard event types include:
 
 <PropertiesTable
   content={[
-{
-name: "speaking",
-type: "{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }",
-description:
-"Emitted when the voice provider is speaking, contains audio data",
-},
-{
-name: "writing",
-type: "{ text: string, role: string }",
-description: "Emitted when text is transcribed from speech",
-},
-{
-name: "error",
-type: "{ message: string; code?: string; details?: unknown }",
-description: "Emitted when an error occurs",
-},
+  {
+    name: 'speaking',
+    type: '{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }',
+    description: 'Emitted when the voice provider is speaking, contains audio data',
+  },
+  {
+    name: 'writing',
+    type: '{ text: string, role: string }',
+    description: 'Emitted when text is transcribed from speech',
+  },
+  {
+    name: 'error',
+    type: '{ message: string; code?: string; details?: unknown }',
+    description: 'Emitted when an error occurs',
+  },
 ]}
 />
 
-## Protected Properties
+## Protected properties
 
 <PropertiesTable
   content={[
-{
-name: "listeningModel",
-type: "BuiltInModelConfig | undefined",
-description: "Configuration for the speech-to-text model",
-isOptional: true,
-},
-{
-name: "speechModel",
-type: "BuiltInModelConfig | undefined",
-description: "Configuration for the text-to-speech model",
-isOptional: true,
-},
-{
-name: "speaker",
-type: "string | undefined",
-description: "Default speaker/voice ID",
-isOptional: true,
-},
-{
-name: "realtimeConfig",
-type: "{ model?: string; apiKey?: string; options?: unknown } | undefined",
-description: "Configuration for real-time speech-to-speech capabilities",
-isOptional: true,
-},
+  {
+    name: 'listeningModel',
+    type: 'BuiltInModelConfig | undefined',
+    description: 'Configuration for the speech-to-text model',
+    isOptional: true,
+  },
+  {
+    name: 'speechModel',
+    type: 'BuiltInModelConfig | undefined',
+    description: 'Configuration for the text-to-speech model',
+    isOptional: true,
+  },
+  {
+    name: 'speaker',
+    type: 'string | undefined',
+    description: 'Default speaker/voice ID',
+    isOptional: true,
+  },
+  {
+    name: 'realtimeConfig',
+    type: '{ model?: string; apiKey?: string; options?: unknown } | undefined',
+    description: 'Configuration for real-time speech-to-speech capabilities',
+    isOptional: true,
+  },
 ]}
 />
 
-## Telemetry Support
+## Telemetry support
 
 MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
 
 ## Notes
 
-- MastraVoice is an abstract class and cannot be instantiated directly
+- MastraVoice is an abstract class and can't be instantiated directly
 - Implementations must provide concrete implementations for all abstract methods
 - The class provides a consistent interface across different voice service providers
 - Speech-to-speech capabilities are optional and provider-specific

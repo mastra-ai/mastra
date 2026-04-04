@@ -9,7 +9,7 @@
 
 import { createRequire } from 'node:module';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -316,7 +316,10 @@ export function removeImport(content: string, root: SgNode, targetName: string):
 
   for (const imp of imports) {
     const text = imp.text();
-    if (text.includes(`'${targetName}'`) || text.includes(`"${targetName}"`)) {
+    const moduleMatch = text.match(/from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/);
+    const moduleName = moduleMatch?.[1] ?? moduleMatch?.[2];
+
+    if (moduleName === targetName || moduleName?.startsWith(`${targetName}/`)) {
       const range = imp.range();
       const start = range.start.index;
       let end = range.end.index;
@@ -516,7 +519,10 @@ Pattern replace (for everything else):
     // Write back if modified
     const wasModified = modifiedContent !== content;
     if (wasModified) {
-      await filesystem.writeFile(path, modifiedContent, { overwrite: true });
+      await filesystem.writeFile(path, modifiedContent, {
+        overwrite: true,
+        expectedMtime: (context as any)?.__expectedMtime,
+      });
     }
 
     if (!wasModified) {

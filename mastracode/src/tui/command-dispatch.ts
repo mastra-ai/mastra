@@ -19,6 +19,7 @@ import {
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
+  handleThreadCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
@@ -32,6 +33,7 @@ import {
   handleSetupCommand,
   handleThemeCommand,
   handleUpdateCommand,
+  handleMemoryGatewayCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -49,17 +51,20 @@ export async function dispatchSlashCommand(
 ): Promise<boolean> {
   const trimmedInput = input.trim();
 
-  // Strip leading slashes — pi-tui may pass /command or command depending
-  // on how the user invoked it.  Try custom commands first, then built-in.
-  const withoutSlashes = trimmedInput.replace(/^\/+/, '');
-  if (trimmedInput.startsWith('/')) {
+  const slashMatch = trimmedInput.match(/^(\/\/?)(.*)$/);
+  const slashPrefix = slashMatch?.[1] ?? '';
+  const withoutSlashes = slashMatch?.[2] ?? trimmedInput;
+
+  if (slashPrefix === '//') {
     const [cmdName, ...cmdArgs] = withoutSlashes.split(' ');
     const customCommand = state.customSlashCommands.find(cmd => cmd.name === cmdName);
     if (customCommand) {
       await handleCustomSlashCommand(state, customCommand, cmdArgs);
       return true;
     }
-    // Not a custom command — fall through to built-in routing
+
+    showError(state, `Unknown custom command: ${cmdName}`);
+    return true;
   }
 
   const [command, ...args] = withoutSlashes.split(' ');
@@ -73,6 +78,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
+      return true;
+    case 'thread':
+      await handleThreadCommand(buildCtx());
       return true;
     case 'skills':
       await handleSkillsCommand(buildCtx());
@@ -154,6 +162,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'update':
       await handleUpdateCommand(buildCtx());
+      return true;
+    case 'memory-gateway':
+      await handleMemoryGatewayCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

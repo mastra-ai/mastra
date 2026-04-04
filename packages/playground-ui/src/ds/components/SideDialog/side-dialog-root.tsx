@@ -1,9 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { cn } from '@/lib/utils';
 
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { ChevronsRightIcon } from 'lucide-react';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type SideDialogRootProps = {
   variant?: 'default' | 'confirmation';
@@ -64,7 +64,7 @@ export function SideDialogRoot({
             <Dialog.Close asChild>
               <button
                 className={cn(
-                  'flex appearance-none items-center justify-center rounded-bl-lg h-[3.5rem] w-[3.5rem] absolute top-0 left-[-3.5rem] bg-surface2 text-neutral3 border-l border-b border-border2',
+                  'flex appearance-none items-center justify-center rounded-bl-lg h-14 w-14 absolute top-0 -left-14 bg-surface2 text-neutral3 border-l border-b border-border2',
                   transitions.all,
                   'hover:bg-surface4 hover:text-neutral5',
                 )}

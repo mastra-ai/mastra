@@ -1,19 +1,19 @@
-import type { RefObject } from 'react';
-import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, Save } from 'lucide-react';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { Label } from '@/ds/components/Label';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { SectionHeader } from '@/domains/cms';
-import { LLMProviders, LLMModels } from '@/domains/llm';
+import type { RefObject } from 'react';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import type { ScorerFormValues } from './utils/form-validation';
+import { SectionHeader } from '@/domains/cms';
+import { LLMProviders, LLMModels } from '@/domains/llm';
+import { Button } from '@/ds/components/Button';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Textarea } from '@/ds/components/Textarea';
+import { Icon } from '@/ds/icons';
 
 interface ScorerEditSidebarProps {
   form: UseFormReturn<ScorerFormValues>;
@@ -88,7 +88,7 @@ export function ScorerEditSidebar({
               name="model.provider"
               control={control}
               render={({ field }) => (
-                <LLMProviders value={field.value} onValueChange={field.onChange} variant="light" container={formRef} />
+                <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
               )}
             />
             {errors.model?.provider && <span className="text-xs text-accent2">{errors.model.provider.message}</span>}
@@ -107,7 +107,6 @@ export function ScorerEditSidebar({
                   value={field.value}
                   onValueChange={field.onChange}
                   llmId={watchedProvider || ''}
-                  variant="light"
                   container={formRef}
                 />
               )}
@@ -195,7 +194,7 @@ export function ScorerEditSidebar({
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="flex-shrink-0 p-4">
+      <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">

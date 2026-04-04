@@ -1,70 +1,58 @@
 import {
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
-  useLinkComponent,
-  DocsIcon,
+  ButtonWithTooltip,
   useAgents,
-  AgentsTable,
+  AgentsList,
   AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
+  useCanCreateAgent,
+  useLinkComponent,
 } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
+import { BookIcon, Plus } from 'lucide-react';
+import { useState } from 'react';
 
 function Agents() {
-  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { isCmsAvailable } = useIsCmsAvailable();
-  const { canEdit } = usePermissions();
-
-  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
-
-  const handleCreateClick = () => {
-    navigate('/cms/agents/create');
-  };
+  const [search, setSearch] = useState('');
+  const { canCreateAgent } = useCanCreateAgent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const createAgentPath = paths.cmsAgentCreateLink();
+  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          Agents
-        </HeaderTitle>
-
-        <HeaderAction>
-          {canCreateAgent && (
-            <Button variant="light" as={Link} to="/cms/agents/create">
-              <Icon>
+    <EntityListPageLayout>
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isLoading}>
+              <AgentIcon /> Agents
+            </MainHeader.Title>
+          </MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
+            {showCreateCta && (
+              <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
                 <Plus />
-              </Icon>
-              Create an agent
-            </Button>
-          )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Agents documentation
-          </Button>
-        </HeaderAction>
-      </Header>
+              </ButtonWithTooltip>
+            )}
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Agents documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </MainHeader.Column>
+        </MainHeader>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+        </div>
+      </EntityListPageLayout.Top>
 
-      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-        />
-      </MainContentContent>
-    </MainContentLayout>
+      <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
+    </EntityListPageLayout>
   );
 }
 

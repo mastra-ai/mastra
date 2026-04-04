@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/getting-started/start",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/index",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/:path*",
       "destination": "/docs/:path*",
       "permanent": true
@@ -132,7 +142,7 @@
     },
     {
       "source": "/docs/getting-started/templates",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -412,7 +422,7 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/studio",
+      "destination": "/docs/mastra-cloud/overview",
       "permanent": true
     },
     {
@@ -542,7 +552,7 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -643,6 +653,51 @@
     {
       "source": "/reference/mastra-code/createMastraCode",
       "destination": "https://code.mastra.ai/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/network-approval",
+      "destination": "/docs/agents/networks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/studio",
+      "destination": "/docs/studio/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/studio",
+      "destination": "/docs/studio/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/studio",
+      "destination": "/docs/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/overview",
+      "destination": "/docs/evals/datasets/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/running-experiments",
+      "destination": "/docs/evals/datasets/running-experiments",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/listStoredAgents",
+      "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getStoredAgentById",
+      "destination": "/reference",
       "permanent": true
     }
   ]

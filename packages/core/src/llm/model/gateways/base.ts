@@ -44,6 +44,14 @@ export abstract class MastraModelGateway {
   }
 
   /**
+   * Whether this gateway should be enabled for the current runtime.
+   * Disabled gateways are skipped when syncing and filtered out when reading cached registry data.
+   */
+  shouldEnable(): boolean {
+    return true;
+  }
+
+  /**
    * Fetch provider configurations from the gateway
    * Should return providers in the standard format
    */

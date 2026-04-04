@@ -21,8 +21,8 @@
     "@mastra/libsql": "*",
     "@mastra/mcp": "*",
     "mastra": "*",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
   },
   "pnpm": {
     "overrides": {

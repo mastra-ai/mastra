@@ -1,6 +1,13 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { useJSONParser } from '../../hooks/use-json-parser';
+import type { ParsedJSON } from '../../hooks/use-json-parser';
+import { JSONPreviewTable } from './json-preview-table';
+import { JSONUploadStep } from './json-upload-step';
+import { JSONValidationSummary } from './json-validation-summary';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -10,14 +17,8 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { toast } from '@/lib/toast';
-import { useJSONParser, type ParsedJSON } from '../../hooks/use-json-parser';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { JSONUploadStep } from './json-upload-step';
-import { JSONPreviewTable } from './json-preview-table';
-import { JSONValidationSummary } from './json-validation-summary';
 
 export interface JSONImportDialogProps {
   datasetId: string;
@@ -196,19 +197,13 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return (
-          <Button variant="standard" size="default" onClick={handleClose}>
-            Cancel
-          </Button>
-        );
+        return <Button onClick={handleClose}>Cancel</Button>;
 
       case 'preview':
         return (
           <>
-            <Button variant="standard" size="default" onClick={() => setStep('upload')}>
-              Back
-            </Button>
-            <Button variant="cta" size="default" onClick={handleImport} disabled={!canImport}>
+            <Button onClick={() => setStep('upload')}>Back</Button>
+            <Button variant="primary" onClick={handleImport} disabled={!canImport}>
               Import {parsedJSON?.items.length ?? 0} Item{parsedJSON?.items.length !== 1 ? 's' : ''}
             </Button>
           </>
@@ -219,7 +214,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
       case 'complete':
         return (
-          <Button variant="cta" size="default" onClick={handleDone}>
+          <Button variant="primary" onClick={handleDone}>
             Done
           </Button>
         );

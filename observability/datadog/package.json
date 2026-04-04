@@ -1,6 +1,6 @@
 {
   "name": "@mastra/datadog",
-  "version": "1.0.4",
+  "version": "1.0.13",
   "description": "Datadog LLM Observability exporter for Mastra - exports tracing data to Datadog's LLM Observability product",
   "type": "module",
   "main": "dist/index.js",
@@ -32,16 +32,16 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "dd-trace": "^5.0.0"
+    "dd-trace": "^5.89.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

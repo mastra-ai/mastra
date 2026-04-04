@@ -1,19 +1,22 @@
-import { useCallback, useMemo } from 'react';
-import { type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { Label } from '@/ds/components/Label';
-import { SectionHeader } from '@/domains/cms';
-import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
-import type { JsonSchema } from '@/lib/json-schema';
+import { useCallback, useMemo } from 'react';
+import { useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
+import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { SectionHeader } from '@/domains/cms';
+import { Button } from '@/ds/components/Button';
+import { Input } from '@/ds/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Textarea } from '@/ds/components/Textarea';
+import { Txt } from '@/ds/components/Txt';
+import { useLinkComponent } from '@/lib/framework';
+import type { JsonSchema } from '@/lib/json-schema';
 
 function RecursiveFieldRenderer({
   field,
@@ -25,7 +28,7 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="py-2 border-border1 border-l-4 border-b">
+    <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row gap-4 items-center">
@@ -36,10 +39,10 @@ function RecursiveFieldRenderer({
               className="[&_input]:bg-surface3 w-full"
             />
 
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove variant="outline" size="md" className="shrink-0" />
+            <JSONSchemaForm.FieldRemove variant="outline" />
           </div>
         </div>
 
@@ -54,8 +57,8 @@ function RecursiveFieldRenderer({
               />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <PlusIcon className="w-3 h-3 mr-1" />
+          <JSONSchemaForm.AddField className="mt-2" size="sm">
+            <PlusIcon />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -75,6 +78,8 @@ interface PromptBlockEditSidebarProps {
   mode?: 'create' | 'edit';
   /** Key that changes when form is reset with new data, forces JSONSchemaForm to remount */
   formResetKey?: number;
+  /** Block ID, used to show "Used by" agents section in edit mode */
+  blockId?: string;
 }
 
 export function PromptBlockEditSidebar({
@@ -87,6 +92,7 @@ export function PromptBlockEditSidebar({
   hasDraft = false,
   mode = 'create',
   formResetKey = 0,
+  blockId,
 }: PromptBlockEditSidebarProps) {
   const {
     register,
@@ -104,6 +110,17 @@ export function PromptBlockEditSidebar({
   );
 
   const initialFields = useMemo(() => jsonSchemaToFields(watchedVariables), [watchedVariables]);
+
+  const { data: storedAgentsData } = useStoredAgents();
+  const { navigate, paths } = useLinkComponent();
+
+  const usedByAgents = useMemo(() => {
+    if (!blockId || !storedAgentsData?.agents) return [];
+    return storedAgentsData.agents.filter(agent => {
+      if (!Array.isArray(agent.instructions)) return false;
+      return agent.instructions.some(instr => instr.type === 'prompt_block_ref' && instr.id === blockId);
+    });
+  }, [blockId, storedAgentsData]);
 
   return (
     <div className="h-full flex flex-col">
@@ -167,27 +184,47 @@ export function PromptBlockEditSidebar({
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField className="bg-transparent flex items-center justify-center gap-2 text-ui-sm text-neutral3 hover:text-neutral6 w-full border border-dashed border-border1 p-2 rounded-md">
-                <Icon>
-                  <Plus />
-                </Icon>
+              <JSONSchemaForm.AddField>
+                <Plus />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>
           </JSONSchemaForm.Root>
         </div>
+
+        {/* Used by */}
+        {mode === 'edit' && blockId && (
+          <div className="flex flex-col gap-3 p-4 border-t border-border1">
+            <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
+            {usedByAgents.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {usedByAgents.map(agent => (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => navigate(paths.agentLink(agent.id))}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-surface3 transition-colors"
+                  >
+                    <Txt variant="ui-sm" className="text-neutral5 truncate">
+                      {agent.name || agent.id}
+                    </Txt>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Txt variant="ui-sm" className="text-neutral3">
+                Not referenced by any agents yet.
+              </Txt>
+            )}
+          </div>
+        )}
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="flex-shrink-0 p-4">
+      <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={onSaveDraft}
-              disabled={!isDirty || isSavingDraft || isSubmitting}
-              className="flex-1"
-            >
+            <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -195,9 +232,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Save />
-                  </Icon>
+                  <Save />
                   Save
                 </>
               )}
@@ -215,9 +250,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Check />
-                  </Icon>
+                  <Check />
                   Publish
                 </>
               )}
@@ -232,9 +265,7 @@ export function PromptBlockEditSidebar({
               </>
             ) : (
               <>
-                <Icon>
-                  <Check />
-                </Icon>
+                <Check />
                 Create prompt block
               </>
             )}

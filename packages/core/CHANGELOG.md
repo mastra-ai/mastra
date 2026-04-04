@@ -1,5 +1,2820 @@
 # @mastra/core
 
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7))
+
+## 1.23.0-alpha.0
+
+### Minor Changes
+
+- Added dynamic function support for workspace tool config. The `enabled`, `requireApproval`, and `requireReadBeforeWrite` options now accept async functions in addition to static booleans, enabling context-aware tool behavior like disabling tools based on user tier or requiring approval only for certain file paths. ([#14528](https://github.com/mastra-ai/mastra/pull/14528))
+
+  **Example**
+
+  ```typescript
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: async ({ args }) => {
+        return (args.path as string).startsWith('/protected')
+      },
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      enabled: async ({ requestContext }) => {
+        return requestContext['allowExecution'] === 'true'
+      },
+    },
+  }
+  ```
+
+### Patch Changes
+
+- Fixed sub-agent memory isolation so sub-agents no longer inherit parent requestContext keys and write to their own threads when `mastra__threadId` or `mastra__resourceId` are set. ([#15022](https://github.com/mastra-ai/mastra/pull/15022))
+
+- Fixed observational memory buffering so sealed assistant chunks stay split instead of being merged back into one persisted message during long tool runs. ([#14995](https://github.com/mastra-ai/mastra/pull/14995))
+
+## 1.22.0
+
+### Minor Changes
+
+- Add browser integration support for agents ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `browser` property on agents for browser automation toolsets
+  - `MastraBrowser` base class with screencast streaming, input injection, and state management
+  - `ThreadManager` for browser session isolation per thread
+  - Browser tools are automatically available when a browser is configured on an agent
+  - New `@mastra/core/browser` export with browser types and utilities
+
+- Added agent-level chat channels via Vercel Chat SDK adapters. ([#14642](https://github.com/mastra-ai/mastra/pull/14642))
+
+  Agents can now communicate over messaging platforms like Slack, Discord, and Telegram using the `channels` configuration option. Each agent manages its own adapters and automatically handles event routing, thread mapping, tool generation, and streaming responses.
+
+  **Key features:**
+  - Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
+  - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
+  - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
+  - Multi-user thread awareness with author prefixes for group conversations
+  - Thread subscriptions persisted via Mastra storage (survives restarts)
+
+  **New exports from `@mastra/core/channels`:**
+  - `AgentChannels` — internal class managing Chat SDK instance and event handlers
+  - `ChatChannelProcessor` — input processor injecting channel context into prompts
+  - `MastraStateAdapter` — StateAdapter backed by Mastra storage
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+- Added Mastra Gateway as a model router provider. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+  The Mastra Gateway enables access to multiple LLM providers through a unified endpoint at server.mastra.ai, supporting both API key and OAuth authentication flows.
+
+  **New exports:**
+  - `MastraGateway` — gateway provider class for routing models through the Mastra Gateway service
+  - `MastraGatewayConfig` — configuration type with `apiKey`, `baseUrl`, and `customFetch` options
+  - `GATEWAY_AUTH_HEADER` — constant for the custom gateway authentication header (`X-Memory-Gateway-Authorization`)
+  - `GatewayRegistry` — manages gateway-based provider discovery with atomic file caching
+  - `parseModelString` — utility to parse provider/model ID strings
+
+  ```ts
+  import { MastraGateway } from '@mastra/core/llm';
+
+  const gateway = new MastraGateway({
+    apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7))
+
+- **Fixed streamed finish metadata being dropped from final model results** ([#13914](https://github.com/mastra-ai/mastra/pull/13914))
+
+  Provider-specific metadata from streamed `finish` events is now preserved consistently across final output results, buffered steps, and `onFinish` callbacks. This improves compatibility with providers like Anthropic and Google/Gemini when they attach cache, reasoning, or other finish-time metadata during streaming.
+
+- Fixed providerMetadata (e.g. Gemini thoughtSignature) being lost on assistant file parts during multi-turn conversations. This resolves 'Image part is missing a thought_signature' errors when round-tripping model-generated images with Gemini 3.x models. ([#14972](https://github.com/mastra-ai/mastra/pull/14972))
+
+- Fixed `LocalSandbox` `execute_command` with a relative `cwd` (e.g. `"."` or `"./subdir"`) resolving against the server's working directory instead of the sandbox's configured `workingDirectory`. ([#14964](https://github.com/mastra-ai/mastra/pull/14964))
+
+- Fixed tool result persistence so savePerStep keeps raw tool output while prompt messages still use stored model output. ([#14966](https://github.com/mastra-ai/mastra/pull/14966))
+
+- Fixed skill path resolution when disambiguating same-named skills. The `skill` tool now correctly resolves skills by path when the location includes the `/SKILL.md` suffix. Fixes #14918. ([#14951](https://github.com/mastra-ai/mastra/pull/14951))
+
+- Fixed thread titles not persisting when generated during async buffered observation. Titles now update immediately when the observer produces them, rather than being lost until activation. ([#14992](https://github.com/mastra-ai/mastra/pull/14992))
+
+## 1.22.0-alpha.3
+
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Add browser integration support for agents ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `browser` property on agents for browser automation toolsets
+  - `MastraBrowser` base class with screencast streaming, input injection, and state management
+  - `ThreadManager` for browser session isolation per thread
+  - Browser tools are automatically available when a browser is configured on an agent
+  - New `@mastra/core/browser` export with browser types and utilities
+
+- Added agent-level chat channels via Vercel Chat SDK adapters. ([#14642](https://github.com/mastra-ai/mastra/pull/14642))
+
+  Agents can now communicate over messaging platforms like Slack, Discord, and Telegram using the `channels` configuration option. Each agent manages its own adapters and automatically handles event routing, thread mapping, tool generation, and streaming responses.
+
+  **Key features:**
+  - Configure channels directly on agents with `channels: { adapters: { slack: createSlackAdapter(), discord: createDiscordAdapter() } }`
+  - Automatic webhook route generation at `/api/agents/{agentId}/channels/{platform}/webhook`
+  - Tool approval buttons with `requireApproval: true` tools rendered as interactive cards
+  - Multi-user thread awareness with author prefixes for group conversations
+  - Thread subscriptions persisted via Mastra storage (survives restarts)
+
+  **New exports from `@mastra/core/channels`:**
+  - `AgentChannels` — internal class managing Chat SDK instance and event handlers
+  - `ChatChannelProcessor` — input processor injecting channel context into prompts
+  - `MastraStateAdapter` — StateAdapter backed by Mastra storage
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Fixed providerMetadata (e.g. Gemini thoughtSignature) being lost on assistant file parts during multi-turn conversations. This resolves 'Image part is missing a thought_signature' errors when round-tripping model-generated images with Gemini 3.x models. ([#14972](https://github.com/mastra-ai/mastra/pull/14972))
+
+- Fixed skill path resolution when disambiguating same-named skills. The `skill` tool now correctly resolves skills by path when the location includes the `/SKILL.md` suffix. Fixes #14918. ([#14951](https://github.com/mastra-ai/mastra/pull/14951))
+
+- Fixed thread titles not persisting when generated during async buffered observation. Titles now update immediately when the observer produces them, rather than being lost until activation. ([#14992](https://github.com/mastra-ai/mastra/pull/14992))
+
+## 1.22.0-alpha.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7))
+
+- **Fixed streamed finish metadata being dropped from final model results** ([#13914](https://github.com/mastra-ai/mastra/pull/13914))
+
+  Provider-specific metadata from streamed `finish` events is now preserved consistently across final output results, buffered steps, and `onFinish` callbacks. This improves compatibility with providers like Anthropic and Google/Gemini when they attach cache, reasoning, or other finish-time metadata during streaming.
+
+## 1.22.0-alpha.0
+
+### Minor Changes
+
+- Added Mastra Gateway as a model router provider. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+  The Mastra Gateway enables access to multiple LLM providers through a unified endpoint at server.mastra.ai, supporting both API key and OAuth authentication flows.
+
+  **New exports:**
+  - `MastraGateway` — gateway provider class for routing models through the Mastra Gateway service
+  - `MastraGatewayConfig` — configuration type with `apiKey`, `baseUrl`, and `customFetch` options
+  - `GATEWAY_AUTH_HEADER` — constant for the custom gateway authentication header (`X-Memory-Gateway-Authorization`)
+  - `GatewayRegistry` — manages gateway-based provider discovery with atomic file caching
+  - `parseModelString` — utility to parse provider/model ID strings
+
+  ```ts
+  import { MastraGateway } from '@mastra/core/llm';
+
+  const gateway = new MastraGateway({
+    apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `LocalSandbox` `execute_command` with a relative `cwd` (e.g. `"."` or `"./subdir"`) resolving against the server's working directory instead of the sandbox's configured `workingDirectory`. ([#14964](https://github.com/mastra-ai/mastra/pull/14964))
+
+- Fixed tool result persistence so savePerStep keeps raw tool output while prompt messages still use stored model output. ([#14966](https://github.com/mastra-ai/mastra/pull/14966))
+
+## 1.21.0
+
+### Minor Changes
+
+- Adds a new `trimMode` option with a `contiguous` strategy that preserves a continuous suffix of messages by stopping at the first message that exceeds the token budget. Default behavior remains unchanged. ([#14801](https://github.com/mastra-ai/mastra/pull/14801))
+
+- Added scorer tracing and exported scores through the observability bus. ([#14920](https://github.com/mastra-ai/mastra/pull/14920))
+
+  **What changed**
+  - Added `SCORER_RUN` and `SCORER_STEP` spans for scorer execution.
+  - Exported scorer results through `mastra.observability.addScore()` when a target trace is available.
+  - Added score metadata for scorer name, target entity type, target scope, and scorer trace links.
+  - Deprecated the legacy scores-store helper while keeping the legacy write path during the transition.
+
+  **Why**
+  This makes scorer execution easier to debug and starts moving scorer results onto the new observability-based score pipeline.
+
+  **Example**
+
+  ```ts
+  await scorer.run({
+    input,
+    output,
+    scoreSource: 'experiment',
+    targetScope: 'span',
+    targetTraceId: traceId,
+    targetSpanId: spanId,
+  });
+  ```
+
+- Added component-scoped logging with custom filtering to ConsoleLogger ([#14947](https://github.com/mastra-ai/mastra/pull/14947))
+
+  ```typescript
+  new ConsoleLogger({
+    level: 'debug',
+    filter: ({ component }) => component === 'AGENT',
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a))
+
+- Fixed score and feedback emission to support live correlation context and unanchored annotations. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed a crash when using provider-defined tools (like `openai.tools.webSearch()`) with `autoResumeSuspendedTools` enabled. ([#14940](https://github.com/mastra-ai/mastra/pull/14940))
+
+- Fixed an AsyncLocalStorage runtime error when importing `@mastra/core/observability` in browser environments. ([#14948](https://github.com/mastra-ai/mastra/pull/14948))
+
+- Fixed assistant message prefill error crashing sessions. When a model does not support assistant message prefill, the harness now automatically retries with a user message instead of failing. ([#14953](https://github.com/mastra-ai/mastra/pull/14953))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Fixed workflow spans missing entityName, which caused the metrics dashboard to show 'unknown' for workflow trace volume ([#14949](https://github.com/mastra-ai/mastra/pull/14949))
+
+## 1.21.0-alpha.2
+
+### Minor Changes
+
+- Adds a new `trimMode` option with a `contiguous` strategy that preserves a continuous suffix of messages by stopping at the first message that exceeds the token budget. Default behavior remains unchanged. ([#14801](https://github.com/mastra-ai/mastra/pull/14801))
+
+- Added component-scoped logging with custom filtering to ConsoleLogger ([#14947](https://github.com/mastra-ai/mastra/pull/14947))
+
+  ```typescript
+  new ConsoleLogger({
+    level: 'debug',
+    filter: ({ component }) => component === 'AGENT',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed score and feedback emission to support live correlation context and unanchored annotations. ([#14942](https://github.com/mastra-ai/mastra/pull/14942))
+
+- Fixed a crash when using provider-defined tools (like `openai.tools.webSearch()`) with `autoResumeSuspendedTools` enabled. ([#14940](https://github.com/mastra-ai/mastra/pull/14940))
+
+- Fixed an AsyncLocalStorage runtime error when importing `@mastra/core/observability` in browser environments. ([#14948](https://github.com/mastra-ai/mastra/pull/14948))
+
+- Fixed assistant message prefill error crashing sessions. When a model does not support assistant message prefill, the harness now automatically retries with a user message instead of failing. ([#14953](https://github.com/mastra-ai/mastra/pull/14953))
+
+- Added error name and stack trace to SpanErrorInfo, allowing exporters to access the original error class name and stack trace for richer error reporting. ([#14944](https://github.com/mastra-ai/mastra/pull/14944))
+
+- Fixed workflow spans missing entityName, which caused the metrics dashboard to show 'unknown' for workflow trace volume ([#14949](https://github.com/mastra-ai/mastra/pull/14949))
+
+## 1.21.0-alpha.1
+
+### Minor Changes
+
+- Added scorer tracing and exported scores through the observability bus. ([#14920](https://github.com/mastra-ai/mastra/pull/14920))
+
+  **What changed**
+  - Added `SCORER_RUN` and `SCORER_STEP` spans for scorer execution.
+  - Exported scorer results through `mastra.observability.addScore()` when a target trace is available.
+  - Added score metadata for scorer name, target entity type, target scope, and scorer trace links.
+  - Deprecated the legacy scores-store helper while keeping the legacy write path during the transition.
+
+  **Why**
+  This makes scorer execution easier to debug and starts moving scorer results onto the new observability-based score pipeline.
+
+  **Example**
+
+  ```ts
+  await scorer.run({
+    input,
+    output,
+    scoreSource: 'experiment',
+    targetScope: 'span',
+    targetTraceId: traceId,
+    targetSpanId: spanId,
+  });
+  ```
+
+## 1.21.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a))
+
+## 1.20.0
+
+### Minor Changes
+
+- Added DualLogger that transparently forwards all infrastructure logger calls (debug, info, warn, error, trackException) to the observability system (loggerVNext). This means all internal Mastra logs now automatically appear in your observability storage (e.g. DuckDB) without any code changes. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  **trackException** now extracts structured error data (errorId, domain, category, details, cause) and forwards it as an error-level log to observability storage, so exceptions are queryable alongside regular logs.
+
+  Added `logging` config option to ObservabilityInstance for controlling which logs reach observability storage:
+
+  ```ts
+  new Observability({
+    instance: new MastraObservability({
+      logging: {
+        enabled: true, // set to false to disable log forwarding
+        level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+      },
+    }),
+  });
+  ```
+
+- Add `registerExporter` method to the observability stack and Mastra class for runtime exporter registration ([#14730](https://github.com/mastra-ai/mastra/pull/14730))
+
+### Patch Changes
+
+- Fixed Anthropic API rejection of empty user text content blocks. ([#14906](https://github.com/mastra-ai/mastra/pull/14906))
+
+  User messages containing only empty text parts (e.g., `{ type: 'text', text: '' }`) are now filtered out before being sent to the LLM. This prevents the "text content blocks must be non-empty" error that could occur when corrupted messages existed in the database.
+
+  Note: The root cause of how these empty user messages get persisted is still under investigation.
+
+- Improved the `pattern` field description in the `list_files` workspace tool to prevent AI models from passing `"*"` when they intend to match all files. The description now clarifies that omitting `pattern` lists all files, that `*` only matches within a single directory level (standard glob), and that glob patterns only filter files while directories are always shown. ([#14897](https://github.com/mastra-ai/mastra/pull/14897))
+
+- Added a `lastMessageOnly` option to the LLM-backed moderation, language detection, prompt injection, PII, and system prompt scrubber processors so they can inspect only the newest message instead of re-checking the full conversation on every run. ([#14903](https://github.com/mastra-ai/mastra/pull/14903))
+
+- Fixed providerMetadata (e.g. Gemini's thoughtSignature) being stripped from tool-call events when using the non-streaming (generate) code path ([#14900](https://github.com/mastra-ai/mastra/pull/14900))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Fixed duplicate OpenAI item ID errors when using web search. When OpenAI streams responses with web search citations, it interleaves source chunks with text, causing multiple message parts to share the same item ID. This resulted in 'Duplicate item found' errors on subsequent requests. The fix prevents text flushing on source chunks and merges any existing duplicate parts. ([#14908](https://github.com/mastra-ai/mastra/pull/14908))
+
+## 1.20.0-alpha.0
+
+### Minor Changes
+
+- Added DualLogger that transparently forwards all infrastructure logger calls (debug, info, warn, error, trackException) to the observability system (loggerVNext). This means all internal Mastra logs now automatically appear in your observability storage (e.g. DuckDB) without any code changes. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  **trackException** now extracts structured error data (errorId, domain, category, details, cause) and forwards it as an error-level log to observability storage, so exceptions are queryable alongside regular logs.
+
+  Added `logging` config option to ObservabilityInstance for controlling which logs reach observability storage:
+
+  ```ts
+  new Observability({
+    instance: new MastraObservability({
+      logging: {
+        enabled: true, // set to false to disable log forwarding
+        level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+      },
+    }),
+  });
+  ```
+
+- Add `registerExporter` method to the observability stack and Mastra class for runtime exporter registration ([#14730](https://github.com/mastra-ai/mastra/pull/14730))
+
+### Patch Changes
+
+- Fixed Anthropic API rejection of empty user text content blocks. ([#14906](https://github.com/mastra-ai/mastra/pull/14906))
+
+  User messages containing only empty text parts (e.g., `{ type: 'text', text: '' }`) are now filtered out before being sent to the LLM. This prevents the "text content blocks must be non-empty" error that could occur when corrupted messages existed in the database.
+
+  Note: The root cause of how these empty user messages get persisted is still under investigation.
+
+- Improved the `pattern` field description in the `list_files` workspace tool to prevent AI models from passing `"*"` when they intend to match all files. The description now clarifies that omitting `pattern` lists all files, that `*` only matches within a single directory level (standard glob), and that glob patterns only filter files while directories are always shown. ([#14897](https://github.com/mastra-ai/mastra/pull/14897))
+
+- Added a `lastMessageOnly` option to the LLM-backed moderation, language detection, prompt injection, PII, and system prompt scrubber processors so they can inspect only the newest message instead of re-checking the full conversation on every run. ([#14903](https://github.com/mastra-ai/mastra/pull/14903))
+
+- Fixed providerMetadata (e.g. Gemini's thoughtSignature) being stripped from tool-call events when using the non-streaming (generate) code path ([#14900](https://github.com/mastra-ai/mastra/pull/14900))
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Fixed duplicate OpenAI item ID errors when using web search. When OpenAI streams responses with web search citations, it interleaves source chunks with text, causing multiple message parts to share the same item ID. This resulted in 'Duplicate item found' errors on subsequent requests. The fix prevents text flushing on source chunks and merges any existing duplicate parts. ([#14908](https://github.com/mastra-ai/mastra/pull/14908))
+
+## 1.19.0
+
+### Minor Changes
+
+- feat(memory): add minMessages option to generateTitle config ([#14778](https://github.com/mastra-ai/mastra/pull/14778))
+
+  Delay automatic title generation until a minimum number of messages is reached, improving title quality and reducing unnecessary LLM calls.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599))
+
+- Streaming traces now end correctly when a model call fails or a request is aborted, so they no longer remain stuck "in progress" in observability tools. ([#14661](https://github.com/mastra-ai/mastra/pull/14661))
+
+- Fix getWorkflowRunById with withNestedWorkflows not returning nested steps for branch sub-workflows ([#14713](https://github.com/mastra-ai/mastra/pull/14713))
+
+- Tools that return objects with circular references no longer crash the agent with "Converting circular structure to JSON". Circular parts are replaced with `"[Circular]"` and the conversation continues normally. ([#14535](https://github.com/mastra-ai/mastra/pull/14535))
+
+- Fixed crashes when using `ModelRouterLanguageModel` with AI SDK v6's `generateObject()` or `generateText()`. The model router now correctly preserves usage and metadata from underlying models. ([#14283](https://github.com/mastra-ai/mastra/pull/14283))
+
+- Agents using structured output no longer fail when workflow tools are present. Setting toolChoice to 'none' now correctly prevents tools from being sent to the provider, fixing errors from providers like Gemini that reject structured output requests when tools are included. ([#14466](https://github.com/mastra-ai/mastra/pull/14466))
+
+- Sub-agent tool calls no longer fail when LLMs use `query`, `message`, or `input` instead of `prompt` during repeated sub-agent calls via custom gateways. These common aliases are now automatically recognized and mapped to `prompt` when the schema expects it. ([#14219](https://github.com/mastra-ai/mastra/pull/14219))
+
+- Fixed an issue where supervisor agent messages were being saved to the sub-agent thread, causing duplicate tool call badges to appear in the chat history when sub-agents are invoked multiple times. ([#13881](https://github.com/mastra-ai/mastra/pull/13881))
+
+- Fixed workspace vector indexing silently swallowing embedder and search engine errors during auto-indexing. File-read errors (binary files, invalid UTF-8) are still skipped, but indexing failures are now logged as warnings instead of being silently ignored. ([#14786](https://github.com/mastra-ai/mastra/pull/14786))
+
+- Fixed incorrect type cast for sub-agent context messages. The context option for new API methods (generate, stream, resumeGenerate, resumeStream) now correctly casts to ModelMessage[] instead of CoreMessage[]. ([#14895](https://github.com/mastra-ai/mastra/pull/14895))
+
+## 1.19.0-alpha.2
+
+### Minor Changes
+
+- feat(memory): add minMessages option to generateTitle config ([#14778](https://github.com/mastra-ai/mastra/pull/14778))
+
+  Delay automatic title generation until a minimum number of messages is reached, improving title quality and reducing unnecessary LLM calls.
+
+### Patch Changes
+
+- Sub-agent tool calls no longer fail when LLMs use `query`, `message`, or `input` instead of `prompt` during repeated sub-agent calls via custom gateways. These common aliases are now automatically recognized and mapped to `prompt` when the schema expects it. ([#14219](https://github.com/mastra-ai/mastra/pull/14219))
+
+## 1.18.1-alpha.1
+
+### Patch Changes
+
+- Streaming traces now end correctly when a model call fails or a request is aborted, so they no longer remain stuck "in progress" in observability tools. ([#14661](https://github.com/mastra-ai/mastra/pull/14661))
+
+- Fix getWorkflowRunById with withNestedWorkflows not returning nested steps for branch sub-workflows ([#14713](https://github.com/mastra-ai/mastra/pull/14713))
+
+- Tools that return objects with circular references no longer crash the agent with "Converting circular structure to JSON". Circular parts are replaced with `"[Circular]"` and the conversation continues normally. ([#14535](https://github.com/mastra-ai/mastra/pull/14535))
+
+- Fixed crashes when using `ModelRouterLanguageModel` with AI SDK v6's `generateObject()` or `generateText()`. The model router now correctly preserves usage and metadata from underlying models. ([#14283](https://github.com/mastra-ai/mastra/pull/14283))
+
+- Agents using structured output no longer fail when workflow tools are present. Setting toolChoice to 'none' now correctly prevents tools from being sent to the provider, fixing errors from providers like Gemini that reject structured output requests when tools are included. ([#14466](https://github.com/mastra-ai/mastra/pull/14466))
+
+- Fixed an issue where supervisor agent messages were being saved to the sub-agent thread, causing duplicate tool call badges to appear in the chat history when sub-agents are invoked multiple times. ([#13881](https://github.com/mastra-ai/mastra/pull/13881))
+
+- Fixed workspace vector indexing silently swallowing embedder and search engine errors during auto-indexing. File-read errors (binary files, invalid UTF-8) are still skipped, but indexing failures are now logged as warnings instead of being silently ignored. ([#14786](https://github.com/mastra-ai/mastra/pull/14786))
+
+- Fixed incorrect type cast for sub-agent context messages. The context option for new API methods (generate, stream, resumeGenerate, resumeStream) now correctly casts to ModelMessage[] instead of CoreMessage[]. ([#14895](https://github.com/mastra-ai/mastra/pull/14895))
+
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599))
+
+## 1.18.0
+
+### Minor Changes
+
+- Add version-aware code-agent lookup and override version lifecycle support. ([#14776](https://github.com/mastra-ai/mastra/pull/14776))
+
+  `Mastra.getAgent(name, version)` and `Mastra.getAgentById(id, version)` can now resolve draft or specific stored override versions when the editor package is configured, and throw a clear error when versioned lookup is requested without the editor.
+
+  `client.getAgent(id, version)` now carries version selection through agent detail and voice metadata requests, and the `Agent` resource now supports override version management methods including `listVersions`, `createVersion`, `getVersion`, `activateVersion`, `restoreVersion`, `deleteVersion`, and `compareVersions`.
+
+  `Agent.createVersion(...)` is intentionally limited to code-agent overrideable fields plus version metadata, rather than the full stored-agent configuration surface.
+
+- **Trajectory evaluation**: Added trajectory types and trace-based extraction for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+
+  `TrajectoryStep` models each step in an execution as a typed object — tool calls, model generations, agent runs, workflow steps, and control flow nodes each have their own variant with relevant properties (e.g., `toolArgs`/`toolResult` for tool calls, `modelId`/`promptTokens` for model generations). Steps can be nested via `children` to represent hierarchical execution.
+
+  `TrajectoryExpectation` lets you define what a good trajectory looks like — expected steps, ordering, step/token/duration budgets, blacklisted tools, and retry thresholds. `ExpectedStep` provides a simple way to define expected steps by name and optional stepType, with support for nested expectations via `children` to set different evaluation rules at each level of the hierarchy.
+
+  **Trace-based extraction:** `extractTrajectoryFromTrace()` builds hierarchical trajectories from observability trace spans. The `runEvals` pipeline automatically uses this when storage is configured, capturing the full execution tree including nested agent runs and tool calls. Falls back to `extractTrajectory` (agents) or `extractWorkflowTrajectory` (workflows) when storage is unavailable.
+
+  **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
+
+- Added support for attaching scorers to datasets. Scorers attached to a dataset automatically run when an experiment is triggered, alongside any scorers specified at trigger time. New `scorerIds` field on `DatasetRecord`, `CreateDatasetInput`, and `UpdateDatasetInput` types. ([#14783](https://github.com/mastra-ai/mastra/pull/14783))
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+- Added public score and feedback analytics APIs to observability storage: ([#14861](https://github.com/mastra-ai/mastra/pull/14861))
+  `getScoreAggregate` / `getFeedbackAggregate` for counts, sums, averages, minimums, maximums, or latest values;
+  `getScoreBreakdown` / `getFeedbackBreakdown` for grouped results by dimension;
+  `getScoreTimeSeries` / `getFeedbackTimeSeries` for time-bucketed trends;
+  and `getScorePercentiles` / `getFeedbackPercentiles` for percentile series such as p50 and p95.
+
+  ```ts
+  await observability.getScoreTimeSeries({
+    scorerId: 'relevance',
+    interval: '1h',
+    aggregation: 'avg',
+  });
+  // returns time-bucketed average scores
+  ```
+
+- Added new observability entrypoint APIs for persisted traces. You can now call `mastra.observability.getRecordedTrace({ traceId })` to load a recorded trace, and use optional top-level `mastra.observability.addScore()/addFeedback()` helpers to annotate a persisted trace by ID. ([#14842](https://github.com/mastra-ai/mastra/pull/14842))
+
+- Align observability signal contracts around first-class trace and span fields. ([#14838](https://github.com/mastra-ai/mastra/pull/14838))
+
+  **Improved observability signal consistency**
+  Logs, metrics, scores, and feedback now carry `traceId` and `spanId` directly on each signal. Shared correlation metadata stays in `correlationContext`.
+
+  **Added clearer provenance fields**
+  Score and feedback payloads now support `scoreSource`, `feedbackSource`, and `executionSource` for clearer source tracking.
+
+  **Migration note**
+  Deprecated fields (like `source` and feedback `userId`) are still accepted for compatibility.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Persist observational memory threshold settings across restarts and restore per-thread overrides. ([#14788](https://github.com/mastra-ai/mastra/pull/14788))
+
+- Fixed title generation blocking stream completion. The `generateTitle` LLM call now runs in the background instead of blocking the stream from closing, removing the 2-3 second post-response delay in the UI when memory is enabled. ([#14757](https://github.com/mastra-ai/mastra/pull/14757))
+
+- feat(memory): add recall-tool history retrieval for agents using observational memory ([#14567](https://github.com/mastra-ai/mastra/pull/14567))
+
+  Agents that use observational memory can now use the `recall` tool to retrieve history from past conversations, including raw messages, thread listings, and indexed observation-group memories.
+
+  Enable observational-memory retrieval when listing tools:
+
+  ```ts
+  const tools = await memory.listTools({
+    threadId: 'thread_123',
+    resourceId: 'resource_abc',
+    observationalMemory: {
+      retrieval: { vector: true, scope: 'resource' },
+    },
+  });
+  ```
+
+  With retrieval enabled, `recall` can browse the current thread, list threads for the current resource, and search indexed observation groups with source ranges.
+
+- Added resolvedVersionId to agent run trace span attributes for tracking which agent version was used during execution. ([#14847](https://github.com/mastra-ai/mastra/pull/14847))
+
+- Limit dynamically injected AGENTS.md reminders to 1000 estimated tokens by default and tell mastracode observational memory to ignore those ephemeral reminder messages. ([#14790](https://github.com/mastra-ai/mastra/pull/14790))
+
+- Fixed missing `TRequestContext` type parameter on `DynamicArgument` fields in `AgentConfig`. Previously, only `instructions` and `tools` correctly propagated the `requestContextSchema` type to their dynamic function callbacks. Now all dynamic fields — `model`, `workflows`, `workspace`, `agents`, `memory`, `scorers`, `defaultGenerateOptionsLegacy`, `defaultStreamOptionsLegacy`, `defaultOptions`, `defaultNetworkOptions`, `inputProcessors`, and `outputProcessors` — properly type `requestContext` based on the agent's `requestContextSchema`. ([#14582](https://github.com/mastra-ai/mastra/pull/14582))
+
+  **Before:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `unknown`
+    },
+  });
+  ```
+
+  **After:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `string`
+    },
+  });
+  ```
+
+- Fixed resuming suspended tool calls with `resumeStream` or `approveToolCall` failing with a TripWire when input processors (e.g. TokenLimiterProcessor) are enabled on the agent. ([#14561](https://github.com/mastra-ai/mastra/pull/14561))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Fixed agent run traces not appearing in Datadog and other observability backends when LLM calls fail. Previously, an API error during streaming would leave the root AGENT_RUN span open indefinitely, causing the entire trace tree to be silently dropped by exporters that wait for the root span to close. Failed agent runs now correctly end the span with error information, making failures visible in your observability dashboard. ([#14850](https://github.com/mastra-ai/mastra/pull/14850))
+
+- Fixed streaming delegation to propagate output processor modifications to the supervisor. Previously, when a sub-agent had an output processor that modified text via `processOutputResult`, the supervisor received the raw LLM output instead of the processed text. The processed text was only saved to the sub-agent's memory. Now the supervisor correctly receives the output-processor-modified text from delegated sub-agents in the streaming path. ([#14731](https://github.com/mastra-ai/mastra/pull/14731))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
+- Fixed `mcpOptions` (including `serverless: true`) being silently ignored when using the Mastra deployer. The deployer now forwards `mcpOptions` from your server config to the underlying `MastraServer`, so MCP stateless mode works correctly in serverless environments like Cloudflare Workers, Vercel Edge, and AWS Lambda. ([#14810](https://github.com/mastra-ai/mastra/issues/14810)) ([#14812](https://github.com/mastra-ai/mastra/pull/14812))
+
+  **What changed:**
+  - Added `mcpOptions` to the `ServerConfig` type so it can be set in `new Mastra({ server: { ... } })`
+  - The deployer now passes `server.mcpOptions` through to `MastraServer`
+
+  **Example:**
+
+  ```typescript
+  const mastra = new Mastra({
+    server: {
+      mcpOptions: {
+        serverless: true,
+      },
+    },
+  });
+  ```
+
+- Added `isValidationError` type guard for the `ValidationError` interface ([#14853](https://github.com/mastra-ai/mastra/pull/14853))
+
+- Fixed models.dev provider URLs to interpolate environment variable placeholders like `${ACCOUNT_ID}` before creating the underlying provider client. ([#14722](https://github.com/mastra-ai/mastra/pull/14722))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
+- Fixed MODEL_GENERATION and AGENT_RUN spans not reflecting model, provider, parameters, and availableTools overrides from input processors. Traces in Langfuse and other exporters now show the correct model info when a processor dynamically switches models. ([#14705](https://github.com/mastra-ai/mastra/pull/14705))
+
+- Fixed MODEL_GENERATION observability span to include all system messages (tagged and untagged). Previously, working memory and semantic recall instructions were missing from trace inputs because only untagged system messages were captured. ([#14800](https://github.com/mastra-ai/mastra/pull/14800))
+
+- Fixed models.dev auth env selection to prefer auth credentials over URL path identifiers, so Cloudflare Workers AI no longer uses the account ID for authentication. ([#14687](https://github.com/mastra-ai/mastra/pull/14687))
+
+- Fixed processInputStep always receiving an empty steps array. Processors can now inspect previous step results (tool calls, LLM responses) when running inside the agentic loop. ([#14821](https://github.com/mastra-ai/mastra/pull/14821))
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
+## 1.18.0-alpha.5
+
+### Minor Changes
+
+- Added public score and feedback analytics APIs to observability storage: ([#14861](https://github.com/mastra-ai/mastra/pull/14861))
+  `getScoreAggregate` / `getFeedbackAggregate` for counts, sums, averages, minimums, maximums, or latest values;
+  `getScoreBreakdown` / `getFeedbackBreakdown` for grouped results by dimension;
+  `getScoreTimeSeries` / `getFeedbackTimeSeries` for time-bucketed trends;
+  and `getScorePercentiles` / `getFeedbackPercentiles` for percentile series such as p50 and p95.
+
+  ```ts
+  await observability.getScoreTimeSeries({
+    scorerId: 'relevance',
+    interval: '1h',
+    aggregation: 'avg',
+  });
+  // returns time-bucketed average scores
+  ```
+
+### Patch Changes
+
+- Added resolvedVersionId to agent run trace span attributes for tracking which agent version was used during execution. ([#14847](https://github.com/mastra-ai/mastra/pull/14847))
+
+## 1.18.0-alpha.4
+
+### Minor Changes
+
+- Added support for attaching scorers to datasets. Scorers attached to a dataset automatically run when an experiment is triggered, alongside any scorers specified at trigger time. New `scorerIds` field on `DatasetRecord`, `CreateDatasetInput`, and `UpdateDatasetInput` types. ([#14783](https://github.com/mastra-ai/mastra/pull/14783))
+
+- Added new observability entrypoint APIs for persisted traces. You can now call `mastra.observability.getRecordedTrace({ traceId })` to load a recorded trace, and use optional top-level `mastra.observability.addScore()/addFeedback()` helpers to annotate a persisted trace by ID. ([#14842](https://github.com/mastra-ai/mastra/pull/14842))
+
+- Align observability signal contracts around first-class trace and span fields. ([#14838](https://github.com/mastra-ai/mastra/pull/14838))
+
+  **Improved observability signal consistency**
+  Logs, metrics, scores, and feedback now carry `traceId` and `spanId` directly on each signal. Shared correlation metadata stays in `correlationContext`.
+
+  **Added clearer provenance fields**
+  Score and feedback payloads now support `scoreSource`, `feedbackSource`, and `executionSource` for clearer source tracking.
+
+  **Migration note**
+  Deprecated fields (like `source` and feedback `userId`) are still accepted for compatibility.
+
+### Patch Changes
+
+- Fixed agent run traces not appearing in Datadog and other observability backends when LLM calls fail. Previously, an API error during streaming would leave the root AGENT_RUN span open indefinitely, causing the entire trace tree to be silently dropped by exporters that wait for the root span to close. Failed agent runs now correctly end the span with error information, making failures visible in your observability dashboard. ([#14850](https://github.com/mastra-ai/mastra/pull/14850))
+
+- Fixed `mcpOptions` (including `serverless: true`) being silently ignored when using the Mastra deployer. The deployer now forwards `mcpOptions` from your server config to the underlying `MastraServer`, so MCP stateless mode works correctly in serverless environments like Cloudflare Workers, Vercel Edge, and AWS Lambda. ([#14810](https://github.com/mastra-ai/mastra/issues/14810)) ([#14812](https://github.com/mastra-ai/mastra/pull/14812))
+
+  **What changed:**
+  - Added `mcpOptions` to the `ServerConfig` type so it can be set in `new Mastra({ server: { ... } })`
+  - The deployer now passes `server.mcpOptions` through to `MastraServer`
+
+  **Example:**
+
+  ```typescript
+  const mastra = new Mastra({
+    server: {
+      mcpOptions: {
+        serverless: true,
+      },
+    },
+  });
+  ```
+
+- Added `isValidationError` type guard for the `ValidationError` interface ([#14853](https://github.com/mastra-ai/mastra/pull/14853))
+
+- Fixed models.dev provider URLs to interpolate environment variable placeholders like `${ACCOUNT_ID}` before creating the underlying provider client. ([#14722](https://github.com/mastra-ai/mastra/pull/14722))
+
+- Fixed MODEL_GENERATION observability span to include all system messages (tagged and untagged). Previously, working memory and semantic recall instructions were missing from trace inputs because only untagged system messages were captured. ([#14800](https://github.com/mastra-ai/mastra/pull/14800))
+
+- Fixed models.dev auth env selection to prefer auth credentials over URL path identifiers, so Cloudflare Workers AI no longer uses the account ID for authentication. ([#14687](https://github.com/mastra-ai/mastra/pull/14687))
+
+- Fixed processInputStep always receiving an empty steps array. Processors can now inspect previous step results (tool calls, LLM responses) when running inside the agentic loop. ([#14821](https://github.com/mastra-ai/mastra/pull/14821))
+
+## 1.18.0-alpha.3
+
+### Minor Changes
+
+- Add version-aware code-agent lookup and override version lifecycle support. ([#14776](https://github.com/mastra-ai/mastra/pull/14776))
+
+  `Mastra.getAgent(name, version)` and `Mastra.getAgentById(id, version)` can now resolve draft or specific stored override versions when the editor package is configured, and throw a clear error when versioned lookup is requested without the editor.
+
+  `client.getAgent(id, version)` now carries version selection through agent detail and voice metadata requests, and the `Agent` resource now supports override version management methods including `listVersions`, `createVersion`, `getVersion`, `activateVersion`, `restoreVersion`, `deleteVersion`, and `compareVersions`.
+
+  `Agent.createVersion(...)` is intentionally limited to code-agent overrideable fields plus version metadata, rather than the full stored-agent configuration surface.
+
+### Patch Changes
+
+- Persist observational memory threshold settings across restarts and restore per-thread overrides. ([#14788](https://github.com/mastra-ai/mastra/pull/14788))
+
+- feat(memory): add recall-tool history retrieval for agents using observational memory ([#14567](https://github.com/mastra-ai/mastra/pull/14567))
+
+  Agents that use observational memory can now use the `recall` tool to retrieve history from past conversations, including raw messages, thread listings, and indexed observation-group memories.
+
+  Enable observational-memory retrieval when listing tools:
+
+  ```ts
+  const tools = await memory.listTools({
+    threadId: 'thread_123',
+    resourceId: 'resource_abc',
+    observationalMemory: {
+      retrieval: { vector: true, scope: 'resource' },
+    },
+  });
+  ```
+
+  With retrieval enabled, `recall` can browse the current thread, list threads for the current resource, and search indexed observation groups with source ranges.
+
+- Limit dynamically injected AGENTS.md reminders to 1000 estimated tokens by default and tell mastracode observational memory to ignore those ephemeral reminder messages. ([#14790](https://github.com/mastra-ai/mastra/pull/14790))
+
+- Fixed missing `TRequestContext` type parameter on `DynamicArgument` fields in `AgentConfig`. Previously, only `instructions` and `tools` correctly propagated the `requestContextSchema` type to their dynamic function callbacks. Now all dynamic fields — `model`, `workflows`, `workspace`, `agents`, `memory`, `scorers`, `defaultGenerateOptionsLegacy`, `defaultStreamOptionsLegacy`, `defaultOptions`, `defaultNetworkOptions`, `inputProcessors`, and `outputProcessors` — properly type `requestContext` based on the agent's `requestContextSchema`. ([#14582](https://github.com/mastra-ai/mastra/pull/14582))
+
+  **Before:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `unknown`
+    },
+  });
+  ```
+
+  **After:**
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ userId: z.string() }),
+    workspace: ({ requestContext }) => {
+      requestContext.get('userId'); // typed as `string`
+    },
+  });
+  ```
+
+- Fixed resuming suspended tool calls with `resumeStream` or `approveToolCall` failing with a TripWire when input processors (e.g. TokenLimiterProcessor) are enabled on the agent. ([#14561](https://github.com/mastra-ai/mastra/pull/14561))
+
+- Fixed streaming delegation to propagate output processor modifications to the supervisor. Previously, when a sub-agent had an output processor that modified text via `processOutputResult`, the supervisor received the raw LLM output instead of the processed text. The processed text was only saved to the sub-agent's memory. Now the supervisor correctly receives the output-processor-modified text from delegated sub-agents in the streaming path. ([#14731](https://github.com/mastra-ai/mastra/pull/14731))
+
+- Fixed MODEL_GENERATION and AGENT_RUN spans not reflecting model, provider, parameters, and availableTools overrides from input processors. Traces in Langfuse and other exporters now show the correct model info when a processor dynamically switches models. ([#14705](https://github.com/mastra-ai/mastra/pull/14705))
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
+## 1.18.0-alpha.2
+
+### Patch Changes
+
+- Fixed title generation blocking stream completion. The `generateTitle` LLM call now runs in the background instead of blocking the stream from closing, removing the 2-3 second post-response delay in the UI when memory is enabled. ([#14757](https://github.com/mastra-ai/mastra/pull/14757))
+
+## 1.18.0-alpha.1
+
+### Minor Changes
+
+- **Trajectory evaluation**: Added trajectory types and trace-based extraction for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+
+  `TrajectoryStep` models each step in an execution as a typed object — tool calls, model generations, agent runs, workflow steps, and control flow nodes each have their own variant with relevant properties (e.g., `toolArgs`/`toolResult` for tool calls, `modelId`/`promptTokens` for model generations). Steps can be nested via `children` to represent hierarchical execution.
+
+  `TrajectoryExpectation` lets you define what a good trajectory looks like — expected steps, ordering, step/token/duration budgets, blacklisted tools, and retry thresholds. `ExpectedStep` provides a simple way to define expected steps by name and optional stepType, with support for nested expectations via `children` to set different evaluation rules at each level of the hierarchy.
+
+  **Trace-based extraction:** `extractTrajectoryFromTrace()` builds hierarchical trajectories from observability trace spans. The `runEvals` pipeline automatically uses this when storage is configured, capturing the full execution tree including nested agent runs and tool calls. Falls back to `extractTrajectory` (agents) or `extractWorkflowTrajectory` (workflows) when storage is unavailable.
+
+  **Pipeline:** `expectedTrajectory` flows from dataset items through `runEvals` to trajectory scorers. Added `trajectory` key to both `AgentScorerConfig` and `WorkflowScorerConfig`.
+
+### Patch Changes
+
+- Add `getReviewSummary()` to experiments storage for aggregating review status counts ([#14649](https://github.com/mastra-ai/mastra/pull/14649))
+
+  Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+  ```ts
+  const summary = await storage.experiments.getReviewSummary();
+  // [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+  ```
+
+## 1.18.0-alpha.0
+
+### Minor Changes
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
+## 1.17.0
+
+### Minor Changes
+
+- Add `lsp_inspect` tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+
+  ```ts
+  new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] });
+  ```
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
+## 1.17.0-alpha.2
+
+### Minor Changes
+
+- Add lsp_inspect tool for LSP-based code inspection with hover, definition, and implementation queries ([#14565](https://github.com/mastra-ai/mastra/pull/14565))
+
+- Added `disableBuiltinTools` to `HarnessConfig` so you can disable specific built-in harness tools. ([#14227](https://github.com/mastra-ai/mastra/pull/14227))
+
+  Example:
+  `new Harness({ disableBuiltinTools: ['submit_plan', 'subagent'] })`
+
+- Added SkillSearchProcessor for on-demand skill discovery. Instead of injecting all skill metadata upfront, agents get `search_skills` and `load_skill` meta-tools to find and load skills on demand with thread-scoped state and TTL cleanup. ([#14596](https://github.com/mastra-ai/mastra/pull/14596))
+
+  **Example**
+
+  ```typescript
+  import { SkillSearchProcessor } from '@mastra/core/processors';
+
+  const skillSearch = new SkillSearchProcessor({
+    workspace,
+    search: { topK: 5 },
+  });
+
+  const agent = new Agent({
+    workspace,
+    inputProcessors: [skillSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `Harness.listThreads()` so callers can request threads across all resources. ([#14690](https://github.com/mastra-ai/mastra/pull/14690))
+
+- Fixed Harness `stateSchema` typing to accept Zod schemas with `.default()`, `.optional()`, and `.transform()` modifiers. Previously, these modifiers caused TypeScript errors because the type system forced schema Input and Output types to be identical. Now `stateSchema` correctly accepts any schema regardless of input type divergence. ([#14606](https://github.com/mastra-ai/mastra/pull/14606))
+
+- Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminder content by default. ([#14637](https://github.com/mastra-ai/mastra/pull/14637))
+
+- Fixed tool input validation failures not producing observability spans. When input schema validation failed, no TOOL_CALL span was created because span creation happened inside the execution function that ran after validation. Moved span creation before input validation so validation errors are now captured in spans and visible in observability backends like Datadog. ([#14677](https://github.com/mastra-ai/mastra/pull/14677))
+
+## 1.16.1-alpha.1
+
+### Patch Changes
+
+- **Refactored Observational Memory into modular architecture** ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+  Restructured the Observational Memory (OM) engine from a single ~3,800-line monolithic class into a modular, strategy-based architecture. The public API and behavior are unchanged — this is a purely internal refactor that improves maintainability, testability, and separation of concerns.
+
+  **Why** — The original `ObservationalMemory` class handled everything: orchestration, LLM calling, observation logic for three different scopes, reflection, buffering coordination, turn lifecycle, and message processing. This made it difficult to reason about individual behaviors, test them in isolation, or extend the system. The refactor separates these responsibilities into focused modules.
+
+  **Observation strategies** — Extracted three duplicated observation code paths (~650 lines of conditionals) into pluggable strategy classes sharing a common `prepare → process → persist` lifecycle via an abstract base class. The correct strategy is selected automatically based on scope and buffering configuration.
+
+  ```
+  observation-strategies/
+    base.ts            — abstract ObservationStrategy + StrategyDeps interface
+    sync.ts            — SyncObservationStrategy (thread-scoped synchronous)
+    async-buffer.ts    — AsyncBufferObservationStrategy (background buffered)
+    resource-scoped.ts — ResourceScopedObservationStrategy (multi-thread)
+    index.ts           — static factory: ObservationStrategy.create(om, opts)
+  ```
+
+  ```ts
+  // Internal usage — strategies are selected and run automatically:
+  const strategy = ObservationStrategy.create(om, {
+    record,
+    threadId,
+    resourceId,
+    messages,
+    cycleId,
+    startedAt,
+  });
+  const result = await strategy.run();
+  ```
+
+  **Turn/Step abstraction** — Introduced `ObservationTurn` and `StepContext` to model the lifecycle of a single agent interaction. A Turn manages message loading, system message injection, record caching, and cleanup. A Step handles per-generation observation, activation, and reflection decisions. This replaced ~580 lines of inline orchestration in the processor with ~170 lines of structured calls.
+
+  ```ts
+  // Internal lifecycle managed by the processor:
+  const turn = new ObservationTurn(om, memory, { threadId, resourceId });
+  await turn.start(messageList, writer); // loads history, injects OM system message
+
+  const step = turn.step(0);
+  await step.prepare(messageList, writer); // activate buffered, maybe reflect
+  // ... agent generates response ...
+  await step.complete(messageList, writer); // observe new messages, buffer if needed
+
+  await turn.end(messageList, writer); // persist, cleanup
+  ```
+
+  **Dedicated runners** — Moved observer and reflector LLM-calling logic into `ObserverRunner` (194 lines) and `ReflectorRunner` (710 lines), separating prompt construction, degenerate output detection, retry logic, and compression level escalation from orchestration. `BufferingCoordinator` (175 lines) extracts the static buffering state machine and async operation tracking.
+
+  **Processor** — Added `ObservationalMemoryProcessor` implementing the `Processor` interface, bridging the OM engine with the AI SDK message pipeline. It owns the decision of _when_ to buffer, activate, observe, and reflect — while the OM engine owns _how_ to do each operation.
+
+  ```ts
+  // The processor is created automatically by Memory when OM is enabled.
+  // It plugs into the AI SDK message pipeline:
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model, messageTokens: 500 },
+        reflection: { model, observationTokens: 10_000 },
+      },
+    },
+  });
+
+  // For direct access to the OM engine (e.g. for manual observe/buffer/activate):
+  const om = await memory.omEngine;
+  ```
+
+  **Unified OM engine instantiation** — Replaced the duplicated `getOMEngine()` singleton and per-call `createOMProcessor()` engine creation with a single lazy `omEngine` property on the `Memory` class. This eliminates config drift between the legacy `getContext()` API and the processor pipeline — both now share the same `ObservationalMemory` instance with the full configuration.
+
+  ```ts
+  // Before (casting required, config could drift):
+  const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
+
+  // After (typed, single shared engine):
+  const om = await memory.omEngine;
+  ```
+
+  **Improved observation activation atomicity** — Added conditional WHERE clauses to `activateBufferedObservations` in all storage adapters (pg, libsql, mongodb) to prevent duplicate chunk swaps when concurrent processes attempt activation simultaneously. If chunks have already been cleared by another process, the operation returns early with zero counts instead of corrupting state.
+
+  **Compression start level from model context** — Integrated model-aware compression start levels into the `ReflectorRunner`. Models like `gemini-2.5-flash` that struggle with light compression now start at compression level 2 instead of 1, reducing wasted reflection retries.
+
+  **Pure function extraction** — Moved reusable helpers into `message-utils.ts`: `filterObservedMessages`, `getBufferedChunks`, `sortThreadsByOldestMessage`, `stripThreadTags`. Eliminated dead code including `isObserving` DB flag, `countMessageTokens`, `acquireObservingLock`/`releaseObservingLock`, and ~10 cascading dead private methods.
+
+  **Cleanup** — Dropped `threadIdCache` (pointless memoization), removed `as any` casts for private method access (made methods properly public with `@internal` tsdoc), replaced sealed-ID-based tracking with message-level `metadata.mastra.sealed` flag checks.
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067))
+
+## 1.16.0
+
+### Minor Changes
+
+- Added dataset-agent association and experiment status tracking for the Evaluate workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - **Dataset targeting**: Added `targetType` and `targetIds` fields to datasets, enabling association with agents, scorers, or workflows. Datasets can now be linked to multiple entities.
+  - **Experiment status**: Added `status` field to experiment results (`'needs-review'`, `'reviewed'`, `'complete'`) for review queue workflow.
+  - **Dataset experiment routes**: Added API endpoints for triggering experiments from a dataset with configurable target type and target ID.
+  - **LLM data generation**: Added endpoint for generating dataset items using an LLM with configurable count and prompt.
+  - **Failure analysis**: Added endpoint for clustering experiment failures and proposing tags using LLM analysis.
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+- Added tool suspension handling to the Harness. ([#14611](https://github.com/mastra-ai/mastra/pull/14611))
+
+  When a tool calls `suspend()` during execution, the harness now emits a `tool_suspended` event, reports `agent_end` with reason `'suspended'`, and exposes `respondToToolSuspension()` to resume execution with user-provided data.
+
+  ```ts
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended') {
+      // event.toolName, event.suspendPayload, event.resumeSchema
+    }
+  });
+
+  // Resume after collecting user input
+  await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+  ```
+
+- Added `agentId` to the agent tool execution context. Tools executed by an agent can now access `context.agent.agentId` to identify which agent is calling them. This enables tools to look up agent metadata, share workspace configuration with sub-agents, or customize behavior per agent. ([#14502](https://github.com/mastra-ai/mastra/pull/14502))
+
+- Improved observability metrics and logs storage support. ([#14607](https://github.com/mastra-ai/mastra/pull/14607))
+  - Added typed observability storage fields for shared correlation context and cost data.
+  - Added storage-layer metric listing and richer metric aggregations that can return estimated cost alongside values.
+  - Improved observability filter parity across log and metric storage APIs.
+
+- Add optional `?path=` query param to workspace skill routes for disambiguating same-named skills. ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  Skill routes continue to use `:skillName` in the URL path (no breaking change). When two skills share the same name (e.g. from different directories), pass the optional `?path=` query parameter to select the exact skill:
+
+  ```
+  GET /workspaces/:workspaceId/skills/:skillName?path=skills/brand-guidelines
+  ```
+
+  `SkillMetadata` now includes a `path` field, and the `list()` method returns all same-named skills for disambiguation. The client SDK's `getSkill()` accepts an optional `skillPath` parameter for disambiguation.
+
+- Added `ModelByInputTokens` in `@mastra/memory` for token-threshold-based model selection in Observational Memory. ([#14614](https://github.com/mastra-ai/mastra/pull/14614))
+
+  When configured, OM automatically selects different observer or reflector models based on the actual input token count at the time the OM call runs.
+
+  Example usage:
+
+  ```ts
+  import { Memory, ModelByInputTokens } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: new ModelByInputTokens({
+          upTo: {
+            10_000: 'google/gemini-2.5-flash',
+            40_000: 'openai/gpt-4o',
+            1_000_000: 'openai/gpt-4.5',
+          },
+        }),
+      },
+    },
+  });
+  ```
+
+  The `upTo` keys are inclusive upper bounds. OM resolves the matching tier directly at the observer or reflector call site. If the input exceeds the largest configured threshold, OM throws an error.
+
+  Improved Observational Memory tracing so traces show the observer and reflector spans and make it easier to see which resolved model was used at runtime.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902))
+
+- Fixed `Harness.destroy()` to properly clean up heartbeats and workspace on teardown. ([#14568](https://github.com/mastra-ai/mastra/pull/14568))
+
+- Fixed null detection in tool input validation to check actual values at failing paths instead of relying on error message string matching. This ensures null values from LLMs are correctly handled even when validators produce error messages that don't contain the word "null" (e.g., "must be string"). Fixes #14476. ([#14496](https://github.com/mastra-ai/mastra/pull/14496))
+
+- Fixed missing tool lists in agent traces for streaming runs. Exporters like Datadog LLM Observability now receive the tools available to the agent. ([#14550](https://github.com/mastra-ai/mastra/pull/14550))
+
+- Fix consecutive tool-only loop iterations being merged into a single assistant message block. When the agentic loop runs multiple iterations that each produce only tool calls, the LLM would misinterpret them as parallel calls from a single turn. A `step-start` boundary is now inserted between iterations to ensure they are treated as sequential steps. ([#14652](https://github.com/mastra-ai/mastra/pull/14652))
+
+- Improved custom OpenAI-compatible model configuration guidance in the models docs. ([#14594](https://github.com/mastra-ai/mastra/pull/14594))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
+- **Workspace skills now surface all same-named skills for disambiguation.** ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  When multiple skills share the same name (e.g., a local `brand-guidelines` skill and one from `node_modules`), `list()` now returns all of them instead of only the tie-break winner. This lets agents and UIs see every available skill, along with its path and source type.
+
+  **Tie-breaking behavior:**
+  - `get(name)` still returns a single skill using source-type priority: local > managed > external
+  - If two skills share the same name _and_ source type, `get(name)` throws an error — rename one or move it to a different source type
+  - `get(path)` bypasses tie-breaking entirely and returns the exact skill
+
+  Agents and UIs now receive all same-named skills with their paths, which improves disambiguation in prompts and tool calls.
+
+  ```ts
+  const skills = await workspace.skills.list();
+  // Returns both local and external "brand-guidelines" skills
+
+  const exact = await workspace.skills.get('node_modules/@myorg/skills/brand-guidelines');
+  // Fetches the external copy directly by path
+  ```
+
+- Fixed Anthropic 'tool_use ids were found without tool_result blocks immediately after' error. When client tools (e.g. execute_command) and provider tools (e.g. web_search) are called in parallel, the tool ordering in message history could cause Anthropic to reject subsequent requests, making the thread unrecoverable. Tool blocks are now correctly split to satisfy Anthropic's ordering requirements. ([#14648](https://github.com/mastra-ai/mastra/pull/14648))
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+- Updated dependencies [[`47358d9`](https://github.com/mastra-ai/mastra/commit/47358d960bb2b931321de7e798f341ab0df81f44), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/schema-compat@1.2.7
+
+## 1.16.0-alpha.5
+
+### Patch Changes
+
+- Fix consecutive tool-only loop iterations being merged into a single assistant message block. When the agentic loop runs multiple iterations that each produce only tool calls, the LLM would misinterpret them as parallel calls from a single turn. A `step-start` boundary is now inserted between iterations to ensure they are treated as sequential steps. ([#14652](https://github.com/mastra-ai/mastra/pull/14652))
+
+## 1.16.0-alpha.4
+
+### Minor Changes
+
+- Added `ModelByInputTokens` in `@mastra/memory` for token-threshold-based model selection in Observational Memory. ([#14614](https://github.com/mastra-ai/mastra/pull/14614))
+
+  When configured, OM automatically selects different observer or reflector models based on the actual input token count at the time the OM call runs.
+
+  Example usage:
+
+  ```ts
+  import { Memory, ModelByInputTokens } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: new ModelByInputTokens({
+          upTo: {
+            10_000: 'google/gemini-2.5-flash',
+            40_000: 'openai/gpt-4o',
+            1_000_000: 'openai/gpt-4.5',
+          },
+        }),
+      },
+    },
+  });
+  ```
+
+  The `upTo` keys are inclusive upper bounds. OM resolves the matching tier directly at the observer or reflector call site. If the input exceeds the largest configured threshold, OM throws an error.
+
+  Improved Observational Memory tracing so traces show the observer and reflector spans and make it easier to see which resolved model was used at runtime.
+
+### Patch Changes
+
+- Fixed null detection in tool input validation to check actual values at failing paths instead of relying on error message string matching. This ensures null values from LLMs are correctly handled even when validators produce error messages that don't contain the word "null" (e.g., "must be string"). Fixes #14476. ([#14496](https://github.com/mastra-ai/mastra/pull/14496))
+
+- Fixed Anthropic 'tool_use ids were found without tool_result blocks immediately after' error. When client tools (e.g. execute_command) and provider tools (e.g. web_search) are called in parallel, the tool ordering in message history could cause Anthropic to reject subsequent requests, making the thread unrecoverable. Tool blocks are now correctly split to satisfy Anthropic's ordering requirements. ([#14648](https://github.com/mastra-ai/mastra/pull/14648))
+
+## 1.16.0-alpha.3
+
+### Minor Changes
+
+- Added `agentId` to the agent tool execution context. Tools executed by an agent can now access `context.agent.agentId` to identify which agent is calling them. This enables tools to look up agent metadata, share workspace configuration with sub-agents, or customize behavior per agent. ([#14502](https://github.com/mastra-ai/mastra/pull/14502))
+
+- Add optional `?path=` query param to workspace skill routes for disambiguating same-named skills. ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  Skill routes continue to use `:skillName` in the URL path (no breaking change). When two skills share the same name (e.g. from different directories), pass the optional `?path=` query parameter to select the exact skill:
+
+  ```
+  GET /workspaces/:workspaceId/skills/:skillName?path=skills/brand-guidelines
+  ```
+
+  `SkillMetadata` now includes a `path` field, and the `list()` method returns all same-named skills for disambiguation. The client SDK's `getSkill()` accepts an optional `skillPath` parameter for disambiguation.
+
+### Patch Changes
+
+- **Workspace skills now surface all same-named skills for disambiguation.** ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  When multiple skills share the same name (e.g., a local `brand-guidelines` skill and one from `node_modules`), `list()` now returns all of them instead of only the tie-break winner. This lets agents and UIs see every available skill, along with its path and source type.
+
+  **Tie-breaking behavior:**
+  - `get(name)` still returns a single skill using source-type priority: local > managed > external
+  - If two skills share the same name _and_ source type, `get(name)` throws an error — rename one or move it to a different source type
+  - `get(path)` bypasses tie-breaking entirely and returns the exact skill
+
+  Agents and UIs now receive all same-named skills with their paths, which improves disambiguation in prompts and tool calls.
+
+  ```ts
+  const skills = await workspace.skills.list();
+  // Returns both local and external "brand-guidelines" skills
+
+  const exact = await workspace.skills.get('node_modules/@myorg/skills/brand-guidelines');
+  // Fetches the external copy directly by path
+  ```
+
+- Updated dependencies [[`47358d9`](https://github.com/mastra-ai/mastra/commit/47358d960bb2b931321de7e798f341ab0df81f44)]:
+  - @mastra/schema-compat@1.2.7-alpha.1
+
+## 1.16.0-alpha.2
+
+### Minor Changes
+
+- Added tool suspension handling to the Harness. ([#14611](https://github.com/mastra-ai/mastra/pull/14611))
+
+  When a tool calls `suspend()` during execution, the harness now emits a `tool_suspended` event, reports `agent_end` with reason `'suspended'`, and exposes `respondToToolSuspension()` to resume execution with user-provided data.
+
+  ```ts
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended') {
+      // event.toolName, event.suspendPayload, event.resumeSchema
+    }
+  });
+
+  // Resume after collecting user input
+  await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+  ```
+
+- Improved observability metrics and logs storage support. ([#14607](https://github.com/mastra-ai/mastra/pull/14607))
+  - Added typed observability storage fields for shared correlation context and cost data.
+  - Added storage-layer metric listing and richer metric aggregations that can return estimated cost alongside values.
+  - Improved observability filter parity across log and metric storage APIs.
+
+### Patch Changes
+
+- Fixed `Harness.destroy()` to properly clean up heartbeats and workspace on teardown. ([#14568](https://github.com/mastra-ai/mastra/pull/14568))
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+- Updated dependencies [[`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/schema-compat@1.2.7-alpha.0
+
+## 1.16.0-alpha.1
+
+### Minor Changes
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+### Patch Changes
+
+- Improved custom OpenAI-compatible model configuration guidance in the models docs. ([#14594](https://github.com/mastra-ai/mastra/pull/14594))
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added dataset-agent association and experiment status tracking for the Evaluate workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - **Dataset targeting**: Added `targetType` and `targetIds` fields to datasets, enabling association with agents, scorers, or workflows. Datasets can now be linked to multiple entities.
+  - **Experiment status**: Added `status` field to experiment results (`'needs-review'`, `'reviewed'`, `'complete'`) for review queue workflow.
+  - **Dataset experiment routes**: Added API endpoints for triggering experiments from a dataset with configurable target type and target ID.
+  - **LLM data generation**: Added endpoint for generating dataset items using an LLM with configurable count and prompt.
+  - **Failure analysis**: Added endpoint for clustering experiment failures and proposing tags using LLM analysis.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902))
+
+- Fixed missing tool lists in agent traces for streaming runs. Exporters like Datadog LLM Observability now receive the tools available to the agent. ([#14550](https://github.com/mastra-ai/mastra/pull/14550))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
+## 1.15.0
+
+### Minor Changes
+
+- Add `server.studioHost`, `server.studioProtocol`, and `server.studioPort` options for Studio in cloud deployments ([#12899](https://github.com/mastra-ai/mastra/pull/12899))
+
+  When deploying to cloud environments (e.g., Google Cloud Run), `server.host` must be `0.0.0.0` for the container to accept traffic, and the internal port often differs from the external one (e.g., 8080 internally vs 443 externally). Studio needs the actual public domain, protocol, and port to make API calls from the browser. These new options decouple the server bind configuration from the Studio API URL.
+
+  ```typescript
+  export const mastra = new Mastra({
+    server: {
+      host: '0.0.0.0',
+      port: 8080,
+      studioHost: 'my-app.run.app',
+      studioProtocol: 'https',
+      studioPort: 443,
+    },
+  });
+  ```
+
+  All three options are optional and fall back to existing behavior when not set.
+
+- Added filesystem-level optimistic concurrency for file writes. When `expectedMtime` is provided in `WriteOptions`, the write will be rejected with a `StaleFileError` if the file was modified externally since it was last read. This provides defense-in-depth against external modifications (e.g., LSP-based editors) that occur between the tool-level mtime check and the actual write. ([#14354](https://github.com/mastra-ai/mastra/pull/14354))
+
+  **New `expectedMtime` option on `WriteOptions`**
+
+  Any caller of `filesystem.writeFile()` can now opt into optimistic concurrency:
+
+  ```ts
+  // Read a file and capture its mtime
+  const stat = await filesystem.stat('config.json');
+  const content = await filesystem.readFile('config.json');
+
+  // Later, write with mtime guard — fails if file changed externally
+  await filesystem.writeFile('config.json', newContent, {
+    overwrite: true,
+    expectedMtime: stat.modifiedAt,
+  });
+  ```
+
+  If the file was modified between the read and write, a `StaleFileError` is thrown instead of silently overwriting.
+
+  **Automatic mtime pass-through for workspace tools**
+
+  When `requireReadBeforeWrite` is enabled, the `edit_file`, `write_file`, and `ast_edit` tools now automatically pass the recorded mtime through to the filesystem layer, providing a second line of defense beyond the existing tool-level read tracker check.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5))
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+- Fixed agent.stream() so the returned spanId matches the top-level agent run span instead of the nested model span. ([#14447](https://github.com/mastra-ai/mastra/pull/14447))
+
+- Fixed deserializeRequestContext to return an actual RequestContext instance instead of a Map, preventing crashes during Inngest durable execution replay with observability enabled. ([#14442](https://github.com/mastra-ai/mastra/pull/14442))
+
+- Fixed trace context propagation in evented workflow steps and processors. Operations started inside those steps now appear under the correct parent in distributed traces. ([#14455](https://github.com/mastra-ai/mastra/pull/14455))
+
+- Fix OTEL context propagation in workflow step execution. Wrapping `step.execute()` in `executeWithContext` ensures auto-instrumented code inside a step (e.g. AI SDK spans) is correctly nested under the workflow step span rather than appearing as siblings. ([#13755](https://github.com/mastra-ai/mastra/pull/13755))
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+- Fixed generation span output to include tool call data, enabling PostHog's LLM Analytics Tools tab to extract and display tool usage ([#14383](https://github.com/mastra-ai/mastra/pull/14383))
+
+- Fixed a bug where workflow-based processor execution would pass null stream parts to subsequent processors. When a processor's processOutputStream returns null (e.g., a guardrail filtering a part), the next processor in the chain would receive null as the part, causing potential errors. The null guard now matches the inline processor path behavior, skipping processors when the part is null. ([#14514](https://github.com/mastra-ai/mastra/pull/14514))
+
+- Updated dependencies [[`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1), [`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6
+
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+- Fixed a bug where workflow-based processor execution would pass null stream parts to subsequent processors. When a processor's processOutputStream returns null (e.g., a guardrail filtering a part), the next processor in the chain would receive null as the part, causing potential errors. The null guard now matches the inline processor path behavior, skipping processors when the part is null. ([#14514](https://github.com/mastra-ai/mastra/pull/14514))
+
+## 1.15.0-alpha.3
+
+### Minor Changes
+
+- Added filesystem-level optimistic concurrency for file writes. When `expectedMtime` is provided in `WriteOptions`, the write will be rejected with a `StaleFileError` if the file was modified externally since it was last read. This provides defense-in-depth against external modifications (e.g., LSP-based editors) that occur between the tool-level mtime check and the actual write. ([#14354](https://github.com/mastra-ai/mastra/pull/14354))
+
+  **New `expectedMtime` option on `WriteOptions`**
+
+  Any caller of `filesystem.writeFile()` can now opt into optimistic concurrency:
+
+  ```ts
+  // Read a file and capture its mtime
+  const stat = await filesystem.stat('config.json');
+  const content = await filesystem.readFile('config.json');
+
+  // Later, write with mtime guard — fails if file changed externally
+  await filesystem.writeFile('config.json', newContent, {
+    overwrite: true,
+    expectedMtime: stat.modifiedAt,
+  });
+  ```
+
+  If the file was modified between the read and write, a `StaleFileError` is thrown instead of silently overwriting.
+
+  **Automatic mtime pass-through for workspace tools**
+
+  When `requireReadBeforeWrite` is enabled, the `edit_file`, `write_file`, and `ast_edit` tools now automatically pass the recorded mtime through to the filesystem layer, providing a second line of defense beyond the existing tool-level read tracker check.
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed deserializeRequestContext to return an actual RequestContext instance instead of a Map, preventing crashes during Inngest durable execution replay with observability enabled. ([#14442](https://github.com/mastra-ai/mastra/pull/14442))
+
+- Fixed generation span output to include tool call data, enabling PostHog's LLM Analytics Tools tab to extract and display tool usage ([#14383](https://github.com/mastra-ai/mastra/pull/14383))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Add `server.studioHost`, `server.studioProtocol`, and `server.studioPort` options for Studio in cloud deployments ([#12899](https://github.com/mastra-ai/mastra/pull/12899))
+
+  When deploying to cloud environments (e.g., Google Cloud Run), `server.host` must be `0.0.0.0` for the container to accept traffic, and the internal port often differs from the external one (e.g., 8080 internally vs 443 externally). Studio needs the actual public domain, protocol, and port to make API calls from the browser. These new options decouple the server bind configuration from the Studio API URL.
+
+  ```typescript
+  export const mastra = new Mastra({
+    server: {
+      host: '0.0.0.0',
+      port: 8080,
+      studioHost: 'my-app.run.app',
+      studioProtocol: 'https',
+      studioPort: 443,
+    },
+  });
+  ```
+
+  All three options are optional and fall back to existing behavior when not set.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5))
+
+- Fixed agent.stream() so the returned spanId matches the top-level agent run span instead of the nested model span. ([#14447](https://github.com/mastra-ai/mastra/pull/14447))
+
+- Fixed trace context propagation in evented workflow steps and processors. Operations started inside those steps now appear under the correct parent in distributed traces. ([#14455](https://github.com/mastra-ai/mastra/pull/14455))
+
+- Fix OTEL context propagation in workflow step execution. Wrapping `step.execute()` in `executeWithContext` ensures auto-instrumented code inside a step (e.g. AI SDK spans) is correctly nested under the workflow step span rather than appearing as siblings. ([#13755](https://github.com/mastra-ai/mastra/pull/13755))
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+- Updated dependencies [[`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1)]:
+  - @mastra/schema-compat@1.2.6-alpha.0
+
+## 1.14.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Fixed `replaceString` utility to properly escape `$` characters in replacement strings. Previously, patterns like `$&` in the replacement text would be interpreted as regex backreferences instead of literal text. ([#14434](https://github.com/mastra-ai/mastra/pull/14434))
+
+- Fixed tool invocation updates to preserve `providerExecuted` and `providerMetadata` from the original tool call when updating to result state. ([#14431](https://github.com/mastra-ai/mastra/pull/14431))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5
+
+## 1.14.0-alpha.3
+
+### Patch Changes
+
+- Fixed `replaceString` utility to properly escape `$` characters in replacement strings. Previously, patterns like `$&` in the replacement text would be interpreted as regex backreferences instead of literal text. ([#14434](https://github.com/mastra-ai/mastra/pull/14434))
+
+- Fixed tool invocation updates to preserve `providerExecuted` and `providerMetadata` from the original tool call when updating to result state. ([#14431](https://github.com/mastra-ai/mastra/pull/14431))
+
+- Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+## 1.14.0-alpha.2
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+## 1.13.3-alpha.1
+
+### Patch Changes
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5-alpha.0
+
+## 1.13.2
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4
+
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4-alpha.0
+
+## 1.13.1
+
+### Patch Changes
+
+- Fixed tryRepairJson to handle unquoted date values (e.g. 2026-04-15) in tool call arguments. LLMs like Claude Sonnet sometimes produce bare date values without quotes, causing JSON.parse to fail and tool calls to silently lose all arguments. The repair function now detects and quotes date-like values matching YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS patterns. See https://github.com/mastra-ai/mastra/issues/14230 ([#14233](https://github.com/mastra-ai/mastra/pull/14233))
+
+- Updated dependencies [[`c4e600e`](https://github.com/mastra-ai/mastra/commit/c4e600e39a04309c3a7ff182bd806ab2b3c788ea)]:
+  - @mastra/schema-compat@1.2.3
+
+## 1.13.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2-alpha.0
+
+## 1.12.0
+
+### Minor Changes
+
+- MCP tool calls now use `MCP_TOOL_CALL` span type instead of `TOOL_CALL` in traces. `CoreToolBuilder` detects `mcpMetadata` on tools and creates spans with MCP server name, version, and tool description attributes. ([#13274](https://github.com/mastra-ai/mastra/pull/13274))
+
+- **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.** ([#13804](https://github.com/mastra-ai/mastra/pull/13804))
+
+  Previously, `LocalFilesystem` in contained mode treated absolute paths like `/file.txt` as shorthand for `basePath/file.txt` (a "virtual-root" convention). This could silently resolve paths to unexpected locations — for example, `/home/user/.config/file.txt` would resolve to `basePath/home/user/.config/file.txt` instead of the real path.
+
+  Now:
+  - **Absolute paths** (starting with `/`) are real filesystem paths, subject to containment checks
+  - **Relative paths** (e.g., `file.txt`, `src/index.ts`) resolve against `basePath`
+  - **Tilde paths** (e.g., `~/Documents`) expand to the home directory
+
+  ### Migration
+
+  If your code passes paths like `/file.txt` to workspace filesystem methods expecting them to resolve relative to `basePath`, change them to relative paths:
+
+  ```ts
+  // Before
+  await filesystem.readFile('/src/index.ts');
+
+  // After
+  await filesystem.readFile('src/index.ts');
+  ```
+
+  Also fixed:
+  - `allowedPaths` resolving against the working directory instead of `basePath`, causing unexpected permission errors when `basePath` differed from `cwd`
+  - Permission errors when accessing paths under `allowedPaths` directories that don't exist yet (e.g., during skills discovery)
+
+- Changed `ProcessHandle.pid` type from `number` to `string` to support sandbox providers that use non-numeric process identifiers (e.g., session IDs). ([#13591](https://github.com/mastra-ai/mastra/pull/13591))
+
+  **Before:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // number
+  await sandbox.processes.get(42);
+  ```
+
+  **After:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // string (e.g., '1234' for local, 'session-abc' for Daytona)
+  await sandbox.processes.get('1234');
+  ```
+
+### Patch Changes
+
+- Added a `mastra/<version>` User-Agent header to all provider API requests (OpenAI, Anthropic, Google, Mistral, Groq, xAI, DeepSeek, and others) across models.dev, Netlify, and Azure gateways for better traffic attribution. ([#13087](https://github.com/mastra-ai/mastra/pull/13087))
+
+- Update provider registry and model documentation with latest models and providers ([`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf))
+
+- Fixed processor-triggered aborts not appearing in traces. Processor spans now include abort details (reason, retry flag, metadata) and agent-level spans capture the same information when an abort short-circuits the agent run. This makes guardrail and processor aborts fully visible in tracing dashboards. ([#14038](https://github.com/mastra-ai/mastra/pull/14038))
+
+- Fix agent loop not continuing when `onIterationComplete` returns `continue: true` ([#14170](https://github.com/mastra-ai/mastra/pull/14170))
+
+- Fixed exponential token growth during multi-step agent workflows by implementing `processInputStep` on `TokenLimiterProcessor` and removing the redundant `processInput` method. Token-based message pruning now runs at every step of the agentic loop (including tool call continuations), keeping the in-memory message list within budget before each LLM call. Also refactored Tiktoken encoder to use the shared global singleton from `getTiktoken()` instead of creating a new instance per processor. ([#13929](https://github.com/mastra-ai/mastra/pull/13929))
+
+- Sub-agents with `defaultOptions.memory` configurations were having their memory settings overridden when called as tools from a parent agent. The parent unconditionally passed its own `memory` option (with newly generated thread/resource IDs), which replaced the sub-agent's intended memory configuration due to shallow object merging. ([#11561](https://github.com/mastra-ai/mastra/pull/11561))
+
+  This fix checks if the sub-agent has its own `defaultOptions.memory` before applying parent-derived memory settings. Sub-agents without their own memory config continue to receive parent-derived IDs as a fallback.
+
+  No code changes required for consumers - sub-agents with explicit `defaultOptions.memory` will now work correctly when used via the `agents: {}` option.
+
+- Fixed listConfiguredInputProcessors() and listConfiguredOutputProcessors() returning a combined workflow instead of individual processors. Previously, these methods wrapped all configured processors into a single committed workflow, making it impossible to inspect or look up processors by ID. Now they return the raw flat array of configured processors as intended. ([#14158](https://github.com/mastra-ai/mastra/pull/14158))
+
+- `fetchWithRetry` now backs off in sequence 2s → 4s → 8s and then caps at 10s. ([#14159](https://github.com/mastra-ai/mastra/pull/14159))
+
+- Preserve trace continuity across workflow suspend/resume for workflows run by the default engine, so resumed workflows appear as children of the original span in tracing tools. ([#12276](https://github.com/mastra-ai/mastra/pull/12276))
+
+- Updated dependencies [[`709362d`](https://github.com/mastra-ai/mastra/commit/709362d67b80d8832729bbf9e449cad27640a5d2), [`787f3ac`](https://github.com/mastra-ai/mastra/commit/787f3ac08b3bb77413645a7ab5c447fa851708fd)]:
+  - @mastra/schema-compat@1.2.1
+
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.** ([#13804](https://github.com/mastra-ai/mastra/pull/13804))
+
+  Previously, `LocalFilesystem` in contained mode treated absolute paths like `/file.txt` as shorthand for `basePath/file.txt` (a "virtual-root" convention). This could silently resolve paths to unexpected locations — for example, `/home/user/.config/file.txt` would resolve to `basePath/home/user/.config/file.txt` instead of the real path.
+
+  Now:
+  - **Absolute paths** (starting with `/`) are real filesystem paths, subject to containment checks
+  - **Relative paths** (e.g., `file.txt`, `src/index.ts`) resolve against `basePath`
+  - **Tilde paths** (e.g., `~/Documents`) expand to the home directory
+
+  ### Migration
+
+  If your code passes paths like `/file.txt` to workspace filesystem methods expecting them to resolve relative to `basePath`, change them to relative paths:
+
+  ```ts
+  // Before
+  await filesystem.readFile('/src/index.ts');
+
+  // After
+  await filesystem.readFile('src/index.ts');
+  ```
+
+  Also fixed:
+  - `allowedPaths` resolving against the working directory instead of `basePath`, causing unexpected permission errors when `basePath` differed from `cwd`
+  - Permission errors when accessing paths under `allowedPaths` directories that don't exist yet (e.g., during skills discovery)
+
+- Changed `ProcessHandle.pid` type from `number` to `string` to support sandbox providers that use non-numeric process identifiers (e.g., session IDs). ([#13591](https://github.com/mastra-ai/mastra/pull/13591))
+
+  **Before:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // number
+  await sandbox.processes.get(42);
+  ```
+
+  **After:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // string (e.g., '1234' for local, 'session-abc' for Daytona)
+  await sandbox.processes.get('1234');
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf))
+
+- Fixed processor-triggered aborts not appearing in traces. Processor spans now include abort details (reason, retry flag, metadata) and agent-level spans capture the same information when an abort short-circuits the agent run. This makes guardrail and processor aborts fully visible in tracing dashboards. ([#14038](https://github.com/mastra-ai/mastra/pull/14038))
+
+- Fixed exponential token growth during multi-step agent workflows by implementing `processInputStep` on `TokenLimiterProcessor` and removing the redundant `processInput` method. Token-based message pruning now runs at every step of the agentic loop (including tool call continuations), keeping the in-memory message list within budget before each LLM call. Also refactored Tiktoken encoder to use the shared global singleton from `getTiktoken()` instead of creating a new instance per processor. ([#13929](https://github.com/mastra-ai/mastra/pull/13929))
+
+- Fixed listConfiguredInputProcessors() and listConfiguredOutputProcessors() returning a combined workflow instead of individual processors. Previously, these methods wrapped all configured processors into a single committed workflow, making it impossible to inspect or look up processors by ID. Now they return the raw flat array of configured processors as intended. ([#14158](https://github.com/mastra-ai/mastra/pull/14158))
+
+- Updated dependencies [[`709362d`](https://github.com/mastra-ai/mastra/commit/709362d67b80d8832729bbf9e449cad27640a5d2)]:
+  - @mastra/schema-compat@1.2.1-alpha.1
+
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- MCP tool calls now use `MCP_TOOL_CALL` span type instead of `TOOL_CALL` in traces. `CoreToolBuilder` detects `mcpMetadata` on tools and creates spans with MCP server name, version, and tool description attributes. ([#13274](https://github.com/mastra-ai/mastra/pull/13274))
+
+### Patch Changes
+
+- Added a `mastra/<version>` User-Agent header to all provider API requests (OpenAI, Anthropic, Google, Mistral, Groq, xAI, DeepSeek, and others) across models.dev, Netlify, and Azure gateways for better traffic attribution. ([#13087](https://github.com/mastra-ai/mastra/pull/13087))
+
+- Fix agent loop not continuing when `onIterationComplete` returns `continue: true` ([#14155](https://github.com/mastra-ai/mastra/pull/14155))
+
+- Sub-agents with `defaultOptions.memory` configurations were having their memory settings overridden when called as tools from a parent agent. The parent unconditionally passed its own `memory` option (with newly generated thread/resource IDs), which replaced the sub-agent's intended memory configuration due to shallow object merging. ([#11561](https://github.com/mastra-ai/mastra/pull/11561))
+
+  This fix checks if the sub-agent has its own `defaultOptions.memory` before applying parent-derived memory settings. Sub-agents without their own memory config continue to receive parent-derived IDs as a fallback.
+
+  No code changes required for consumers - sub-agents with explicit `defaultOptions.memory` will now work correctly when used via the `agents: {}` option.
+
+- `fetchWithRetry` now backs off in sequence 2s → 4s → 8s and then caps at 10s. ([#14159](https://github.com/mastra-ai/mastra/pull/14159))
+
+- Preserve trace continuity across workflow suspend/resume for workflows run by the default engine, so resumed workflows appear as children of the original span in tracing tools. ([#12276](https://github.com/mastra-ai/mastra/pull/12276))
+
+- Updated dependencies [[`787f3ac`](https://github.com/mastra-ai/mastra/commit/787f3ac08b3bb77413645a7ab5c447fa851708fd)]:
+  - @mastra/schema-compat@1.2.1-alpha.0
+
+## 1.11.0
+
+### Minor Changes
+
+- feat: support dynamic functions returning model fallback arrays ([#11975](https://github.com/mastra-ai/mastra/pull/11975))
+
+  Agents can now use dynamic functions that return entire fallback arrays based on runtime context. This enables:
+  - Dynamic selection of complete fallback configurations
+  - Context-based model selection with automatic fallback
+  - Flexible model routing based on user tier, region, or other factors
+  - Nested dynamic functions within returned arrays (each model in array can also be dynamic)
+
+  ## Examples
+
+  ### Basic dynamic fallback array
+
+  ```typescript
+  const agent = new Agent({
+    model: ({ requestContext }) => {
+      const tier = requestContext.get('tier');
+      if (tier === 'premium') {
+        return [
+          { model: 'openai/gpt-4', maxRetries: 2 },
+          { model: 'anthropic/claude-3-opus', maxRetries: 1 },
+        ];
+      }
+      return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+    },
+  });
+  ```
+
+  ### Region-based routing with nested dynamics
+
+  ```typescript
+  const agent = new Agent({
+    model: ({ requestContext }) => {
+      const region = requestContext.get('region');
+      return [
+        {
+          model: ({ requestContext }) => {
+            // Select model variant based on region
+            return region === 'eu' ? 'openai/gpt-4-eu' : 'openai/gpt-4';
+          },
+          maxRetries: 2,
+        },
+        { model: 'anthropic/claude-3-opus', maxRetries: 1 },
+      ];
+    },
+    maxRetries: 1, // Agent-level default for models without explicit maxRetries
+  });
+  ```
+
+  ### Async dynamic selection
+
+  ```typescript
+  const agent = new Agent({
+    model: async ({ requestContext }) => {
+      // Fetch user's tier from database
+      const userId = requestContext.get('userId');
+      const user = await db.users.findById(userId);
+
+      if (user.tier === 'enterprise') {
+        return [
+          { model: 'openai/gpt-4', maxRetries: 3 },
+          { model: 'anthropic/claude-3-opus', maxRetries: 2 },
+        ];
+      }
+      return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+    },
+  });
+  ```
+
+  ## Technical Details
+  - Functions can return `MastraModelConfig` (single model) or `ModelWithRetries[]` (array)
+  - Models without explicit `maxRetries` inherit agent-level `maxRetries` default
+  - Each model in returned array can also be a dynamic function for nested selection
+  - Empty arrays are validated and throw errors early
+  - Arrays are normalized to `ModelFallbacks` with all required fields filled in
+  - Performance optimization: Already-normalized arrays skip re-normalization
+
+  ## Fixes and Improvements
+  - Dynamic model fallbacks now properly inherit agent-level `maxRetries` when not explicitly specified
+  - `getModelList()` now correctly handles dynamic functions that return arrays
+  - Added validation for empty arrays returned from dynamic functions
+  - Added type guard optimization to prevent double normalization of static arrays
+  - Preserved backward-compatible `getLLM()` and `getModel()` return behavior while adding dynamic fallback array support
+  - Comprehensive test coverage for edge cases (async functions, nested dynamics, error handling)
+
+  ## Documentation
+  - Added dynamic fallback array example in Models docs under **Model fallbacks**
+
+  ## Migration Guide
+
+  No breaking changes. All existing model configurations continue to work:
+  - Static single models: `model: 'openai/gpt-4'`
+  - Static arrays: `model: [{ model: 'openai/gpt-4', maxRetries: 2 }]`
+  - Dynamic single: `model: ({ requestContext }) => 'openai/gpt-4'`
+  - Dynamic arrays (NEW): `model: ({ requestContext }) => [{ model: 'openai/gpt-4', maxRetries: 2 }]`
+
+  Closes #11951
+
+- Added `onValidationError` hook to `ServerConfig` and `createRoute()`. When a request fails Zod schema validation (query parameters, request body, or path parameters), this hook lets you customize the error response — including the HTTP status code and response body — instead of the default 400 response. Set it on the server config to apply globally, or on individual routes to override per-route. All server adapters (Hono, Express, Fastify, Koa) support this hook. ([#13477](https://github.com/mastra-ai/mastra/pull/13477))
+
+  ```ts
+  const mastra = new Mastra({
+    server: {
+      onValidationError: (error, context) => ({
+        status: 422,
+        body: {
+          ok: false,
+          errors: error.issues.map(i => ({
+            path: i.path.join('.'),
+            message: i.message,
+          })),
+          source: context,
+        },
+      }),
+    },
+  });
+  ```
+
+- Added `requestContext` field to tracing spans. Each span now automatically captures a snapshot of the active `RequestContext`, making request-scoped values like user IDs, tenant IDs, and feature flags available when viewing traces. ([#14020](https://github.com/mastra-ai/mastra/pull/14020))
+
+- Added `allowedWorkspaceTools` to `HarnessSubagent`. Subagents now automatically inherit the parent agent's workspace. Use `allowedWorkspaceTools` to restrict which workspace tools a subagent can see: ([#13940](https://github.com/mastra-ai/mastra/pull/13940))
+
+  ```ts
+  const subagent: HarnessSubagent = {
+    id: 'explore',
+    name: 'Explore',
+    allowedWorkspaceTools: ['view', 'search_content', 'find_files'],
+  };
+  ```
+
+- Enabled tracing for tool executions through mcp server ([#12804](https://github.com/mastra-ai/mastra/pull/12804))
+
+  Traces now appear in the Observability UI for MCP server tool calls
+
+- Added `result` to `processOutputResult` args, providing resolved generation data (usage, text, steps, finishReason) directly. This replaces raw stream chunks with an easy-to-use `OutputResult` object containing the same data available in the `onFinish` callback. ([#13810](https://github.com/mastra-ai/mastra/pull/13810))
+
+  ```typescript
+  const usageProcessor: Processor = {
+    id: 'usage-processor',
+    processOutputResult({ result, messages }) {
+      console.log(`Text: ${result.text}`);
+      console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`);
+      console.log(`Finish reason: ${result.finishReason}`);
+      console.log(`Steps: ${result.steps.length}`);
+      return messages;
+    },
+  };
+  ```
+
+- Added `requestContext` support for dataset items and experiments. ([#13938](https://github.com/mastra-ai/mastra/pull/13938))
+
+  **Dataset items** now accept an optional `requestContext` field when adding or updating items. This lets you store per-item request context alongside inputs and ground truths.
+
+  **Datasets** now support a `requestContextSchema` field to describe the expected shape of request context on items.
+
+  **Experiments** now accept a `requestContext` option that gets passed through to `agent.generate()` during execution. Per-item request context merges with (and takes precedence over) the experiment-level context.
+
+  ```ts
+  // Add item with request context
+  await dataset.addItem({
+    input: messages,
+    groundTruth: expectedOutput,
+    requestContext: { userId: '123', locale: 'en' },
+  });
+
+  // Run experiment with global request context
+  await runExperiment(mastra, {
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    requestContext: { environment: 'staging' },
+  });
+  ```
+
+- Add Zod v4 and Standard Schema support ([#12238](https://github.com/mastra-ai/mastra/pull/12238))
+
+  ## Zod v4 Breaking Changes
+  - Fix all `z.record()` calls to use 2-argument form (key + value schema) as required by Zod v4
+  - Update `ZodError.errors` to `ZodError.issues` (Zod v4 API change)
+  - Update `@ai-sdk/provider` versions for Zod v4 compatibility
+
+  ## Standard Schema Integration
+  - Add `packages/core/src/schema/` module that re-exports from `@mastra/schema-compat`
+  - Migrate codebase to use `PublicSchema` type for schema parameters
+  - Use `toStandardSchema()` for normalizing schemas across Zod v3, Zod v4, AI SDK Schema, and JSON Schema
+  - Use `standardSchemaToJSONSchema()` for JSON Schema conversion
+
+  ## Schema Compatibility (@mastra/schema-compat)
+  - Add new adapter exports: `@mastra/schema-compat/adapters/ai-sdk`, `@mastra/schema-compat/adapters/zod-v3`, `@mastra/schema-compat/adapters/json-schema`
+  - Enhance test coverage with separate v3 and v4 test suites
+  - Improve zod-to-json conversion with `unrepresentable: 'any'` support
+
+  ## TypeScript Fixes
+  - Resolve deep instantiation errors in client-js and model.ts
+  - Add proper type assertions where Zod v4 inference differs
+
+  **BREAKING CHANGE**: Minimum Zod version is now `^3.25.0` for v3 compatibility or `^4.0.0` for v4
+
+### Patch Changes
+
+- dependencies updates: ([#14085](https://github.com/mastra-ai/mastra/pull/14085))
+  - Updated dependency [`ajv@^8.18.0` ↗︎](https://www.npmjs.com/package/ajv/v/8.18.0) (from `^8.17.1`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`332c014`](https://github.com/mastra-ai/mastra/commit/332c014e076b81edf7fe45b58205882726415e90))
+
+- fix(workflows): add generic bail signature with overloads. The bail() function now uses method overloads - bail(result: TStepOutput) for backward compatibility and bail<T>(result: ...) for workflow type inference. This allows flexible early exits while maintaining type safety for workflow chaining. Runtime validation will be added in a follow-up. ([#12211](https://github.com/mastra-ai/mastra/pull/12211))
+
+- Fixed structured output parsing when JSON string fields include fenced JSON examples. ([#13948](https://github.com/mastra-ai/mastra/pull/13948))
+
+- Fixed `writer` being undefined in `processOutputStream` for all output processors. The root cause was that `processPart` in `ProcessorRunner` did not pass the `writer` to `executeWorkflowAsProcessor` in the outputStream phase. Since all user processors are wrapped into workflows via `combineProcessorsIntoWorkflow`, this meant no processor ever received a `writer`. Custom output processors (like guardrail processors) can now reliably use `writer.custom()` to emit stream events. ([#14111](https://github.com/mastra-ai/mastra/pull/14111))
+
+- Added JSON repair for malformed tool call arguments from LLM providers. When an LLM (e.g., Kimi/K2) generates broken JSON for tool call arguments, Mastra now attempts to fix common errors (missing quotes on property names, single quotes, trailing commas) before falling back to undefined. This reduces silent tool execution failures caused by minor JSON formatting issues. See https://github.com/mastra-ai/mastra/issues/11078 ([#14033](https://github.com/mastra-ai/mastra/pull/14033))
+
+- Fixed Windows shell command execution to avoid visible cmd.exe popups and broken output piping. ([#13886](https://github.com/mastra-ai/mastra/pull/13886))
+
+- Fixed OpenAI reasoning models (e.g. gpt-5-mini) failing with "function*call was provided without its required reasoning item" when the agent loops back after a tool call. The issue was that `callProviderMetadata.openai` carrying `fc*\*`item IDs was not being stripped alongside reasoning parts, causing the AI SDK to send`item_reference`instead of inline`function_call` content. ([#14144](https://github.com/mastra-ai/mastra/pull/14144))
+
+- Output processors can now inspect, modify, or block custom `data-*` chunks emitted by tools via `writer.custom()` during streaming. Processors must opt in by setting `processDataParts = true` to receive these chunks in `processOutputStream`. ([#13823](https://github.com/mastra-ai/mastra/pull/13823))
+
+  ```ts
+  class MyDataProcessor extends Processor {
+    processDataParts = true;
+
+    processOutputStream(part, { abort }) {
+      if (part.type === 'data-sensitive') {
+        abort('Blocked sensitive data');
+      }
+      return part;
+    }
+  }
+  ```
+
+- Fixed agent tool calls not being surfaced in evented workflow streams. Added StreamChunkWriter abstraction and stream format configuration ('legacy' | 'vnext') to forward agent stream chunks through the workflow output stream. ([#12692](https://github.com/mastra-ai/mastra/pull/12692))
+
+- Fixed OpenAI strict mode schema rejection when using agent networks with structured output. The compat layer was skipped when modelId was undefined, causing optional fields to be missing from the required array. (Fixes #12284) ([#13695](https://github.com/mastra-ai/mastra/pull/13695))
+
+- Fixed `activeTools` to also enforce at execution time, not just at the model prompt. Tool calls to tools not in the active set are now rejected with a `ToolNotFoundError`. ([#13949](https://github.com/mastra-ai/mastra/pull/13949))
+
+- Fix build failures on Windows when running `build:patch-commonjs` during `pnpm run setup` ([#14029](https://github.com/mastra-ai/mastra/pull/14029))
+
+- Experiments now fail immediately with a clear error when triggered on a dataset with zero items, instead of getting stuck in "pending" status forever. The experiment trigger API returns HTTP 400 for empty datasets. Unexpected errors during async experiment setup are now logged and mark the experiment as failed. ([#14031](https://github.com/mastra-ai/mastra/pull/14031))
+
+- fix: respect `lastMessages: false` in `recall()` to disable conversation history ([#12951](https://github.com/mastra-ai/mastra/pull/12951))
+
+  Setting `lastMessages: false` in Memory options now correctly prevents `recall()` from returning previous messages. Previously, the agent would retain the full conversation history despite this setting being disabled.
+
+  Callers can still pass `perPage: false` explicitly to `recall()` to retrieve all messages (e.g., for displaying thread history in a UI).
+
+- `@mastra/core`: patch ([#14103](https://github.com/mastra-ai/mastra/pull/14103))
+
+  Fixed reasoning content being lost in multi-turn conversations with thinking models (kimi-k2.5, DeepSeek-R1) when using OpenAI-compatible providers (e.g., OpenRouter).
+
+  Previously, reasoning content could be discarded during streaming, causing 400 errors when the model tried to continue the conversation. Multi-turn conversations now preserve reasoning content correctly across all turns.
+
+- fix(workflows): propagate logger to executionEngine ([#12517](https://github.com/mastra-ai/mastra/pull/12517))
+
+  When a custom logger is set on a Workflow via `__registerPrimitives` or `__setLogger`, it is now correctly propagated to the internal `executionEngine`. This ensures workflow step execution errors are logged through the custom logger instead of the default ConsoleLogger, enabling proper observability integration.
+
+- Added permission denied handling for dataset pages. Datasets now show a "Permission Denied" screen when the user lacks access, matching the behavior of agents, workflows, and other resources. ([#13876](https://github.com/mastra-ai/mastra/pull/13876))
+
+- Fixed stream freezing when using Anthropic's Programmatic Tool Calling (PTC). Streams that contain only tool-input streaming chunks (without explicit tool-call chunks) now correctly synthesize tool-call events and complete without hanging. See [#12390](https://github.com/mastra-ai/mastra/issues/12390). ([#12400](https://github.com/mastra-ai/mastra/pull/12400))
+
+- Fixed subagents receiving parent's tool call/result parts in their context messages. On subsequent queries in a conversation, these references to tools the subagent doesn't have caused models (especially via custom gateways) to return blank or incorrect results. Parent delegation tool artifacts are now stripped from context before forwarding to subagents. ([#13927](https://github.com/mastra-ai/mastra/pull/13927))
+
+- Memory now automatically creates btree indexes on `thread_id` and `resource_id` metadata fields when using PgVector. This prevents sequential scans on the `memory_messages` vector table, resolving performance issues under high load. ([#14034](https://github.com/mastra-ai/mastra/pull/14034))
+
+  Fixes #12109
+
+- Clarified the `idGenerator` documentation to reflect the current context-aware function signature and documented the available `IdGeneratorContext` fields used for type-specific ID generation. ([#14081](https://github.com/mastra-ai/mastra/pull/14081))
+
+- Reasoning content from OpenAI models is now stripped from conversation history before replaying it to the LLM, preventing API errors on follow-up messages while preserving reasoning data in the database. Fixes #12980. ([#13418](https://github.com/mastra-ai/mastra/pull/13418))
+
+- Added `transient` option for data chunks to skip database persistence. Chunks marked as transient are streamed to the client for live display but not saved to storage, reducing bloat from large streaming outputs. ([#13869](https://github.com/mastra-ai/mastra/pull/13869))
+
+  ```ts
+  await context.writer?.custom({
+    type: 'data-my-stream',
+    data: { output: line },
+    transient: true,
+  });
+  ```
+
+  Workspace tools now use this to mark stdout/stderr streaming chunks as transient.
+
+- Fixed message ID mismatch between generate/stream response and memory-stored messages. When an agent used memory, the message IDs returned in the response (e.g. `response.uiMessages[].id`) could differ from the IDs persisted to the database. This was caused by a format conversion that stripped message IDs during internal re-processing. Messages now retain their original IDs throughout the entire save pipeline. ([#13796](https://github.com/mastra-ai/mastra/pull/13796))
+
+- Fixed assistant messages to persist `content.metadata.modelId` during streaming. ([#12969](https://github.com/mastra-ai/mastra/pull/12969))
+  This ensures stored and processed assistant messages keep the model identifier.
+  Developers can now reliably read `content.metadata.modelId` from downstream storage adapters and processors.
+
+- Fixed `savePerStep: true` not actually persisting messages to storage during step execution. Previously, `onStepFinish` only accumulated messages in the in-memory MessageList but never flushed them to the storage backend. The only persistence path was `executeOnFinish`, which is skipped when the stream is aborted. Now messages are flushed to storage after each completed step, so they survive page refreshes and stream aborts. Fixes https://github.com/mastra-ai/mastra/issues/13984 ([#14030](https://github.com/mastra-ai/mastra/pull/14030))
+
+- Fixed agentic loop continuing indefinitely when model hits max output tokens (finishReason: 'length'). Previously, only 'stop' and 'error' were treated as termination conditions, causing runaway token generation up to maxSteps when using structuredOutput with generate(). The loop now correctly stops on 'length' finish reason. Fixes #13012. ([#13861](https://github.com/mastra-ai/mastra/pull/13861))
+
+- **Fixed tool-call arguments being silently lost when LLMs append internal tokens to JSON** ([#13400](https://github.com/mastra-ai/mastra/pull/13400))
+
+  LLMs (particularly via OpenRouter and OpenAI) sometimes append internal tokens like `<|call|>`, `<|endoftext|>`, or `<|end|>` to otherwise valid JSON in streamed tool-call arguments. Previously, these inputs would fail `JSON.parse` and the tool call would silently lose its arguments (set to `undefined`).
+
+  Now, `sanitizeToolCallInput` strips these token patterns before parsing, recovering valid data that was previously discarded. Valid JSON containing `<|...|>` inside string values is left untouched. Truly malformed JSON still gracefully returns `undefined`.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/13185 and https://github.com/mastra-ai/mastra/issues/13261.
+
+- Fixed agent loop stopping prematurely when LLM returns tool calls with finishReason 'stop'. Some models (e.g., OpenAI gpt-5.3-codex) return 'stop' even when tool calls are present, causing the agent to halt instead of processing tool results and continuing. The agent now correctly continues the loop whenever tool calls exist, regardless of finishReason. ([#14043](https://github.com/mastra-ai/mastra/pull/14043))
+
+- **Fixed** ([#14133](https://github.com/mastra-ai/mastra/pull/14133))
+  - Prevented provider-executed tools from triggering extra loop iterations and duplicate requests.
+  - Preserved tool-call metadata during streaming so multi-turn conversations continue to work correctly with provider-executed tools.
+
+- Fixed observational memory activation using outdated buffered observations in some long-running threads. Activation now uses the latest thread state so the correct observations are promoted. ([#13955](https://github.com/mastra-ai/mastra/pull/13955))
+
+- Fixed model fallback retry behavior. Non-retryable errors (401, 403) are no longer retried on the same model before falling back. Retryable errors (429, 500) are now only retried by a single layer (p-retry) instead of being duplicated across two layers, preventing (maxRetries + 1)² total calls. The per-model maxRetries setting now correctly controls how many times p-retry retries on that specific model before the fallback loop moves to the next model. ([#14039](https://github.com/mastra-ai/mastra/pull/14039))
+
+- Added processor-driven response message ID rotation so streamed assistant IDs use the rotated ID. ([#13887](https://github.com/mastra-ai/mastra/pull/13887))
+
+  Processors that run outside the agent loop no longer need synthetic response message IDs.
+
+- Fixed a regression where dynamic `model` functions returning a single v1 model were treated as model arrays. ([#14018](https://github.com/mastra-ai/mastra/pull/14018))
+
+- Fixed `requestContext` not being forwarded to tools dynamically added by input processors. ([#13827](https://github.com/mastra-ai/mastra/pull/13827))
+
+- Added 'sandbox_access_request' to the HarnessEvent union type, enabling type-safe handling of sandbox access request events without requiring type casts. ([#13648](https://github.com/mastra-ai/mastra/pull/13648))
+
+- Fix wrong threadId and resourceId being sent to subagent ([#13868](https://github.com/mastra-ai/mastra/pull/13868))
+
+- Updated dependencies [[`fb58ce1`](https://github.com/mastra-ai/mastra/commit/fb58ce1de85d57f142005c4b3b7559f909167a3f), [`aae2295`](https://github.com/mastra-ai/mastra/commit/aae2295838a2d329ad6640829e87934790ffe5b8), [`17c4145`](https://github.com/mastra-ai/mastra/commit/17c4145166099354545582335b5252bdfdfd908b)]:
+  - @mastra/schema-compat@1.2.0
+
+## 1.11.0-alpha.2
+
+### Patch Changes
+
+- Fixed OpenAI reasoning models (e.g. gpt-5-mini) failing with "function*call was provided without its required reasoning item" when the agent loops back after a tool call. The issue was that `callProviderMetadata.openai` carrying `fc*\*`item IDs was not being stripped alongside reasoning parts, causing the AI SDK to send`item_reference`instead of inline`function_call` content. ([#14144](https://github.com/mastra-ai/mastra/pull/14144))
+
+## 1.11.0-alpha.1
+
+### Minor Changes
+
+- Enabled tracing for tool executions through mcp server ([#12804](https://github.com/mastra-ai/mastra/pull/12804))
+
+  Traces now appear in the Observability UI for MCP server tool calls
+
+### Patch Changes
+
+- Fixed `writer` being undefined in `processOutputStream` for all output processors. The root cause was that `processPart` in `ProcessorRunner` did not pass the `writer` to `executeWorkflowAsProcessor` in the outputStream phase. Since all user processors are wrapped into workflows via `combineProcessorsIntoWorkflow`, this meant no processor ever received a `writer`. Custom output processors (like guardrail processors) can now reliably use `writer.custom()` to emit stream events. ([#14111](https://github.com/mastra-ai/mastra/pull/14111))
+
+- Fixed agent tool calls not being surfaced in evented workflow streams. Added StreamChunkWriter abstraction and stream format configuration ('legacy' | 'vnext') to forward agent stream chunks through the workflow output stream. ([#12692](https://github.com/mastra-ai/mastra/pull/12692))
+
+- Experiments now fail immediately with a clear error when triggered on a dataset with zero items, instead of getting stuck in "pending" status forever. The experiment trigger API returns HTTP 400 for empty datasets. Unexpected errors during async experiment setup are now logged and mark the experiment as failed. ([#14031](https://github.com/mastra-ai/mastra/pull/14031))
+
+- `@mastra/core`: patch ([#14103](https://github.com/mastra-ai/mastra/pull/14103))
+
+  Fixed reasoning content being lost in multi-turn conversations with thinking models (kimi-k2.5, DeepSeek-R1) when using OpenAI-compatible providers (e.g., OpenRouter).
+
+  Previously, reasoning content could be discarded during streaming, causing 400 errors when the model tried to continue the conversation. Multi-turn conversations now preserve reasoning content correctly across all turns.
+
+- fix(workflows): propagate logger to executionEngine ([#12517](https://github.com/mastra-ai/mastra/pull/12517))
+
+  When a custom logger is set on a Workflow via `__registerPrimitives` or `__setLogger`, it is now correctly propagated to the internal `executionEngine`. This ensures workflow step execution errors are logged through the custom logger instead of the default ConsoleLogger, enabling proper observability integration.
+
+- Added permission denied handling for dataset pages. Datasets now show a "Permission Denied" screen when the user lacks access, matching the behavior of agents, workflows, and other resources. ([#13876](https://github.com/mastra-ai/mastra/pull/13876))
+
+- Reasoning content from OpenAI models is now stripped from conversation history before replaying it to the LLM, preventing API errors on follow-up messages while preserving reasoning data in the database. Fixes #12980. ([#13418](https://github.com/mastra-ai/mastra/pull/13418))
+
+- **Fixed** ([#14133](https://github.com/mastra-ai/mastra/pull/14133))
+  - Prevented provider-executed tools from triggering extra loop iterations and duplicate requests.
+  - Preserved tool-call metadata during streaming so multi-turn conversations continue to work correctly with provider-executed tools.
+
+## 1.11.0-alpha.0
+
+### Minor Changes
+
+- feat: support dynamic functions returning model fallback arrays ([#11975](https://github.com/mastra-ai/mastra/pull/11975))
+
+  Agents can now use dynamic functions that return entire fallback arrays based on runtime context. This enables:
+  - Dynamic selection of complete fallback configurations
+  - Context-based model selection with automatic fallback
+  - Flexible model routing based on user tier, region, or other factors
+  - Nested dynamic functions within returned arrays (each model in array can also be dynamic)
+
+  ## Examples
+
+  ### Basic dynamic fallback array
+
+  ```typescript
+  const agent = new Agent({
+    model: ({ requestContext }) => {
+      const tier = requestContext.get('tier');
+      if (tier === 'premium') {
+        return [
+          { model: 'openai/gpt-4', maxRetries: 2 },
+          { model: 'anthropic/claude-3-opus', maxRetries: 1 },
+        ];
+      }
+      return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+    },
+  });
+  ```
+
+  ### Region-based routing with nested dynamics
+
+  ```typescript
+  const agent = new Agent({
+    model: ({ requestContext }) => {
+      const region = requestContext.get('region');
+      return [
+        {
+          model: ({ requestContext }) => {
+            // Select model variant based on region
+            return region === 'eu' ? 'openai/gpt-4-eu' : 'openai/gpt-4';
+          },
+          maxRetries: 2,
+        },
+        { model: 'anthropic/claude-3-opus', maxRetries: 1 },
+      ];
+    },
+    maxRetries: 1, // Agent-level default for models without explicit maxRetries
+  });
+  ```
+
+  ### Async dynamic selection
+
+  ```typescript
+  const agent = new Agent({
+    model: async ({ requestContext }) => {
+      // Fetch user's tier from database
+      const userId = requestContext.get('userId');
+      const user = await db.users.findById(userId);
+
+      if (user.tier === 'enterprise') {
+        return [
+          { model: 'openai/gpt-4', maxRetries: 3 },
+          { model: 'anthropic/claude-3-opus', maxRetries: 2 },
+        ];
+      }
+      return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+    },
+  });
+  ```
+
+  ## Technical Details
+  - Functions can return `MastraModelConfig` (single model) or `ModelWithRetries[]` (array)
+  - Models without explicit `maxRetries` inherit agent-level `maxRetries` default
+  - Each model in returned array can also be a dynamic function for nested selection
+  - Empty arrays are validated and throw errors early
+  - Arrays are normalized to `ModelFallbacks` with all required fields filled in
+  - Performance optimization: Already-normalized arrays skip re-normalization
+
+  ## Fixes and Improvements
+  - Dynamic model fallbacks now properly inherit agent-level `maxRetries` when not explicitly specified
+  - `getModelList()` now correctly handles dynamic functions that return arrays
+  - Added validation for empty arrays returned from dynamic functions
+  - Added type guard optimization to prevent double normalization of static arrays
+  - Preserved backward-compatible `getLLM()` and `getModel()` return behavior while adding dynamic fallback array support
+  - Comprehensive test coverage for edge cases (async functions, nested dynamics, error handling)
+
+  ## Documentation
+  - Added dynamic fallback array example in Models docs under **Model fallbacks**
+
+  ## Migration Guide
+
+  No breaking changes. All existing model configurations continue to work:
+  - Static single models: `model: 'openai/gpt-4'`
+  - Static arrays: `model: [{ model: 'openai/gpt-4', maxRetries: 2 }]`
+  - Dynamic single: `model: ({ requestContext }) => 'openai/gpt-4'`
+  - Dynamic arrays (NEW): `model: ({ requestContext }) => [{ model: 'openai/gpt-4', maxRetries: 2 }]`
+
+  Closes #11951
+
+- Added `onValidationError` hook to `ServerConfig` and `createRoute()`. When a request fails Zod schema validation (query parameters, request body, or path parameters), this hook lets you customize the error response — including the HTTP status code and response body — instead of the default 400 response. Set it on the server config to apply globally, or on individual routes to override per-route. All server adapters (Hono, Express, Fastify, Koa) support this hook. ([#13477](https://github.com/mastra-ai/mastra/pull/13477))
+
+  ```ts
+  const mastra = new Mastra({
+    server: {
+      onValidationError: (error, context) => ({
+        status: 422,
+        body: {
+          ok: false,
+          errors: error.issues.map(i => ({
+            path: i.path.join('.'),
+            message: i.message,
+          })),
+          source: context,
+        },
+      }),
+    },
+  });
+  ```
+
+- Added `requestContext` field to tracing spans. Each span now automatically captures a snapshot of the active `RequestContext`, making request-scoped values like user IDs, tenant IDs, and feature flags available when viewing traces. ([#14020](https://github.com/mastra-ai/mastra/pull/14020))
+
+- Added `allowedWorkspaceTools` to `HarnessSubagent`. Subagents now automatically inherit the parent agent's workspace. Use `allowedWorkspaceTools` to restrict which workspace tools a subagent can see: ([#13940](https://github.com/mastra-ai/mastra/pull/13940))
+
+  ```ts
+  const subagent: HarnessSubagent = {
+    id: 'explore',
+    name: 'Explore',
+    allowedWorkspaceTools: ['view', 'search_content', 'find_files'],
+  };
+  ```
+
+- Added `result` to `processOutputResult` args, providing resolved generation data (usage, text, steps, finishReason) directly. This replaces raw stream chunks with an easy-to-use `OutputResult` object containing the same data available in the `onFinish` callback. ([#13810](https://github.com/mastra-ai/mastra/pull/13810))
+
+  ```typescript
+  const usageProcessor: Processor = {
+    id: 'usage-processor',
+    processOutputResult({ result, messages }) {
+      console.log(`Text: ${result.text}`);
+      console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`);
+      console.log(`Finish reason: ${result.finishReason}`);
+      console.log(`Steps: ${result.steps.length}`);
+      return messages;
+    },
+  };
+  ```
+
+- Added `requestContext` support for dataset items and experiments. ([#13938](https://github.com/mastra-ai/mastra/pull/13938))
+
+  **Dataset items** now accept an optional `requestContext` field when adding or updating items. This lets you store per-item request context alongside inputs and ground truths.
+
+  **Datasets** now support a `requestContextSchema` field to describe the expected shape of request context on items.
+
+  **Experiments** now accept a `requestContext` option that gets passed through to `agent.generate()` during execution. Per-item request context merges with (and takes precedence over) the experiment-level context.
+
+  ```ts
+  // Add item with request context
+  await dataset.addItem({
+    input: messages,
+    groundTruth: expectedOutput,
+    requestContext: { userId: '123', locale: 'en' },
+  });
+
+  // Run experiment with global request context
+  await runExperiment(mastra, {
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    requestContext: { environment: 'staging' },
+  });
+  ```
+
+- Add Zod v4 and Standard Schema support ([#12238](https://github.com/mastra-ai/mastra/pull/12238))
+
+  ## Zod v4 Breaking Changes
+  - Fix all `z.record()` calls to use 2-argument form (key + value schema) as required by Zod v4
+  - Update `ZodError.errors` to `ZodError.issues` (Zod v4 API change)
+  - Update `@ai-sdk/provider` versions for Zod v4 compatibility
+
+  ## Standard Schema Integration
+  - Add `packages/core/src/schema/` module that re-exports from `@mastra/schema-compat`
+  - Migrate codebase to use `PublicSchema` type for schema parameters
+  - Use `toStandardSchema()` for normalizing schemas across Zod v3, Zod v4, AI SDK Schema, and JSON Schema
+  - Use `standardSchemaToJSONSchema()` for JSON Schema conversion
+
+  ## Schema Compatibility (@mastra/schema-compat)
+  - Add new adapter exports: `@mastra/schema-compat/adapters/ai-sdk`, `@mastra/schema-compat/adapters/zod-v3`, `@mastra/schema-compat/adapters/json-schema`
+  - Enhance test coverage with separate v3 and v4 test suites
+  - Improve zod-to-json conversion with `unrepresentable: 'any'` support
+
+  ## TypeScript Fixes
+  - Resolve deep instantiation errors in client-js and model.ts
+  - Add proper type assertions where Zod v4 inference differs
+
+  **BREAKING CHANGE**: Minimum Zod version is now `^3.25.0` for v3 compatibility or `^4.0.0` for v4
+
+### Patch Changes
+
+- dependencies updates: ([#14085](https://github.com/mastra-ai/mastra/pull/14085))
+  - Updated dependency [`ajv@^8.18.0` ↗︎](https://www.npmjs.com/package/ajv/v/8.18.0) (from `^8.17.1`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`332c014`](https://github.com/mastra-ai/mastra/commit/332c014e076b81edf7fe45b58205882726415e90))
+
+- fix(workflows): add generic bail signature with overloads. The bail() function now uses method overloads - bail(result: TStepOutput) for backward compatibility and bail<T>(result: ...) for workflow type inference. This allows flexible early exits while maintaining type safety for workflow chaining. Runtime validation will be added in a follow-up. ([#12211](https://github.com/mastra-ai/mastra/pull/12211))
+
+- Fixed structured output parsing when JSON string fields include fenced JSON examples. ([#13948](https://github.com/mastra-ai/mastra/pull/13948))
+
+- Added JSON repair for malformed tool call arguments from LLM providers. When an LLM (e.g., Kimi/K2) generates broken JSON for tool call arguments, Mastra now attempts to fix common errors (missing quotes on property names, single quotes, trailing commas) before falling back to undefined. This reduces silent tool execution failures caused by minor JSON formatting issues. See https://github.com/mastra-ai/mastra/issues/11078 ([#14033](https://github.com/mastra-ai/mastra/pull/14033))
+
+- Fixed Windows shell command execution to avoid visible cmd.exe popups and broken output piping. ([#13886](https://github.com/mastra-ai/mastra/pull/13886))
+
+- Output processors can now inspect, modify, or block custom `data-*` chunks emitted by tools via `writer.custom()` during streaming. Processors must opt in by setting `processDataParts = true` to receive these chunks in `processOutputStream`. ([#13823](https://github.com/mastra-ai/mastra/pull/13823))
+
+  ```ts
+  class MyDataProcessor extends Processor {
+    processDataParts = true;
+
+    processOutputStream(part, { abort }) {
+      if (part.type === 'data-sensitive') {
+        abort('Blocked sensitive data');
+      }
+      return part;
+    }
+  }
+  ```
+
+- Fixed OpenAI strict mode schema rejection when using agent networks with structured output. The compat layer was skipped when modelId was undefined, causing optional fields to be missing from the required array. (Fixes #12284) ([#13695](https://github.com/mastra-ai/mastra/pull/13695))
+
+- Fixed `activeTools` to also enforce at execution time, not just at the model prompt. Tool calls to tools not in the active set are now rejected with a `ToolNotFoundError`. ([#13949](https://github.com/mastra-ai/mastra/pull/13949))
+
+- Fix build failures on Windows when running `build:patch-commonjs` during `pnpm run setup` ([#14029](https://github.com/mastra-ai/mastra/pull/14029))
+
+- fix: respect `lastMessages: false` in `recall()` to disable conversation history ([#12951](https://github.com/mastra-ai/mastra/pull/12951))
+
+  Setting `lastMessages: false` in Memory options now correctly prevents `recall()` from returning previous messages. Previously, the agent would retain the full conversation history despite this setting being disabled.
+
+  Callers can still pass `perPage: false` explicitly to `recall()` to retrieve all messages (e.g., for displaying thread history in a UI).
+
+- Fixed stream freezing when using Anthropic's Programmatic Tool Calling (PTC). Streams that contain only tool-input streaming chunks (without explicit tool-call chunks) now correctly synthesize tool-call events and complete without hanging. See [#12390](https://github.com/mastra-ai/mastra/issues/12390). ([#12400](https://github.com/mastra-ai/mastra/pull/12400))
+
+- Fixed subagents receiving parent's tool call/result parts in their context messages. On subsequent queries in a conversation, these references to tools the subagent doesn't have caused models (especially via custom gateways) to return blank or incorrect results. Parent delegation tool artifacts are now stripped from context before forwarding to subagents. ([#13927](https://github.com/mastra-ai/mastra/pull/13927))
+
+- Memory now automatically creates btree indexes on `thread_id` and `resource_id` metadata fields when using PgVector. This prevents sequential scans on the `memory_messages` vector table, resolving performance issues under high load. ([#14034](https://github.com/mastra-ai/mastra/pull/14034))
+
+  Fixes #12109
+
+- Clarified the `idGenerator` documentation to reflect the current context-aware function signature and documented the available `IdGeneratorContext` fields used for type-specific ID generation. ([#14081](https://github.com/mastra-ai/mastra/pull/14081))
+
+- Added `transient` option for data chunks to skip database persistence. Chunks marked as transient are streamed to the client for live display but not saved to storage, reducing bloat from large streaming outputs. ([#13869](https://github.com/mastra-ai/mastra/pull/13869))
+
+  ```ts
+  await context.writer?.custom({
+    type: 'data-my-stream',
+    data: { output: line },
+    transient: true,
+  });
+  ```
+
+  Workspace tools now use this to mark stdout/stderr streaming chunks as transient.
+
+- Fixed message ID mismatch between generate/stream response and memory-stored messages. When an agent used memory, the message IDs returned in the response (e.g. `response.uiMessages[].id`) could differ from the IDs persisted to the database. This was caused by a format conversion that stripped message IDs during internal re-processing. Messages now retain their original IDs throughout the entire save pipeline. ([#13796](https://github.com/mastra-ai/mastra/pull/13796))
+
+- Fixed assistant messages to persist `content.metadata.modelId` during streaming. ([#12969](https://github.com/mastra-ai/mastra/pull/12969))
+  This ensures stored and processed assistant messages keep the model identifier.
+  Developers can now reliably read `content.metadata.modelId` from downstream storage adapters and processors.
+
+- Fixed `savePerStep: true` not actually persisting messages to storage during step execution. Previously, `onStepFinish` only accumulated messages in the in-memory MessageList but never flushed them to the storage backend. The only persistence path was `executeOnFinish`, which is skipped when the stream is aborted. Now messages are flushed to storage after each completed step, so they survive page refreshes and stream aborts. Fixes https://github.com/mastra-ai/mastra/issues/13984 ([#14030](https://github.com/mastra-ai/mastra/pull/14030))
+
+- Fixed agentic loop continuing indefinitely when model hits max output tokens (finishReason: 'length'). Previously, only 'stop' and 'error' were treated as termination conditions, causing runaway token generation up to maxSteps when using structuredOutput with generate(). The loop now correctly stops on 'length' finish reason. Fixes #13012. ([#13861](https://github.com/mastra-ai/mastra/pull/13861))
+
+- **Fixed tool-call arguments being silently lost when LLMs append internal tokens to JSON** ([#13400](https://github.com/mastra-ai/mastra/pull/13400))
+
+  LLMs (particularly via OpenRouter and OpenAI) sometimes append internal tokens like `<|call|>`, `<|endoftext|>`, or `<|end|>` to otherwise valid JSON in streamed tool-call arguments. Previously, these inputs would fail `JSON.parse` and the tool call would silently lose its arguments (set to `undefined`).
+
+  Now, `sanitizeToolCallInput` strips these token patterns before parsing, recovering valid data that was previously discarded. Valid JSON containing `<|...|>` inside string values is left untouched. Truly malformed JSON still gracefully returns `undefined`.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/13185 and https://github.com/mastra-ai/mastra/issues/13261.
+
+- Fixed agent loop stopping prematurely when LLM returns tool calls with finishReason 'stop'. Some models (e.g., OpenAI gpt-5.3-codex) return 'stop' even when tool calls are present, causing the agent to halt instead of processing tool results and continuing. The agent now correctly continues the loop whenever tool calls exist, regardless of finishReason. ([#14043](https://github.com/mastra-ai/mastra/pull/14043))
+
+- Fixed observational memory activation using outdated buffered observations in some long-running threads. Activation now uses the latest thread state so the correct observations are promoted. ([#13955](https://github.com/mastra-ai/mastra/pull/13955))
+
+- Fixed model fallback retry behavior. Non-retryable errors (401, 403) are no longer retried on the same model before falling back. Retryable errors (429, 500) are now only retried by a single layer (p-retry) instead of being duplicated across two layers, preventing (maxRetries + 1)² total calls. The per-model maxRetries setting now correctly controls how many times p-retry retries on that specific model before the fallback loop moves to the next model. ([#14039](https://github.com/mastra-ai/mastra/pull/14039))
+
+- Added processor-driven response message ID rotation so streamed assistant IDs use the rotated ID. ([#13887](https://github.com/mastra-ai/mastra/pull/13887))
+
+  Processors that run outside the agent loop no longer need synthetic response message IDs.
+
+- Fixed a regression where dynamic `model` functions returning a single v1 model were treated as model arrays. ([#14018](https://github.com/mastra-ai/mastra/pull/14018))
+
+- Fixed `requestContext` not being forwarded to tools dynamically added by input processors. ([#13827](https://github.com/mastra-ai/mastra/pull/13827))
+
+- Added 'sandbox_access_request' to the HarnessEvent union type, enabling type-safe handling of sandbox access request events without requiring type casts. ([#13648](https://github.com/mastra-ai/mastra/pull/13648))
+
+- Fix wrong threadId and resourceId being sent to subagent ([#13868](https://github.com/mastra-ai/mastra/pull/13868))
+
+- Updated dependencies [[`fb58ce1`](https://github.com/mastra-ai/mastra/commit/fb58ce1de85d57f142005c4b3b7559f909167a3f), [`aae2295`](https://github.com/mastra-ai/mastra/commit/aae2295838a2d329ad6640829e87934790ffe5b8), [`17c4145`](https://github.com/mastra-ai/mastra/commit/17c4145166099354545582335b5252bdfdfd908b)]:
+  - @mastra/schema-compat@1.2.0-alpha.0
+
+## 1.10.0
+
+### Minor Changes
+
+- Added `editor` shorthand to `MastraCompositeStore` for routing all editor-related domains (agents, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, skills) to a single storage backend. Priority: `domains` > `editor` > `default`. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { MastraCompositeStore } from '@mastra/core/storage';
+
+  new MastraCompositeStore({
+    id: 'composite',
+    default: postgresStore,
+    editor: filesystemStore,
+  });
+  ```
+
+  Improved code-agent editing so editor overrides can be applied and reverted without losing original dynamic values for fields like instructions, model, and tools.
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+- Add `inputExamples` support on tool definitions to show AI models what valid tool inputs look like. Models that support this (e.g., Anthropic's `input_examples`) will receive the examples alongside the tool schema, improving tool call accuracy. ([#12932](https://github.com/mastra-ai/mastra/pull/12932))
+  - Added optional `inputExamples` field to `ToolAction`, `CoreTool`, and `Tool` class
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get-weather',
+    description: 'Get weather for a location',
+    inputSchema: z.object({
+      city: z.string(),
+      units: z.enum(['celsius', 'fahrenheit']),
+    }),
+    inputExamples: [
+      { input: { city: 'New York', units: 'fahrenheit' } },
+      { input: { city: 'Tokyo', units: 'celsius' } },
+    ],
+    execute: async ({ city, units }) => {
+      return await fetchWeather(city, units);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13209](https://github.com/mastra-ai/mastra/pull/13209))
+  - Updated dependency [`p-map@^7.0.4` ↗︎](https://www.npmjs.com/package/p-map/v/7.0.4) (from `^7.0.3`, in `dependencies`)
+
+- dependencies updates: ([#13210](https://github.com/mastra-ai/mastra/pull/13210))
+  - Updated dependency [`p-retry@^7.1.1` ↗︎](https://www.npmjs.com/package/p-retry/v/7.1.1) (from `^7.1.0`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448))
+
+- Fixed execute_command tool timeout parameter to accept seconds instead of milliseconds, preventing agents from accidentally setting extremely short timeouts ([#13799](https://github.com/mastra-ai/mastra/pull/13799))
+
+- **Skill tools are now stable across conversation turns and prompt-cache friendly.** ([#13744](https://github.com/mastra-ai/mastra/pull/13744))
+  - Renamed `skill-activate` → `skill` — returns full skill instructions directly in the tool result
+  - Consolidated `skill-read-reference`, `skill-read-script`, `skill-read-asset` → `skill_read`
+  - Renamed `skill-search` → `skill_search`
+  - `<available_skills>` in the system message is now sorted deterministically
+
+- Fixed Cloudflare Workers build failures when using `@mastra/core`. Local process execution now loads its runtime dependency lazily, preventing incompatible Node-only modules from being bundled during worker builds. ([#13813](https://github.com/mastra-ai/mastra/pull/13813))
+
+- Fix `mimeType` → `mediaType` typo in `sendMessage` file part construction. This caused file attachments to be routed through the V4 adapter instead of V5, preventing them from being correctly processed by AI SDK v5 providers. ([#13833](https://github.com/mastra-ai/mastra/pull/13833))
+
+- Fixed onIterationComplete feedback being discarded when it returns `{ continue: false }` — feedback is now added to the conversation and the model gets one final turn to produce a text response before the loop stops. ([#13759](https://github.com/mastra-ai/mastra/pull/13759))
+
+- Fixed `generate()` and `resumeGenerate()` to always throw provider stream errors. Previously, certain provider errors were silently swallowed, returning false "successful" empty responses. Now errors are always surfaced to the caller, making retry logic reliable when providers fail transiently. ([#13802](https://github.com/mastra-ai/mastra/pull/13802))
+
+- Remove the default maxSteps limit so stopWhen can control sub-agent execution ([#13764](https://github.com/mastra-ai/mastra/pull/13764))
+
+- Fix suspendedToolRunId required error when it shouldn't be required ([#13722](https://github.com/mastra-ai/mastra/pull/13722))
+
+- Fixed subagent tool defaulting maxSteps to 50 when no stop condition is configured, preventing unbounded execution loops. When stopWhen is set, maxSteps is left to the caller. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+- Fixed prompt failures by removing assistant messages that only contain sources before model calls. ([#13790](https://github.com/mastra-ai/mastra/pull/13790))
+
+- - Fixed experiment pending count showing negative values when experiments are triggered from the Studio ([#13831](https://github.com/mastra-ai/mastra/pull/13831))
+  - Fixed scorer prompt metadata (analysis context, generated prompts) being lost when saving experiment scores
+
+- Fixed RequestContext constructor crashing when constructed from a deserialized plain object. ([#13856](https://github.com/mastra-ai/mastra/pull/13856))
+
+- Fixed LLM errors (generateText, generateObject, streamText, streamObject) being swallowed by the AI SDK's default handler instead of being routed through the Mastra logger. Errors now appear with structured context (runId, modelId, provider, etc.) in your logger, and streaming errors are captured via onError callbacks. ([#13857](https://github.com/mastra-ai/mastra/pull/13857))
+
+- Fixed workspace tool output truncation so it no longer gets prematurely cut off when short lines precede a very long line (e.g. minified JSON). Output now uses the full token budget instead of stopping at line boundaries, resulting in more complete tool results. ([#13828](https://github.com/mastra-ai/mastra/pull/13828))
+
+- Fixed subagent tool to default maxSteps to 50 when no stopWhen condition is configured, preventing unbounded agent loops. When stopWhen is set, maxSteps remains unset so the stop condition controls termination. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+## 1.10.0-alpha.0
+
+### Minor Changes
+
+- Added `editor` shorthand to `MastraCompositeStore` for routing all editor-related domains (agents, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, skills) to a single storage backend. Priority: `domains` > `editor` > `default`. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { MastraCompositeStore } from '@mastra/core/storage';
+
+  new MastraCompositeStore({
+    id: 'composite',
+    default: postgresStore,
+    editor: filesystemStore,
+  });
+  ```
+
+  Improved code-agent editing so editor overrides can be applied and reverted without losing original dynamic values for fields like instructions, model, and tools.
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+- Add `inputExamples` support on tool definitions to show AI models what valid tool inputs look like. Models that support this (e.g., Anthropic's `input_examples`) will receive the examples alongside the tool schema, improving tool call accuracy. ([#12932](https://github.com/mastra-ai/mastra/pull/12932))
+  - Added optional `inputExamples` field to `ToolAction`, `CoreTool`, and `Tool` class
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get-weather',
+    description: 'Get weather for a location',
+    inputSchema: z.object({
+      city: z.string(),
+      units: z.enum(['celsius', 'fahrenheit']),
+    }),
+    inputExamples: [
+      { input: { city: 'New York', units: 'fahrenheit' } },
+      { input: { city: 'Tokyo', units: 'celsius' } },
+    ],
+    execute: async ({ city, units }) => {
+      return await fetchWeather(city, units);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13209](https://github.com/mastra-ai/mastra/pull/13209))
+  - Updated dependency [`p-map@^7.0.4` ↗︎](https://www.npmjs.com/package/p-map/v/7.0.4) (from `^7.0.3`, in `dependencies`)
+
+- dependencies updates: ([#13210](https://github.com/mastra-ai/mastra/pull/13210))
+  - Updated dependency [`p-retry@^7.1.1` ↗︎](https://www.npmjs.com/package/p-retry/v/7.1.1) (from `^7.1.0`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448))
+
+- Fixed execute_command tool timeout parameter to accept seconds instead of milliseconds, preventing agents from accidentally setting extremely short timeouts ([#13799](https://github.com/mastra-ai/mastra/pull/13799))
+
+- **Skill tools are now stable across conversation turns and prompt-cache friendly.** ([#13744](https://github.com/mastra-ai/mastra/pull/13744))
+  - Renamed `skill-activate` → `skill` — returns full skill instructions directly in the tool result
+  - Consolidated `skill-read-reference`, `skill-read-script`, `skill-read-asset` → `skill_read`
+  - Renamed `skill-search` → `skill_search`
+  - `<available_skills>` in the system message is now sorted deterministically
+
+- Fixed Cloudflare Workers build failures when using `@mastra/core`. Local process execution now loads its runtime dependency lazily, preventing incompatible Node-only modules from being bundled during worker builds. ([#13813](https://github.com/mastra-ai/mastra/pull/13813))
+
+- Fix `mimeType` → `mediaType` typo in `sendMessage` file part construction. This caused file attachments to be routed through the V4 adapter instead of V5, preventing them from being correctly processed by AI SDK v5 providers. ([#13833](https://github.com/mastra-ai/mastra/pull/13833))
+
+- Fixed onIterationComplete feedback being discarded when it returns `{ continue: false }` — feedback is now added to the conversation and the model gets one final turn to produce a text response before the loop stops. ([#13759](https://github.com/mastra-ai/mastra/pull/13759))
+
+- Fixed `generate()` and `resumeGenerate()` to always throw provider stream errors. Previously, certain provider errors were silently swallowed, returning false "successful" empty responses. Now errors are always surfaced to the caller, making retry logic reliable when providers fail transiently. ([#13802](https://github.com/mastra-ai/mastra/pull/13802))
+
+- Remove the default maxSteps limit so stopWhen can control sub-agent execution ([#13764](https://github.com/mastra-ai/mastra/pull/13764))
+
+- Fix suspendedToolRunId required error when it shouldn't be required ([#13722](https://github.com/mastra-ai/mastra/pull/13722))
+
+- Fixed subagent tool defaulting maxSteps to 50 when no stop condition is configured, preventing unbounded execution loops. When stopWhen is set, maxSteps is left to the caller. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+- Fixed prompt failures by removing assistant messages that only contain sources before model calls. ([#13790](https://github.com/mastra-ai/mastra/pull/13790))
+
+- - Fixed experiment pending count showing negative values when experiments are triggered from the Studio ([#13831](https://github.com/mastra-ai/mastra/pull/13831))
+  - Fixed scorer prompt metadata (analysis context, generated prompts) being lost when saving experiment scores
+
+- Fixed RequestContext constructor crashing when constructed from a deserialized plain object. ([#13856](https://github.com/mastra-ai/mastra/pull/13856))
+
+- Fixed LLM errors (generateText, generateObject, streamText, streamObject) being swallowed by the AI SDK's default handler instead of being routed through the Mastra logger. Errors now appear with structured context (runId, modelId, provider, etc.) in your logger, and streaming errors are captured via onError callbacks. ([#13857](https://github.com/mastra-ai/mastra/pull/13857))
+
+- Fixed workspace tool output truncation so it no longer gets prematurely cut off when short lines precede a very long line (e.g. minified JSON). Output now uses the full token budget instead of stopping at line boundaries, resulting in more complete tool results. ([#13828](https://github.com/mastra-ai/mastra/pull/13828))
+
+- Fixed subagent tool to default maxSteps to 50 when no stopWhen condition is configured, preventing unbounded agent loops. When stopWhen is set, maxSteps remains unset so the stop condition controls termination. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
 ## 1.9.0
 
 ### Minor Changes
@@ -15959,7 +18774,7 @@
 - 74b3078: Reduce verbosity in workflows API
 - 8b416d9: Breaking changes
 - 16e5b04: Moved @mastra/vector-libsql into @mastra/core/vector/libsql
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 
 ### Patch Changes
 
@@ -16318,7 +19133,7 @@
 ### Minor Changes
 
 - 30322ce: Added new Memory API for managed agent memory via MastraStorage and MastraVector classes
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 
 ### Patch Changes
 
