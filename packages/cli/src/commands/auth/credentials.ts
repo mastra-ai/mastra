@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, release } from 'node:os';
 import { join } from 'node:path';
 
 import { MASTRA_PLATFORM_API_URL } from './client.js';
@@ -61,10 +62,29 @@ export async function setCurrentOrgId(orgId: string): Promise<void> {
   await saveCredentials(creds);
 }
 
+function isWSL(): boolean {
+  if (process.platform !== 'linux') return false;
+  try {
+    // WSL kernels contain "microsoft" or "WSL" in the version string
+    return /microsoft|wsl/i.test(release()) || /microsoft|wsl/i.test(readFileSync('/proc/version', 'utf-8'));
+  } catch {
+    return false;
+  }
+}
+
 function openBrowser(url: string) {
-  const platform = process.platform;
-  const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
-  execSync(`${cmd} "${url}"`);
+  if (process.platform === 'darwin') {
+    execSync(`open "${url}"`);
+  } else if (process.platform === 'win32') {
+    execSync(`start "${url}"`);
+  } else if (isWSL()) {
+    // In WSL, use Windows interop to open the host browser.
+    // cmd.exe /c start interprets '&' in URLs as a shell operator,
+    // so we use PowerShell's Start-Process which handles URLs cleanly.
+    execSync(`powershell.exe -NoProfile -Command "Start-Process '${url}'"`);
+  } else {
+    execSync(`xdg-open "${url}"`);
+  }
 }
 
 export async function tryRefreshToken(creds: Credentials): Promise<string | null> {
@@ -91,6 +111,58 @@ export async function tryRefreshToken(creds: Credentials): Promise<string | null
   }
 }
 
+function callbackPage({ success }: { success: boolean }): string {
+  const title = success ? 'Logged in!' : 'Login failed';
+  const message = success
+    ? 'You can close this tab and return to the terminal.'
+    : 'Missing parameters. Close this tab and try again.';
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title} — Mastra</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0d0d0d;
+        color: #ffffff;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .container {
+        text-align: center;
+      }
+      .logo {
+        margin-bottom: 1.5rem;
+      }
+      h1 {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin: 0 0 0.75rem 0;
+      }
+      p {
+        color: #9ca3af;
+        font-size: 1rem;
+        margin: 0;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>${title}</h1>
+      <p>${message}</p>
+    </div>
+  </body>
+</html>`;
+}
+
 export async function login(): Promise<Credentials> {
   console.info('\nLogging in to Mastra...\n');
 
@@ -113,6 +185,9 @@ export async function login(): Promise<Credentials> {
   } catch {
     console.info(`   Could not open browser automatically.`);
     console.info(`   Open this URL manually: ${loginUrl}\n`);
+    if (isWSL()) {
+      console.info(`   Note: If login times out, ensure localhost forwarding is enabled in your .wslconfig.\n`);
+    }
   }
 
   const result = await new Promise<{
@@ -139,21 +214,14 @@ export async function login(): Promise<Credentials> {
 
         if (!token || !userParam || !orgId) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end('<h1>Login failed</h1><p>Missing parameters. Close this tab and try again.</p>');
+          res.end(callbackPage({ success: false }));
           return;
         }
 
         const user = JSON.parse(decodeURIComponent(userParam));
 
         res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
-        res.end(
-          `<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-            <div style="text-align:center">
-              <h1>Logged in!</h1>
-              <p>You can close this tab and return to the terminal.</p>
-            </div>
-          </body></html>`,
-        );
+        res.end(callbackPage({ success: true }));
 
         clearTimeout(timeout);
         server.close(() => {
