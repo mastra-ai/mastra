@@ -394,8 +394,16 @@ export function welcomeHtml(apiPrefix: string = '/api') {
       function copyCode(btn) {
         var pre = btn.closest('.curl-block').querySelector('.curl-code');
         var text = pre.getAttribute('data-tpl');
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          btn.textContent = 'Unavailable';
+          setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+          return;
+        }
         navigator.clipboard.writeText(text).then(function() {
           btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+        }).catch(function() {
+          btn.textContent = 'Failed';
           setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
         });
       }
