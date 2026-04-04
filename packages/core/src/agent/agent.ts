@@ -3176,7 +3176,7 @@ export class Agent<
                     await context.writer.custom({
                       type: 'tool-output',
                       toolCallId,
-                      output: { ...chunk, from: 'AGENT' },
+                      output: { ...chunk, from: ChunkFrom.AGENT },
                     } as any);
 
                     if (chunk.type === 'data-tool-call-approval' || chunk.type === 'tool-call-approval') {
@@ -3275,7 +3275,7 @@ export class Agent<
                     await context.writer.custom({
                       type: 'tool-output',
                       toolCallId,
-                      output: { ...chunk, from: 'AGENT' },
+                      output: { ...chunk, from: ChunkFrom.AGENT },
                     } as any);
                   }
 
@@ -3622,7 +3622,7 @@ export class Agent<
                     await context.writer.custom({
                       type: 'tool-output',
                       toolCallId: toolCallIdToUse,
-                      output: { ...chunk, from: 'WORKFLOW' },
+                      output: { ...chunk, from: ChunkFrom.WORKFLOW },
                     } as any);
                   }
                 } else {
@@ -3652,7 +3652,7 @@ export class Agent<
                     await context.writer.custom({
                       type: 'tool-output',
                       toolCallId: toolCallIdToUse,
-                      output: { ...chunk, from: 'WORKFLOW' },
+                      output: { ...chunk, from: ChunkFrom.WORKFLOW },
                     } as any);
                   }
                 }
