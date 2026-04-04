@@ -139,11 +139,7 @@ interface OAuthContext {
   redirectTriggered: boolean;
 }
 
-function createOAuthProvider(
-  serverName: string,
-  dataDir: string,
-  oauthCtx: OAuthContext,
-): MCPOAuthClientProvider {
+function createOAuthProvider(serverName: string, dataDir: string, oauthCtx: OAuthContext): MCPOAuthClientProvider {
   const storagePath = join(dataDir, 'mcp-oauth.json');
   const storage = new McpOAuthFileStorage(serverName, storagePath);
   const redirectUrl = `http://localhost:${oauthCtx.callbackServer.port}${OAUTH_CALLBACK_PATH}`;
