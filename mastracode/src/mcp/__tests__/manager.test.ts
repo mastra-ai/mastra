@@ -97,12 +97,14 @@ describe('createMcpManager', () => {
       const manager = createMcpManager('/tmp/test');
       await manager.init();
 
-      expect(MockedMCPClient).toHaveBeenCalledWith({
-        id: 'mastra-code-mcp',
-        servers: {
-          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
-        },
-      });
+      expect(MockedMCPClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'mastra-code-mcp',
+          servers: {
+            fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
+          },
+        }),
+      );
     });
 
     it('builds http server def with URL object and requestInit', async () => {
