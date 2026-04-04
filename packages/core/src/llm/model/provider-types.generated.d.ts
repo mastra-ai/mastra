@@ -460,6 +460,7 @@ export type ProviderModelsMap = {
     'elevenlabs/elevenlabs-music',
     'elevenlabs/elevenlabs-v2.5-turbo',
     'elevenlabs/elevenlabs-v3',
+    'fireworks-ai/kimi-k2.5-fw',
     'google/gemini-2.0-flash',
     'google/gemini-2.0-flash-lite',
     'google/gemini-2.5-flash',
@@ -529,6 +530,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-instant',
     'openai/gpt-5.2-pro',
     'openai/gpt-5.3-codex',
+    'openai/gpt-5.3-codex-spark',
     'openai/gpt-5.3-instant',
     'openai/gpt-5.4',
     'openai/gpt-5.4-mini',
@@ -593,8 +595,6 @@ export type ProviderModelsMap = {
     'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
-    'mimo-v2-omni-free',
-    'mimo-v2-pro-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
@@ -832,6 +832,8 @@ export type ProviderModelsMap = {
     'gemma-3-4b-it',
     'gemma-3n-e2b-it',
     'gemma-3n-e4b-it',
+    'gemma-4-26b',
+    'gemma-4-31b',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -914,7 +916,7 @@ export type ProviderModelsMap = {
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly 'alibaba-cn': readonly [
     'MiniMax-M2.5',
-    'MiniMax/MiniMax-M2.5',
+    'MiniMax/MiniMax-M2.7',
     'deepseek-r1',
     'deepseek-r1-0528',
     'deepseek-r1-distill-llama-70b',
@@ -980,6 +982,7 @@ export type ProviderModelsMap = {
     'qwen3.5-397b-a17b',
     'qwen3.5-flash',
     'qwen3.5-plus',
+    'qwen3.6-plus',
     'qwq-32b',
     'qwq-plus',
     'siliconflow/deepseek-r1-0528',
@@ -1204,6 +1207,7 @@ export type ProviderModelsMap = {
     'glm-4.5-air',
     'glm-4.7',
     'glm-4.7-flash',
+    'glm-5',
     'gpt-4.1',
     'gpt-oss-120b',
     'intellect-3',
@@ -1857,6 +1861,7 @@ export type ProviderModelsMap = {
     'inclusionai/ring-1t',
     'kuaishou/kat-coder-pro-v1',
     'kuaishou/kat-coder-pro-v1-free',
+    'kuaishou/kat-coder-pro-v2',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
@@ -1886,6 +1891,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-max',
     'qwen/qwen3.5-flash',
     'qwen/qwen3.5-plus',
+    'qwen/qwen3.6-plus',
     'stepfun/step-3',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.5-flash-free',
@@ -1917,8 +1923,10 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flashx',
     'z-ai/glm-5',
     'z-ai/glm-5-turbo',
+    'z-ai/glm-5v-turbo',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
+  readonly 'xiaomi-token-plan-sgp': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
   readonly 'privatemode-ai': readonly [
     'gemma-3-27b',
     'gpt-oss-120b',
@@ -2169,6 +2177,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen3-vl-thinking',
     'alibaba/qwen3.5-flash',
     'alibaba/qwen3.5-plus',
+    'alibaba/qwen3.6-plus',
     'amazon/nova-2-lite',
     'amazon/nova-lite',
     'amazon/nova-micro',
@@ -2189,6 +2198,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
     'arcee-ai/trinity-large-preview',
+    'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-mini',
     'bfl/flux-kontext-max',
     'bfl/flux-kontext-pro',
@@ -2223,6 +2233,8 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-pro-preview',
     'google/gemini-embedding-001',
     'google/gemini-embedding-2',
+    'google/gemma-4-26b-a4b-it',
+    'google/gemma-4-31b-it',
     'google/imagen-4.0-fast-generate-001',
     'google/imagen-4.0-generate-001',
     'google/imagen-4.0-ultra-generate-001',
@@ -2374,6 +2386,7 @@ export type ProviderModelsMap = {
     'zai/glm-4.7-flashx',
     'zai/glm-5',
     'zai/glm-5-turbo',
+    'zai/glm-5v-turbo',
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
@@ -2627,6 +2640,7 @@ export type ProviderModelsMap = {
     'whisper-large-v3',
     'whisper-large-v3-turbo',
   ];
+  readonly 'xiaomi-token-plan-ams': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
   readonly 'minimax-cn-coding-plan': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -3549,6 +3563,7 @@ export type ProviderModelsMap = {
     'kimi-k2-turbo-preview',
     'kimi-k2.5',
   ];
+  readonly 'xiaomi-token-plan-cn': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-v3p1',
     'accounts/fireworks/models/deepseek-v3p2',

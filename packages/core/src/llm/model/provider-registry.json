@@ -638,6 +638,7 @@
         "elevenlabs/elevenlabs-music",
         "elevenlabs/elevenlabs-v2.5-turbo",
         "elevenlabs/elevenlabs-v3",
+        "fireworks-ai/kimi-k2.5-fw",
         "google/gemini-2.0-flash",
         "google/gemini-2.0-flash-lite",
         "google/gemini-2.5-flash",
@@ -707,6 +708,7 @@
         "openai/gpt-5.2-instant",
         "openai/gpt-5.2-pro",
         "openai/gpt-5.3-codex",
+        "openai/gpt-5.3-codex-spark",
         "openai/gpt-5.3-instant",
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini",
@@ -779,8 +781,6 @@
         "gpt-5.4-nano",
         "gpt-5.4-pro",
         "kimi-k2.5",
-        "mimo-v2-omni-free",
-        "mimo-v2-pro-free",
         "minimax-m2.5",
         "minimax-m2.5-free",
         "nemotron-3-super-free",
@@ -1078,7 +1078,9 @@
         "gemma-3-27b-it",
         "gemma-3-4b-it",
         "gemma-3n-e2b-it",
-        "gemma-3n-e4b-it"
+        "gemma-3n-e4b-it",
+        "gemma-4-26b",
+        "gemma-4-31b"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev",
@@ -1203,7 +1205,7 @@
       "name": "Alibaba (China)",
       "models": [
         "MiniMax-M2.5",
-        "MiniMax/MiniMax-M2.5",
+        "MiniMax/MiniMax-M2.7",
         "deepseek-r1",
         "deepseek-r1-0528",
         "deepseek-r1-distill-llama-70b",
@@ -1269,6 +1271,7 @@
         "qwen3.5-397b-a17b",
         "qwen3.5-flash",
         "qwen3.5-plus",
+        "qwen3.6-plus",
         "qwq-32b",
         "qwq-plus",
         "siliconflow/deepseek-r1-0528",
@@ -1533,6 +1536,7 @@
         "glm-4.5-air",
         "glm-4.7",
         "glm-4.7-flash",
+        "glm-5",
         "gpt-4.1",
         "gpt-oss-120b",
         "intellect-3",
@@ -2242,6 +2246,7 @@
         "inclusionai/ring-1t",
         "kuaishou/kat-coder-pro-v1",
         "kuaishou/kat-coder-pro-v1-free",
+        "kuaishou/kat-coder-pro-v2",
         "minimax/minimax-m2",
         "minimax/minimax-m2.1",
         "minimax/minimax-m2.5",
@@ -2271,6 +2276,7 @@
         "qwen/qwen3-max",
         "qwen/qwen3.5-flash",
         "qwen/qwen3.5-plus",
+        "qwen/qwen3.6-plus",
         "stepfun/step-3",
         "stepfun/step-3.5-flash",
         "stepfun/step-3.5-flash-free",
@@ -2301,7 +2307,8 @@
         "z-ai/glm-4.7-flash-free",
         "z-ai/glm-4.7-flashx",
         "z-ai/glm-5",
-        "z-ai/glm-5-turbo"
+        "z-ai/glm-5-turbo",
+        "z-ai/glm-5v-turbo"
       ],
       "docUrl": "https://docs.zenmux.ai",
       "gateway": "models.dev"
@@ -2313,6 +2320,15 @@
       "docUrl": "https://docs.perplexity.ai",
       "gateway": "models.dev",
       "npm": "@ai-sdk/perplexity"
+    },
+    "xiaomi-token-plan-sgp": {
+      "url": "https://token-plan-sgp.xiaomimimo.com/v1",
+      "apiKeyEnvVar": "XIAOMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Xiaomi Token Plan (Singapore)",
+      "models": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
+      "docUrl": "https://platform.xiaomimimo.com/#/docs",
+      "gateway": "models.dev"
     },
     "privatemode-ai": {
       "url": "http://localhost:8080/v1",
@@ -2659,6 +2675,7 @@
         "alibaba/qwen3-vl-thinking",
         "alibaba/qwen3.5-flash",
         "alibaba/qwen3.5-plus",
+        "alibaba/qwen3.6-plus",
         "amazon/nova-2-lite",
         "amazon/nova-lite",
         "amazon/nova-micro",
@@ -2679,6 +2696,7 @@
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
         "arcee-ai/trinity-large-preview",
+        "arcee-ai/trinity-large-thinking",
         "arcee-ai/trinity-mini",
         "bfl/flux-kontext-max",
         "bfl/flux-kontext-pro",
@@ -2713,6 +2731,8 @@
         "google/gemini-3.1-pro-preview",
         "google/gemini-embedding-001",
         "google/gemini-embedding-2",
+        "google/gemma-4-26b-a4b-it",
+        "google/gemma-4-31b-it",
         "google/imagen-4.0-fast-generate-001",
         "google/imagen-4.0-generate-001",
         "google/imagen-4.0-ultra-generate-001",
@@ -2863,7 +2883,8 @@
         "zai/glm-4.7-flash",
         "zai/glm-4.7-flashx",
         "zai/glm-5",
-        "zai/glm-5-turbo"
+        "zai/glm-5-turbo",
+        "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
       "gateway": "models.dev"
@@ -3151,6 +3172,15 @@
       "docUrl": "https://console.groq.com/docs/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/groq"
+    },
+    "xiaomi-token-plan-ams": {
+      "url": "https://token-plan-ams.xiaomimimo.com/v1",
+      "apiKeyEnvVar": "XIAOMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Xiaomi Token Plan (Europe)",
+      "models": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
+      "docUrl": "https://platform.xiaomimimo.com/#/docs",
+      "gateway": "models.dev"
     },
     "minimax-cn-coding-plan": {
       "url": "https://api.minimaxi.com/anthropic/v1",
@@ -4253,6 +4283,15 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
+    "xiaomi-token-plan-cn": {
+      "url": "https://token-plan-cn.xiaomimimo.com/v1",
+      "apiKeyEnvVar": "XIAOMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Xiaomi Token Plan (China)",
+      "models": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
+      "docUrl": "https://platform.xiaomimimo.com/#/docs",
+      "gateway": "models.dev"
+    },
     "fireworks-ai": {
       "url": "https://api.fireworks.ai/inference/v1/",
       "apiKeyEnvVar": "FIREWORKS_API_KEY",
@@ -4886,6 +4925,7 @@
       "elevenlabs/elevenlabs-music",
       "elevenlabs/elevenlabs-v2.5-turbo",
       "elevenlabs/elevenlabs-v3",
+      "fireworks-ai/kimi-k2.5-fw",
       "google/gemini-2.0-flash",
       "google/gemini-2.0-flash-lite",
       "google/gemini-2.5-flash",
@@ -4955,6 +4995,7 @@
       "openai/gpt-5.2-instant",
       "openai/gpt-5.2-pro",
       "openai/gpt-5.3-codex",
+      "openai/gpt-5.3-codex-spark",
       "openai/gpt-5.3-instant",
       "openai/gpt-5.4",
       "openai/gpt-5.4-mini",
@@ -5019,8 +5060,6 @@
       "gpt-5.4-nano",
       "gpt-5.4-pro",
       "kimi-k2.5",
-      "mimo-v2-omni-free",
-      "mimo-v2-pro-free",
       "minimax-m2.5",
       "minimax-m2.5-free",
       "nemotron-3-super-free",
@@ -5257,7 +5296,9 @@
       "gemma-3-27b-it",
       "gemma-3-4b-it",
       "gemma-3n-e2b-it",
-      "gemma-3n-e4b-it"
+      "gemma-3n-e4b-it",
+      "gemma-4-26b",
+      "gemma-4-31b"
     ],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
@@ -5340,7 +5381,7 @@
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "alibaba-cn": [
       "MiniMax-M2.5",
-      "MiniMax/MiniMax-M2.5",
+      "MiniMax/MiniMax-M2.7",
       "deepseek-r1",
       "deepseek-r1-0528",
       "deepseek-r1-distill-llama-70b",
@@ -5406,6 +5447,7 @@
       "qwen3.5-397b-a17b",
       "qwen3.5-flash",
       "qwen3.5-plus",
+      "qwen3.6-plus",
       "qwq-32b",
       "qwq-plus",
       "siliconflow/deepseek-r1-0528",
@@ -5630,6 +5672,7 @@
       "glm-4.5-air",
       "glm-4.7",
       "glm-4.7-flash",
+      "glm-5",
       "gpt-4.1",
       "gpt-oss-120b",
       "intellect-3",
@@ -6283,6 +6326,7 @@
       "inclusionai/ring-1t",
       "kuaishou/kat-coder-pro-v1",
       "kuaishou/kat-coder-pro-v1-free",
+      "kuaishou/kat-coder-pro-v2",
       "minimax/minimax-m2",
       "minimax/minimax-m2.1",
       "minimax/minimax-m2.5",
@@ -6312,6 +6356,7 @@
       "qwen/qwen3-max",
       "qwen/qwen3.5-flash",
       "qwen/qwen3.5-plus",
+      "qwen/qwen3.6-plus",
       "stepfun/step-3",
       "stepfun/step-3.5-flash",
       "stepfun/step-3.5-flash-free",
@@ -6342,9 +6387,11 @@
       "z-ai/glm-4.7-flash-free",
       "z-ai/glm-4.7-flashx",
       "z-ai/glm-5",
-      "z-ai/glm-5-turbo"
+      "z-ai/glm-5-turbo",
+      "z-ai/glm-5v-turbo"
     ],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
+    "xiaomi-token-plan-sgp": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
     "privatemode-ai": ["gemma-3-27b", "gpt-oss-120b", "qwen3-coder-30b-a3b", "qwen3-embedding-4b", "whisper-large-v3"],
     "perplexity-agent": [
       "anthropic/claude-haiku-4-5",
@@ -6589,6 +6636,7 @@
       "alibaba/qwen3-vl-thinking",
       "alibaba/qwen3.5-flash",
       "alibaba/qwen3.5-plus",
+      "alibaba/qwen3.6-plus",
       "amazon/nova-2-lite",
       "amazon/nova-lite",
       "amazon/nova-micro",
@@ -6609,6 +6657,7 @@
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
       "arcee-ai/trinity-large-preview",
+      "arcee-ai/trinity-large-thinking",
       "arcee-ai/trinity-mini",
       "bfl/flux-kontext-max",
       "bfl/flux-kontext-pro",
@@ -6643,6 +6692,8 @@
       "google/gemini-3.1-pro-preview",
       "google/gemini-embedding-001",
       "google/gemini-embedding-2",
+      "google/gemma-4-26b-a4b-it",
+      "google/gemma-4-31b-it",
       "google/imagen-4.0-fast-generate-001",
       "google/imagen-4.0-generate-001",
       "google/imagen-4.0-ultra-generate-001",
@@ -6793,7 +6844,8 @@
       "zai/glm-4.7-flash",
       "zai/glm-4.7-flashx",
       "zai/glm-5",
-      "zai/glm-5-turbo"
+      "zai/glm-5-turbo",
+      "zai/glm-5v-turbo"
     ],
     "synthetic": [
       "hf:MiniMaxAI/MiniMax-M2",
@@ -7047,6 +7099,7 @@
       "whisper-large-v3",
       "whisper-large-v3-turbo"
     ],
+    "xiaomi-token-plan-ams": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
     "minimax-cn-coding-plan": [
       "MiniMax-M2",
       "MiniMax-M2.1",
@@ -7969,6 +8022,7 @@
       "kimi-k2-turbo-preview",
       "kimi-k2.5"
     ],
+    "xiaomi-token-plan-cn": ["mimo-v2-omni", "mimo-v2-pro", "mimo-v2-tts"],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-v3p1",
       "accounts/fireworks/models/deepseek-v3p2",
