@@ -209,7 +209,7 @@ describe('workspace tool tracing integration', () => {
   it('readFile tool creates a WORKSPACE_ACTION span on success', async () => {
     await fs.writeFile(path.join(tempDir, 'hello.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -230,7 +230,7 @@ describe('workspace tool tracing integration', () => {
 
   it('writeFile tool creates a WORKSPACE_ACTION span on success', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -249,7 +249,7 @@ describe('workspace tool tracing integration', () => {
   it('editFile tool creates a WORKSPACE_ACTION span on success', async () => {
     await fs.writeFile(path.join(tempDir, 'edit.txt'), 'foo bar baz');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -267,7 +267,7 @@ describe('workspace tool tracing integration', () => {
   it('deleteFile tool creates a WORKSPACE_ACTION span on success', async () => {
     await fs.writeFile(path.join(tempDir, 'del.txt'), 'delete me');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -287,7 +287,7 @@ describe('workspace tool tracing integration', () => {
     await fs.writeFile(path.join(tempDir, 'a.txt'), 'a');
     await fs.writeFile(path.join(tempDir, 'b.txt'), 'b');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -305,7 +305,7 @@ describe('workspace tool tracing integration', () => {
   it('fileStat tool creates a WORKSPACE_ACTION span', async () => {
     await fs.writeFile(path.join(tempDir, 'stat.txt'), 'hello');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -323,7 +323,7 @@ describe('workspace tool tracing integration', () => {
 
   it('fileStat tool ends span with success=false for missing file', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -340,7 +340,7 @@ describe('workspace tool tracing integration', () => {
 
   it('mkdir tool creates a WORKSPACE_ACTION span', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -358,7 +358,7 @@ describe('workspace tool tracing integration', () => {
   it('grep tool creates a WORKSPACE_ACTION span with resultCount', async () => {
     await fs.writeFile(path.join(tempDir, 'code.ts'), 'function hello() {}\nfunction world() {}');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const { mockParentSpan, childSpans } = createMockSpan();
 
@@ -417,7 +417,7 @@ describe('workspace tool tracing integration', () => {
   it('tools work correctly without tracing context (no span created)', async () => {
     await fs.writeFile(path.join(tempDir, 'no-trace.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     // No tracing context — should not throw
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'no-trace.txt' }, { workspace });

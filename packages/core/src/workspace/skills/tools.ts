@@ -74,28 +74,33 @@ function createSkillTool(skills: WorkspaceSkills) {
         input: { name },
       });
 
-      const result = await resolveSkill(skills, name);
+      try {
+        const result = await resolveSkill(skills, name);
 
-      if ('notFound' in result) {
-        span.end({ success: false });
-        return result.notFound;
-      }
+        if ('notFound' in result) {
+          span.end({ success: false });
+          return result.notFound;
+        }
 
-      const { skill } = result;
-      const parts = [skill.instructions];
+        const { skill } = result;
+        const parts = [skill.instructions];
 
-      if (skill.references?.length) {
-        parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
-      }
-      if (skill.scripts?.length) {
-        parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
-      }
-      if (skill.assets?.length) {
-        parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
-      }
+        if (skill.references?.length) {
+          parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
+        }
+        if (skill.scripts?.length) {
+          parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
+        }
+        if (skill.assets?.length) {
+          parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
+        }
 
-      span.end({ success: true });
-      return parts.join('');
+        span.end({ success: true });
+        return parts.join('');
+      } catch (err) {
+        span.error(err);
+        throw err;
+      }
     },
   });
 
