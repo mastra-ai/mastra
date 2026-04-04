@@ -102,7 +102,8 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     if (!browser.enabled) {
       ctx.showInfo('Browser: disabled');
     } else {
-      const providerLabel = browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
+      const providerLabel =
+        browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
       const lines = [
         `Browser: enabled`,
         `  Provider: ${providerLabel}`,
@@ -198,9 +199,7 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     const env = envChoice as StagehandEnv;
 
     if (env === 'BROWSERBASE') {
-      ctx.showInfo(
-        'For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables.',
-      );
+      ctx.showInfo('For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables.');
     }
 
     stagehandSettings = { env };
