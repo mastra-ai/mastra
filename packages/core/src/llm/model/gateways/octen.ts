@@ -91,8 +91,9 @@ export class OctenGateway extends MastraModelGateway {
 
         // Intercept response to normalize the `meta.usage` nested object so the AI SDK tracks it
         if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+          const clonedResponse = response.clone();
           try {
-            const jsonText = await response.text();
+            const jsonText = await clonedResponse.text();
             const jsonObj = JSON.parse(jsonText);
             if (jsonObj.meta && jsonObj.meta.usage) {
               jsonObj.usage = jsonObj.meta.usage;
@@ -106,6 +107,7 @@ export class OctenGateway extends MastraModelGateway {
             // Unparseable JSON, return original
             return response;
           }
+        }
         }
 
         return response;
