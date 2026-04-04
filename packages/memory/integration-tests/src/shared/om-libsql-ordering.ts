@@ -187,6 +187,7 @@ export const OM_14745_PRE_SEAL_ASSISTANT_ID = 'om-14745-pre-seal-assistant-id';
 
 /** Marker text only present on the continuation assistant message after seal. */
 export const OM_14745_POST_SEAL_TEXT = 'OM_14745_POST_SEAL_CONTINUATION_MARKER';
+export const OM_14745_TOOL_CALL_ID = 'om-14745-tool-call-id';
 
 export function createOm14745MockObserverModel() {
   const observationText = `<observations>
@@ -345,13 +346,40 @@ export async function runOm14745RotationScenario(opts: {
 
   messageList.add(
     createOm14745DbMessage(
-      'Pre-seal assistant body '.padEnd(400, 'p'),
-      'assistant',
-      OM_14745_PRE_SEAL_ASSISTANT_ID,
-      new Date(base + 20_000),
+      'Warmup separator user',
+      'user',
+      'om14745-separator-user',
+      new Date(base + 19_500),
       threadId,
       resourceId,
     ),
+    'memory',
+  );
+
+  messageList.add(
+    {
+      id: OM_14745_PRE_SEAL_ASSISTANT_ID,
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: OM_14745_TOOL_CALL_ID,
+              toolName: 'test',
+              args: { action: 'trigger' },
+            },
+          },
+          { type: 'text', text: 'Pre-seal assistant body '.padEnd(400, 'p') },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(base + 20_000),
+      threadId,
+      resourceId,
+    } as MastraDBMessage,
     'response',
   );
 
@@ -394,6 +422,17 @@ export async function runOm14745RotationScenario(opts: {
   if (!bufResult.buffered) {
     throw new Error('OM 14745 harness: expected om.buffer() to run (buffered=false)');
   }
+
+  messageList.updateToolInvocation({
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: OM_14745_TOOL_CALL_ID,
+      toolName: 'test',
+      args: {},
+      result: { success: true, message: 'Tool executed after seal' },
+    },
+  });
 
   messageList.add(
     {

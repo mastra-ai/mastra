@@ -370,6 +370,8 @@ export class CoreToolBuilder extends MastraBase {
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
+            // Browser for web automation (lazily initialized on first use)
+            browser: options.browser,
             writer: new ToolStream(
               {
                 prefix: 'tool',

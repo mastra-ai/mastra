@@ -3026,13 +3026,18 @@ ${formattedMessages}
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
       const lastActivated = activatedChunks[activatedChunks.length - 1];
       if (lastActivated) {
+        const chunkThreadTitle = lastActivated.threadTitle;
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: lastActivated.suggestedContinuation,
           currentTask: lastActivated.currentTask,
+          threadTitle: chunkThreadTitle,
         });
+        const oldTitle = thread.title?.trim();
+        const newTitle = chunkThreadTitle?.trim();
+        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
         await this.storage.updateThread({
           id: threadId,
-          title: thread.title ?? '',
+          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
           metadata: newMetadata,
         });
       }
