@@ -16,7 +16,7 @@ const memory = new Memory();
 
 export const browserUseBrowserToolset = new BrowserUseBrowser({
   // API key from env: BROWSER_USE_API_KEY
-  threadIsolation: 'browser', // Each thread gets its own cloud browser
+  scope: 'thread', // Each thread gets its own cloud browser
 });
 
 export const browserUseAgent = new Agent({
