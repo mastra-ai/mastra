@@ -166,8 +166,8 @@ async function setupGateway(projectName: string) {
     const escapedKey = shellQuote.quote([result.apiKey]);
     const escapedUrl = shellQuote.quote([MASTRA_GATEWAY_URL]);
 
-    await exec(`echo GATEWAY_URL=${escapedUrl} >> .env`);
-    await exec(`echo GATEWAY_API_KEY=${escapedKey} >> .env`);
+    await exec(`echo MASTRA_GATEWAY_URL=${escapedUrl} >> .env`);
+    await exec(`echo MASTRA_GATEWAY_API_KEY=${escapedKey} >> .env`);
 
     p.log.success(`Gateway project "${result.project.name}" provisioned`);
     p.log.info(`API key written to .env`);
