@@ -1,6 +1,6 @@
 import { useAssistantState } from '@assistant-ui/react';
 import type { MastraUIMessageMetadata } from '@mastra/react';
-import { AlertCircle, CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
@@ -72,26 +72,20 @@ export const ErrorAwareText = () => {
       const errorMessage = trimmedText.substring('__ERROR__:'.length);
 
       return (
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
-            <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
-          </div>
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle as="h5">Error</AlertTitle>
+          <AlertDescription as="p">{errorMessage}</AlertDescription>
+        </Alert>
       );
     } else if (trimmedText.startsWith('Error:')) {
       // Handle plain error messages without special prefix
       const errorMessage = trimmedText.substring('Error:'.length).trim();
 
       return (
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
-            <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
-          </div>
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle as="h5">Error</AlertTitle>
+          <AlertDescription as="p">{errorMessage}</AlertDescription>
+        </Alert>
       );
     }
 
@@ -100,13 +94,10 @@ export const ErrorAwareText = () => {
   } catch {
     // Fallback to displaying the raw text if something goes wrong
     return (
-      <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-        <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
-          <p className="text-sm text-red-700 dark:text-red-300">{String(text)}</p>
-        </div>
-      </div>
+      <Alert variant="destructive">
+        <AlertTitle as="h5">Error</AlertTitle>
+        <AlertDescription as="p">{String(text)}</AlertDescription>
+      </Alert>
     );
   }
 };

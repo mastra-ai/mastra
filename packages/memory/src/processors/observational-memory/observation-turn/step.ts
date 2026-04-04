@@ -1,4 +1,3 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
@@ -54,6 +53,7 @@ export class ObservationStep {
     let buffered = false;
     let reflected = false;
     let didThresholdCleanup = false;
+    let observerExchange: StepContext['observerExchange'];
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
@@ -125,6 +125,40 @@ export class ObservationStep {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
+      // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
+      // buffer call. The beforeBuffer callback inside buffer() only runs deep in its
+      // async chain (after multiple awaits). Meanwhile, the step > 0 save below drains
+      // response messages synchronously. If sealing/rotation happens after that drain,
+      // the sealed messages get re-added as memory (unsealed) and all new content keeps
+      // appending to the same assistant message — producing the "mega-message" bug.
+      const candidates = om.getUnobservedMessages(unobservedMessages, statusSnapshot.record, {
+        excludeBuffered: true,
+      });
+      if (candidates.length > 0) {
+        om.sealMessagesForBuffering(candidates);
+
+        try {
+          await this.turn.hooks?.onBufferChunkSealed?.();
+        } catch (error) {
+          omDebug(
+            `[OM:buffer] onBufferChunkSealed hook failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        if (this.turn.memory) {
+          await this.turn.memory.persistMessages(candidates);
+        }
+
+        // Once a buffered chunk has been sealed and persisted, it should no longer
+        // remain in the live response/input buckets. Move the exact same messages
+        // into memory so later step-save drains don't pull them back out and grow
+        // them again under the old response id.
+        messageList.removeByIds(candidates.map(msg => msg.id));
+        for (const msg of candidates) {
+          messageList.add(msg, 'memory');
+        }
+      }
+
       void om
         .buffer({
           threadId,
@@ -135,25 +169,6 @@ export class ObservationStep {
           writer: this.turn.writer,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
-          beforeBuffer: async (candidates: MastraDBMessage[]) => {
-            if (candidates.length === 0) {
-              return;
-            }
-
-            om.sealMessagesForBuffering(candidates);
-
-            try {
-              await this.turn.hooks?.onBufferChunkSealed?.();
-            } catch (error) {
-              omDebug(
-                `[OM:buffer] onBufferChunkSealed hook failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            }
-
-            if (this.turn.memory) {
-              await this.turn.memory.persistMessages(candidates);
-            }
-          },
         })
         .catch((err: Error) => {
           omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
@@ -178,6 +193,7 @@ export class ObservationStep {
       if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
         const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation();
+        observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
           didThresholdCleanup = true;
@@ -249,6 +265,7 @@ export class ObservationStep {
 
     this._context = {
       systemMessage,
+      observerExchange,
       activated,
       observed,
       buffered,
@@ -275,6 +292,7 @@ export class ObservationStep {
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
+    observerExchange?: StepContext['observerExchange'];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
@@ -337,6 +355,10 @@ export class ObservationStep {
       observabilityContext: this.turn.observabilityContext,
     });
 
-    return { succeeded: obsResult.observed, record: obsResult.record };
+    return {
+      succeeded: obsResult.observed,
+      record: obsResult.record,
+      observerExchange: om.observer.lastExchange,
+    };
   }
 }
