@@ -279,12 +279,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // requireApproval can be:
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
-        // If needsApprovalFn exists, evaluate it with the tool args
+        // If needsApprovalFn exists, evaluate it with the tool args and context
         let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
         if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with the parsed args
+          // Evaluate the function with parsed args and available context
           try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
+              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+              workspace: _internal?.stepWorkspace,
+            });
             toolRequiresApproval = needsApprovalResult;
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
