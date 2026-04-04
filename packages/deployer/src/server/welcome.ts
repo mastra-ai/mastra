@@ -1,4 +1,7 @@
 export function welcomeHtml(apiPrefix: string = '/api') {
+  // Normalize: ensure single leading slash, no trailing slash
+  const prefix = '/' + apiPrefix.replace(/^\/+|\/+$/g, '');
+  const prefixNoSlash = prefix.slice(1);
   return `
 <!doctype html>
 <html lang="en">
@@ -262,7 +265,7 @@ export function welcomeHtml(apiPrefix: string = '/api') {
             <span>List your agents</span>
             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre class="curl-code" data-tpl="curl <base>${apiPrefix}/agents"><span class="c-cmd">curl</span> <span class="c-url" data-url="${apiPrefix.slice(1)}/agents"></span></pre>
+          <pre class="curl-code" data-tpl="curl <base>${prefix}/agents"><span class="c-cmd">curl</span> <span class="c-url" data-url="${prefixNoSlash}/agents"></span></pre>
         </div>
 
         <div class="curl-block">
@@ -270,7 +273,7 @@ export function welcomeHtml(apiPrefix: string = '/api') {
             <span>Chat with an agent</span>
             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre class="curl-code" data-tpl="curl -X POST <base>${apiPrefix}/agents/:agent-id/generate -H 'Content-Type: application/json' -d '{&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Hello&quot;}]}'"><span class="c-cmd">curl</span> <span class="c-flag">-X POST</span> <span class="c-url" data-url="${apiPrefix.slice(1)}/agents/:agent-id/generate"></span> \\
+          <pre class="curl-code" data-tpl="curl -X POST <base>${prefix}/agents/:agent-id/generate -H 'Content-Type: application/json' -d '{&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Hello&quot;}]}'"><span class="c-cmd">curl</span> <span class="c-flag">-X POST</span> <span class="c-url" data-url="${prefixNoSlash}/agents/:agent-id/generate"></span> \\
   <span class="c-flag">-H</span> <span class="c-str">'Content-Type: application/json'</span> \\
   <span class="c-flag">-d</span> <span class="c-str">'{"messages":[{"role":"user","content":"Hello"}]}'</span></pre>
         </div>
@@ -280,7 +283,7 @@ export function welcomeHtml(apiPrefix: string = '/api') {
             <span>Stream an agent response</span>
             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre class="curl-code" data-tpl="curl -N -X POST <base>${apiPrefix}/agents/:agent-id/stream -H 'Content-Type: application/json' -d '{&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Hello&quot;}]}'"><span class="c-cmd">curl</span> <span class="c-flag">-N -X POST</span> <span class="c-url" data-url="${apiPrefix.slice(1)}/agents/:agent-id/stream"></span> \\
+          <pre class="curl-code" data-tpl="curl -N -X POST <base>${prefix}/agents/:agent-id/stream -H 'Content-Type: application/json' -d '{&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Hello&quot;}]}'"><span class="c-cmd">curl</span> <span class="c-flag">-N -X POST</span> <span class="c-url" data-url="${prefixNoSlash}/agents/:agent-id/stream"></span> \\
   <span class="c-flag">-H</span> <span class="c-str">'Content-Type: application/json'</span> \\
   <span class="c-flag">-d</span> <span class="c-str">'{"messages":[{"role":"user","content":"Hello"}]}'</span></pre>
         </div>
@@ -292,56 +295,56 @@ export function welcomeHtml(apiPrefix: string = '/api') {
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-get">GET</span>
-              <span class="endpoint-path">${apiPrefix}/agents</span>
+              <span class="endpoint-path">${prefix}/agents</span>
             </div>
             <span class="endpoint-desc">List all agents</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-post">POST</span>
-              <span class="endpoint-path">${apiPrefix}/agents/:id/generate</span>
+              <span class="endpoint-path">${prefix}/agents/:id/generate</span>
             </div>
             <span class="endpoint-desc">Generate a response</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-post">POST</span>
-              <span class="endpoint-path">${apiPrefix}/agents/:id/stream</span>
+              <span class="endpoint-path">${prefix}/agents/:id/stream</span>
             </div>
             <span class="endpoint-desc">Stream a response</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-get">GET</span>
-              <span class="endpoint-path">${apiPrefix}/workflows</span>
+              <span class="endpoint-path">${prefix}/workflows</span>
             </div>
             <span class="endpoint-desc">List all workflows</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-post">POST</span>
-              <span class="endpoint-path">${apiPrefix}/workflows/:id/start</span>
+              <span class="endpoint-path">${prefix}/workflows/:id/start</span>
             </div>
             <span class="endpoint-desc">Run a workflow</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-get">GET</span>
-              <span class="endpoint-path">${apiPrefix}/tools</span>
+              <span class="endpoint-path">${prefix}/tools</span>
             </div>
             <span class="endpoint-desc">List all tools</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-post">POST</span>
-              <span class="endpoint-path">${apiPrefix}/tools/:id/execute</span>
+              <span class="endpoint-path">${prefix}/tools/:id/execute</span>
             </div>
             <span class="endpoint-desc">Execute a tool</span>
           </div>
           <div class="card-row">
             <div class="card-row-left">
               <span class="method method-get">GET</span>
-              <span class="endpoint-path">${apiPrefix}/memory/threads</span>
+              <span class="endpoint-path">${prefix}/memory/threads</span>
             </div>
             <span class="endpoint-desc">List memory threads</span>
           </div>
