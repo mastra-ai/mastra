@@ -1,5 +1,7 @@
 # @mastra/core
 
+## 1.23.0-alpha.2
+
 ## 1.23.0-alpha.1
 
 ### Patch Changes
