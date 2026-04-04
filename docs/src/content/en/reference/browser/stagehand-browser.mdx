@@ -193,12 +193,12 @@ Perform an action using natural language instructions. The AI interprets your in
 
 **Returns:**
 
-```text
+```typescript
 interface ActResult {
-  success: boolean;
-  message?: string;
-  action?: string;
-  url?: string;
+  success: boolean
+  message?: string
+  action?: string
+  url?: string
 }
 ```
 
@@ -228,13 +228,13 @@ Extract structured data from a page using natural language instructions.
 
 **Returns:**
 
-```text
+```typescript
 interface ExtractResult<T = unknown> {
-  success: boolean;
-  data?: T;
-  hint?: string;
-  error?: string;
-  url?: string;
+  success: boolean
+  data?: T
+  hint?: string
+  error?: string
+  url?: string
 }
 ```
 
@@ -262,18 +262,18 @@ Discover actionable elements on a page. Returns a list of elements with their se
 
 **Returns:**
 
-```text
+```typescript
 interface ObserveResult {
-  success: boolean;
-  actions: StagehandAction[];
-  url?: string;
+  success: boolean
+  actions: StagehandAction[]
+  url?: string
 }
 
 interface StagehandAction {
-  selector: string;      // XPath selector
-  description: string;   // Human-readable description
-  method?: string;       // Suggested action method
-  arguments?: string[];  // Action parameters
+  selector: string
+  description: string
+  method?: string
+  arguments?: string[]
 }
 ```
 
