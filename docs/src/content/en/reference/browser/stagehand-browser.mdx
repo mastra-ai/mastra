@@ -325,33 +325,33 @@ Close the browser and clean up resources.
 
 Run Stagehand in the cloud using Browserbase:
 
-```text
+```typescript
 const browser = new StagehandBrowser({
-  env: "BROWSERBASE",
+  env: 'BROWSERBASE',
   apiKey: process.env.BROWSERBASE_API_KEY,
   projectId: process.env.BROWSERBASE_PROJECT_ID,
-  model: "openai/gpt-4o",
-});
+  model: 'openai/gpt-4o',
+})
 ```
 
 ## Model configuration
 
 Configure the AI model for Stagehand operations:
 
-```text
+```typescript
 // String format: "provider/model"
 const browser = new StagehandBrowser({
-  model: "openai/gpt-4o",
-});
+  model: 'openai/gpt-4o',
+})
 
 // Object format for custom configuration
 const browser = new StagehandBrowser({
   model: {
-    modelName: "gpt-4o",
+    modelName: 'gpt-4o',
     apiKey: process.env.OPENAI_API_KEY,
-    baseURL: "https://api.openai.com/v1",
+    baseURL: 'https://api.openai.com/v1',
   },
-});
+})
 ```
 
 Supported providers:
@@ -365,7 +365,7 @@ Supported providers:
 | - | - | - |
 | **Approach** | Deterministic refs (`@e5`) | Natural language |
 | **Precision** | Exact element targeting | AI interpretation |
-| **Flexibility** | Requires snapshot first | Direct instructions |
+| **Flexibility** | Requires a snapshot first | Direct instructions |
 | **Use case** | Reproducible automation | Adaptive automation |
 | **Speed** | Faster (no AI inference) | Slower (AI inference) |
 
