@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 22.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`fd8cf05`](https://github.com/mastra-ai/mastra/commit/fd8cf05151465e479504aa42eb009bcb36b9a801)]:
+  - @mastra/ai-sdk@1.3.2-alpha.0
+  - @mastra/core@1.23.0-alpha.2
+  - @mastra/client-js@1.13.1-alpha.2
+  - @mastra/react@0.2.23-alpha.2
+
+## 22.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7)]:
+  - @mastra/core@1.23.0-alpha.1
+  - @mastra/client-js@1.13.1-alpha.1
+  - @mastra/react@0.2.23-alpha.1
+
+## 22.0.1-alpha.0
+
+### Patch Changes
+
+- Expired sessions now refresh automatically. Requests that previously returned 401 are retried after refreshing, so users stay signed in instead of being logged out. ([#15024](https://github.com/mastra-ai/mastra/pull/15024))
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a)]:
+  - @mastra/core@1.23.0-alpha.0
+  - @mastra/client-js@1.13.1-alpha.0
+  - @mastra/ai-sdk@1.3.1
+  - @mastra/react@0.2.23-alpha.0
+
 ## 22.0.0
 
 ### Minor Changes

@@ -53,8 +53,8 @@ export class GatewayMemoryClient {
   private apiKey: string;
 
   constructor(baseUrl: string, apiKey: string) {
-    // Remove trailing slash and append /v1/memory base path
-    this.baseUrl = baseUrl.replace(/\/$/, '') + '/v1/memory';
+    // Strip trailing slashes and /v1 suffix so both URL forms resolve correctly
+    this.baseUrl = baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1/memory';
     this.apiKey = apiKey;
   }
 
