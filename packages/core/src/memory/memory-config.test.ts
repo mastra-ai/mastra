@@ -67,4 +67,42 @@ describe('MastraMemory config serialization', () => {
       shareTokenBudget: undefined,
     });
   });
+
+  it('should serialize retrieval config with vector: true', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          retrieval: { vector: true },
+          model: 'test-model',
+        },
+      },
+    });
+
+    const omConfig = memory.getConfig().observationalMemory;
+    expect(typeof omConfig).not.toBe('boolean');
+    if (typeof omConfig !== 'boolean' && omConfig) {
+      expect(omConfig.retrieval).toEqual({ vector: true });
+    }
+  });
+
+  it('should preserve backward compatibility with retrieval: false', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          retrieval: false,
+          model: 'test-model',
+        },
+      },
+    });
+
+    const omConfig = memory.getConfig().observationalMemory;
+    expect(typeof omConfig).not.toBe('boolean');
+    if (typeof omConfig !== 'boolean' && omConfig) {
+      expect(omConfig.retrieval).toBe(false);
+    }
+  });
 });

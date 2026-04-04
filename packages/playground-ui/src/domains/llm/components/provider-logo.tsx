@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cleanProviderId as cleanProviderIdUtil } from '../utils';
 import { providerMapToIcon } from '@/domains/agents/components/provider-map-icon';
 import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 interface ProviderLogoProps {
   providerId: string;
@@ -37,12 +38,13 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
       fireworks_ai: 'fireworks',
       openrouter: 'openrouter',
       netlify: 'netlify',
+      mastra: 'mastra',
     };
     return iconMap[id] || 'DEFAULT';
   };
 
   const fallbackIcon = getFallbackProviderIcon(cleanedProviderId);
-  const isGateway = ['netlify'].includes(cleanProviderId);
+  const isGateway = ['netlify', 'mastra'].includes(cleanProviderId);
 
   // If we've already had an error or don't have a provider ID or this is a special gateway case, show fallback
   if (isGateway || imageError || !providerId) {
@@ -58,14 +60,13 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
       alt={`${providerId} logo`}
       width={size}
       height={size}
-      className={className}
+      className={cn(className, 'dark:brightness-0 dark:invert')}
       onError={() => setImageError(true)}
       loading="lazy"
       style={{
         width: `${size}px`,
         height: `${size}px`,
         objectFit: 'contain',
-        filter: 'brightness(0) invert(1)', // Make the logo white
         opacity: 0.9,
       }}
     />

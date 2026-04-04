@@ -19,6 +19,7 @@ test-outputs/
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 
@@ -59,4 +60,5 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+.mastracode/
 /packages/core/__recordings__

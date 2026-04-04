@@ -24,6 +24,7 @@ import type {
   GetAgentResponse,
   GetToolResponse,
   ClientOptions,
+  AgentVersionIdentifier,
   StreamParams,
   StreamLegacyParams,
   UpdateModelParams,
@@ -34,13 +35,28 @@ import type {
   CloneAgentParams,
   StoredAgentResponse,
   StructuredOutputOptions,
+  AgentVersionResponse,
+  ListAgentVersionsParams,
+  ListAgentVersionsResponse,
+  CreateCodeAgentVersionParams,
+  ActivateAgentVersionResponse,
+  CompareVersionsResponse,
+  DeleteAgentVersionResponse,
+  RestoreAgentVersionResponse,
 } from '../types';
 
-import { parseClientRequestContext, requestContextQueryString } from '../utils';
+import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
+
+type ToolCallRespondFn<OUTPUT> = (
+  messages: MessageListInput,
+  options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  },
+) => Promise<FullOutput<OUTPUT>>;
 
 async function executeToolCallAndRespond<OUTPUT>({
   response,
@@ -57,7 +73,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
-  respondFn: Agent['generate'];
+  respondFn: ToolCallRespondFn<OUTPUT>;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -110,7 +126,15 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        return respondFn(updatedMessages as MessageListInput, params);
+        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+        } = {
+          ...params,
+        };
+
+        delete (respondOptions as { messages?: MessageListInput }).messages;
+
+        return respondFn(updatedMessages as MessageListInput, respondOptions);
       }
     }
   }
@@ -123,9 +147,23 @@ export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
+    private version?: AgentVersionIdentifier,
   ) {
     super(options);
     this.agentId = agentId;
+  }
+
+  private getQueryString(requestContext?: RequestContext | Record<string, any>, delimiter: string = '?'): string {
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+
+    if (this.version) {
+      new URLSearchParams(toQueryParams(this.version)).forEach((value, key) => {
+        searchParams.set(key, value);
+      });
+    }
+
+    const queryString = searchParams.toString();
+    return queryString ? `${delimiter}${queryString}` : '';
   }
 
   /**
@@ -174,7 +212,7 @@ export class AgentVoice extends BaseResource {
   getSpeakers(
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    return this.request(`/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/voice/speakers${this.getQueryString(requestContext)}`);
   }
 
   /**
@@ -184,7 +222,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing a check if the agent has listening capabilities
    */
   getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    return this.request(`/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/voice/listener${this.getQueryString(requestContext)}`);
   }
 }
 
@@ -194,9 +232,23 @@ export class Agent extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
+    private version?: AgentVersionIdentifier,
   ) {
     super(options);
-    this.voice = new AgentVoice(options, this.agentId);
+    this.voice = new AgentVoice(options, this.agentId, this.version);
+  }
+
+  private getQueryString(requestContext?: RequestContext | Record<string, any>, delimiter: string = '?'): string {
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+
+    if (this.version) {
+      new URLSearchParams(toQueryParams(this.version)).forEach((value, key) => {
+        searchParams.set(key, value);
+      });
+    }
+
+    const queryString = searchParams.toString();
+    return queryString ? `${delimiter}${queryString}` : '';
   }
 
   /**
@@ -205,7 +257,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing agent details including model and instructions
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
-    return this.request(`/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
   }
 
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
@@ -229,6 +281,136 @@ export class Agent extends BaseResource {
         requestContext: parseClientRequestContext(requestContext),
       },
     });
+  }
+
+  /**
+   * Lists all override versions for this code agent
+   * @param params - Optional pagination and sorting parameters
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing paginated list of versions
+   */
+  listVersions(
+    params?: ListAgentVersionsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentVersionsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) queryParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
+    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+
+    const queryString = queryParams.toString();
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+    );
+  }
+
+  /**
+   * Creates a new override version snapshot for this code agent
+   * @param params - Optional override fields and change message for the version
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the created version
+   */
+  createVersion(
+    params?: CreateCodeAgentVersionParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<AgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+        body: params || {},
+      },
+    );
+  }
+
+  /**
+   * Retrieves a specific override version by its ID
+   * @param versionId - The UUID of the version to retrieve
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the version details
+   */
+  getVersion(versionId: string, requestContext?: RequestContext | Record<string, any>): Promise<AgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+    );
+  }
+
+  /**
+   * Activates a specific override version for this code agent
+   * @param versionId - The UUID of the version to activate
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the activated version details
+   */
+  activateVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Restores a version by creating a new override version with the same configuration
+   * @param versionId - The UUID of the version to restore
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the newly created version
+   */
+  restoreVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<RestoreAgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Deletes a specific override version
+   * @param versionId - The UUID of the version to delete
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise that resolves with deletion response
+   */
+  deleteVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteAgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Compares two override versions and returns their differences
+   * @param fromId - The UUID of the source version
+   * @param toId - The UUID of the target version
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the comparison results
+   */
+  compareVersions(
+    fromId: string,
+    toId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<CompareVersionsResponse> {
+    const queryParams = new URLSearchParams();
+    queryParams.set('from', fromId);
+    queryParams.set('to', toId);
+
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/versions/compare?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+    );
   }
 
   /**
@@ -374,7 +556,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
-        respondFn: this.generate.bind(this),
+        respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -1373,7 +1555,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveNetworkToolCall(params: { runId: string }): Promise<
+  async approveNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1382,9 +1567,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1418,7 +1604,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineNetworkToolCall(params: { runId: string }): Promise<
+  async declineNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1427,9 +1616,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1577,7 +1767,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async approveToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1586,6 +1780,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1595,7 +1792,7 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'approve-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController!, 'approve-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1625,7 +1822,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async declineToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1634,6 +1835,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1643,7 +1847,7 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'decline-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController!, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1677,10 +1881,15 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async approveToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 
@@ -1688,10 +1897,15 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async declineToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 
@@ -1859,7 +2073,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing tool details
    */
   getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
-    return this.request(`/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/tools/${toolId}${this.getQueryString(requestContext)}`);
   }
 
   /**

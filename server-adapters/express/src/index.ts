@@ -291,13 +291,27 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        response.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             response.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          response.off('error', onResError);
           response.end();
         }
       } else {

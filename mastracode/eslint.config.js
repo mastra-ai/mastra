@@ -10,4 +10,7 @@ export default [
     files: ['**/*.ts?(x)'],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    ignores: ['scripts/**'],
+  },
 ];

@@ -120,6 +120,9 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['experiment-results', variables.experimentId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
       void queryClient.invalidateQueries({ queryKey: ['review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-completed-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
     },
   });
 

@@ -80,7 +80,8 @@ describe('createNodeServer host binding', () => {
 
     serveMock.mockImplementation((options: any, callback?: () => void) => {
       callback?.();
-      return { close: vi.fn(), options };
+      // Mock server needs `on` method for @hono/node-ws injectWebSocket
+      return { close: vi.fn(), on: vi.fn(), options };
     });
 
     mockMastra = {
@@ -108,7 +109,7 @@ describe('createNodeServer host binding', () => {
       port: 4111,
       hostname: undefined,
     });
-    expect(logger.info).toHaveBeenCalledWith(' Mastra API running on http://localhost:4111/api');
+    expect(logger.info).toHaveBeenCalledWith('Mastra API running', { url: 'http://localhost:4111/api' });
   });
 
   it('uses MASTRA_HOST when it is set', async () => {
@@ -120,6 +121,6 @@ describe('createNodeServer host binding', () => {
       port: 4111,
       hostname: '0.0.0.0',
     });
-    expect(logger.info).toHaveBeenCalledWith(' Mastra API running on http://0.0.0.0:4111/api');
+    expect(logger.info).toHaveBeenCalledWith('Mastra API running', { url: 'http://0.0.0.0:4111/api' });
   });
 });

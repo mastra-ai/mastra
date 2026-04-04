@@ -620,6 +620,9 @@ export class AIV5Adapter {
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
           updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            matchingV2Part.providerMetadata = toolResultPart.providerOptions;
+          }
         } else {
           const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
             type: 'tool-invocation' as const,
@@ -631,6 +634,9 @@ export class AIV5Adapter {
             },
           };
           updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            toolInvocationPart.providerMetadata = toolResultPart.providerOptions;
+          }
           mastraDBParts.push(toolInvocationPart);
         }
       } else if (part.type === 'reasoning') {

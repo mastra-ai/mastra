@@ -8,6 +8,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
+import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
@@ -19,15 +20,23 @@ import { useAutoscroll } from '@/hooks/use-autoscroll';
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
+  threadId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
+  const { hasSession, viewMode, isInSidebar } = useBrowserSession();
+
+  // Show thumbnail in chat when:
+  // 1. There's an active session
+  // 2. View mode is collapsed or expanded (not modal)
+  // 3. NOT currently viewing browser in sidebar
+  const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded') && !isInSidebar;
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
@@ -57,6 +66,13 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelS
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
+      {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
+      {showThumbnailInChat && agentId && threadId && (
+        <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
+          <BrowserThumbnail agentName={agentName} />
+        </div>
+      )}
+
       <Composer
         hasMemory={hasMemory}
         agentId={agentId}
@@ -82,7 +98,7 @@ export interface ThreadWelcomeProps {
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   return (
     <ThreadPrimitive.Empty>
-      <div className="flex w-full flex-grow flex-col items-center pt-[15vh]">
+      <div className="flex w-full grow flex-col items-center pt-[15vh]">
         <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
@@ -110,12 +126,12 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
               autoFocus={false}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
               placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
               id=""

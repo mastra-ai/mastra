@@ -27,11 +27,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/project-structure',
           label: 'Project Structure',
         },
@@ -44,6 +39,32 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Studio',
+      items: [
+        {
+          type: 'doc',
+          id: 'studio/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'studio/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'studio/auth',
+          label: 'Auth',
+        },
+        {
+          type: 'doc',
+          id: 'studio/observability',
+          label: 'Observability',
         },
       ],
     },
@@ -97,6 +118,14 @@ const sidebars = {
           type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -244,37 +273,6 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/publishing-mcp-server',
           label: 'Publishing an MCP Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'RAG',
-      items: [
-        {
-          type: 'doc',
-          id: 'rag/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'rag/chunking-and-embedding',
-          label: 'Chunking and Embedding',
-        },
-        {
-          type: 'doc',
-          id: 'rag/vector-databases',
-          label: 'Vector Databases',
-        },
-        {
-          type: 'doc',
-          id: 'rag/retrieval',
-          label: 'Retrieval',
-        },
-        {
-          type: 'doc',
-          id: 'rag/graph-rag',
-          label: 'GraphRAG',
         },
       ],
     },
@@ -440,11 +438,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'deployment/monorepo',
           label: 'Monorepo',
         },
@@ -462,40 +455,6 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/workflow-runners',
           label: 'Workflow Runners',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Mastra Cloud',
-      customProps: {
-        tags: ['beta'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-cloud/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
         },
       ],
     },
@@ -611,17 +570,12 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Datasets',
+          label: 'Metrics',
           items: [
             {
               type: 'doc',
-              id: 'observability/datasets/overview',
+              id: 'observability/metrics/overview',
               label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'observability/datasets/running-experiments',
-              label: 'Running Experiments',
             },
           ],
         },
@@ -651,6 +605,82 @@ const sidebars = {
           id: 'evals/running-in-ci',
           label: 'Running in CI',
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'evals/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'evals/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Cloud',
+      customProps: {
+        tags: ['beta'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-cloud/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/setup',
+          label: 'Setup',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-cloud/observability',
+          label: 'Observability',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'RAG',
+      items: [
+        {
+          type: 'doc',
+          id: 'rag/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'rag/chunking-and-embedding',
+          label: 'Chunking and Embedding',
+        },
+        {
+          type: 'doc',
+          id: 'rag/vector-databases',
+          label: 'Vector Databases',
+        },
+        {
+          type: 'doc',
+          id: 'rag/retrieval',
+          label: 'Retrieval',
+        },
+        {
+          type: 'doc',
+          id: 'rag/graph-rag',
+          label: 'GraphRAG',
+        },
       ],
     },
     {
@@ -679,7 +709,6 @@ const sidebars = {
         },
       ],
     },
-
     {
       type: 'category',
       label: 'Build with AI',

@@ -378,20 +378,42 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.borderedBox.setInteractive(this.selectList, this.input, hintText);
   }
 
+  private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
+
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
     const items: SelectItem[] = opts.map(opt => ({
       value: opt.label,
       label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
     }));
 
+    // Append a "Custom response..." option so the user can type a free-text answer
+    items.push({
+      value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
+      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+    });
+
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
     this.selectList.onSelect = (item: SelectItem) => {
+      if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {
+        this.switchToCustomInput();
+        return;
+      }
       this.handleAnswer(item.value);
     };
     this.selectList.onCancel = () => {
       this.handleCancel();
     };
+  }
+
+  private switchToCustomInput(): void {
+    // Tear down the select list and switch to free-text input
+    this.selectList = undefined;
+    this.buildInputMode();
+
+    // Clear items so the answered state renders as free-text, not select
+    this.borderedBox.items = [];
+    this.borderedBox.setInteractive(undefined, this.input, 'Enter to submit · Esc to skip');
   }
 
   private buildInputMode(): void {

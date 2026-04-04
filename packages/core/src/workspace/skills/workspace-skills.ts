@@ -163,10 +163,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Resolve a skill by exact path (escape hatch for disambiguation).
    * Searches across all candidate arrays.
+   * Accepts paths with or without a trailing `/SKILL.md` suffix, since
+   * SkillsProcessor.formatLocation() exposes `${path}/SKILL.md` to the LLM.
    */
   #resolveByPath(skillPath: string): InternalSkill | null {
+    const normalized = skillPath.replace(/\/SKILL\.md$/, '');
     for (const candidates of this.#skills.values()) {
-      const match = candidates.find(s => s.path === skillPath);
+      const match = candidates.find(s => s.path === normalized);
       if (match) return match;
     }
     return null;
