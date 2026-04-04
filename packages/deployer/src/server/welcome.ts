@@ -5,7 +5,6 @@ export const html = `
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Server</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/inter-ui/3.19.3/inter.min.css" />
     <style>
       * { box-sizing: border-box; }
 
@@ -14,7 +13,7 @@ export const html = `
         padding: 0;
         background-color: #0a0a0a;
         color: #e4e4e7;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
         min-height: 100vh;
         line-height: 1.6;
       }
