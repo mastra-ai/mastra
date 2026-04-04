@@ -22,10 +22,10 @@ import type { Tool } from '../tools/tool';
 import { commandExists } from '../workspace/sandbox/native-sandbox/detect';
 import type { ProcessHandle, SandboxProcessManager } from '../workspace/sandbox/process-manager';
 import { MastraBrowser } from './browser';
-import type { BrowserConfig, MouseEventParams, KeyboardEventParams } from './browser';
+import type { BrowserConfigBase, MouseEventParams, KeyboardEventParams } from './browser';
 import { ScreencastStream } from './screencast/screencast-stream';
 import type { CdpSessionLike, CdpSessionProvider, ScreencastOptions } from './screencast/types';
-import type { BrowserState, BrowserTabState } from './thread-manager';
+import type { BrowserScope, BrowserState, BrowserTabState } from './thread-manager';
 import { BrowserViewerThreadManager } from './viewer-thread-manager';
 import type { ThreadCdpConnection } from './viewer-thread-manager';
 
@@ -154,7 +154,7 @@ export const CLI_SKILL_REPOS: Record<BuiltInCLIProvider, { repo: string; skill: 
 // Types
 // ---------------------------------------------------------------------------
 
-export interface BrowserViewerConfig extends BrowserConfig {
+export interface BrowserViewerConfig extends BrowserConfigBase {
   /**
    * CLI provider for browser automation.
    * BrowserViewer will get the CDP URL from this CLI.
@@ -174,6 +174,13 @@ export interface BrowserViewerConfig extends BrowserConfig {
    * enabling proper CDP port discovery and thread isolation.
    */
   processManager?: SandboxProcessManager;
+
+  /**
+   * Browser scope for thread isolation.
+   * - 'shared': All threads share one browser (default for CLI providers)
+   * - 'thread': Each thread gets its own browser instance
+   */
+  scope?: BrowserScope;
 }
 
 export interface BrowserViewerEvents {
@@ -382,7 +389,12 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
   private sharedState: ThreadBrowserState | null = null;
 
   constructor(config: BrowserViewerConfig = {}) {
-    super(config);
+    // Pass base config properties to MastraBrowser
+
+    const { cli, execCommand, processManager, scope, ...baseConfig } = config;
+    // BrowserViewer doesn't use cdpUrl from config (it discovers it from CLI)
+    // so we can safely pass the base config as a no-cdpUrl BrowserConfig
+    super({ ...baseConfig, scope } as { scope?: BrowserScope });
     this.viewerConfig = config;
     this.id = `browser-viewer-${Date.now()}`;
 
@@ -2100,6 +2112,38 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
     const targets = [...this.pageTargets.keys()];
     const index = targets.indexOf(this.activeTargetId);
     return index >= 0 ? index : 0;
+  }
+
+  /**
+   * Get the active page for a thread (returns object with url() method).
+   * Used by screencast reconnection to emit the current URL.
+   */
+  protected override async getActivePage(_threadId?: string): Promise<{ url(): string } | null> {
+    const activeTarget = this.getActiveTarget();
+    if (!activeTarget) return null;
+    return { url: () => activeTarget.url };
+  }
+
+  /**
+   * Get the current browser state for a thread.
+   * Used for state persistence and restoration.
+   */
+  protected override getBrowserStateForThread(_threadId?: string): BrowserState | null {
+    if (!this.isBrowserRunning() || this.pageTargets.size === 0) {
+      return null;
+    }
+
+    const tabs = [...this.pageTargets.values()].map(target => ({
+      url: target.url,
+      title: target.title,
+    }));
+
+    const activeIndex = this.activeTargetId ? [...this.pageTargets.keys()].indexOf(this.activeTargetId) : 0;
+
+    return {
+      tabs,
+      activeTabIndex: activeIndex >= 0 ? activeIndex : 0,
+    };
   }
 
   /**

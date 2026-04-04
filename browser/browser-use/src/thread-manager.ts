@@ -174,13 +174,7 @@ export class BrowserUseThreadManager extends ThreadManager<BrowserSessionInfo> {
     };
   }
 
-  /**
-   * Switch to an existing session.
-   * For cloud sessions, this is a no-op since each session is independent.
-   */
-  protected override async switchToSession(_session: ThreadSession): Promise<void> {
-    // No-op for cloud sessions - they're independent
-  }
+
 
   /**
    * Get the browser manager (session info) for a specific session.

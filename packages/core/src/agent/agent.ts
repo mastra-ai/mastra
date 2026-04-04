@@ -9,6 +9,7 @@ import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
+import { AgentChannels } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -62,6 +63,7 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import type { ToolToConvert } from '../tools/tool-builder/builder';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -175,6 +177,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
   #voice: MastraVoice;
+  #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
@@ -301,6 +304,18 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.channels) {
+      if (config.channels instanceof AgentChannels) {
+        this.#agentChannels = config.channels;
+      } else if (config.channels.adapters && Object.keys(config.channels.adapters).length > 0) {
+        this.#agentChannels = new AgentChannels({
+          ...config.channels,
+          userName: config.channels.userName ?? config.name,
+        });
+      }
+      this.#agentChannels?.__setAgent(this);
+    }
+
     if (config.browser) {
       this.#browser = config.browser;
     }
@@ -334,8 +349,18 @@ export class Agent<
   }
 
   /**
-   * Returns the browser toolset for this agent, if configured.
-   * Used by server-side code to access browser features like screencast streaming.
+   * Returns the AgentChannels instance that manages all channel adapters.
+   * Returns null if no channels are configured.
+   */
+  getChannels(): AgentChannels | null {
+    return this.#agentChannels;
+  }
+
+  /**
+   * Returns the browser instance for this agent, if configured.
+   * Browser tools are automatically added at execution time via `convertTools()`.
+   * This getter is primarily used by server-side code to access browser features
+   * like screencast streaming and input injection.
    */
   get browser(): MastraBrowser | undefined {
     return this.#browser;
@@ -641,11 +666,27 @@ export class Agent<
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
+    // Get channel input processors (with deduplication)
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
+
+    // Get browser context processors (with deduplication)
+    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
+
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
-    // Skills processors run after workspace but before user-configured processors
-    const allProcessors = [...memoryProcessors, ...workspaceProcessors, ...skillsProcessors, ...configuredProcessors];
+    // Skills processors run after workspace
+    // Channel processors run after skills (context injection for platform awareness)
+    // Browser processors run after channel processors to inject browser context
+    // User-configured processors run last to allow customization
+    const allProcessors = [
+      ...memoryProcessors,
+      ...workspaceProcessors,
+      ...skillsProcessors,
+      ...channelProcessors,
+      ...browserProcessors,
+      ...configuredProcessors,
+    ];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
@@ -938,8 +979,6 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
-        // Set browser from workspace if not already set (CLI browser approach)
-        await this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -965,36 +1004,11 @@ export class Agent<
         });
       }
 
-      // Set browser from workspace if not already set (CLI browser approach)
-      await this.#setBrowserFromWorkspace(resolvedWorkspace);
-
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    const globalWorkspace = this.#mastra?.getWorkspace();
-    if (globalWorkspace) {
-      await this.#setBrowserFromWorkspace(globalWorkspace);
-    }
-    return globalWorkspace;
-  }
-
-  /**
-   * Sets the agent's browser from workspace's BrowserViewer if:
-   * 1. Agent doesn't already have a browser configured (SDK approach)
-   * 2. Workspace has browser capabilities (CLI approach)
-   */
-  async #setBrowserFromWorkspace(workspace: AnyWorkspace): Promise<void> {
-    // Skip if agent already has a browser (SDK approach takes precedence)
-    if (this.#browser) {
-      return;
-    }
-
-    // Check if workspace has browser capabilities
-    const browserViewer = await workspace.getBrowserViewer?.();
-    if (browserViewer) {
-      this.#browser = browserViewer;
-    }
+    return this.#mastra?.getWorkspace();
   }
 
   get voice() {
@@ -1396,7 +1410,7 @@ export class Agent<
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
    *
-   * Note: Browser tools are NOT included here. They are added at execution time via `listBrowserTools()`.
+   * Note: Browser tools are NOT included here. They are added at execution time via `convertTools()`.
    *
    * @example
    * ```typescript
@@ -2164,7 +2178,10 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
-    const workspaceTools = createWorkspaceTools(workspace);
+    const workspaceTools = await createWorkspaceTools(workspace, {
+      requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+      workspace,
+    });
 
     if (Object.keys(workspaceTools).length > 0) {
       this.logger.debug('Adding workspace tools', { agent: this.name, tools: Object.keys(workspaceTools), runId });
@@ -2193,6 +2210,64 @@ export class Agent<
     }
 
     return convertedWorkspaceTools;
+  }
+
+  /**
+   * Returns tools provided by the agent's channels (e.g. discord_send_message).
+   * @internal
+   */
+  private async listChannelTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const convertedChannelTools: Record<string, CoreTool> = {};
+
+    if (!this.#agentChannels) {
+      return convertedChannelTools;
+    }
+
+    const channelTools = this.#agentChannels.getTools();
+
+    if (Object.keys(channelTools).length > 0) {
+      const memory = await this.getMemory({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(channelTools)) {
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          requestContext,
+          ...observabilityContext,
+          tracingPolicy: this.#options?.tracingPolicy,
+        };
+        convertedChannelTools[toolName] = makeCoreTool(
+          tool as ToolToConvert,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
+      }
+    }
+
+    return convertedChannelTools;
   }
 
   /**
@@ -2270,7 +2345,6 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    mastraProxy,
     autoResumeSuspendedTools,
     ...rest
   }: {
@@ -2278,7 +2352,6 @@ export class Agent<
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -2309,14 +2382,14 @@ export class Agent<
           threadId,
           resourceId,
           logger: this.logger,
-          mastra: mastraProxy as MastraUnion | undefined,
+          mastra: undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
-          browser: this.#browser,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedBrowserTools[toolName] = convertedToCoreTool;
@@ -2357,7 +2430,9 @@ export class Agent<
       this.#inputProcessors ||
       this.#memory ||
       this.#workspace ||
-      this.#mastra?.getWorkspace()
+      this.#mastra?.getWorkspace() ||
+      this.#browser ||
+      this.#agentChannels
     ) {
       const runner = await this.getProcessorRunner({
         requestContext,
@@ -2941,6 +3016,19 @@ export class Agent<
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
 
+            // Save and clear reserved thread/resource keys so they don't override the
+            // sub-agent's isolated memory config. These keys take precedence over the
+            // memory option in generate/stream, so leaving them would cause the
+            // sub-agent to write to the parent's thread instead of its own.
+            const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+            const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+            if (savedThreadIdKey !== undefined) {
+              requestContext.delete(MASTRA_THREAD_ID_KEY);
+            }
+            if (savedResourceIdKey !== undefined) {
+              requestContext.delete(MASTRA_RESOURCE_ID_KEY);
+            }
+
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
@@ -3042,6 +3130,13 @@ export class Agent<
                           error: memoryError,
                         });
                       }
+                    }
+
+                    if (savedThreadIdKey !== undefined) {
+                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                    }
+                    if (savedResourceIdKey !== undefined) {
+                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
                     }
 
                     return {
@@ -3219,6 +3314,12 @@ export class Agent<
                 }
 
                 if (generateResult.finishReason === 'suspended') {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(generateResult.suspendPayload, {
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
@@ -3360,6 +3461,12 @@ export class Agent<
                 }
 
                 if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
@@ -3474,6 +3581,12 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+              }
 
               return result;
             } catch (err) {
@@ -3547,11 +3660,16 @@ export class Agent<
                 }
               }
 
-              // Wrap error in MastraError
               // Restore even on error so the parent's retry/fallback logic
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
+              }
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
               }
 
               const mastraError = new MastraError(
@@ -3992,13 +4110,22 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
-    const browserTools = await this.listBrowserTools({
+    const channelTools = await this.listChannelTools({
       runId,
       resourceId,
       threadId,
       requestContext,
       ...observabilityContext,
       mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
+    const browserTools = await this.listBrowserTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
       autoResumeSuspendedTools,
     });
 
@@ -4011,6 +4138,7 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
+      ...channelTools,
       ...browserTools,
     };
     return this.formatTools(allTools);
@@ -4298,17 +4426,26 @@ export class Agent<
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
+      // Normalize memory.thread which can be a string or { id, ... } object
+      const memoryThread = options.memory?.thread;
+      const memoryThreadId = typeof memoryThread === 'string' ? memoryThread : memoryThread?.id;
       const browserThreadId =
         (requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
-        options.memory?.thread ||
+        memoryThreadId ||
         snapshotMemoryInfo?.threadId;
+
+      // Use thread-aware running check to avoid cross-thread state leakage
+      // In thread scope, only report running if this specific thread has a session
+      const isThreadRunning = browserThreadId
+        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
+        : this.#browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
         provider: this.#browser.provider,
-        sessionId: this.#browser.id,
-        headless: (this.#browser as any).config?.headless,
+        sessionId: this.#browser.getSessionId(browserThreadId),
+        headless: this.#browser.headless,
         currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
-        isRunning: this.#browser.isBrowserRunning(),
+        isRunning: isThreadRunning,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4330,14 +4467,16 @@ export class Agent<
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
-    if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
-      this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
-    }
-
     const llm = (await this.getLLM({
       requestContext,
       model: options.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     })) as MastraLLMVNext;
+
+    const resolvedModel = llm.getModel();
+    const isGatewayModel = resolvedModel instanceof ModelRouterLanguageModel && resolvedModel.gatewayId === 'mastra';
+    if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
+      this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
+    }
 
     // Apply null→undefined transform for OpenAI structured output validation.
     // OpenAI strict mode sends null for optional fields, but schemas like Zod's .optional()

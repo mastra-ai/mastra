@@ -168,6 +168,7 @@ const trajectoryExpectationSchema = z
     maxRetriesPerTool: z.number().int().optional().describe('Maximum retries per tool before penalizing (default: 2)'),
   })
   .optional()
+  .nullable()
   .describe('Expected trajectory configuration for trajectory scoring');
 
 // Dataset item source tracking

@@ -638,6 +638,26 @@ export class BrowserUseBrowser extends MastraBrowser implements CdpSessionProvid
   }
 
   /**
+   * Get the active page for a thread (returns object with url() method).
+   * Used by screencast reconnection to emit the current URL.
+   */
+  protected override async getActivePage(_threadId?: string): Promise<{ url(): string } | null> {
+    const url = this.lastBrowserUrl;
+    if (!url) return null;
+    return { url: () => url };
+  }
+
+  /**
+   * Get the current browser state for a thread.
+   * Used for state persistence and restoration.
+   */
+  protected override getBrowserStateForThread(_threadId?: string): BrowserState | null {
+    const url = this.lastBrowserUrl;
+    if (!url) return null;
+    return this.getBrowserStateFromUrl(url);
+  }
+
+  /**
    * Get the current browser state (all tabs and active tab index).
    * Note: Browser-use currently only tracks single tabs via CDP.
    */
