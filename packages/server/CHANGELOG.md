@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Fixed gateway memory client failing with 404 when MASTRA_GATEWAY_URL includes a /v1 suffix (e.g. https://gateway-api.mastra.ai/v1). The URL is now normalized before appending the memory base path, matching how the model router handles the same variable. ([#15054](https://github.com/mastra-ai/mastra/pull/15054))
+
+- Updated dependencies:
+  - @mastra/core@1.23.0-alpha.2
+
 ## 1.23.0-alpha.1
 
 ### Patch Changes
