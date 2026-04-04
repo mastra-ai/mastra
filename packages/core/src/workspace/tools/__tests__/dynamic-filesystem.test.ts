@@ -20,11 +20,11 @@ describe('dynamic filesystem tools', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('should create filesystem tools when workspace has a filesystem resolver', () => {
+  it('should create filesystem tools when workspace has a filesystem resolver', async () => {
     const resolver = () => new LocalFilesystem({ basePath: tempDir });
     const workspace = new Workspace({ filesystem: resolver });
 
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
@@ -39,7 +39,7 @@ describe('dynamic filesystem tools', () => {
 
     const resolver = () => new LocalFilesystem({ basePath: tempDir });
     const workspace = new Workspace({ filesystem: resolver });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const ctx = { requestContext: new RequestContext() };
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
@@ -62,7 +62,7 @@ describe('dynamic filesystem tools', () => {
         return role === 'admin' ? new LocalFilesystem({ basePath: dirA }) : new LocalFilesystem({ basePath: dirB });
       };
       const workspace = new Workspace({ filesystem: resolver });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const adminResult = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
         { path: 'data.txt', showLineNumbers: false },
@@ -84,7 +84,7 @@ describe('dynamic filesystem tools', () => {
   it('should block writes on read-only resolved filesystem at execution time', async () => {
     const resolver = () => new LocalFilesystem({ basePath: tempDir, readOnly: true });
     const workspace = new Workspace({ filesystem: resolver });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const ctx = { requestContext: new RequestContext() };
 
@@ -118,7 +118,7 @@ describe('dynamic filesystem tools', () => {
 
     const resolver = () => new LocalFilesystem({ basePath: tempDir, readOnly: true });
     const workspace = new Workspace({ filesystem: resolver });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const ctx = { requestContext: new RequestContext() };
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
