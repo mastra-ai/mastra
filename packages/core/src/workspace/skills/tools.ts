@@ -180,14 +180,13 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         attributes: { filePath: path },
       });
 
-      // Resolve skill by name or path (get() handles both with tie-breaking)
-      const resolved = await resolveSkill(skills, skillName);
-      if ('notFound' in resolved) {
-        span.end({ success: false });
-        return resolved.notFound;
-      }
-
       try {
+        // Resolve skill by name or path (get() handles both with tie-breaking)
+        const resolved = await resolveSkill(skills, skillName);
+        if ('notFound' in resolved) {
+          span.end({ success: false });
+          return resolved.notFound;
+        }
         const resolvedPath = resolved.skill.path;
 
         // Try each reader using the resolved path to target the exact skill candidate
