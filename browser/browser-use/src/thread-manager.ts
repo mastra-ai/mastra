@@ -174,8 +174,6 @@ export class BrowserUseThreadManager extends ThreadManager<BrowserSessionInfo> {
     };
   }
 
-
-
   /**
    * Get the browser manager (session info) for a specific session.
    */
