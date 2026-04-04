@@ -351,19 +351,19 @@ export function welcomeHtml(apiPrefix: string = '/api') {
       <section>
         <h2>Resources</h2>
         <div class="links-grid">
-          <a href="https://mastra.ai/docs" target="_blank" class="link-card">
+          <a href="https://mastra.ai/docs" target="_blank" rel="noopener noreferrer" class="link-card">
             <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             Documentation
           </a>
-          <a href="https://mastra.ai/docs/server-db/custom-api-routes" target="_blank" class="link-card">
+          <a href="https://mastra.ai/docs/server-db/custom-api-routes" target="_blank" rel="noopener noreferrer" class="link-card">
             <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
             Custom API Routes
           </a>
-          <a href="https://mastra.ai/docs/agents/overview" target="_blank" class="link-card">
+          <a href="https://mastra.ai/docs/agents/overview" target="_blank" rel="noopener noreferrer" class="link-card">
             <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-7.8-15.4 2.8 2.8m9.6 9.6 2.8 2.8M1 12h4m14 0h4M4.2 19.8l2.8-2.8m9.6-9.6 2.8-2.8"/></svg>
             Agents Guide
           </a>
-          <a href="https://mastra.ai/docs/workflows/overview" target="_blank" class="link-card">
+          <a href="https://mastra.ai/docs/workflows/overview" target="_blank" rel="noopener noreferrer" class="link-card">
             <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
             Workflows Guide
           </a>
@@ -371,7 +371,7 @@ export function welcomeHtml(apiPrefix: string = '/api') {
       </section>
 
       <footer>
-        Powered by <a href="https://mastra.ai" target="_blank" style="color:#71717a;">Mastra</a>
+        Powered by <a href="https://mastra.ai" target="_blank" rel="noopener noreferrer" style="color:#71717a;">Mastra</a>
       </footer>
     </div>
 
