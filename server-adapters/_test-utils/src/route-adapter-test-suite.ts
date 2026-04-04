@@ -90,6 +90,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/sso/callback',
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
+      '/auth/refresh',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [

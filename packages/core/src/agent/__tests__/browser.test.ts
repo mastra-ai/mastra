@@ -48,6 +48,7 @@ function createMockBrowser(
     provider: options.provider ?? 'mock',
     headless: options.headless ?? true,
     getTools: () => tools,
+    getInputProcessors: vi.fn().mockReturnValue([]),
     isBrowserRunning: vi.fn().mockReturnValue(true),
     hasThreadSession: vi.fn().mockReturnValue(true),
     getSessionId: vi
