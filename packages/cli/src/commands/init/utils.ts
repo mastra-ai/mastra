@@ -338,8 +338,13 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
-  const modelString = getModelIdentifier(llmProvider);
+export async function writeScorersSample(
+  llmProvider: LLMProvider,
+  destPath: string,
+  connectionMethod: ConnectionMethod = 'direct',
+) {
+  const rawModel = getModelIdentifier(llmProvider);
+  const modelString = connectionMethod === 'gateway' ? `mastra/${rawModel}` : rawModel;
   const content = `import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
@@ -450,7 +455,7 @@ export async function writeCodeSampleForComponents(
     case 'workflows':
       return writeWorkflowSample(destPath);
     case 'scorers':
-      return writeScorersSample(llmprovider, destPath);
+      return writeScorersSample(llmprovider, destPath, connectionMethod);
     default:
       return '';
   }
