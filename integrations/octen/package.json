@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts --no-dts",
+    "build": "tsup --silent --config tsup.config.ts",
     "clean": "rm -rf dist",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
