@@ -544,7 +544,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
           ...((payload.payload as any).response || {}),
-          messages: stepRun.response.messages || [],
+          messages:
+            ((payload.payload as any).response?.messages as typeof stepRun.response.messages) ??
+            stepRun.response.messages ??
+            [],
         },
       };
 
