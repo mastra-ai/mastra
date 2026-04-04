@@ -41,6 +41,8 @@ const SPAN_TYPE_CONFIG: Record<SpanType, { opType: string; opName: string }> = {
   [SpanType.GENERIC]: { opType: 'ai.span', opName: 'span' },
   [SpanType.MODEL_STEP]: { opType: 'ai.span', opName: 'step' },
   [SpanType.MODEL_CHUNK]: { opType: 'ai.span', opName: 'step' },
+  [SpanType.SCORER_RUN]: { opType: 'workflow.run', opName: 'eval' },
+  [SpanType.SCORER_STEP]: { opType: 'workflow.step', opName: 'step' },
 };
 
 const ATTRIBUTE_KEYS = {

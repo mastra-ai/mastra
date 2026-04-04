@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { AgentMetadata } from '../agent-metadata';
 import { AgentSettings } from '../agent-settings';
+import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
 import { AgentMemory } from './agent-memory';
 import { useMemory } from '@/domains/memory/hooks';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
@@ -17,6 +19,7 @@ export interface AgentInformationProps {
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { hasSession, isInSidebar } = useBrowserSession();
   const hasMemory = !isMemoryLoading && Boolean(memory?.result);
 
   const { selectedTab, handleTabChange } = useAgentInformationTab({
@@ -28,7 +31,15 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
     <AgentInformationLayout>
       <AgentEntityHeader agentId={agentId} />
 
-      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
+      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col relative">
+        {/* Browser sidebar overlay - takes over when in sidebar mode */}
+        {hasSession && isInSidebar && (
+          <div className="absolute inset-0 z-10 bg-surface1">
+            <BrowserSidebarTab />
+          </div>
+        )}
+
+        {/* Normal tabs - always rendered but hidden when browser overlay is active */}
         <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
@@ -54,7 +65,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
           {hasMemory && (
             <TabContent value="memory">
-              <AgentMemory agentId={agentId} threadId={threadId} />
+              <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
             </TabContent>
           )}
 
@@ -73,27 +84,36 @@ export interface UseAgentInformationTabArgs {
   isMemoryLoading: boolean;
   hasMemory: boolean;
 }
+
+// Valid tab values that can be persisted
+const VALID_TABS = new Set(['overview', 'model-settings', 'memory', 'request-context', 'tracing-options']);
+
 export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
-    return sessionStorage.getItem(STORAGE_KEY) || 'overview';
+    const stored = sessionStorage.getItem(STORAGE_KEY) || 'overview';
+    // Validate stored tab is a known valid tab
+    if (!VALID_TABS.has(stored)) return 'overview';
+    return stored;
   });
 
-  const handleTabChange = (value: string) => {
+  // Compute effective tab - handle unavailable tabs
+  const effectiveTab = (() => {
+    // Unknown tab values fall back to overview
+    if (!VALID_TABS.has(selectedTab)) return 'overview';
+    // Memory tab requires memory to be available
+    if (selectedTab === 'memory' && !isMemoryLoading && !hasMemory) {
+      return 'overview';
+    }
+    return selectedTab;
+  })();
+
+  const handleTabChange = useCallback((value: string) => {
     setSelectedTab(value);
     sessionStorage.setItem(STORAGE_KEY, value);
-  };
-
-  // Switch away from memory tab if memory is disabled (not just loading)
-  useEffect(() => {
-    if (!isMemoryLoading && !hasMemory && selectedTab === 'memory') {
-      // Switch to overview tab if memory is disabled
-      setSelectedTab('overview');
-      sessionStorage.setItem(STORAGE_KEY, 'overview');
-    }
-  }, [isMemoryLoading, hasMemory, selectedTab]);
+  }, []);
 
   return {
-    selectedTab,
+    selectedTab: effectiveTab,
     handleTabChange,
   };
 };

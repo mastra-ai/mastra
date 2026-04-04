@@ -1,30 +1,82 @@
 import { json } from '@codemirror/lang-json';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import type { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import ReactCodeMirror, { EditorView } from '@uiw/react-codemirror';
+import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
+import { useIsDarkMode } from '@/store/playground-store';
 
-const useCodemirrorTheme = () => {
-  return useMemo(
-    () =>
-      draculaInit({
-        settings: {
-          fontFamily: 'var(--geist-mono)',
-          fontSize: '0.75rem',
-          lineHighlight: 'transparent',
-          gutterBackground: 'transparent',
-          gutterForeground: '#939393',
-          background: 'transparent',
-        },
-        styles: [{ tag: [t.className, t.propertyName] }],
-      }),
-    [],
-  );
+function buildDarkTheme(): Extension {
+  return draculaInit({
+    settings: {
+      fontFamily: 'var(--geist-mono)',
+      fontSize: '0.75rem',
+      lineHighlight: 'transparent',
+      gutterBackground: 'transparent',
+      gutterForeground: '#939393',
+      background: 'transparent',
+    },
+    styles: [{ tag: [t.className, t.propertyName] }],
+  });
+}
+
+function buildLightTheme(): Extension {
+  const editorTheme = EditorView.theme({
+    '&': {
+      backgroundColor: 'transparent',
+      color: 'var(--neutral6)',
+      fontSize: '0.75rem',
+    },
+    '&.cm-editor .cm-scroller': {
+      fontFamily: 'var(--geist-mono)',
+    },
+    '.cm-gutters': {
+      backgroundColor: 'transparent',
+      color: 'var(--neutral2)',
+      borderRight: 'none',
+    },
+    '.cm-content': {
+      color: 'var(--neutral6)',
+      caretColor: 'var(--neutral6)',
+    },
+    '.cm-activeLine': {
+      backgroundColor: 'transparent',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: 'transparent',
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: 'var(--neutral6)',
+    },
+  });
+
+  const highlightStyle = HighlightStyle.define([
+    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    {
+      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
+      color: 'var(--accent3)',
+    },
+    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
+    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+  ]);
+
+  return [editorTheme, syntaxHighlighting(highlightStyle)];
+}
+
+const useCodemirrorTheme = (): Extension => {
+  const isDark = useIsDarkMode();
+  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
 export interface DataDetailsPanelCodeSectionProps {
@@ -83,7 +135,7 @@ export function DataDetailsPanelCodeSection({
           )}
         </ButtonsGroup>
       </div>
-      <div className="bg-black/20 p-3 overflow-hidden rounded-lg border border-white/10 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
+      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
         {usePlainTextView ? (
           <div className="text-neutral4 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>

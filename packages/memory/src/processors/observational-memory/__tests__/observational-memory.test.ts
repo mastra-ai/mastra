@@ -35,6 +35,7 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from '../observer-agent';
+import { ObserverRunner } from '../observer-runner';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -1096,6 +1097,50 @@ describe('Observer Agent Helpers', () => {
           mimeType: 'application/pdf',
           filename: 'floorplan.pdf',
         }),
+      );
+    });
+
+    it('should inject thread title instructions into the observer request when enabled', async () => {
+      let capturedPrompt: any;
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: 'test-model',
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          threadTitle: true,
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: 'test-model' as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- saw image\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
+        priorThreadTitle: 'Old thread title',
+      });
+
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(capturedPrompt[0].content).toContain(
+        'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
     });
   });
@@ -13198,6 +13243,72 @@ describe('Observer output threadTitle propagation', () => {
     });
     expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
     expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+  });
+
+  it('should persist threadTitle from activated buffered chunks to thread record', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'buf-title-thread';
+    const resourceId = 'buf-title-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'New Thread',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: 10000,
+        bufferActivation: 1,
+        threadTitle: true,
+      },
+      reflection: { observationTokens: 100000 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    // Simulate a buffered chunk that includes a threadTitle
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- User building a React dashboard',
+        tokenCount: 100,
+        messageIds: ['msg-1', 'msg-2'],
+        messageTokens: 45000,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'cycle-title-1',
+        threadTitle: 'React Dashboard Project',
+        currentTask: 'Building the dashboard',
+        suggestedContinuation: 'Let me help with that.',
+      },
+    });
+
+    const result = await om.activate({ threadId, resourceId });
+    expect(result.activated).toBe(true);
+
+    // Verify threadTitle was persisted to the thread record
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('React Dashboard Project');
+
+    // Verify OM metadata includes the threadTitle
+    const omMetadata = ((thread?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omMetadata.threadTitle).toBe('React Dashboard Project');
+    expect(omMetadata.currentTask).toBe('Building the dashboard');
+    expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
   });
 });
 

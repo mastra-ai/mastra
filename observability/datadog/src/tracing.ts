@@ -274,6 +274,18 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
+   * Sets native dd-trace error tags required by Datadog's Error Tracking UI.
+   */
+  private setErrorTags(ddSpan: any, errorInfo: NonNullable<AnyExportedSpan['errorInfo']>): void {
+    ddSpan.setTag('error', true);
+    ddSpan.setTag('error.message', errorInfo.message);
+    ddSpan.setTag('error.type', errorInfo.name ?? errorInfo.category ?? 'Error');
+    if (errorInfo.stack) {
+      ddSpan.setTag('error.stack', errorInfo.stack);
+    }
+  }
+
+  /**
    * Builds annotations object for llmobs.annotate().
    * Uses dd-trace's expected property names: inputData, outputData, metadata, tags, metrics.
    */
@@ -682,9 +694,9 @@ export class DatadogExporter extends BaseExporter {
         tracer.llmobs.annotate(ddSpan, annotations);
       }
 
-      // Set native Datadog error status for proper UI highlighting
+      // Set native Datadog error tags for proper Error Tracking UI
       if (span.errorInfo) {
-        ddSpan.setTag('error', true);
+        this.setErrorTags(ddSpan, span.errorInfo);
       }
 
       // Store context for potential evaluation submissions
@@ -721,9 +733,9 @@ export class DatadogExporter extends BaseExporter {
           tracer.llmobs.annotate(ddSpan, annotations);
         }
 
-        // Set native Datadog error status for proper UI highlighting
+        // Set native Datadog error tags for proper Error Tracking UI
         if (span.errorInfo) {
-          ddSpan.setTag('error', true);
+          this.setErrorTags(ddSpan, span.errorInfo);
         }
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;

@@ -376,6 +376,80 @@ describe('ObservabilityStorageDuckDB', () => {
     await legacyStore.db.close();
   });
 
+  it('relaxes legacy score and feedback traceId columns during init', async () => {
+    const legacyStore = new DuckDBStore({ path: ':memory:' });
+
+    await legacyStore.db.execute(`
+      CREATE TABLE score_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR NOT NULL,
+        spanId VARCHAR,
+        experimentId VARCHAR,
+        scoreTraceId VARCHAR,
+        scorerId VARCHAR NOT NULL,
+        scorerVersion VARCHAR,
+        source VARCHAR,
+        score DOUBLE NOT NULL,
+        reason VARCHAR,
+        metadata JSON
+      )
+    `);
+
+    await legacyStore.db.execute(`
+      CREATE TABLE feedback_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR NOT NULL,
+        spanId VARCHAR,
+        experimentId VARCHAR,
+        userId VARCHAR,
+        source VARCHAR,
+        feedbackType VARCHAR NOT NULL,
+        value VARCHAR NOT NULL,
+        comment VARCHAR,
+        metadata JSON
+      )
+    `);
+
+    await legacyStore.observability.init();
+
+    await legacyStore.observability.createScore({
+      score: {
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        scorerId: 'quality',
+        scoreSource: 'automated',
+        score: 0.8,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      } as any,
+    });
+
+    await legacyStore.observability.createFeedback({
+      feedback: {
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        sourceId: null,
+        metadata: null,
+      } as any,
+    });
+
+    const scores = await legacyStore.observability.listScores({});
+    const feedback = await legacyStore.observability.listFeedback({});
+
+    expect(scores.scores[0]!.traceId).toBeNull();
+    expect(feedback.feedback[0]!.traceId).toBeNull();
+
+    await legacyStore.db.close();
+  });
+
   // ==========================================================================
   // Logs
   // ==========================================================================
@@ -904,6 +978,27 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores[0]!.scoreSource).toBe('manual');
     });
 
+    it('supports nullable traceId for scores at the storage boundary', async () => {
+      await storage.createScore({
+        score: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: null,
+          spanId: null,
+          scorerId: 'quality',
+          scoreSource: 'automated',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listScores({});
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]!.traceId).toBeNull();
+      expect(result.scores[0]!.scoreSource).toBe('automated');
+    });
+
     it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
       await storage.batchCreateScores({
         scores: [
@@ -1067,6 +1162,28 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
       expect(filtered.feedback[0]!.source).toBe('manual');
       expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
+    });
+
+    it('supports nullable traceId for feedback at the storage boundary', async () => {
+      await storage.createFeedback({
+        feedback: {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: null,
+          spanId: null,
+          feedbackSource: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listFeedback({});
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]!.traceId).toBeNull();
+      expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('batch creates and lists feedback', async () => {
