@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@mastra/core/*": ["../../packages/core/src/*"],
+      "@mastra/octen": ["../../integrations/octen/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

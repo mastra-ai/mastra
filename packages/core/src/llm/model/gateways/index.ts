@@ -5,6 +5,7 @@ export { AzureOpenAIGateway, type AzureOpenAIGatewayConfig } from './azure.js';
 export { ModelsDevGateway } from './models-dev.js';
 export { MastraGateway, type MastraGatewayConfig } from './mastra.js';
 export { NetlifyGateway } from './netlify.js';
+export { OctenGateway } from './octen.js';
 
 /**
  * Find the gateway that handles a specific model ID based on gateway ID

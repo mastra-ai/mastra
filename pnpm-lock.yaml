@@ -4,47 +4,14 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-catalogs:
-  default:
-    '@microsoft/api-extractor':
-      specifier: ^7.57.7
-      version: 7.57.7
-    '@vitest/coverage-v8':
-      specifier: 4.0.18
-      version: 4.0.18
-    '@vitest/ui':
-      specifier: 4.0.18
-      version: 4.0.18
-    vitest:
-      specifier: 4.0.18
-      version: 4.0.18
-    zod:
-      specifier: ^4.3.6
-      version: 4.3.6
-
 overrides:
-  typescript: ^5.9.3
-  '@types/node': 22.19.15
-  cookie: '>=1.1.1'
-  tmp: '>=0.2.5'
-  jsondiffpatch: '>=0.7.3'
-  ssri: '>=6.0.2'
-  jws: ^4.0.1
-  client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  better-auth: ^1.4.18
-  js-yaml: ^3.14.2
-  glob@<=10.5.0: 10.5.0
-  body-parser@<=2.2.1: 2.2.2
-  fast-xml-parser@<=5.3.8: 5.5.7
+  '@mastra/core': link:../../packages/core
+  '@mastra/octen': link:../../integrations/octen
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
     hash: 1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535
     path: patches/@changesets__get-dependents-graph.patch
-  fetch-to-node@2.1.0:
-    hash: 42949ba7834aab28b47574e6989b8f3203c3ef91ee1ca866baf4dc8b151d34ae
-    path: patches/fetch-to-node@2.1.0.patch
 
 importers:
 
@@ -1305,6 +1272,27 @@ importers:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  examples/octen:
+    dependencies:
+      '@mastra/core':
+        specifier: link:../../packages/core
+        version: link:../../packages/core
+      '@mastra/octen':
+        specifier: link:../../integrations/octen
+        version: link:../../integrations/octen
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      tsx:
+        specifier: ^4.19.1
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   explorations/longmemeval:
     dependencies:
       '@ai-sdk/google':
@@ -1392,6 +1380,22 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  integrations/octen:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
   integrations/opencode:
     dependencies:

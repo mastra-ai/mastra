@@ -11,6 +11,7 @@ import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
+import { OctenGateway } from './gateways/octen.js';
 import staticRegistry from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
@@ -229,6 +230,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
   const enabledGatewayIds = getEnabledGatewayIds([
     new ModelsDevGateway({}),
     new NetlifyGateway(),
+    new OctenGateway(),
     new MastraGateway(),
     ...customGateways,
   ]);
@@ -509,6 +511,7 @@ export class GatewayRegistry {
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
       const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { OctenGateway } = await import('./gateways/octen.js');
       const { MastraGateway } = await import('./gateways/mastra.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
@@ -516,6 +519,7 @@ export class GatewayRegistry {
       const defaultGateways = [
         new ModelsDevGateway({}),
         new NetlifyGateway(),
+        new OctenGateway(),
         ...(writeToSrc ? [] : [new MastraGateway()]),
       ];
 
