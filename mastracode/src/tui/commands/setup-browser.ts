@@ -236,9 +236,5 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     summary.push(`  Environment: ${stagehandSettings.env}`);
   }
 
-  if (provider === 'agent-browser') {
-    summary.push("  Note: Run 'pnpm exec playwright install chromium' if not already installed");
-  }
-
   ctx.showInfo(summary.join('\n'));
 }
