@@ -238,6 +238,13 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+    isOptional: true,
+  },
+  {
     name: 'heartbeatHandlers',
     type: 'HeartbeatHandler[]',
     description:
@@ -336,7 +343,7 @@ const state = harness.getState()
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
 
 ```typescript
-await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-6' })
 ```
 
 ### Modes
@@ -415,10 +422,10 @@ Switch the active model. When `scope` is `'thread'`, the model ID is persisted t
 
 ```typescript
 // Set for current session only
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6' })
 
 // Persist to the current thread
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-20250514', scope: 'thread' })
+await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6', scope: 'thread' })
 ```
 
 #### `getCurrentModelAuthStatus()`
@@ -758,7 +765,7 @@ Destroy the workspace and release resources. Only applies to static workspaces â
 await harness.destroyWorkspace()
 ```
 
-### Observational memory
+### Observational Memory
 
 #### `loadOMProgress()`
 
@@ -846,7 +853,7 @@ Set the subagent model ID. Pass an `agentType` to set a per-type override, or om
 
 ```typescript
 // Set global subagent model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-6' })
 
 // Set per-type model
 await harness.setSubagentModelId({ modelId: 'anthropic/claude-haiku-3.5', agentType: 'explore' })
@@ -908,7 +915,7 @@ The harness emits events through registered listeners. The following table lists
 | `workspace_status_changed` | The workspace status changed. |
 | `workspace_ready` | The workspace finished initializing. |
 | `workspace_error` | The workspace encountered an error. |
-| `om_status` | Observational memory status update. |
+| `om_status` | Observational Memory status update. |
 | `om_observation_start` | An observation started. |
 | `om_observation_end` | An observation completed. |
 | `om_reflection_start` | A reflection started. |

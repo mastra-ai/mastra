@@ -1,7 +1,7 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
+import { format } from 'date-fns/format';
 import {
   FileOutputIcon,
   Calendar1Icon,
@@ -9,14 +9,15 @@ import {
   FileCodeIcon,
   PanelRightIcon,
   OctagonAlertIcon,
+  TagIcon,
   XIcon,
 } from 'lucide-react';
-import { format } from 'date-fns/format';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { Column } from '@/ds/components/Columns/column';
-import { PrevNextNav } from '@/ds/components/PrevNextNav';
 import { ItemList } from '@/ds/components/ItemList';
 import { MainHeader } from '@/ds/components/MainHeader';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon } from '@/ds/components/Text';
 import { Button, ButtonsGroup, Notice } from '@/index';
 
 const scoreColumns = [
@@ -119,6 +120,36 @@ export function ExperimentResultPanel({
               ))}
             </ItemList.Items>
           </ItemList>
+        )}
+
+        {(result.status || (Array.isArray(result.tags) && result.tags.length > 0)) && (
+          <div className="grid gap-2">
+            <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">
+              <TagIcon className="w-4 h-4" /> Review Status
+            </h4>
+            <div className="flex flex-wrap gap-2 items-center">
+              {result.status && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    result.status === 'needs-review'
+                      ? 'bg-warning/10 text-warning'
+                      : result.status === 'complete'
+                        ? 'bg-accent1/10 text-accent1'
+                        : 'bg-neutral3/10 text-neutral4'
+                  }`}
+                >
+                  {result.status}
+                </span>
+              )}
+              {Array.isArray(result.tags) &&
+                result.tags.length > 0 &&
+                result.tags.map(tag => (
+                  <span key={tag} className="text-xs px-2 py-0.5 rounded bg-surface4 text-neutral4">
+                    {tag}
+                  </span>
+                ))}
+            </div>
+          </div>
         )}
 
         <SideDialog.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />

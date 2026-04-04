@@ -1,57 +1,59 @@
 import {
   Button,
+  ButtonWithTooltip,
   useLinkComponent,
   useIsCmsAvailable,
   useStoredPromptBlocks,
-  PromptBlockList,
-  PageContent,
+  PromptsList,
+  ListSearch,
   MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { ExternalLinkIcon, FileTextIcon, Plus } from 'lucide-react';
+import { BookIcon, FileTextIcon, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 
 export default function PromptBlocks() {
-  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const { paths } = useLinkComponent();
   const { data, isLoading } = useStoredPromptBlocks();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const [search, setSearch] = useState('');
 
   const promptBlocks = data?.promptBlocks ?? [];
 
   return (
-    <PageContent>
-      <PageContent.TopBar>
-        <Button
-          as="a"
-          href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="ghost"
-          size="md"
-        >
-          Prompts documentation
-          <ExternalLinkIcon />
-        </Button>
-      </PageContent.TopBar>
-      <PageContent.Main>
-        <div className="w-full max-w-[80rem] px-10 mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
-          <MainHeader>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <FileTextIcon /> Prompts
-              </MainHeader.Title>
-            </MainHeader.Column>
+    <EntityListPageLayout>
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isLoading}>
+              <FileTextIcon /> Prompts
+            </MainHeader.Title>
+          </MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Prompts documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
             {isCmsAvailable && (
-              <MainHeader.Column>
-                <Button variant="primary" as={FrameworkLink} to={paths.cmsPromptBlockCreateLink()}>
-                  <Plus />
-                  Create Prompt Block
-                </Button>
-              </MainHeader.Column>
+              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
+                <Plus />
+                Create Prompt
+              </Button>
             )}
-          </MainHeader>
-
-          <PromptBlockList promptBlocks={promptBlocks} isLoading={isLoading} />
+          </MainHeader.Column>
+        </MainHeader>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
         </div>
-      </PageContent.Main>
-    </PageContent>
+      </EntityListPageLayout.Top>
+
+      <PromptsList promptBlocks={promptBlocks} isLoading={isLoading} search={search} onSearch={setSearch} />
+    </EntityListPageLayout>
   );
 }

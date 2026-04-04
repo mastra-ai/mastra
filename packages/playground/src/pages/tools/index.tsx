@@ -1,41 +1,57 @@
-import { Button, ToolsIcon, ToolList, useAgents, useTools, PageContent, MainHeader } from '@mastra/playground-ui';
-
-import { ExternalLinkIcon } from 'lucide-react';
+import {
+  ToolsIcon,
+  ButtonWithTooltip,
+  ToolsList,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
+  useAgents,
+  useTools,
+} from '@mastra/playground-ui';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
+  const [search, setSearch] = useState('');
 
   const isLoading = isLoadingAgents || isLoadingTools;
 
   return (
-    <PageContent>
-      <PageContent.TopBar>
-        <Button
-          as="a"
-          href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="ghost"
-          size="md"
-        >
-          Tools documentation
-          <ExternalLinkIcon />
-        </Button>
-      </PageContent.TopBar>
-      <PageContent.Main>
-        <div className="w-full max-w-[80rem] px-10 mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
-          <MainHeader>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <ToolsIcon /> Tools
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-
-          <ToolList tools={tools} agents={agentsRecord} isLoading={isLoading} error={error} />
+    <EntityListPageLayout>
+      <EntityListPageLayout.Top>
+        <MainHeader withMargins={false}>
+          <MainHeader.Column>
+            <MainHeader.Title isLoading={isLoading}>
+              <ToolsIcon /> Tools
+            </MainHeader.Title>
+          </MainHeader.Column>
+          <MainHeader.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Tools documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </MainHeader.Column>
+        </MainHeader>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
         </div>
-      </PageContent.Main>
-    </PageContent>
+      </EntityListPageLayout.Top>
+
+      <ToolsList
+        tools={tools}
+        agents={agentsRecord}
+        isLoading={isLoading}
+        error={error}
+        search={search}
+        onSearch={setSearch}
+      />
+    </EntityListPageLayout>
   );
 }

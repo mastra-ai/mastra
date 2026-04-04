@@ -1,10 +1,10 @@
-import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
-import { getShortId } from '@/ds/components/Text';
-import { ScoreDialog } from '@/domains/scores';
-import { useLinkComponent } from '@/lib/framework';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
+import { ScoreDialog } from '@/domains/scores';
+import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
+import { useLinkComponent } from '@/lib/framework';
 
 export const traceScoresListColumns = [
   { name: 'shortId', label: 'ID', size: '1fr' },
@@ -49,6 +49,10 @@ export function SpanScoreList({
     const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
     setSelectedScore(score);
     setDialogIsOpen(true);
+
+    if (traceId) {
+      navigate(`${computeTraceLink(traceId, spanId)}&tab=scores&scoreId=${encodeURIComponent(scoreId)}`);
+    }
   };
 
   if (isLoadingScoresData) {

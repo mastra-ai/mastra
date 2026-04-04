@@ -1,18 +1,24 @@
 ---
 title: "Reference: Agent.getLLM() | Agents"
-description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
+description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance and supports request-scoped model overrides."
 packages:
   - "@mastra/core"
 ---
 
 # Agent.getLLM()
 
-The `.getLLM()` method retrieves the language model instance configured for an agent, resolving it if it's a function. This method provides access to the underlying LLM that powers the agent's capabilities.
+The `.getLLM()` method retrieves the language model instance configured for an agent, resolving it if it's a function. You can also pass a request-scoped `model` override without mutating the agent's configured model.
 
 ## Usage example
 
 ```typescript
 await agent.getLLM()
+```
+
+```typescript
+await agent.getLLM({
+  model: 'openai/gpt-5.4',
+})
 ```
 
 ## Parameters
@@ -21,13 +27,14 @@ await agent.getLLM()
   content={[
   {
     name: 'options',
-    type: '{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }',
+    type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
     isOptional: true,
     defaultValue: '{}',
-    description: 'Optional configuration object containing request context and optional model override.',
+    description:
+      'Optional configuration object containing request context and an optional request-scoped model override.',
     properties: [
       {
-        type: '{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }',
+        type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
         parameters: [
           {
             name: 'requestContext',
@@ -38,10 +45,9 @@ await agent.getLLM()
           },
           {
             name: 'model',
-            type: 'MastraLanguageModel | DynamicArgument<MastraLanguageModel>',
+            type: 'MastraModelConfig | DynamicArgument<MastraModelConfig>',
             isOptional: true,
-            description:
-              "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
+            description: "Optional request-scoped model override. The agent's configured model is not mutated.",
           },
         ],
       },
@@ -68,7 +74,7 @@ await agent.getLLM()
 ```typescript
 await agent.getLLM({
   requestContext: new RequestContext(),
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 

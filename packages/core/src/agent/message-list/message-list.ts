@@ -28,6 +28,7 @@ import { downloadAssetsFromMessages } from './prompt/download-assets';
 import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
+  MastraMessagePart,
   MastraMessageV1,
   MessageSource,
   MemoryInfo,
@@ -380,8 +381,44 @@ export class MessageList {
         },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
-        // Stored toModelOutput results from providerMetadata are applied automatically
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+
+        const storedModelOutputs = new Map<string, unknown>();
+        for (const dbMsg of this.messages) {
+          if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
+
+          for (const part of dbMsg.content.parts) {
+            if (
+              part.type === 'tool-invocation' &&
+              part.toolInvocation?.state === 'result' &&
+              part.providerMetadata?.mastra &&
+              typeof part.providerMetadata.mastra === 'object' &&
+              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+            ) {
+              storedModelOutputs.set(
+                part.toolInvocation.toolCallId,
+                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+              );
+            }
+          }
+        }
+
+        if (storedModelOutputs.size > 0) {
+          for (const modelMsg of modelMessages) {
+            if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
+
+            for (let i = 0; i < modelMsg.content.length; i++) {
+              const part = modelMsg.content[i]!;
+              if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                modelMsg.content[i] = {
+                  ...part,
+                  output: storedModelOutputs.get(part.toolCallId) as any,
+                };
+              }
+            }
+          }
+        }
+
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -401,7 +438,7 @@ export class MessageList {
         // Check if any messages have image/file content that needs processing
         const hasImageOrFileContent = modelMessages.some(
           message =>
-            message.role === 'user' &&
+            (message.role === 'user' || message.role === 'assistant') &&
             typeof message.content !== 'string' &&
             message.content.some(part => part.type === 'image' || part.type === 'file'),
         );
@@ -431,6 +468,20 @@ export class MessageList {
                 content: convertedContent,
                 providerOptions: message.providerOptions,
               } as AIV5Type.ModelMessage;
+            }
+
+            if (message.role === 'assistant' && typeof message.content !== 'string') {
+              const convertedContent = message.content.map(part => {
+                if (part.type === 'file') {
+                  return convertImageFilePart(part, downloadedAssets);
+                }
+                return part;
+              });
+
+              return {
+                ...message,
+                content: convertedContent,
+              };
             }
 
             return message;
@@ -624,6 +675,104 @@ export class MessageList {
    */
   public isNewMessage(messageOrId: MastraDBMessage | string): boolean {
     return this.stateManager.isNewMessage(messageOrId);
+  }
+
+  /**
+   * Replace a tool-invocation part matching the given toolCallId with the
+   * provided result part. Walks backwards through messages to find the match.
+   * If the message was already persisted (e.g. as a memory message), it is
+   * moved to the response source so it will be re-saved.
+   *
+   * @returns true if the tool call was found and updated, false otherwise.
+   */
+  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+    if (!inputPart.toolInvocation?.toolCallId) {
+      return false;
+    }
+    const toolCallId = inputPart.toolInvocation.toolCallId;
+
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      for (let i = 0; i < msg.content.parts.length; i++) {
+        const part = msg.content.parts[i];
+        if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+          // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
+          const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
+          const inputPartWithMeta = inputPart as typeof inputPart & {
+            providerExecuted?: boolean;
+            providerMetadata?: unknown;
+          };
+
+          msg.content.parts[i] = {
+            ...inputPart,
+            toolInvocation: {
+              ...inputPart.toolInvocation,
+              args: part.toolInvocation.args,
+            },
+            // Preserve providerExecuted from original call if not in result
+            ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+              ? { providerExecuted: originalPart.providerExecuted }
+              : {}),
+            // Preserve providerMetadata from original call if not in result
+            ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
+              ? { providerMetadata: originalPart.providerMetadata }
+              : {}),
+          };
+
+          // Move the message to the response source so it gets
+          // picked up by drainUnsavedMessages for re-saving.
+          if (!this.stateManager.isResponseMessage(msg)) {
+            this.stateManager.removeMessage(msg);
+            this.stateManager.addToSource(msg, 'response');
+          }
+
+          return true;
+        }
+      }
+    }
+    this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
+  /**
+   * Append a `step-start` boundary to the last assistant message.
+   * This marks the beginning of a new loop iteration so that
+   * `convertToModelMessages` splits sequential tool-call turns into
+   * separate message blocks instead of collapsing them into one.
+   *
+   * Respects sealed messages (post-observation) — if the last assistant
+   * message is sealed, the step-start is not added.
+   *
+   * If the message was loaded from memory it is moved to the response
+   * source so the updated content is re-saved.
+   */
+  public stepStart(): boolean {
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
+    }
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    // Don't add a duplicate step-start
+    const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
+    if (lastPart?.type === 'step-start') {
+      return false;
+    }
+
+    lastMsg.content.parts.push({ type: 'step-start' as const });
+
+    // Ensure the mutated message is persisted
+    if (!this.stateManager.isResponseMessage(lastMsg)) {
+      this.stateManager.removeMessage(lastMsg);
+      this.stateManager.addToSource(lastMsg, 'response');
+    }
+
+    return true;
   }
 
   public getSystemMessages(tag?: string): CoreMessageV4[] {

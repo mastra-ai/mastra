@@ -1,6 +1,7 @@
-import { type ItemListColumn } from './types';
 import { ItemListItems } from './item-list-items';
 import { ItemListRow } from './item-list-row';
+import { ItemListRowButton } from './item-list-row-button';
+import type { ItemListColumn } from './types';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
@@ -18,17 +19,19 @@ export function ItemListItemsSkeleton({ columns, numberOfRows = 3 }: ItemListIte
   return (
     <ItemListItems>
       {Array.from({ length: numberOfRows }).map((_, rowIdx) => (
-        <ItemListRow key={rowIdx} columns={columns} className="py-4">
-          {(columns || []).map((col, colIdx) => {
-            const key = `${col.name}-${colIdx}`;
-            return (
-              <div
-                key={key}
-                className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
-                style={{ width: `${getPseudoRandomWidth(rowIdx, colIdx)}` }}
-              ></div>
-            );
-          })}
+        <ItemListRow key={rowIdx}>
+          <ItemListRowButton columns={columns}>
+            {(columns || []).map((col, colIdx) => {
+              const key = `${col.name}-${colIdx}`;
+              return (
+                <div
+                  key={key}
+                  className="bg-surface4 rounded-md animate-pulse text-transparent h-4 select-none"
+                  style={{ width: `${getPseudoRandomWidth(rowIdx, colIdx)}` }}
+                ></div>
+              );
+            })}
+          </ItemListRowButton>
         </ItemListRow>
       ))}
     </ItemListItems>

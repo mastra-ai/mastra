@@ -1,10 +1,10 @@
-import { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
+import { Plus, Upload, FileJson } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Plus, Upload, FileJson } from 'lucide-react';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -157,6 +157,19 @@ export function DatasetItemsList({
                     <ItemList.TextCell className="font-mono">{listItem.input}</ItemList.TextCell>
                     {columns.some(col => col.name === 'groundTruth') && (
                       <ItemList.TextCell className="font-mono">{listItem.groundTruth}</ItemList.TextCell>
+                    )}
+                    {columns.some(col => col.name === 'trajectory') && (
+                      <ItemList.TextCell>
+                        {item.expectedTrajectory ? (
+                          <span className="text-xs">
+                            {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
+                              ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
+                              : 'Yes'}
+                          </span>
+                        ) : (
+                          <span className="text-neutral4">—</span>
+                        )}
+                      </ItemList.TextCell>
                     )}
                     <ItemList.DateCell date={listItem.date} withTime />
                   </ItemList.RowButton>

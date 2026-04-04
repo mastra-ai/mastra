@@ -1,9 +1,9 @@
+import type { ObjectWrapperProps } from '@autoform/react';
+import { Braces, ChevronDownIcon } from 'lucide-react';
 import React, { useState } from 'react';
-import { ObjectWrapperProps } from '@autoform/react';
+import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Braces, ChevronDownIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children }) => {
@@ -31,11 +31,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
       </div>
 
       {isOpen && (
-        <div
-          className={
-            hasLabel ? 'flex flex-col gap-1 [&>*]:border-dashed [&>*]:border-l [&>*]:border-l-border1 [&>*]:pl-4' : ''
-          }
-        >
+        <div className={hasLabel ? 'flex flex-col gap-1 *:border-dashed *:border-l *:border-l-border1 *:pl-4' : ''}>
           {children}
         </div>
       )}

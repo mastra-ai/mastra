@@ -2,9 +2,23 @@ import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
+import { EntityType } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { TargetType } from '../../storage/types';
 import type { ScorerResult } from './types';
+
+function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefined {
+  switch (targetType) {
+    case 'agent':
+      return EntityType.AGENT;
+    case 'workflow':
+      return EntityType.WORKFLOW_RUN;
+    case 'scorer':
+      return EntityType.SCORER;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Resolve scorers from mixed array of instances and string IDs.
@@ -52,11 +66,20 @@ export async function runScorersForItem(
 
   const settled = await Promise.allSettled(
     scorers.map(async scorer => {
-      const { result, promptMetadata } = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
+      const { result, promptMetadata } = await runScorerSafe(
+        scorer,
+        item,
+        output,
+        scorerInput,
+        scorerOutput,
+        targetType,
+        traceId,
+      );
 
       // Persist score if storage available and score was computed
       if (storage && result.score !== null) {
         try {
+          // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
             scorerId: scorer.id,
             score: result.score,
@@ -82,6 +105,7 @@ export async function runScorersForItem(
             ...promptMetadata,
           });
         } catch (saveError) {
+          // TODO: Remove this warning path once the old scores storage is deprecated.
           // Log but don't fail - score persistence is best-effort
           console.warn(`Failed to save score for scorer ${scorer.id}:`, saveError);
         }
@@ -118,12 +142,18 @@ async function runScorerSafe(
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
+  targetType?: TargetType,
+  targetTraceId?: string,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
     const scoreResult: unknown = await scorer.run({
       input: scorerInput ?? item.input,
       output: scorerOutput ?? output,
       groundTruth: item.groundTruth,
+      scoreSource: 'experiment',
+      targetScope: 'span',
+      targetEntityType: toScorerTargetEntityType(targetType),
+      targetTraceId,
     });
 
     // Extract fields with typeof guards — scorer run result types use complex

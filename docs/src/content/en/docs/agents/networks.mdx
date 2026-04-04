@@ -1,6 +1,6 @@
 ---
 title: "Agent networks | Agents"
-description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
+description: Coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -9,46 +9,29 @@ packages:
 
 # Agent networks
 
-:::warning[Agent Network Deprecated — Supervisor Pattern Recommended]
+:::warning[Deprecated — Use supervisor agents]
 
-Agent networks are deprecated and will be removed in a future release. The [supervisor pattern](./supervisor-agents) using `agent.stream()` or `agent.generate()` is now the recommended approach for coordinating multiple agents. It provides the same multi-agent coordination capabilities as `.network()` with significant improvements:
+Agent networks are deprecated and will be removed in a future major release. [Supervisor agents](./supervisor-agents) using `agent.stream()` or `agent.generate()` are now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
 
-- **Better control**: Iteration hooks, delegation hooks, and task completion scoring give you fine-grained control over execution
-- **Simpler API**: Uses familiar `stream()` and `generate()` methods instead of a separate `.network()` API
-- **More flexible**: Stop execution early, modify delegations, filter context, and provide feedback to guide the agent
-- **Type-safe**: Full TypeScript support for all hooks and callbacks
-- **Easier debugging**: Monitor progress with `onIterationComplete`, track delegations with `onDelegationStart`/`onDelegationComplete`
-
-See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade from `.network()`.
+See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
 
 :::
 
-Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (subagents, workflows, or tools) to call, in what order, and with what data.
+A **routing agent** uses an LLM to interpret a request and decide which primitives (subagents, workflows, or tools) to call, in what order, and with what data.
 
-## When to use networks
+## Create an agent network
 
-Use networks for complex tasks that require coordination across multiple primitives. Unlike workflows, which follow a predefined sequence, networks rely on LLM reasoning to interpret the request and decide what to run.
+Configure a routing agent with `agents`, `workflows`, and `tools`. Memory is required as `.network()` uses it to store task history and determine when a task is complete.
 
-## Core principles
+Each primitive needs a clear `description` so the routing agent can decide which to use. For workflows and tools, `inputSchema` and `outputSchema` also help the router determine the right inputs.
 
-Mastra agent networks operate using these principles:
-
-- Memory is required when using `.network()` and is used to store task history and determine when a task is complete.
-- Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows and tools, the input schema helps determine the right inputs at runtime.
-- If multiple primitives have overlapping functionality, the agent favors the more specific one, using a combination of schema and descriptions to decide which to run.
-
-## Creating an agent network
-
-An agent network is built around a top-level routing agent that delegates tasks to subagents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
-
-```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
+```typescript title="src/mastra/agents/routing-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 import { researchAgent } from './research-agent'
 import { writingAgent } from './writing-agent'
-
 import { cityWorkflow } from '../workflows/city-workflow'
 import { weatherTool } from '../tools/weather-tool'
 
@@ -56,20 +39,20 @@ export const routingAgent = new Agent({
   id: 'routing-agent',
   name: 'Routing Agent',
   instructions: `
-      You are a network of writers and researchers.
-      The user will ask you to research a topic.
-      Always respond with a complete report—no bullet points.
-      Write in full paragraphs, like a blog post.
-      Do not answer with incomplete or uncertain information.`,
-  model: 'openai/gpt-5.1',
+    You are a network of writers and researchers. The user will ask you to research a topic. Always respond with a complete report—no bullet points. Write in full paragraphs, like a blog post. Do not answer with incomplete or uncertain information.`,
+  model: 'openai/gpt-5.4',
   agents: {
+    // highlight-start
     researchAgent,
     writingAgent,
+    // highlight-end
   },
   workflows: {
+    // highlight-next-line
     cityWorkflow,
   },
   tools: {
+    // highlight-next-line
     weatherTool,
   },
   memory: new Memory({
@@ -81,81 +64,15 @@ export const routingAgent = new Agent({
 })
 ```
 
-### Writing descriptions for network primitives
+:::note
 
-When configuring a Mastra agent network, each primitive (agent, workflow, or tool) needs a clear description to help the routing agent decide which to use. The routing agent uses each primitive's description and schema to determine what it does and how to use it. Clear descriptions and well-defined input and output schemas improve routing accuracy.
+Subagents need a `description` on the `Agent` instance. Workflows and tools need a `description` plus `inputSchema` and `outputSchema` on `createWorkflow()` or `createTool()`.
 
-#### Agent descriptions
+:::
 
-Each subagent in a network should include a clear `description` that explains what the agent does.
+## Call the network
 
-```typescript title="src/mastra/agents/research-agent.ts"
-export const researchAgent = new Agent({
-  id: 'research-agent',
-  name: 'Research Agent',
-  description: `This agent gathers concise research insights in bullet-point form.
-    It's designed to extract key facts without generating full
-    responses or narrative content.`,
-})
-```
-
-```typescript title="src/mastra/agents/writing-agent.ts"
-export const writingAgent = new Agent({
-  id: 'writing-agent',
-  name: 'Writing Agent',
-  description: `This agent turns researched material into well-structured
-    written content. It produces full-paragraph reports with no bullet points,
-    suitable for use in articles, summaries, or blog posts.`,
-})
-```
-
-#### Workflow descriptions
-
-Workflows in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
-
-```typescript title="src/mastra/workflows/city-workflow.ts"
-export const cityWorkflow = createWorkflow({
-  id: 'city-workflow',
-  description: `This workflow handles city-specific research tasks.
-    It first gathers factual information about the city, then synthesizes
-    that research into a full written report. Use it when the user input
-    includes a city to be researched.`,
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    text: z.string(),
-  }),
-})
-```
-
-#### Tool descriptions
-
-Tools in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
-
-```typescript title="src/mastra/tools/weather-tool.ts"
-export const weatherTool = createTool({
-  id: 'weather-tool',
-  description: ` Retrieves current weather information using the wttr.in API.
-    Accepts a city or location name as input and returns a short weather summary.
-    Use this tool whenever up-to-date weather data is requested.
-  `,
-  inputSchema: z.object({
-    location: z.string(),
-  }),
-  outputSchema: z.object({
-    weather: z.string(),
-  }),
-})
-```
-
-## Calling agent networks
-
-Call a Mastra agent network using `.network()` with a user message. The method returns a stream of events that you can iterate over to track execution progress and retrieve the final result.
-
-### Agent example
-
-In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
+Call `.network()` with a user message. The method returns a stream of events you can iterate over.
 
 ```typescript
 const result = await routingAgent.network('Tell me three cool ways to use Mastra')
@@ -168,86 +85,9 @@ for await (const chunk of result) {
 }
 ```
 
-#### Agent output
-
-The following `chunk.type` events are emitted during this request:
-
-```text
-routing-agent-start
-routing-agent-end
-agent-execution-start
-agent-execution-event-start
-agent-execution-event-step-start
-agent-execution-event-text-start
-agent-execution-event-text-delta
-agent-execution-event-text-end
-agent-execution-event-step-finish
-agent-execution-event-finish
-agent-execution-end
-network-execution-event-step-finish
-```
-
-## Workflow example
-
-In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
-
-```typescript
-const result = await routingAgent.network('Tell me some historical facts about London')
-
-for await (const chunk of result) {
-  console.log(chunk.type)
-  if (chunk.type === 'network-execution-event-step-finish') {
-    console.log(chunk.payload.result)
-  }
-}
-```
-
-### Workflow output
-
-The following `chunk.type` events are emitted during this request:
-
-```text
-routing-agent-end
-workflow-execution-start
-workflow-execution-event-workflow-start
-workflow-execution-event-workflow-step-start
-workflow-execution-event-workflow-step-result
-workflow-execution-event-workflow-finish
-workflow-execution-end
-routing-agent-start
-network-execution-event-step-finish
-```
-
-### Tool example
-
-In this example, the routing agent skips the `researchAgent`, `writingAgent`, and `cityWorkflow`, and calls the `weatherTool` directly to complete the task.
-
-```typescript
-const result = await routingAgent.network("What's the weather in London?")
-
-for await (const chunk of result) {
-  console.log(chunk.type)
-  if (chunk.type === 'network-execution-event-step-finish') {
-    console.log(chunk.payload.result)
-  }
-}
-```
-
-#### Tool output
-
-The following `chunk.type` events are emitted during this request:
-
-```text
-routing-agent-start
-routing-agent-end
-tool-execution-start
-tool-execution-end
-network-execution-event-step-finish
-```
-
 ## Structured output
 
-When you need typed, validated results from a network, use the `structuredOutput` option. After the network completes its task, it generates a structured response matching your schema.
+Pass `structuredOutput` to get typed, validated results. Use `objectStream` for partial objects as they generate.
 
 ```typescript
 import { z } from 'zod'
@@ -259,54 +99,105 @@ const resultSchema = z.object({
 })
 
 const stream = await routingAgent.network('Research AI trends', {
-  structuredOutput: {
-    schema: resultSchema,
-  },
-})
-
-// Consume the stream
-for await (const chunk of stream) {
-  if (chunk.type === 'network-object') {
-    // Partial object during generation
-    console.log('Partial:', chunk.payload.object)
-  }
-  if (chunk.type === 'network-object-result') {
-    // Final structured object
-    console.log('Final:', chunk.payload.object)
-  }
-}
-
-// Get the typed result
-const result = await stream.object
-console.log(result?.summary)
-console.log(result?.recommendations)
-console.log(result?.confidence)
-```
-
-### Streaming partial objects
-
-For real-time updates during structured output generation, use `objectStream`:
-
-```typescript
-const stream = await routingAgent.network('Analyze market data', {
   structuredOutput: { schema: resultSchema },
 })
 
-// Stream partial objects as they're generated
 for await (const partial of stream.objectStream) {
   console.log('Building result:', partial)
 }
 
-// Get the final typed result
 const final = await stream.object
+console.log(final?.summary)
 ```
+
+## Approve and decline tool calls
+
+When a primitive requires approval, the stream emits an `agent-execution-approval` or `tool-execution-approval` chunk. Use `approveNetworkToolCall()` or `declineNetworkToolCall()` to respond.
+
+Network approval uses snapshots to capture execution state. Ensure a [storage provider](/docs/memory/storage) is enabled in your Mastra instance.
+
+```typescript title="src/approve-network.ts"
+const stream = await routingAgent.network('Perform some sensitive action', {
+  memory: {
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
+
+for await (const chunk of stream) {
+  if (chunk.type === 'agent-execution-approval' || chunk.type === 'tool-execution-approval') {
+    // Approve
+    const approvedStream = await routingAgent.approveNetworkToolCall(chunk.payload.toolCallId, {
+      runId: stream.runId,
+      memory: { thread: 'user-123', resource: 'my-app' },
+    })
+
+    for await (const c of approvedStream) {
+      if (c.type === 'network-execution-event-step-finish') {
+        console.log(c.payload.result)
+      }
+    }
+  }
+}
+```
+
+To decline instead, call `declineNetworkToolCall()` with the same arguments.
+
+## Suspend and resume
+
+When a primitive calls `suspend()`, the stream emits a suspension chunk (e.g., `tool-execution-suspended`). Use `resumeNetwork()` to provide the requested data and continue execution.
+
+```typescript title="src/resume-network.ts"
+const stream = await routingAgent.network('Delete the old records', {
+  memory: { thread: 'user-123', resource: 'my-app' },
+})
+
+for await (const chunk of stream) {
+  if (chunk.type === 'workflow-execution-suspended') {
+    console.log(chunk.payload.suspendPayload)
+  }
+}
+
+// Resume with user confirmation
+const resumedStream = await routingAgent.resumeNetwork(
+  { confirmed: true },
+  {
+    runId: stream.runId,
+    memory: { thread: 'user-123', resource: 'my-app' },
+  },
+)
+
+for await (const chunk of resumedStream) {
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
+  }
+}
+```
+
+### Automatic resumption
+
+Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information naturally.
+
+```typescript
+const stream = await routingAgent.network('Delete the old records', {
+  autoResumeSuspendedTools: true,
+  memory: { thread: 'user-123', resource: 'my-app' },
+})
+```
+
+Requirements for automatic resumption:
+
+- **Memory configured**: The agent needs memory to track suspended tools across messages.
+- **Same thread**: The follow-up message must use the same `thread` and `resource` identifiers.
+- **`resumeSchema` defined**: The tool must define a `resumeSchema` so the network can extract data from the user's message.
+
+| | Manual (`resumeNetwork`) | Automatic (`autoResumeSuspendedTools`) |
+| - | - | - |
+| Best for | Custom UIs with approval buttons | Chat-style interfaces |
+| Control | Full control over resume timing and data | Network extracts data from user's message |
+| Setup | Handle suspension chunks, call `resumeNetwork` | Set flag, define `resumeSchema` on tools |
 
 ## Related
 
-- [Supervisor Agents](./supervisor-agents)
-- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
-- [Guide: Research Coordinator](/guides/guide/research-coordinator)
-- [Agent Memory](./agent-memory)
-- [Agent Approval](./agent-approval)
-- [Workflows Overview](../workflows/overview)
-- [Request Context](/docs/server/request-context)
+- [Supervisor agents](./supervisor-agents)
+- [Migration: `.network()` to supervisor agents](/guides/migrations/network-to-supervisor)

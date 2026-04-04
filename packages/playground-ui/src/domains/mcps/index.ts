@@ -1,4 +1,5 @@
-export * from './components/mcp-server-list/mcp-server-list';
+export * from './components/mcp-table/mcp-table';
+export * from './components/mcps-list/mcps-list';
 export * from './hooks/index';
 export * from './components/MCPToolPanel';
 export * from './components/MCPDetail';

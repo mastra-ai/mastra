@@ -1,6 +1,7 @@
 import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery, is403ForbiddenError } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 const fetchTracesFn = async ({
@@ -40,16 +41,28 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-/** Deduplicates traces by traceId across all loaded pages, keeping the first occurrence. */
-export function selectUniqueTraces(data: { pages: ListTracesResponse[] }) {
+type TracesPageResponse = ListTracesResponse & { threadTitles?: Record<string, string> };
+
+/** Deduplicates traces by traceId across all loaded pages, keeping the first occurrence.
+ *  Also merges threadTitles from all pages for thread grouping display. */
+export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   const seen = new Set<string>();
-  return data.pages
+  const spans = data.pages
     .flatMap(page => page.spans ?? [])
     .filter(span => {
       if (seen.has(span.traceId)) return false;
       seen.add(span.traceId);
       return true;
     });
+
+  const threadTitles: Record<string, string> = {};
+  for (const page of data.pages) {
+    if (page.threadTitles) {
+      Object.assign(threadTitles, page.threadTitles);
+    }
+  }
+
+  return { spans, threadTitles };
 }
 
 export const useTraces = ({ filters }: TracesFilters) => {
@@ -68,6 +81,7 @@ export const useTraces = ({ filters }: TracesFilters) => {
     initialPageParam: 0,
     getNextPageParam: getTracesNextPageParam,
     select: selectUniqueTraces,
+    placeholderData: keepPreviousData,
     retry: false,
     // Disable polling on 403 to prevent flickering
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),

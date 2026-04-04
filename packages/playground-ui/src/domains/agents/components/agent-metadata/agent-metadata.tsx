@@ -1,32 +1,32 @@
-import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { useLinkComponent } from '@/lib/framework';
-import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
-import { AgentMetadataSection } from './agent-metadata-section';
-import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
-import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
-import { useScorers } from '@/domains/scores';
-import { AgentIcon } from '@/ds/icons';
-import { GaugeIcon, Folder } from 'lucide-react';
-import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
-import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
-import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
-import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
-import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { githubDarkInit } from '@uiw/codemirror-theme-github';
-import { extractPrompt } from '../../utils/extractPrompt';
-import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
-import { useAgent } from '../../hooks/use-agent';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { useMemory } from '@/domains/memory/hooks';
+import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import CodeMirror, { EditorView } from '@uiw/react-codemirror';
+import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
+import { useAgent } from '../../hooks/use-agent';
+import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
+import { extractPrompt } from '../../utils/extractPrompt';
+import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
+import { AgentMetadataModelList } from './agent-metadata-model-list';
+import { AgentMetadataSection } from './agent-metadata-section';
+import { AgentMetadataWrapper } from './agent-metadata-wrapper';
+import { useMemory } from '@/domains/memory/hooks';
+import { useScorers } from '@/domains/scores';
+import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
+import { Badge } from '@/ds/components/Badge';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { AgentIcon } from '@/ds/icons';
+import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { ToolsIcon } from '@/ds/icons/ToolsIcon';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -63,6 +63,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const codemirrorTheme = useCodemirrorTheme();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -84,6 +85,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const skills = agent.skills ?? [];
   const workspaceTools = agent.workspaceTools ?? [];
+  const browserTools = agent.browserTools ?? [];
   const workspaceId = agent.workspaceId;
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
@@ -190,6 +192,18 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </AgentMetadataSection>
       )}
 
+      {browserTools.length > 0 && (
+        <AgentMetadataSection
+          title="Browser Tools"
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+            title: 'Browser tools documentation',
+          }}
+        >
+          <AgentMetadataBrowserToolsList tools={browserTools} />
+        </AgentMetadataSection>
+      )}
+
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
@@ -211,16 +225,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           value={extractPrompt(agent.instructions)}
           editable={false}
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
-          theme={githubDarkInit({
-            settings: {
-              caret: '#c6c6c6',
-              fontFamily: 'monospace',
-              background: 'transparent',
-              gutterBackground: 'transparent',
-              gutterForeground: '#939393',
-              gutterBorder: 'none',
-            },
-          })}
+          theme={codemirrorTheme}
         />
       </AgentMetadataSection>
     </AgentMetadataWrapper>
@@ -322,6 +327,7 @@ export interface AgentMetadataSkillListProps {
     name: string;
     description: string;
     license?: string;
+    path: string;
   }>;
   agentId: string;
   workspaceId?: string;
@@ -350,12 +356,15 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         );
 
         return (
-          <AgentMetadataListItem key={skill.name}>
+          <AgentMetadataListItem key={skill.path}>
             {isActivated ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+                    <Link
+                      href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
+                      data-testid="skill-badge"
+                    >
                       {badge}
                     </Link>
                   </TooltipTrigger>
@@ -363,7 +372,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+              <Link href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)} data-testid="skill-badge">
                 {badge}
               </Link>
             )}
@@ -400,6 +409,26 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
           <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataBrowserToolsListProps {
+  tools: string[];
+}
+
+export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToolsListProps) => {
+  if (tools.length === 0) {
+    return <AgentMetadataListEmpty>No browser tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {tools.map(tool => (
+        <AgentMetadataListItem key={tool}>
+          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

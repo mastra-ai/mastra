@@ -24,7 +24,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfigInternal;
@@ -88,6 +88,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     instructions,
     memoryConfig,
     memory,
+    isResume: !!resumeContext,
   });
 
   const streamStep = createStreamStep({

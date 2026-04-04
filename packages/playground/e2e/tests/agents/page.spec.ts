@@ -10,19 +10,16 @@ test('has overall information', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('h1')).toHaveText('Agents');
-  await expect(page.locator('text=Agents documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/agents/overview',
-  );
+  await expect(page.locator('a[href="https://mastra.ai/en/docs/agents/overview"]')).toBeVisible();
 
-  const list = page.locator('main').getByRole('list');
-  await expect(list).toMatchAriaSnapshot();
+  // Verify agent list renders with at least one agent
+  await expect(page.locator('.entity-list-row').first()).toBeVisible();
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {
   await page.goto('/agents');
 
-  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'Weather Agent' });
+  const el = page.locator('a:has-text("Weather Agent")');
   await el.click();
 
   await expect(page).toHaveURL(/\/agents\/weather-agent\/chat.*/);

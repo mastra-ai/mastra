@@ -24,19 +24,21 @@ export * from './utils/csv-export';
 export * from './utils/json-export';
 
 // Components
-export { DatasetsList } from './components/datasets-list/datasets-list';
+export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
-export { NoDatasetInfo } from './components/datasets-list/no-datasets-info';
+export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
+export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-content';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
@@ -88,3 +90,6 @@ export { DatasetVersionsPanel } from './components/items/dataset-versions-panel'
 export { DatasetItemVersionsPanel } from './components/versions';
 export { DatasetCompareVersionToolbar } from './components/versions';
 export { DatasetCompareVersionsList } from './components/versions';
+
+// Generation context
+export { GenerationProvider, useGenerationTasks } from './context/generation-context';

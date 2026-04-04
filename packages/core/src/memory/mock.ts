@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -21,6 +21,7 @@ import type {
   MessageDeleteInput,
   WorkingMemoryTemplate,
   WorkingMemory,
+  SharedMemoryConfig,
 } from './types';
 
 export class MockMemory extends MastraMemory {
@@ -29,20 +30,23 @@ export class MockMemory extends MastraMemory {
     enableWorkingMemory = false,
     workingMemoryTemplate,
     enableMessageHistory = true,
+    options,
   }: {
     storage?: InMemoryStore;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
     workingMemoryTemplate?: string;
+    options?: SharedMemoryConfig['options'];
   } = {}) {
     super({
       name: 'mock',
       storage: storage || new InMemoryStore(),
       options: {
+        ...options,
         workingMemory: enableWorkingMemory
           ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
-          : undefined,
-        lastMessages: enableMessageHistory ? 10 : undefined,
+          : options?.workingMemory,
+        lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
       },
     });
     this._hasOwnStorage = true;

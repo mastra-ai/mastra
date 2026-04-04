@@ -10,6 +10,7 @@ export default defineConfig({
     'src/server/server-adapter/index.ts',
     'src/server/auth/index.ts',
     'src/server/schemas/index.ts',
+    'src/server/browser-stream/index.ts',
     '!src/server/handlers/*.test.ts',
     '!src/server/auth/*.test.ts',
     '!src/server/schemas/*.test.ts',
@@ -25,6 +26,6 @@ export default defineConfig({
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   external: ['typescript'],
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/core']));
   },
 });

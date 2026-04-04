@@ -2,7 +2,7 @@
 export * from './types';
 
 // Factory + config
-export { createWorkspaceTools, resolveToolConfig } from './tools';
+export { createWorkspaceTools, resolveToolConfig, type ResolvedToolConfig } from './tools';
 
 // Individual standalone tools
 export { readFileTool } from './read-file';
@@ -23,6 +23,7 @@ export {
 export { getProcessOutputTool } from './get-process-output';
 export { killProcessTool } from './kill-process';
 export { grepTool } from './grep';
+export { lspInspectTool } from './lsp-inspect';
 
 // Helpers
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';

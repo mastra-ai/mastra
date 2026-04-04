@@ -10,16 +10,13 @@ test('has overall information', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('h1')).toHaveText('Processors');
-  await expect(page.getByRole('link', { name: 'Processors documentation' })).toHaveAttribute(
-    'href',
-    'https://mastra.ai/docs/agents/processors',
-  );
+  await expect(page.locator('a[href="https://mastra.ai/en/docs/agents/processors"]')).toBeVisible();
 });
 
 test('clicking on the processor row redirects to detail page', async ({ page }) => {
   await page.goto('/processors');
 
-  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'Logging Processor' });
+  const el = page.locator('.entity-list-row:has-text("Logging Processor")');
   await el.click();
 
   await expect(page).toHaveURL(/\/processors\/logging-processor$/);

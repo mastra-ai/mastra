@@ -1,13 +1,12 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
+import { format } from 'date-fns/format';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
 import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Sections } from '@/ds/components/Sections';
 import { SideDialog } from '@/ds/components/SideDialog';
-import { useLinkComponent } from '@/lib/framework';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
-import { format } from 'date-fns/format';
+import { TextAndIcon } from '@/ds/components/Text';
 
 export interface DatasetItemPageProps {
   item: DatasetItem;
@@ -18,11 +17,9 @@ export interface DatasetItemPageProps {
  * Read-only view showing input, ground truth, and metadata.
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
-  const { Link } = useLinkComponent();
-
   return (
     <div className="h-full overflow-y-auto p-6">
-      <DatasetItemContent item={item} Link={Link} />
+      <DatasetItemContent item={item} />
     </div>
   );
 }
@@ -30,8 +27,9 @@ export function DatasetItemPage({ item }: DatasetItemPageProps) {
 /**
  * Read-only view of the dataset item details
  */
-function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
+function DatasetItemContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
 
   return (
     <>
@@ -62,7 +60,6 @@ function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnTyp
                 ]
               : []),
           ]}
-          LinkComponent={Link}
         />
 
         <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
@@ -73,6 +70,10 @@ function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnTyp
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
+        )}
+
+        {trajectoryDisplay && (
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
         )}
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}

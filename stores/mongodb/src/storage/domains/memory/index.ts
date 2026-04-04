@@ -1893,6 +1893,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
@@ -2051,7 +2052,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existingTokenCount = Number(doc.observationTokenCount || 0);
 
       // Calculate new values
-      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
       const newTokenCount = existingTokenCount + activatedTokens;
 
       // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
@@ -2063,8 +2065,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existingPending = Number(doc.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await collection.updateOne(
-        { id: input.id },
+      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
+      const updateResult = await collection.updateOne(
+        {
+          id: input.id,
+          bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
+        },
         {
           $set: {
             activeObservations: newActive,
@@ -2076,6 +2082,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           },
         },
       );
+
+      if (updateResult.modifiedCount === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

@@ -1,6 +1,6 @@
 import { Brain, CheckCircle2, XCircle, Loader2, CloudCog } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 /**
  * Types for OM observation markers streamed from the agent.

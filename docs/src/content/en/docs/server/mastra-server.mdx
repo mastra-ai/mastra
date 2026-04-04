@@ -23,7 +23,7 @@ The server provides:
 
 - API endpoints for all registered agents and workflows
 - Custom API routes and middleware
-- Authentication with multiple providers
+- Authentication across providers
 - Request context for dynamic configuration
 - Stream data redaction for secure responses
 
@@ -36,8 +36,8 @@ import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   server: {
-    port: 3000, // Defaults to 4111
-    host: '0.0.0.0', // Defaults to 'localhost'
+    port: 3000, // Defaults to PORT env var or 4111
+    host: '0.0.0.0', // Defaults to MASTRA_HOST env var or 'localhost'
   },
 })
 ```
@@ -57,6 +57,30 @@ Visit the [configuration reference](/reference/configuration#server-options) for
 - **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
 - **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
 - **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
+
+## REST API
+
+You can explore all available endpoints in the OpenAPI specification at [http://localhost:4111/api/openapi.json](http://localhost:4111/api/openapi.json), which details every endpoint and its request and response schemas.
+
+To explore the API interactively, visit the Swagger UI at [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui). Here, you can discover endpoints and test them directly from your browser.
+
+:::note
+
+The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
+
+:::
+
+## OpenAI Responses API
+
+Mastra exposes OpenAI-compatible Responses and Conversations routes that let you use Mastra Agents as a Responses API. These routes are agent-backed adapters over Mastra agents, memory, and storage, so requests run through the selected Mastra agent instead of acting as a raw provider proxy.
+
+These APIs are currently experimental.
+
+Use `agent_id` to select the Mastra agent that should handle the request. Initial requests target an agent directly, and stored follow-up turns can continue with `previous_response_id`. You can also pass `model` to override the agent's configured model for a single request. If you omit `model`, Mastra uses the model already configured on the agent.
+
+The Responses routes support streaming, function calling (tools), stored continuations with `previous_response_id`, conversation threads through `conversation_id`, provider-specific passthrough with `providerOptions`, and JSON output through `text.format`.
+
+For the full request and response contract, see the [Responses API reference](/reference/client-js/responses) and [Conversations API reference](/reference/client-js/conversations). For the complete list of HTTP routes, see [server routes](/reference/server/routes#responses-api).
 
 ## Stream data redaction
 

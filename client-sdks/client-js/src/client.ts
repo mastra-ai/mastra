@@ -1,7 +1,64 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { PaginationInfo, TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  TraceRecord,
+  ListTracesArgs,
+  ListTracesResponse,
+  // Logs
+  ListLogsArgs,
+  ListLogsResponse,
+  // Scores (observability)
+  ListScoresArgs,
+  ListScoresResponse as ListScoresResponseNew,
+  CreateScoreBody,
+  CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+  // Feedback
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  CreateFeedbackBody,
+  CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+  // Metrics OLAP
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  // Discovery
+  GetMetricNamesArgs,
+  GetMetricNamesResponse,
+  GetMetricLabelKeysArgs,
+  GetMetricLabelKeysResponse,
+  GetMetricLabelValuesArgs,
+  GetMetricLabelValuesResponse,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesResponse,
+  GetEnvironmentsResponse,
+  GetTagsArgs,
+  GetTagsResponse,
+} from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -14,6 +71,7 @@ import {
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
   StoredAgent,
   StoredPromptBlock,
@@ -23,6 +81,7 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -34,6 +93,7 @@ import type {
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  AgentVersionIdentifier,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -91,13 +151,17 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
+  GenerateDatasetItemsParams,
+  GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
   DatasetItemVersionResponse,
@@ -109,9 +173,13 @@ import { base64RequestContext, parseClientRequestContext, requestContextQueryStr
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
   }
 
   /**
@@ -146,10 +214,11 @@ export class MastraClient extends BaseResource {
   /**
    * Gets an agent instance by ID
    * @param agentId - ID of the agent to retrieve
+   * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string) {
-    return new Agent(this.options, agentId);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
+    return new Agent(this.options, agentId, version);
   }
 
   /**
@@ -810,8 +879,14 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
   }
 
   /**
@@ -841,11 +916,157 @@ export class MastraClient extends BaseResource {
     return this.observability.listScoresBySpan(params);
   }
 
+  /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Logs
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability logs. */
+  listLogsVNext(params: ListLogsArgs = {}): Promise<ListLogsResponse> {
+    return this.observability.listLogs(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Scores
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability scores. */
+  listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
+    return this.observability.listScores(params);
+  }
+
+  /** Creates a single score record in the observability store. */
+  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params);
+  }
+
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Feedback
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of feedback records. */
+  listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
+    return this.observability.listFeedback(params);
+  }
+
+  /** Creates a single feedback record in the observability store. */
+  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Metrics
+  // --------------------------------------------------------------------------
+
+  /** Returns an aggregated metric value with optional period-over-period comparison. */
+  getMetricAggregate(params: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
+    return this.observability.getMetricAggregate(params);
+  }
+
+  /** Returns metric values grouped by specified dimensions. */
+  getMetricBreakdown(params: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    return this.observability.getMetricBreakdown(params);
+  }
+
+  /** Returns metric values bucketed by time interval with optional grouping. */
+  getMetricTimeSeries(params: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    return this.observability.getMetricTimeSeries(params);
+  }
+
+  /** Returns percentile values for a metric bucketed by time interval. */
+  getMetricPercentiles(params: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    return this.observability.getMetricPercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Discovery
+  // --------------------------------------------------------------------------
+
+  /** Returns distinct metric names with optional prefix filtering. */
+  getMetricNames(params: GetMetricNamesArgs = {}): Promise<GetMetricNamesResponse> {
+    return this.observability.getMetricNames(params);
+  }
+
+  /** Returns distinct label keys for a given metric. */
+  getMetricLabelKeys(params: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
+    return this.observability.getMetricLabelKeys(params);
+  }
+
+  /** Returns distinct values for a given metric label key. */
+  getMetricLabelValues(params: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
+    return this.observability.getMetricLabelValues(params);
+  }
+
+  /** Returns distinct entity types from observability data. */
+  getEntityTypes(): Promise<GetEntityTypesResponse> {
+    return this.observability.getEntityTypes();
+  }
+
+  /** Returns distinct entity names with optional type filtering. */
+  getEntityNames(params: GetEntityNamesArgs = {}): Promise<GetEntityNamesResponse> {
+    return this.observability.getEntityNames(params);
+  }
+
+  /** Returns distinct service names from observability data. */
+  getServiceNames(): Promise<GetServiceNamesResponse> {
+    return this.observability.getServiceNames();
+  }
+
+  /** Returns distinct environments from observability data. */
+  getEnvironments(): Promise<GetEnvironmentsResponse> {
+    return this.observability.getEnvironments();
+  }
+
+  /** Returns distinct tags with optional entity type filtering. */
+  getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
+    return this.observability.getTags(params);
   }
 
   // ============================================================================
@@ -1374,6 +1595,42 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /**
+   * Generates synthetic dataset items using AI. Items are returned for review, not auto-saved.
+   */
+  public generateDatasetItems(params: GenerateDatasetItemsParams): Promise<{ items: GeneratedItem[] }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/generate-items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Cluster experiment failures using AI to identify common failure patterns.
+   */
+  public clusterFailures(params: {
+    modelId: string;
+    items: Array<{
+      id: string;
+      input: unknown;
+      output?: unknown;
+      error?: string;
+      scores?: Record<string, number>;
+      existingTags?: string[];
+    }>;
+    availableTags?: string[];
+    prompt?: string;
+  }): Promise<{
+    clusters: Array<{ id: string; label: string; description: string; itemIds: string[] }>;
+    proposedTags?: Array<{ itemId: string; tags: string[]; reason: string }>;
+  }> {
+    return this.request(`/datasets/cluster-failures`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
   // ============================================================================
   // Dataset Item Versions
   // ============================================================================
@@ -1421,6 +1678,27 @@ export class MastraClient extends BaseResource {
   // ============================================================================
 
   /**
+   * Lists all experiments across all datasets
+   */
+  public listExperiments(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
+  }
+
+  /**
    * Lists experiments for a dataset
    */
   public listDatasetExperiments(
@@ -1459,6 +1737,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Updates an experiment result's status and/or tags
+   */
+  public updateDatasetExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
+  }
+
+  /**
    * Triggers a new dataset experiment
    */
   public triggerDatasetExperiment(params: TriggerDatasetExperimentParams): Promise<{
@@ -1493,6 +1785,20 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Updates the status and/or tags on an experiment result
+   */
+  public updateExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
   }
 
   /**

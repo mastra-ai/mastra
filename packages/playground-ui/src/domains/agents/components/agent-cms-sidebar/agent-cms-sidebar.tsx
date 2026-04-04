@@ -1,15 +1,13 @@
 import { Check } from 'lucide-react';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { isActive } from './agent-cms-is-active';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { useSidebarDescriptions } from './use-sidebar-descriptions';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { Txt } from '@/ds/components/Txt';
-import { useSidebarDescriptions } from './use-sidebar-descriptions';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
-import { isActive } from './agent-cms-is-active';
 
 interface AgentCmsSidebarProps {
   basePath: string;
@@ -84,12 +82,12 @@ const SidebarLink = ({
         )}
       >
         {done ? (
-          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center flex-shrink-0">
+          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center shrink-0">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (
           <Txt
-            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono flex-shrink-0"
+            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono shrink-0"
             variant="ui-sm"
           >
             {index + 1}

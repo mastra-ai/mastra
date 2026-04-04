@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useLinkComponent } from '@/lib/framework';
-import { toast } from '@/lib/toast';
+import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
-import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
 import { DatasetItemContent } from '../dataset-detail/dataset-item-content';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
+import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Column } from '@/ds/components/Columns';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -37,25 +37,6 @@ function parseValidationError(error: unknown): SchemaValidationError | null {
   return null;
 }
 
-/** Displays field-level validation errors */
-function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
-  if (!errors.length) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {errors.map((err, idx) => (
-        <p key={idx} className="text-xs text-destructive">
-          <code className="bg-destructive/10 px-1 rounded">
-            {field}
-            {err.path !== '/' ? err.path : ''}
-          </code>
-          : {err.message}
-        </p>
-      ))}
-    </div>
-  );
-}
-
 export interface DatasetItemPanelProps {
   datasetId: string;
   item: DatasetItem;
@@ -77,6 +58,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
+  const [trajectoryValue, setTrajectoryValue] = useState('');
 
   // Validation error state
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
@@ -90,6 +72,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setInputValue(JSON.stringify(item.input, null, 2));
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
       setValidationErrors(null); // Reset validation errors on item change
@@ -146,6 +129,17 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
+    let parsedTrajectory: unknown | null = null;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -153,6 +147,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        expectedTrajectory: parsedTrajectory,
       });
 
       toast.success('Item updated successfully');
@@ -174,6 +169,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setInputValue(JSON.stringify(item.input, null, 2));
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
   };
@@ -235,6 +231,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setGroundTruthValue={handleGroundTruthValueChange}
               metadataValue={metadataValue}
               setMetadataValue={setMetadataValue}
+              trajectoryValue={trajectoryValue}
+              setTrajectoryValue={setTrajectoryValue}
               validationErrors={validationErrors}
               onSave={handleSave}
               onCancel={handleCancel}
