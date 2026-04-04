@@ -508,6 +508,8 @@ export class AIV5Adapter {
     } else if ('image' in part) {
       mimeType = part.mediaType || 'image/jpeg';
       data = part.image;
+    } else if ('url' in part && typeof (part as any).url === 'string') {
+      return (part as any).url;
     } else {
       throw new MastraError({
         id: 'MASTRA_AIV5_DATA_PART_INVALID',
