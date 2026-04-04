@@ -126,6 +126,7 @@
   },
   "changesets": [
     "auth-studio-refresh",
+    "automated-provider-registry-20260404-004906",
     "green-birds-knock",
     "green-impalas-slide",
     "playground-ui-fetch-refresh",
