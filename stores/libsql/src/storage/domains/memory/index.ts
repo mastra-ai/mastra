@@ -1533,7 +1533,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const lookupKey = this.getOMKey(threadId, resourceId);
 
       const conditions = [`"lookupKey" = ?`];
-      const args: unknown[] = [lookupKey];
+      const args: InValue[] = [lookupKey];
 
       if (options?.from) {
         conditions.push(`"createdAt" >= ?`);
