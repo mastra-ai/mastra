@@ -15,7 +15,6 @@ import {
   writeAPIKey,
   writeClaudeMarkdown,
   writeCodeSample,
-  writeGatewaySharedFile,
   writeIndexFile,
 } from './utils';
 import type { Component, ConnectionMethod, LLMProvider } from './utils';
@@ -85,10 +84,6 @@ export const init = async ({
       initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }));
     }
 
-    if (connectionMethod === 'gateway') {
-      initTasks.push(writeGatewaySharedFile(dirPath));
-    }
-
     await Promise.all(initTasks);
 
     if (addExample) {
@@ -111,7 +106,7 @@ export const init = async ({
           await installWithFallback(depService, '@mastra/memory', packageVersionTag);
         }
       }
-      
+
       const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
       if (needsDuckDB) {
         await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
@@ -217,7 +212,7 @@ export const init = async ({
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 
-      ${color.cyan('GATEWAY_URL')} and ${color.cyan('GATEWAY_API_KEY')} have been written to your ${color.cyan('.env')} file
+      ${color.cyan('MASTRA_GATEWAY_URL')} and ${color.cyan('MASTRA_GATEWAY_API_KEY')} have been written to your ${color.cyan('.env')} file
       `);
     } else if (!llmApiKey) {
       const key = await getAPIKey(llmProvider || 'openai');
