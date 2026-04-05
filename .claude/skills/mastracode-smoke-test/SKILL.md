@@ -74,51 +74,44 @@ After creation, verify the project has:
 - `src/mastra/index.ts` exporting a Mastra instance
 - `.env` file (may need to be created)
 
-### Step 2.5: Add Agent Network for Network Mode Testing
+### Step 2.5: Add Browser Agent for Browser Testing
 
-To enable Network mode testing, add an agent network configuration:
+To test browser functionality, add a browser-enabled agent:
 
-1. **Create activity-agent.ts** in `src/mastra/agents/`:
+1. **Install browser packages**:
+
+```sh
+<pm> add @mastra/stagehand
+# or for deterministic browser automation:
+<pm> add @mastra/agent-browser
+```
+
+2. **Create browser-agent.ts** in `src/mastra/agents/`:
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { StagehandBrowser } from '@mastra/stagehand';
 
-export const activityAgent = new Agent({
-  id: 'activity-agent',
-  name: 'Activity Agent',
-  instructions: `You are a helpful activity planning assistant that suggests activities based on weather conditions.`,
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  instructions: `You are a helpful assistant that can browse the web to find information.`,
   model: '<provider>/<model>', // e.g., 'openai/gpt-4o'
   memory: new Memory(),
+  browser: new StagehandBrowser({
+    headless: false,
+  }),
 });
 ```
 
-2. **Create planner-network.ts** in `src/mastra/agents/`:
+3. **Update index.ts** to register the browser agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { weatherAgent } from './weather-agent';
-import { activityAgent } from './activity-agent';
-
-export const plannerNetwork = new Agent({
-  id: 'planner-network',
-  name: 'Planner Network',
-  instructions: `You are a coordinator that manages weather and activity agents.`,
-  model: '<provider>/<model>',
-  agents: { weatherAgent, activityAgent }, // This makes it a network agent
-  memory: new Memory(),
-});
-```
-
-3. **Update index.ts** to register the new agents:
-
-```typescript
-import { activityAgent } from './agents/activity-agent';
-import { plannerNetwork } from './agents/planner-network';
+import { browserAgent } from './agents/browser-agent';
 
 // In Mastra config:
-agents: { weatherAgent, activityAgent, plannerNetwork },
+agents: { weatherAgent, browserAgent },
 ```
 
 ### Step 3: Configure Environment Variables
@@ -183,12 +176,12 @@ Perform the following smoke tests:
 - [ ] Extract/snapshot to verify response appears
 - [ ] Confirm agent chat works
 
-**Network Mode** (if planner-network was added)
+**Browser Agent** (`/agents/browser-agent/chat`) - if browser agent was added
 
-- [ ] Navigate to `/agents/planner-network/chat`
-- [ ] Select "Network" mode if available
-- [ ] Send: "What activities can I do in Paris based on the weather?"
-- [ ] Extract/snapshot to verify network coordination response
+- [ ] Navigate to the browser-agent
+- [ ] Send a message: "Go to example.com and tell me what you see"
+- [ ] Verify the agent launches a browser and extracts content
+- [ ] Verify response includes page content (this is "browserception" - your browser watching the agent's browser!)
 
 **Tools Page** (`/tools`)
 
@@ -280,8 +273,14 @@ Provide a summary:
 - Check server logs for errors
 - Ensure LLM provider API is accessible
 
+**Browser agent fails**
+
+- Ensure Playwright browsers are installed: `pnpm exec playwright install chromium`
+- Check that no other browser instance is blocking
+
 ## Notes
 
 - This skill works with both Stagehand (AI-powered) and AgentBrowser (deterministic) providers
 - The test instructions are tool-agnostic - the agent will use whichever browser tools are available
+- Browser agent testing creates "browserception" - your MastraCode browser watching the project's agent browser
 - For external browser automation (Chrome MCP), use the `smoke-test` skill instead
