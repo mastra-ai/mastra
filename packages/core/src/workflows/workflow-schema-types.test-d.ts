@@ -327,4 +327,58 @@ describe('Workflow schema type inference', () => {
       workflow.then(step);
     });
   });
+
+  describe('stateSchema type inference', () => {
+    it('should infer TState from stateSchema in createWorkflow', () => {
+      const stateSchema = z.object({
+        idx: z.number().default(0),
+        chunks: z.array(z.object({ text: z.string() })).optional(),
+      });
+
+      const myStep = createStep({
+        id: 'my-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        execute: async ({ state }) => {
+          expectTypeOf(state.idx).toBeNumber();
+          return {};
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'my-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+      });
+
+      workflow.then(myStep).dowhile(myStep, async ({ state }) => {
+        // state should be inferred from stateSchema, not unknown
+        expectTypeOf(state).not.toBeUnknown();
+        expectTypeOf(state.idx).toBeNumber();
+        return state.idx < (state.chunks?.length ?? 0);
+      });
+    });
+
+    it('should type state as unknown in dowhile when stateSchema is not provided', () => {
+      const myStep = createStep({
+        id: 'my-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => ({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'my-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(myStep).dowhile(myStep, async ({ state }) => {
+        expectTypeOf(state).toBeUnknown();
+        return false;
+      });
+    });
+  });
 });

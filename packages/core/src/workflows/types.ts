@@ -795,7 +795,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
-  stateSchema?: PublicSchema<TState>;
+  stateSchema?: StandardSchemaWithJSON<TState>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema when the workflow starts.
