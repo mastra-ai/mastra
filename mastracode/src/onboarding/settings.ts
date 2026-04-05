@@ -294,8 +294,7 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
-  const rawViewport =
-    raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
 
@@ -636,9 +635,7 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
  * Returns undefined if browser is disabled.
  */
-export async function createBrowserFromSettings(
-  settings: BrowserSettings,
-): Promise<MastraBrowser | undefined> {
+export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
   if (!settings.enabled) {
     return undefined;
   }

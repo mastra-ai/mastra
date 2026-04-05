@@ -15,8 +15,6 @@ import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
-
-
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
