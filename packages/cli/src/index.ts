@@ -21,6 +21,7 @@ import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { serverDeployAction } from './commands/server/deploy';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
@@ -253,6 +254,19 @@ const authTokens = authCommand.command('tokens').description('Manage API tokens'
 authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
+
+// ---- Server commands ----
+
+const serverCommand = program.command('server').description('Manage Mastra Server deployments');
+
+serverCommand
+  .command('deploy [dir]')
+  .description('Deploy to Mastra Server')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverDeployAction));
 
 program.parse(process.argv);
 
