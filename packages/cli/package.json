@@ -60,6 +60,7 @@
     "fs-extra": "^11.3.4",
     "get-port": "^7.1.0",
     "local-pkg": "^1.1.2",
+    "openapi-fetch": "^0.17.0",
     "picocolors": "^1.1.1",
     "posthog-node": "5.17.2",
     "prettier": "^3.8.1",

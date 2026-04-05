@@ -16,8 +16,21 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { loginAction, logoutAction } from './commands/auth/login';
+import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
+import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
+import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+
+function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
+  return (...args: any[]) => {
+    fn(...args).catch((err: Error) => {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    });
+  };
+}
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -183,6 +196,26 @@ scorersCommand
   .action(addScorer);
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
+
+// ---- Auth commands ----
+
+const authCommand = program.command('auth').description('Manage authentication');
+
+authCommand.command('login').description('Log in to Mastra').action(wrapAction(loginAction));
+
+authCommand.command('logout').description('Log out and clear credentials').action(wrapAction(logoutAction));
+
+authCommand.command('whoami').description('Show current user and organization').action(wrapAction(whoamiAction));
+
+const authOrgs = authCommand.command('orgs').description('Manage organizations').action(wrapAction(listOrgsAction));
+
+authOrgs.command('switch').description('Switch current organization').action(wrapAction(switchOrgAction));
+
+const authTokens = authCommand.command('tokens').description('Manage API tokens').action(wrapAction(listTokensAction));
+
+authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
+
+authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
 
 program.parse(process.argv);
 
