@@ -47,6 +47,7 @@ const mockVerifyResponse = {
     lastName: '',
   },
   organizationId: 'org-2',
+  role: 'member',
 };
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,7 @@ describe('MastraAuthStudio', () => {
         email: 'bob@example.com',
         name: 'Bob',
         organizationId: 'org-2',
+        role: 'member',
       });
 
       // Should have called /auth/verify with the bearer token
@@ -175,6 +177,7 @@ describe('MastraAuthStudio', () => {
         email: 'bob@example.com',
         name: 'Bob',
         organizationId: 'org-2',
+        role: 'member',
       });
 
       expect(fetchSpy).toHaveBeenCalledTimes(2);

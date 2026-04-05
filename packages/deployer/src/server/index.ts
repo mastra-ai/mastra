@@ -24,7 +24,7 @@ import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
-import { html } from './welcome';
+import { welcomeHtml } from './welcome';
 
 // Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
@@ -462,7 +462,7 @@ export async function createHonoServer(
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
-    return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
+    return c.newResponse(welcomeHtml(apiPrefix), 200, { 'Content-Type': 'text/html' });
   });
 
   if (options?.studio) {
