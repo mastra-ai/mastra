@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -776,9 +777,21 @@ export class InMemoryMemory extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
-    const records = this.db.observationalMemory.get(key) ?? [];
+    let records = this.db.observationalMemory.get(key) ?? [];
+
+    if (options?.from) {
+      records = records.filter(r => r.createdAt >= options.from!);
+    }
+    if (options?.to) {
+      records = records.filter(r => r.createdAt <= options.to!);
+    }
+    if (options?.offset != null) {
+      records = records.slice(options.offset);
+    }
+
     return limit != null ? records.slice(0, limit) : records;
   }
 
