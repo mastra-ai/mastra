@@ -2,8 +2,9 @@
 "@mastra/evals": patch
 ---
 
-fix(evals): align answer-similarity prompt with Zod schema for matchType
+Fix answer-similarity scorer to align prompt guidelines with allowed match types
 
-The Matching Guidelines in prompts.ts listed "contradiction" as a matchType value,
-but the Zod schema only allows exact/semantic/partial/missing. Replaced with an
-instruction to use the existing contradictions array, matching the original design.
+The answer-similarity scorer could throw a ZodError when the LLM returned
+"contradiction" as a matchType, since only exact/semantic/partial/missing are
+valid. The prompt now correctly directs contradictory information to the
+existing contradictions array instead.
