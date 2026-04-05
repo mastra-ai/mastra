@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
@@ -637,7 +638,7 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
  */
 export async function createBrowserFromSettings(
   settings: BrowserSettings,
-): Promise<import('@mastra/core/browser').MastraBrowser | undefined> {
+): Promise<MastraBrowser | undefined> {
   if (!settings.enabled) {
     return undefined;
   }
