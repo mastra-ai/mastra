@@ -17,7 +17,9 @@ export function pruneChatContainer(state: TUIState): void {
   children.splice(0, removeCount);
   state.chatContainer.invalidate();
 
-  state.allToolComponents = state.allToolComponents.filter(component => !removed.has(component as unknown as Component));
+  state.allToolComponents = state.allToolComponents.filter(
+    component => !removed.has(component as unknown as Component),
+  );
   state.allSlashCommandComponents = state.allSlashCommandComponents.filter(component => !removed.has(component));
   state.allSystemReminderComponents = state.allSystemReminderComponents.filter(component => !removed.has(component));
 }

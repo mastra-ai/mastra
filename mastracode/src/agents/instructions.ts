@@ -1,6 +1,6 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import { z } from 'zod';
-import { stateSchema } from '../schema.js';
+import type { z } from 'zod';
+import type { stateSchema } from '../schema.js';
 import { getCurrentGitBranch } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';

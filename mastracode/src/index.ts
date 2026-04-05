@@ -7,9 +7,8 @@ import type {
   HarnessMode,
   HarnessSubagent,
 } from '@mastra/core/harness';
-import type { LanguageModel } from '@mastra/core/llm';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 

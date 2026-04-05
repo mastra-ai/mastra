@@ -7,9 +7,9 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { loadSettings } from '../onboarding/settings.js';
-import { stateSchema } from '../schema';
+import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
