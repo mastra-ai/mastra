@@ -34,13 +34,17 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
-      const body = await res.json();
+      const text = await res.text();
+      console.log(`[DEBUG] GET /test status=${res.status} body=${text.slice(0, 2000)}`);
+      const body = JSON.parse(text);
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!' });
     });
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
-      const body = await res.json();
+      const text = await res.text();
+      console.log(`[DEBUG] GET /api/tools status=${res.status} body=${text.slice(0, 2000)}`);
+      const body = JSON.parse(text);
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['weatherTool']);
     });
@@ -55,6 +59,24 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
 
     beforeAll(async () => {
       const workerDir = join(fixturePath, '.mastra', 'output');
+
+      // Debug: dump build output
+      try {
+        const { readdirSync } = await import('fs');
+        console.log(`[DEBUG] output dir: ${readdirSync(workerDir).join(', ')}`);
+        const pkg = await readFile(join(workerDir, 'package.json'), 'utf-8');
+        console.log(`[DEBUG] package.json: ${pkg}`);
+        const entry = await readFile(join(workerDir, 'index.mjs'), 'utf-8');
+        console.log(`[DEBUG] index.mjs (first 3000 chars):\n${entry.slice(0, 3000)}`);
+        const wranglerCfg = await readFile(join(workerDir, 'wrangler.json'), 'utf-8');
+        console.log(`[DEBUG] wrangler.json: ${wranglerCfg}`);
+        if (readdirSync(workerDir).includes('node_modules')) {
+          const nmTop = readdirSync(join(workerDir, 'node_modules'));
+          console.log(`[DEBUG] node_modules: ${nmTop.join(', ')}`);
+        }
+      } catch (e) {
+        console.log(`[DEBUG] error reading output: ${e}`);
+      }
 
       proc = execa('npx', ['wrangler', 'dev', '--port', port.toString()], {
         cwd: workerDir,
