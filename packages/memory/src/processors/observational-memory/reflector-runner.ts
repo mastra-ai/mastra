@@ -32,6 +32,7 @@ import { withOmTracingSpan } from './tracing';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
+  ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -725,7 +726,7 @@ export class ReflectorRunner {
         }
       : undefined;
 
-    let reflectionUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
+    let reflectionUsage: ObserveHookUsage | undefined;
     let reflectionError: Error | undefined;
     try {
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);

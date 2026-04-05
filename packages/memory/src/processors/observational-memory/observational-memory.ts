@@ -3082,7 +3082,7 @@ ${formattedMessages}
       : undefined;
 
     let observed = false;
-    let observationUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
+    let observationUsage: ObserveHookUsage | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
