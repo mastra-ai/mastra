@@ -673,6 +673,7 @@ describe('reflect()', () => {
   it('should return reflected=false when no observations exist', async () => {
     const result = await om.reflect(threadId);
     expect(result.reflected).toBe(false);
+    expect(result.usage).toBeUndefined();
   });
 
   it('should reflect when observations exist', async () => {
@@ -684,6 +685,9 @@ describe('reflect()', () => {
     expect(result.reflected).toBe(true);
     expect(result.record.generationCount).toBeGreaterThan(0);
     expect(result.record.activeObservations).toBeTruthy();
+    expect(result.usage).toEqual(
+      expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+    );
   });
 
   it('should create a new generation on reflect', async () => {
