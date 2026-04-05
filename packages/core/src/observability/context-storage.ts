@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { AnySpan } from './types';
-import { setCurrentSpanResolver } from './utils';
+import { setCurrentSpanResolver, setExecuteWithContext, setExecuteWithContextSync } from './utils';
 
 /**
  * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
@@ -19,6 +19,8 @@ export function getCurrentSpan(): AnySpan | undefined {
 }
 
 setCurrentSpanResolver(getCurrentSpan);
+setExecuteWithContext(executeWithContext);
+setExecuteWithContextSync(executeWithContextSync);
 
 /**
  * Execute an async function within the span's tracing context if available.
