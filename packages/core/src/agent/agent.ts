@@ -378,6 +378,14 @@ export class Agent<
   }
 
   /**
+   * Returns true if this agent was configured with its own browser instance.
+   * Used by Harness to avoid overwriting agent-level browser configuration.
+   */
+  hasOwnBrowser(): boolean {
+    return Boolean(this.#browser);
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */

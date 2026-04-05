@@ -193,7 +193,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
-    browser: config?.browser,
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -368,6 +367,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...config?.initialState,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
+    browser: config?.browser,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
