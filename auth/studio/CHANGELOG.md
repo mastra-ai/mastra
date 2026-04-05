@@ -1,5 +1,14 @@
 # @mastra/auth-studio
 
+## 1.2.1-alpha.1
+
+### Patch Changes
+
+- Fix Bearer token authentication to extract role from /auth/verify response. Previously, CLI tokens created via `mastra auth token create` would fail permission checks because the role was not being extracted, causing MastraRBACStudio to fall back to empty default permissions. ([#15075](https://github.com/mastra-ai/mastra/pull/15075))
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/core@1.23.0-alpha.5
+
 ## 1.2.1-alpha.0
 
 ### Patch Changes
