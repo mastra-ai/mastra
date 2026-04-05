@@ -289,6 +289,24 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
 }
 
 /**
+ * Deep-merge browser settings to preserve nested defaults.
+ */
+function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
+  const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
+  const rawViewport =
+    raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const rawStagehand =
+    raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+
+  return {
+    ...DEFAULTS.browser,
+    ...(raw as Partial<BrowserSettings>),
+    viewport: { ...DEFAULTS.browser.viewport, ...rawViewport } as { width: number; height: number },
+    stagehand: { ...DEFAULTS.browser.stagehand, ...rawStagehand } as StagehandSettings,
+  };
+}
+
+/**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
  * merges them into settings, removes them from auth.json, and writes both files.
@@ -329,7 +347,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
-        browser: { ...DEFAULTS.browser, ...raw.browser },
+        browser: parseBrowserSettings(raw.browser),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -447,7 +465,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
-      browser: { ...DEFAULTS.browser, ...raw.browser },
+      browser: parseBrowserSettings(raw.browser),
     };
 
     // Migrate legacy omModelId → omModelOverride
@@ -610,4 +628,38 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/**
+ * Create a browser instance from settings.
+ * Shared by startup (main.ts) and live reconfiguration (/browser command).
+ * Returns undefined if browser is disabled.
+ */
+export async function createBrowserFromSettings(
+  settings: BrowserSettings,
+): Promise<import('@mastra/core/browser').MastraBrowser | undefined> {
+  if (!settings.enabled) {
+    return undefined;
+  }
+
+  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    return new StagehandBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
+      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+    });
+  } else {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return new AgentBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+    });
+  }
 }

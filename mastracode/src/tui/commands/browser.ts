@@ -3,7 +3,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { createBrowserFromSettings, loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -50,36 +50,6 @@ function askInline(
     ctx.state.ui.requestRender();
     ctx.state.chatContainer.invalidate();
   });
-}
-
-/**
- * Create a browser instance from settings.
- */
-async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
-  if (!settings.enabled) {
-    return undefined;
-  }
-
-  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
-
-  if (provider === 'stagehand') {
-    const { StagehandBrowser } = await import('@mastra/stagehand');
-    return new StagehandBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-      env: stagehand?.env ?? 'LOCAL',
-      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
-      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
-    });
-  } else {
-    const { AgentBrowser } = await import('@mastra/agent-browser');
-    return new AgentBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-    });
-  }
 }
 
 /**
@@ -137,11 +107,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   }
 
   if (arg === 'on' || arg === 'enable') {
-    settings.browser.enabled = true;
-    saveSettings(settings);
+    const nextBrowser = { ...settings.browser, enabled: true };
     try {
-      const browserInstance = await createBrowserFromSettings(settings.browser);
-      await applyBrowserToAgents(ctx, browserInstance);
+      const browserInstance = await createBrowserFromSettings(nextBrowser);
+      applyBrowserToAgents(ctx, browserInstance);
+      settings.browser = nextBrowser;
+      saveSettings(settings);
       const providerLabel = browser.provider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
       ctx.showInfo(`Browser enabled (${providerLabel}).`);
     } catch (err) {
@@ -230,8 +201,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     headless = headlessChoice === 'Yes';
   }
 
-  // Save settings
-  settings.browser = {
+  // Build new browser settings
+  const nextBrowser: BrowserSettings = {
     enabled: true,
     provider,
     headless,
@@ -239,12 +210,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     cdpUrl: browser.cdpUrl,
     stagehand: stagehandSettings,
   };
-  saveSettings(settings);
 
-  // Apply browser to agents
+  // Apply browser to agents first, then persist on success
   try {
-    const browserInstance = await createBrowserFromSettings(settings.browser);
-    await applyBrowserToAgents(ctx, browserInstance);
+    const browserInstance = await createBrowserFromSettings(nextBrowser);
+    applyBrowserToAgents(ctx, browserInstance);
+    settings.browser = nextBrowser;
+    saveSettings(settings);
   } catch (err) {
     ctx.showError(`Failed to create browser: ${err instanceof Error ? err.message : String(err)}`);
     return;

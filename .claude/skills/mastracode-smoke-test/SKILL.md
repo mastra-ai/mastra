@@ -14,7 +14,7 @@ Creates a new Mastra project using `create-mastra@<tag>` and performs smoke test
 
 Activate this skill and provide the parameters:
 
-```
+```text
 smoke test with directory ~/projects, name my-test-app, tag latest
 smoke test -d ~/projects -n my-test-app -t alpha --pm pnpm --llm anthropic
 ```
@@ -259,7 +259,7 @@ Provide a summary:
 
 - Run `/browser` to configure browser support
 - Ensure browser is enabled with `/browser on`
-- Restart MastraCode after changing browser settings
+- Browser setting changes apply immediately; no restart required
 
 **Server won't start**
 
