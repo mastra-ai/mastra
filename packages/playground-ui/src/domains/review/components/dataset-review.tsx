@@ -11,7 +11,8 @@ import {
   Trash2,
   XIcon,
 } from 'lucide-react';
-import { type ComponentPropsWithoutRef, useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
@@ -23,8 +24,7 @@ import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Column } from '@/ds/components/Columns';
-import { Columns } from '@/ds/components/Columns';
+import { Columns, Column } from '@/ds/components/Columns';
 import {
   Dialog,
   DialogContent,

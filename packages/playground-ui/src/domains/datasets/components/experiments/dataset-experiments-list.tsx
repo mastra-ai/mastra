@@ -2,10 +2,10 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Chip } from '@/ds/components/Chip';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { EntityList } from '@/ds/components/EntityList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Chip } from '@/ds/components/Chip';
 import { cn } from '@/lib/utils';
 
 const experimentsListColumns = [
