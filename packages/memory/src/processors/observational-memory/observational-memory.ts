@@ -92,6 +92,7 @@ import type {
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -3081,6 +3082,7 @@ ${formattedMessages}
       : undefined;
 
     let observed = false;
+    let observationUsage: ObserveHookUsage | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3105,8 +3107,9 @@ ${formattedMessages}
       }
 
       hooks?.onObservationStart?.();
+      let observationError: Error | undefined;
       try {
-        observed = await ObservationStrategy.create(this, {
+        const result = await ObservationStrategy.create(this, {
           record: freshRecord,
           threadId,
           resourceId,
@@ -3116,8 +3119,13 @@ ${formattedMessages}
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();
+        observed = result.observed;
+        observationUsage = result.usage;
+      } catch (error) {
+        observationError = error instanceof Error ? error : new Error(String(error));
+        throw error;
       } finally {
-        hooks?.onObservationEnd?.();
+        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
       }
     });
 
@@ -3147,11 +3155,12 @@ ${formattedMessages}
   ): Promise<{
     reflected: boolean;
     record: ObservationalMemoryRecord;
+    usage?: ObserveHookUsage;
   }> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
     if (!record.activeObservations) {
-      return { reflected: false, record };
+      return { reflected: false, record, usage: undefined };
     }
 
     await this.storage.setReflectingFlag(record.id, true);
@@ -3182,11 +3191,11 @@ ${formattedMessages}
       // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
       // and doesn't need to be updated during reflection - it was set during observation
       const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
-      return { reflected: true, record: updatedRecord };
+      return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
       omError('[OM] reflect() failed', error);
       const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
-      return { reflected: false, record: latestRecord };
+      return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
       unregisterOp(record.id, 'reflecting');
