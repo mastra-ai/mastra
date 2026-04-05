@@ -52,6 +52,7 @@
   "dependencies": {
     "@clack/prompts": "^1.1.0",
     "@expo/devcert": "^1.2.1",
+    "archiver": "^7.0.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
     "commander": "^14.0.3",
@@ -77,6 +78,7 @@
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@types/archiver": "^6.0.3",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.15",
     "@types/semver": "^7.7.1",
