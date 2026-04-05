@@ -1,5 +1,14 @@
 # @mastra/auth-studio
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fix session refresh for studio-deployed instances. Sessions now properly refresh when expired, preventing users from being logged out every 5 minutes. ([#15024](https://github.com/mastra-ai/mastra/pull/15024))
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a)]:
+  - @mastra/core@1.23.0-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes
