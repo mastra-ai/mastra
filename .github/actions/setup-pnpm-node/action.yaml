@@ -22,7 +22,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v4.2.0
       name: Install pnpm
       with:
         run_install: false
