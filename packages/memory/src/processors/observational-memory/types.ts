@@ -881,7 +881,7 @@ export interface ObserveHookUsage {
 
 export interface ObserveHooks {
   onObservationStart?: () => void;
-  onObservationEnd?: (result: { usage?: ObserveHookUsage }) => void;
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
   onReflectionStart?: () => void;
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage }) => void;
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
 }

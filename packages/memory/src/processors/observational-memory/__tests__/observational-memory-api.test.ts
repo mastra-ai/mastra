@@ -411,8 +411,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
-      // Observer failed before producing usage, so usage should be undefined
-      expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined });
+      // Observer failed before producing usage, so usage should be undefined and error should be present
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined, error: expect.any(Error) });
+      expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {

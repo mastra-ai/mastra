@@ -359,7 +359,10 @@ export class ReflectorRunner {
           await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
-        reflectionHooks?.onReflectionEnd?.({ usage: undefined });
+        reflectionHooks?.onReflectionEnd?.({
+          usage: undefined,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
         // Clear the boundary so a failed reflection doesn't permanently block
         // future async reflection attempts (line 554 checks this map).
         BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
@@ -723,6 +726,7 @@ export class ReflectorRunner {
       : undefined;
 
     let reflectionUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
+    let reflectionError: Error | undefined;
     try {
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
       const reflectResult = await this.call(
@@ -785,10 +789,11 @@ export class ReflectorRunner {
       if (abortSignal?.aborted) {
         throw error;
       }
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
-      reflectionHooks?.onReflectionEnd?.({ usage: reflectionUsage });
+      reflectionHooks?.onReflectionEnd?.({ usage: reflectionUsage, error: reflectionError });
       unregisterOp(record.id, 'reflecting');
     }
   }

@@ -3107,6 +3107,7 @@ ${formattedMessages}
       }
 
       hooks?.onObservationStart?.();
+      let observationError: Error | undefined;
       try {
         const result = await ObservationStrategy.create(this, {
           record: freshRecord,
@@ -3120,8 +3121,11 @@ ${formattedMessages}
         }).run();
         observed = result.observed;
         observationUsage = result.usage;
+      } catch (error) {
+        observationError = error instanceof Error ? error : new Error(String(error));
+        throw error;
       } finally {
-        hooks?.onObservationEnd?.({ usage: observationUsage });
+        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
       }
     });
 
