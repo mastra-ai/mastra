@@ -31,7 +31,7 @@ import {
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
-  handleSetupBrowserCommand,
+  handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
   handleMemoryGatewayCommand,
@@ -158,8 +158,8 @@ export async function dispatchSlashCommand(
     case 'setup':
       await handleSetupCommand(buildCtx());
       return true;
-    case 'setup-browser':
-      await handleSetupBrowserCommand(buildCtx(), args);
+    case 'browser':
+      await handleBrowserCommand(buildCtx(), args);
       return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);

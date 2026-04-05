@@ -8,6 +8,16 @@ import { AskQuestionInlineComponent } from '../components/ask-question-inline.js
 import type { SlashCommandContext } from './types.js';
 
 /**
+ * /browser command - Configure browser automation for agents.
+ *
+ * Usage:
+ *   /browser          - Interactive setup wizard
+ *   /browser status   - Show current browser configuration
+ *   /browser on       - Enable browser with current settings
+ *   /browser off      - Disable browser
+ */
+
+/**
  * Helper to show an inline question and return the answer.
  */
 function askInline(
@@ -84,14 +94,14 @@ function applyBrowserToAgents(ctx: SlashCommandContext, browser: MastraBrowser |
 }
 
 /**
- * /setup-browser — Configure browser automation settings.
+ * /browser — Configure browser automation settings.
  *
  * Interactive flow to set up browser provider (Stagehand or AgentBrowser),
  * headless mode, and provider-specific options.
  *
  * Changes are applied immediately to the current session.
  */
-export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
+export async function handleBrowserCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   const settings = loadSettings();
   const browser = settings.browser;
 
