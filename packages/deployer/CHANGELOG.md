@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- Added `mastra studio deploy` command for deploying studio to the Mastra platform. Includes `deploy`, `deploy list`, `deploy status`, `deploy logs`, and `projects` subcommands. Also generates a `package-lock.json` during build for faster deploys. ([#15067](https://github.com/mastra-ai/mastra/pull/15067))
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+  - @mastra/server@1.23.0-alpha.4
+
 ## 1.23.0-alpha.3
 
 ### Patch Changes

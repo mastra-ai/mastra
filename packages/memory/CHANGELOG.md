@@ -1,5 +1,43 @@
 # @mastra/memory
 
+## 1.14.0-alpha.1
+
+### Minor Changes
+
+- Added usage data to ObserveHooks callbacks and standalone reflect() return. ([#15047](https://github.com/mastra-ai/mastra/pull/15047))
+
+  **ObserveHooks:** `onObservationEnd` and `onReflectionEnd` now receive a result object containing token usage from the underlying LLM call. This enables reliable usage tracking across all observation and reflection paths (sync, async buffered, and resource-scoped).
+
+  **Standalone reflect():** `reflect()` now returns `{ reflected, record, usage? }` so callers can capture token usage without hooks.
+
+  **Examples**
+
+  ```ts
+  // Via hooks
+  await memory.observe({
+    threadId,
+    messages,
+    hooks: {
+      onObservationEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+      onReflectionEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+    },
+  });
+
+  // Via standalone reflect()
+  const { reflected, usage } = await memory.reflect(threadId, resourceId);
+  ```
+
+  Existing callbacks that accept no arguments continue to work without changes.
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+
 ## 1.13.2-alpha.0
 
 ### Patch Changes

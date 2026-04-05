@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- Fixed a browser bundling issue where importing `@mastra/core` could pull in a Node-only dependency. ([#15072](https://github.com/mastra-ai/mastra/pull/15072))
+
 ## 1.23.0-alpha.3
 
 ### Patch Changes

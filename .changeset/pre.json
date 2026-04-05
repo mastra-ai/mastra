@@ -127,15 +127,19 @@
   "changesets": [
     "auth-studio-refresh",
     "automated-provider-registry-20260404-004906",
+    "cli-studio-deploy",
     "green-birds-knock",
     "green-impalas-slide",
+    "legal-dots-spend",
     "little-doors-laugh",
+    "ninety-bugs-brake",
     "playground-ui-fetch-refresh",
     "public-turtles-speak",
     "puny-clubs-push",
     "quick-paths-eat",
     "server-auth-refresh",
     "slow-plums-invite",
+    "social-forks-flash",
     "two-socks-train"
   ]
 }

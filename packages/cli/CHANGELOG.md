@@ -1,5 +1,19 @@
 # mastra
 
+## 1.4.0-alpha.4
+
+### Minor Changes
+
+- Added `mastra studio deploy` command for deploying studio to the Mastra platform. Includes `deploy`, `deploy list`, `deploy status`, `deploy logs`, and `projects` subcommands. Also generates a `package-lock.json` during build for faster deploys. ([#15067](https://github.com/mastra-ai/mastra/pull/15067))
+
+- Added `mastra auth` commands to log in, log out, show the current account, switch organizations, and manage API tokens. ([#15066](https://github.com/mastra-ai/mastra/pull/15066))
+
+### Patch Changes
+
+- Updated dependencies [[`ef36607`](https://github.com/mastra-ai/mastra/commit/ef36607c05142900dd6de2dff1a0a575830d78bd), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/deployer@1.23.0-alpha.4
+  - @mastra/core@1.23.0-alpha.4
+
 ## 1.3.21-alpha.3
 
 ### Patch Changes
