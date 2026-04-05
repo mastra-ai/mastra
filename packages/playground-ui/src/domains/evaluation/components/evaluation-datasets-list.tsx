@@ -132,13 +132,18 @@ export function EvaluationDatasetsList({
             <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
             <EntityList.Cell>
               {Array.isArray(ds.tags) && ds.tags.length > 0 ? (
-                <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={(ds.tags as string[]).join(', ')}>
+                <div
+                  className="flex max-w-48 items-center gap-1 overflow-hidden"
+                  title={(ds.tags as string[]).join(', ')}
+                >
                   {(ds.tags as string[]).slice(0, 2).map(tag => (
                     <Badge key={tag} variant="default" className="shrink-0 px-1.5 py-0 text-[10px]">
                       {tag}
                     </Badge>
                   ))}
-                  {ds.tags.length > 2 && <span className="shrink-0 text-[10px] text-neutral2">+{ds.tags.length - 2}</span>}
+                  {ds.tags.length > 2 && (
+                    <span className="shrink-0 text-[10px] text-neutral2">+{ds.tags.length - 2}</span>
+                  )}
                 </div>
               ) : (
                 <span className="text-neutral2">—</span>
@@ -192,5 +197,10 @@ export function getEvaluationDatasetTagOptions(datasets: DatasetRecord[]) {
     }
   }
 
-  return [{ value: 'all', label: 'All tags' }, ...Array.from(tagSet).sort().map(tag => ({ value: tag, label: tag }))];
+  return [
+    { value: 'all', label: 'All tags' },
+    ...Array.from(tagSet)
+      .sort()
+      .map(tag => ({ value: tag, label: tag })),
+  ];
 }

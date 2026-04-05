@@ -277,7 +277,10 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   }, [showCompleted, completedItems, filteredItems, activeTagFilter]);
   const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
   const visibleIds = useMemo(() => new Set(displayItems.map(i => i.id)), [displayItems]);
-  const selectedVisibleCount = useMemo(() => [...selectedItemIds].filter(id => visibleIds.has(id)).length, [selectedItemIds, visibleIds]);
+  const selectedVisibleCount = useMemo(
+    () => [...selectedItemIds].filter(id => visibleIds.has(id)).length,
+    [selectedItemIds, visibleIds],
+  );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
   const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
 
@@ -398,12 +401,9 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   }, [proposedAssignments, items, setItemTags]);
 
   // Row click handler
-  const handleRowClick = useCallback(
-    (itemId: string) => {
-      setFeaturedItemId(prev => (prev === itemId ? null : itemId));
-    },
-    [],
-  );
+  const handleRowClick = useCallback((itemId: string) => {
+    setFeaturedItemId(prev => (prev === itemId ? null : itemId));
+  }, []);
 
   // Featured item
   const featuredItem = useMemo(() => {
@@ -803,7 +803,9 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                             {item.comment}
                           </Txt>
                         ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">—</Txt>
+                          <Txt variant="ui-xs" className="text-neutral2">
+                            —
+                          </Txt>
                         )}
                       </EntityList.Cell>
 
@@ -814,7 +816,9 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                             {item.tags.join(', ')}
                           </Txt>
                         ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">—</Txt>
+                          <Txt variant="ui-xs" className="text-neutral2">
+                            —
+                          </Txt>
                         )}
                       </EntityList.Cell>
 
@@ -831,7 +835,11 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                               <ThumbsDown />
                             </Icon>
                           )}
-                          {!item.rating && <Txt variant="ui-xs" className="text-neutral2">—</Txt>}
+                          {!item.rating && (
+                            <Txt variant="ui-xs" className="text-neutral2">
+                              —
+                            </Txt>
+                          )}
                         </EntityList.Cell>
                       )}
 
@@ -846,12 +854,12 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                               <Txt variant="ui-xs" className="text-neutral4 font-mono">
                                 {scoreEntries[0][1].toFixed(2)}
                               </Txt>
-                              {scoreEntries.length > 1 && (
-                                <Badge variant="default">+{scoreEntries.length - 1}</Badge>
-                              )}
+                              {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
                             </div>
                           ) : (
-                            <Txt variant="ui-xs" className="text-neutral2">—</Txt>
+                            <Txt variant="ui-xs" className="text-neutral2">
+                              —
+                            </Txt>
                           )}
                         </EntityList.Cell>
                       )}

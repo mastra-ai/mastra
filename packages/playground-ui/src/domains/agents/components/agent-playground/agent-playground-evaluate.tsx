@@ -374,9 +374,7 @@ export function AgentPlaygroundEvaluate({
               activeScorers={Object.keys(agentScorers)}
               datasetScorerIds={datasetMap.get(detailView.id)?.scorerIds ?? null}
               onGenerate={() => setGenerateDatasetId(detailView.id)}
-              onViewExperiment={expId =>
-                setDetailView({ type: 'experiment', id: expId, datasetId: detailView.id })
-              }
+              onViewExperiment={expId => setDetailView({ type: 'experiment', id: expId, datasetId: detailView.id })}
             />
           </Column.Content>
         </Column>
@@ -583,7 +581,11 @@ export function AgentPlaygroundEvaluate({
           const isGenerating = genTask?.status === 'generating';
 
           return (
-            <EntityList.Row key={ds.id} selected={detailView?.type === 'dataset' && detailView.id === ds.id} onClick={() => setDetailView({ type: 'dataset', id: ds.id })}>
+            <EntityList.Row
+              key={ds.id}
+              selected={detailView?.type === 'dataset' && detailView.id === ds.id}
+              onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
+            >
               <EntityList.NameCell>{ds.name}</EntityList.NameCell>
               <EntityList.Cell>
                 {ds.tags?.length ? (
@@ -600,11 +602,7 @@ export function AgentPlaygroundEvaluate({
                 )}
               </EntityList.Cell>
               <EntityList.Cell>
-                {exp ? (
-                  <ExperimentBadge experiment={exp} />
-                ) : (
-                  <span className="text-neutral2">No experiments</span>
-                )}
+                {exp ? <ExperimentBadge experiment={exp} /> : <span className="text-neutral2">No experiments</span>}
               </EntityList.Cell>
               <EntityList.Cell>
                 {isGenerating ? (
@@ -666,7 +664,11 @@ export function AgentPlaygroundEvaluate({
           }).length;
 
           return (
-            <EntityList.Row key={id} selected={detailView?.type === 'scorer' && detailView.id === id} onClick={() => setDetailView({ type: 'scorer', id })}>
+            <EntityList.Row
+              key={id}
+              selected={detailView?.type === 'scorer' && detailView.id === id}
+              onClick={() => setDetailView({ type: 'scorer', id })}
+            >
               <EntityList.NameCell>
                 <Icon size="sm" className="text-neutral3 mr-1.5">
                   <GaugeIcon />
@@ -679,7 +681,9 @@ export function AgentPlaygroundEvaluate({
               <EntityList.TextCell className="truncate max-w-[200px]">
                 {description || <span className="text-neutral2">—</span>}
               </EntityList.TextCell>
-              <EntityList.TextCell>{linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}</EntityList.TextCell>
+              <EntityList.TextCell>
+                {linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}
+              </EntityList.TextCell>
             </EntityList.Row>
           );
         })}
@@ -691,11 +695,7 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-          targetIds={[agentId]}
-        />
+        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -725,11 +725,7 @@ export function AgentPlaygroundEvaluate({
               <DialogTitle>Attach Existing Dataset</DialogTitle>
             </DialogHeader>
             <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <Searchbar
-                onSearch={setAttachDatasetSearch}
-                label="Search datasets"
-                placeholder="Search datasets..."
-              />
+              <Searchbar onSearch={setAttachDatasetSearch} label="Search datasets" placeholder="Search datasets..." />
               {unattachedDatasets
                 .filter(ds => !attachDatasetSearch || ds.name.toLowerCase().includes(attachDatasetSearch.toLowerCase()))
                 .map(ds => (
@@ -780,11 +776,7 @@ export function AgentPlaygroundEvaluate({
               <DialogTitle>Attach Existing Scorer</DialogTitle>
             </DialogHeader>
             <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <Searchbar
-                onSearch={setAttachScorerSearch}
-                label="Search scorers"
-                placeholder="Search scorers..."
-              />
+              <Searchbar onSearch={setAttachScorerSearch} label="Search scorers" placeholder="Search scorers..." />
               {unattachedScorers
                 .filter(([id, scorer]) => {
                   if (!attachScorerSearch) return true;
@@ -838,7 +830,12 @@ export function AgentPlaygroundEvaluate({
 
   return (
     <div className="flex h-full flex-col overflow-hidden p-4">
-      <Tabs<AgentEvalTab> defaultTab="experiments" value={activeTab} onValueChange={handleTabChange} className="flex flex-col h-full overflow-hidden">
+      <Tabs<AgentEvalTab>
+        defaultTab="experiments"
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="flex flex-col h-full overflow-hidden"
+      >
         <div className="flex items-center justify-between border-b border-border1">
           <TabList className="border-b-0">
             <Tab value="experiments">Experiments</Tab>
@@ -870,11 +867,7 @@ export function AgentPlaygroundEvaluate({
                     Attach
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDetailView({ type: 'new-scorer' })}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setDetailView({ type: 'new-scorer' })}>
                   <Plus className="size-3.5 mr-1" />
                   New
                 </Button>
@@ -886,25 +879,13 @@ export function AgentPlaygroundEvaluate({
         {/* Search bar below tabs */}
         <div className="py-2 border-b border-border1">
           {activeTab === 'experiments' && (
-            <Searchbar
-              onSearch={setExperimentsSearch}
-              label="Search experiments"
-              placeholder="Search experiments..."
-            />
+            <Searchbar onSearch={setExperimentsSearch} label="Search experiments" placeholder="Search experiments..." />
           )}
           {activeTab === 'datasets' && (
-            <Searchbar
-              onSearch={setDatasetsSearch}
-              label="Search datasets"
-              placeholder="Search datasets..."
-            />
+            <Searchbar onSearch={setDatasetsSearch} label="Search datasets" placeholder="Search datasets..." />
           )}
           {activeTab === 'scorers' && (
-            <Searchbar
-              onSearch={setScorersSearch}
-              label="Search scorers"
-              placeholder="Search scorers..."
-            />
+            <Searchbar onSearch={setScorersSearch} label="Search scorers" placeholder="Search scorers..." />
           )}
         </div>
 
@@ -928,11 +909,23 @@ export function AgentPlaygroundEvaluate({
           </TabContent>
 
           <TabContent value="scorers" className="h-full overflow-hidden">
-            <Columns className={hasDetailPanel && (detailView?.type === 'scorer' || detailView?.type === 'new-scorer' || detailView?.type === 'edit-scorer') ? 'grid-cols-[1fr_1fr]' : ''}>
+            <Columns
+              className={
+                hasDetailPanel &&
+                (detailView?.type === 'scorer' ||
+                  detailView?.type === 'new-scorer' ||
+                  detailView?.type === 'edit-scorer')
+                  ? 'grid-cols-[1fr_1fr]'
+                  : ''
+              }
+            >
               <Column>
                 <Column.Content>{renderScorersTab()}</Column.Content>
               </Column>
-              {(detailView?.type === 'scorer' || detailView?.type === 'new-scorer' || detailView?.type === 'edit-scorer') && renderDetailPanel()}
+              {(detailView?.type === 'scorer' ||
+                detailView?.type === 'new-scorer' ||
+                detailView?.type === 'edit-scorer') &&
+                renderDetailPanel()}
             </Columns>
           </TabContent>
         </div>

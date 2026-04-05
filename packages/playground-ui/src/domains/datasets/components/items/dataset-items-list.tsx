@@ -105,12 +105,7 @@ export function DatasetItemsList({
     onToggleSelection(id, shiftKey, allIds);
   };
 
-  const gridColumns = [
-    isSelectionActive ? '2rem' : '',
-    ...columns.map(c => c.size),
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const gridColumns = [isSelectionActive ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
     <EntityList columns={gridColumns}>

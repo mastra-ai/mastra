@@ -70,7 +70,10 @@ export function EvaluationExperimentsList({
     return sortedExperiments.filter(exp => {
       const dsName = exp.datasetId ? (datasetMap.get(exp.datasetId) ?? '') : '';
       const matchesSearch =
-        !term || exp.id.toLowerCase().includes(term) || dsName.toLowerCase().includes(term) || (exp.targetId ?? '').toLowerCase().includes(term);
+        !term ||
+        exp.id.toLowerCase().includes(term) ||
+        dsName.toLowerCase().includes(term) ||
+        (exp.targetId ?? '').toLowerCase().includes(term);
       const matchesStatus = statusFilter === 'all' || exp.status === statusFilter;
       const matchesDataset = datasetFilter === 'all' || exp.datasetId === datasetFilter;
       return matchesSearch && matchesStatus && matchesDataset;
@@ -147,7 +150,11 @@ export function EvaluationExperimentsList({
                 if (review.needsReview > 0) {
                   return <Badge variant="warning">{review.needsReview} pending</Badge>;
                 }
-                return <Badge variant="success">{review.complete}/{inPipeline} reviewed</Badge>;
+                return (
+                  <Badge variant="success">
+                    {review.complete}/{inPipeline} reviewed
+                  </Badge>
+                );
               })()}
             </EntityList.Cell>
             <EntityList.TextCell>{formatDate(exp.createdAt)}</EntityList.TextCell>

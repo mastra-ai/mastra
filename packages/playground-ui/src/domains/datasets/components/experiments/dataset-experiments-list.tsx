@@ -47,10 +47,7 @@ export function DatasetExperimentsList({
     return <EmptyDatasetExperimentsList />;
   }
 
-  const gridColumns = [
-    isSelectionActive ? '2rem' : '',
-    ...experimentsListColumns.map(c => c.size),
-  ]
+  const gridColumns = [isSelectionActive ? '2rem' : '', ...experimentsListColumns.map(c => c.size)]
     .filter(Boolean)
     .join(' ');
 

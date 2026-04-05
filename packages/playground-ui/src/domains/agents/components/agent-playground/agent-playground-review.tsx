@@ -266,7 +266,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   }, [showCompleted, completedItems, filteredItems, activeTagFilter]);
   const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
   const visibleIds = useMemo(() => new Set(displayItems.map(i => i.id)), [displayItems]);
-  const selectedVisibleCount = useMemo(() => [...selectedItemIds].filter(id => visibleIds.has(id)).length, [selectedItemIds, visibleIds]);
+  const selectedVisibleCount = useMemo(
+    () => [...selectedItemIds].filter(id => visibleIds.has(id)).length,
+    [selectedItemIds, visibleIds],
+  );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
   const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
 
@@ -698,10 +701,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         </Icon>
                         Analyze selected
                       </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        disabled={untaggedCount === 0}
-                        onSelect={() => openAnalyzeDialog('untagged')}
-                      >
+                      <DropdownMenu.Item disabled={untaggedCount === 0} onSelect={() => openAnalyzeDialog('untagged')}>
                         <Icon size="sm">
                           <Sparkles />
                         </Icon>
@@ -857,9 +857,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                               <Txt variant="ui-xs" className="text-neutral4">
                                 {scoreEntries[0][1].toFixed(2)}
                               </Txt>
-                              {scoreEntries.length > 1 && (
-                                <Badge variant="default">+{scoreEntries.length - 1}</Badge>
-                              )}
+                              {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
                             </span>
                           ) : (
                             <Txt variant="ui-xs" className="text-neutral2">
