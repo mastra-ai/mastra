@@ -1,5 +1,13 @@
 # @mastra/deployer-cloud
 
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`c3899d0`](https://github.com/mastra-ai/mastra/commit/c3899d0829eae0c9844672da817578dcf1a11eba), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/deployer@1.23.0-alpha.5
+  - @mastra/core@1.23.0-alpha.5
+
 ## 1.23.0-alpha.4
 
 ### Patch Changes

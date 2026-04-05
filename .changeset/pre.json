@@ -125,14 +125,19 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "angry-mirrors-knock",
     "auth-studio-refresh",
     "automated-provider-registry-20260404-004906",
+    "cli-server-deploy",
     "cli-studio-deploy",
+    "fix-bearer-token-role",
     "green-birds-knock",
     "green-impalas-slide",
     "legal-dots-spend",
     "little-doors-laugh",
+    "loud-tigers-march",
     "ninety-bugs-brake",
+    "perky-mammals-wink",
     "playground-ui-fetch-refresh",
     "public-turtles-speak",
     "puny-clubs-push",
@@ -140,6 +145,7 @@
     "server-auth-refresh",
     "slow-plums-invite",
     "social-forks-flash",
-    "two-socks-train"
+    "two-socks-train",
+    "yummy-radios-relate"
   ]
 }

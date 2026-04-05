@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- Fully isolate `async_hooks` from shared chunks so importing `@mastra/core` in browser bundles never pulls in the Node-only dependency ([#15074](https://github.com/mastra-ai/mastra/pull/15074))
+
+- Fixed `__setLogger` passing a raw string to `logger.child()`, which caused PinoLogger to serialize each character as a separate log field (e.g. `0: "B", 1: "U", 2: "N"...`). Now passes `{ component }` object instead. ([#15079](https://github.com/mastra-ai/mastra/pull/15079))
+
 ## 1.23.0-alpha.4
 
 ### Patch Changes
