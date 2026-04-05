@@ -7,7 +7,7 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -3222,9 +3222,14 @@ ${formattedMessages}
   /**
    * Get observation history (previous generations)
    */
-  async getHistory(threadId: string, resourceId?: string, limit?: number): Promise<ObservationalMemoryRecord[]> {
+  async getHistory(
+    threadId: string,
+    resourceId?: string,
+    limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
+  ): Promise<ObservationalMemoryRecord[]> {
     const ids = this.getStorageIds(threadId, resourceId);
-    return this.storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, limit);
+    return this.storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, limit, options);
   }
 
   /**

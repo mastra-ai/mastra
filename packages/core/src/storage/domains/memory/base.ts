@@ -13,6 +13,7 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -183,6 +184,7 @@ export abstract class MemoryStorage extends StorageDomain {
     _threadId: string | null,
     _resourceId: string,
     _limit?: number,
+    _options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
