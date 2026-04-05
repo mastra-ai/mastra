@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
@@ -148,7 +148,9 @@ export abstract class Bundler extends MastraBundler {
    */
   private async generateNpmLockfile(outputDir: string): Promise<void> {
     try {
-      execSync('rm -rf node_modules && npm install --package-lock-only --force 2>/dev/null', {
+      // Remove node_modules first — pnpm's symlink layout confuses npm's arborist
+      await rm(join(outputDir, 'node_modules'), { recursive: true, force: true }).catch(() => {});
+      execSync('npm install --package-lock-only --force', {
         cwd: outputDir,
         stdio: 'pipe',
         timeout: 60_000,

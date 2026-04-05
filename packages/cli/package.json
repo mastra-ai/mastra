@@ -78,7 +78,7 @@
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/archiver": "^6.0.3",
+    "@types/archiver": "^7.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.15",
     "@types/semver": "^7.7.1",

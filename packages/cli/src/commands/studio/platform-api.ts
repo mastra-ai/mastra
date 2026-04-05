@@ -196,7 +196,7 @@ export async function pollDeploy(
         lastStatus = deploy.status;
       }
 
-      if (deploy.status === 'running' || deploy.status === 'failed') {
+      if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
         return deploy;
       }
 

@@ -42,6 +42,7 @@ async function streamLogs(deployId: string, token: string, orgId: string) {
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
 
   // Handle Ctrl+C gracefully
   process.on('SIGINT', () => {
@@ -53,9 +54,11 @@ async function streamLogs(deployId: string, token: string, orgId: string) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    const chunk = decoder.decode(value, { stream: true });
-    // Parse SSE data lines
-    for (const line of chunk.split('\n')) {
+    buffer += decoder.decode(value, { stream: true });
+    // Parse SSE data lines, keeping any incomplete trailing line in the buffer
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
       if (line.startsWith('data:')) {
         const data = line.slice(5).trimStart();
         process.stdout.write(data + '\n');
