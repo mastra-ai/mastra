@@ -150,9 +150,13 @@ export abstract class Bundler extends MastraBundler {
   private async generateNpmLockfile(outputDir: string): Promise<void> {
     const nodeModules = join(outputDir, 'node_modules');
     const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
+    let movedNodeModules = false;
     try {
       // Move node_modules aside — pnpm's symlink layout confuses npm's arborist
-      await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true }).catch(() => {});
+      if (await fsExtra.pathExists(nodeModules)) {
+        await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true });
+        movedNodeModules = true;
+      }
       execSync('npm install --package-lock-only --force', {
         cwd: outputDir,
         stdio: 'pipe',
@@ -162,8 +166,10 @@ export abstract class Bundler extends MastraBundler {
       this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
     } finally {
       // Restore node_modules so runtime resolution works
-      await rm(nodeModules, { recursive: true, force: true }).catch(() => {});
-      await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true }).catch(() => {});
+      if (movedNodeModules) {
+        await rm(nodeModules, { recursive: true, force: true });
+        await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true });
+      }
     }
   }
 
