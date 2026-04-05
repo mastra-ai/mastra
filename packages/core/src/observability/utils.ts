@@ -47,7 +47,11 @@ export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => 
   if (executeWithContextImpl) {
     return executeWithContextImpl(params);
   }
-  return params.fn();
+  const { span, fn } = params;
+  if (span?.executeInContext) {
+    return span.executeInContext(fn);
+  }
+  return fn();
 }
 
 /**
@@ -58,7 +62,11 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
   if (executeWithContextSyncImpl) {
     return executeWithContextSyncImpl(params);
   }
-  return params.fn();
+  const { span, fn } = params;
+  if (span?.executeInContextSync) {
+    return span.executeInContextSync(fn);
+  }
+  return fn();
 }
 
 /**
