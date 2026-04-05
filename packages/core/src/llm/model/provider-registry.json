@@ -1079,7 +1079,7 @@
         "gemma-3-4b-it",
         "gemma-3n-e2b-it",
         "gemma-3n-e4b-it",
-        "gemma-4-26b",
+        "gemma-4-26b-a4b-it",
         "gemma-4-31b"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
@@ -5297,7 +5297,7 @@
       "gemma-3-4b-it",
       "gemma-3n-e2b-it",
       "gemma-3n-e4b-it",
-      "gemma-4-26b",
+      "gemma-4-26b-a4b-it",
       "gemma-4-31b"
     ],
     "cloudferro-sherlock": [

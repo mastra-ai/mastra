@@ -114,7 +114,13 @@
       "js-yaml": "^3.14.2",
       "glob@<=10.5.0": "10.5.0",
       "body-parser@<=2.2.1": "2.2.2",
-      "fast-xml-parser@<=5.3.8": "5.5.7"
+      "fast-xml-parser@<=5.3.8": "5.5.7",
+      "form-data": "^4.0.0",
+      "handlebars": "^4.7.9",
+      "argparse": "^2.0.1",
+      "bcrypt-pbkdf": "^1.0.2",
+      "bcryptjs": "^3.0.3",
+      "spdx-exceptions": "^2.5.0"
     },
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
