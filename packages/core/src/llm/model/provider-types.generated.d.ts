@@ -641,6 +641,7 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'google/gemma-3n-e2b-it',
     'google/gemma-3n-e4b-it',
+    'google/gemma-4-31b-it',
     'meta/codellama-70b',
     'meta/llama-3.1-405b-instruct',
     'meta/llama-3.1-70b-instruct',
@@ -756,18 +757,14 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'Qwen/Qwen3-Coder-Next-FP8',
-    'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'Qwen/Qwen3.5-397B-A17B',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-1',
     'essentialai/Rnj-1-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2.5',
     'openai/gpt-oss-120b',
-    'zai-org/GLM-4.6',
-    'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
   readonly firmware: readonly [
@@ -1804,7 +1801,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
-    'qwen/qwen3.6-plus-preview:free',
     'qwen/qwen3.6-plus:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
@@ -1961,7 +1957,10 @@ export type ProviderModelsMap = {
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.2-codex',
+    'gpt-5.3-codex',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
   ];
   readonly helicone: readonly [
     'chatgpt-4o-latest',
@@ -2073,6 +2072,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-plus',
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2',
@@ -2732,6 +2732,7 @@ export type ProviderModelsMap = {
     'qwen3-vl-plus',
     'qwen3.5-397b-a17b',
     'qwen3.5-plus',
+    'qwen3.6-plus',
     'qwq-plus',
   ];
   readonly mistral: readonly [
@@ -3537,6 +3538,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-plus',
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly inception: readonly ['mercury', 'mercury-2', 'mercury-coder', 'mercury-edit'];
   readonly 'zhipuai-coding-plan': readonly [
