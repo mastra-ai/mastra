@@ -1,14 +1,14 @@
 ---
 name: mastracode-smoke-test
-description: Create a Mastra project using create-mastra and smoke test the studio using MastraCode's built-in Stagehand browser tools
+description: Create a Mastra project using create-mastra and smoke test the studio using MastraCode's built-in browser tools
 model: claude-opus-4-5
 ---
 
 # MastraCode Smoke Test Skill
 
-Creates a new Mastra project using `create-mastra@<tag>` and performs smoke testing of the Mastra Studio using MastraCode's built-in Stagehand browser tools.
+Creates a new Mastra project using `create-mastra@<tag>` and performs smoke testing of the Mastra Studio using MastraCode's built-in browser tools.
 
-**This skill is for MastraCode with built-in browser support.** For Claude Code with external browser tools, use `claude-smoke-test` instead.
+**This skill is for MastraCode with browser support enabled.** It works with either Stagehand or AgentBrowser providers. For Claude Code with external browser tools, use `smoke-test` instead.
 
 ## Usage
 
@@ -31,16 +31,12 @@ smoke test -d ~/projects -n my-test-app -t alpha --pm pnpm --llm anthropic
 
 ## Prerequisites
 
-This skill requires MastraCode with browser support enabled. The following Stagehand tools must be available:
+This skill requires MastraCode with browser support enabled via `/browser on`. Either browser provider works:
 
-- `stagehand_navigate` - Navigate to URLs
-- `stagehand_act` - Perform actions (click, type, etc.)
-- `stagehand_extract` - Extract data from pages
-- `stagehand_observe` - Observe page elements
-- `stagehand_tabs` - Manage browser tabs
-- `stagehand_close` - Close browser session
+- **Stagehand** (AI-powered): Uses natural language actions
+- **AgentBrowser** (deterministic): Uses explicit element refs
 
-If these tools are not available, configure browser support in MastraCode settings.
+If browser tools are not available, run `/browser` to configure browser support.
 
 ## Execution Steps
 
@@ -155,90 +151,88 @@ cd <directory>/<project-name>
 
 The server typically starts on `http://localhost:4111`. Wait for the server to be ready.
 
-### Step 5: Smoke Test the Studio with Stagehand
+### Step 5: Smoke Test the Studio
 
-Use the built-in Stagehand browser tools to test the Mastra Studio.
+Use the available browser tools to test the Mastra Studio. The instructions below are tool-agnostic - use whichever browser tools are available (Stagehand or AgentBrowser).
 
 #### 5.1 Initial Navigation
 
-```
-stagehand_navigate to http://localhost:4111
-```
+Navigate to `http://localhost:4111`
 
 #### 5.2 Test Checklist
 
-Perform the following smoke tests using Stagehand tools:
+Perform the following smoke tests:
 
 **Navigation & Basic Loading**
 
-- [ ] `stagehand_navigate` to `http://localhost:4111`
-- [ ] `stagehand_extract` to verify "Mastra Studio" or agents list appears
+- [ ] Navigate to `http://localhost:4111`
+- [ ] Extract/snapshot the page to verify "Mastra Studio" or agents list appears
 - [ ] Verify Studio loads successfully
 
 **Agents Page** (`/agents`)
 
-- [ ] `stagehand_navigate` to `/agents` (or click Agents link)
-- [ ] `stagehand_extract` to verify at least one agent is listed
+- [ ] Navigate to `/agents` (or click Agents link)
+- [ ] Extract/snapshot to verify at least one agent is listed
 - [ ] Note the agents available
 
 **Agent Chat**
 
-- [ ] `stagehand_act` to click on Weather Agent
-- [ ] `stagehand_act` to type a test message: "What's the weather in Tokyo?"
-- [ ] `stagehand_act` to click send button
-- [ ] `stagehand_extract` to verify response appears
+- [ ] Click on Weather Agent
+- [ ] Type a test message: "What's the weather in Tokyo?"
+- [ ] Click send button
+- [ ] Extract/snapshot to verify response appears
 - [ ] Confirm agent chat works
 
 **Network Mode** (if planner-network was added)
 
-- [ ] `stagehand_navigate` to `/agents/planner-network/chat`
-- [ ] `stagehand_act` to select "Network" mode if available
-- [ ] `stagehand_act` to send: "What activities can I do in Paris based on the weather?"
-- [ ] `stagehand_extract` to verify network coordination response
+- [ ] Navigate to `/agents/planner-network/chat`
+- [ ] Select "Network" mode if available
+- [ ] Send: "What activities can I do in Paris based on the weather?"
+- [ ] Extract/snapshot to verify network coordination response
 
 **Tools Page** (`/tools`)
 
-- [ ] `stagehand_navigate` to `/tools`
-- [ ] `stagehand_extract` to verify tools list loads
-- [ ] `stagehand_act` to click on `get-weather` tool
-- [ ] `stagehand_act` to type "London" in city input
-- [ ] `stagehand_act` to click Submit
-- [ ] `stagehand_extract` to verify JSON output with weather data
+- [ ] Navigate to `/tools`
+- [ ] Extract/snapshot to verify tools list loads
+- [ ] Click on `get-weather` tool
+- [ ] Type "London" in city input
+- [ ] Click Submit
+- [ ] Extract/snapshot to verify JSON output with weather data
 
 **Workflows Page** (`/workflows`)
 
-- [ ] `stagehand_navigate` to `/workflows`
-- [ ] `stagehand_extract` to verify workflows list loads
-- [ ] `stagehand_act` to click on `weather-workflow`
-- [ ] `stagehand_act` to type "Berlin" in city input
-- [ ] `stagehand_act` to click Run
-- [ ] `stagehand_extract` to verify workflow execution succeeds
+- [ ] Navigate to `/workflows`
+- [ ] Extract/snapshot to verify workflows list loads
+- [ ] Click on `weather-workflow`
+- [ ] Type "Berlin" in city input
+- [ ] Click Run
+- [ ] Extract/snapshot to verify workflow execution succeeds
 
 **Evaluation/Scorers Page** (`/evaluation?tab=scorers`)
 
-- [ ] `stagehand_navigate` to `/evaluation?tab=scorers`
-- [ ] `stagehand_extract` to verify scorers list loads (3 example scorers)
+- [ ] Navigate to `/evaluation?tab=scorers`
+- [ ] Extract/snapshot to verify scorers list loads (3 example scorers)
 
 **Settings Page** (`/settings`)
 
-- [ ] `stagehand_navigate` to `/settings`
-- [ ] `stagehand_extract` to verify settings page loads
+- [ ] Navigate to `/settings`
+- [ ] Extract/snapshot to verify settings page loads
 
 **Observability Page** (`/observability/traces`)
 
-- [ ] `stagehand_navigate` to `/observability/traces`
-- [ ] `stagehand_extract` to check for traces (may be empty initially)
+- [ ] Navigate to `/observability/traces`
+- [ ] Extract/snapshot to check for traces (may be empty initially)
 
 **MCP Servers Page** (`/mcps`)
 
-- [ ] `stagehand_navigate` to `/mcps`
-- [ ] `stagehand_extract` to verify page loads (empty state OK)
+- [ ] Navigate to `/mcps`
+- [ ] Extract/snapshot to verify page loads (empty state OK)
 
 #### 5.3 Cleanup
 
 After testing:
 
-- [ ] `stagehand_close` to close the browser session
+- [ ] Close the browser session
 - [ ] Stop the dev server if needed
 
 #### 5.4 Report Results
@@ -268,11 +262,11 @@ Provide a summary:
 
 ## Troubleshooting
 
-**Stagehand tools not available**
+**Browser tools not available**
 
-- Ensure MastraCode has browser support enabled
-- Check that `@mastra/stagehand` is configured
-- Restart MastraCode after enabling browser settings
+- Run `/browser` to configure browser support
+- Ensure browser is enabled with `/browser on`
+- Restart MastraCode after changing browser settings
 
 **Server won't start**
 
@@ -288,8 +282,6 @@ Provide a summary:
 
 ## Notes
 
-- This skill uses MastraCode's built-in Stagehand browser (AI-powered actions)
-- Stagehand uses natural language instructions for browser automation
-- The `-e` flag includes example agents, making smoke testing meaningful
-- Network mode requires the `agents` property AND `memory` in the Agent constructor
-- Observability traces appear automatically after running agents or workflows
+- This skill works with both Stagehand (AI-powered) and AgentBrowser (deterministic) providers
+- The test instructions are tool-agnostic - the agent will use whichever browser tools are available
+- For external browser automation (Chrome MCP), use the `smoke-test` skill instead

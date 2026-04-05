@@ -1,6 +1,5 @@
 ---
 'mastracode': minor
-'@mastra/core': patch
 ---
 
 Added browser automation support via `/browser` command
