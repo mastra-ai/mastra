@@ -1,7 +1,6 @@
 import type { IMastraLogger } from './logger';
 
 export const noopLogger = {
-  child: () => noopLogger,
   debug: () => {},
   info: () => {},
   warn: () => {},

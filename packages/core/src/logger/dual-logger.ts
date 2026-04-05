@@ -28,10 +28,6 @@ export class DualLogger implements IMastraLogger {
     this.#getLoggerVNext = getLoggerVNext;
   }
 
-  child(bindings: Record<string, unknown>): DualLogger {
-    return new DualLogger(this.#inner.child(bindings), this.#getLoggerVNext);
-  }
-
   /**
    * Set or update the loggerVNext getter.
    * Called after observability initializes (which may happen after logger creation).

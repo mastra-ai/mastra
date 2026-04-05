@@ -10,10 +10,6 @@ export class MultiLogger implements IMastraLogger {
     this.loggers = loggers;
   }
 
-  child(bindings: Record<string, unknown>): MultiLogger {
-    return new MultiLogger(this.loggers.map(logger => logger.child(bindings)));
-  }
-
   debug(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.debug(message, ...args));
   }

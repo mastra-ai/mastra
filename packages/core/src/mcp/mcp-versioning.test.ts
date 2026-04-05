@@ -52,13 +52,13 @@ class MockMCPServer extends MCPServerBase {
 
 const loggerDebugMock = vi.fn();
 const loggerWarnMock = vi.fn();
-const mockLogger: any = {
+const mockLogger = {
   debug: loggerDebugMock,
   warn: loggerWarnMock,
   info: vi.fn(),
   error: vi.fn(),
-  child: vi.fn(() => mockLogger),
-};
+  // Implement other logger methods if necessary or ensure your code handles their absence
+} as any;
 
 describe('Mastra - getMCPServer Versioning Logic', () => {
   const serverIdA = 'logical-server-a';

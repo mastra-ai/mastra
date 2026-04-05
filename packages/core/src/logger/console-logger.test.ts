@@ -10,7 +10,7 @@ describe('ConsoleLogger', () => {
   describe('child()', () => {
     it('creates a child logger with the specified component', () => {
       const parent = new ConsoleLogger({ name: 'test', level: LogLevel.DEBUG });
-      const child = parent.child({ component: RegisteredLogger.AGENT });
+      const child = parent.child(RegisteredLogger.AGENT);
 
       expect(child).toBeInstanceOf(ConsoleLogger);
       expect(child).not.toBe(parent);
@@ -18,7 +18,7 @@ describe('ConsoleLogger', () => {
 
     it('inherits name and level from parent', () => {
       const parent = new ConsoleLogger({ name: 'test', level: LogLevel.WARN });
-      const child = parent.child({ component: RegisteredLogger.AGENT });
+      const child = parent.child(RegisteredLogger.AGENT);
 
       // Verify by checking the child only logs at WARN level (inherited from parent)
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -33,7 +33,7 @@ describe('ConsoleLogger', () => {
     it('inherits filter from parent', () => {
       const filter = vi.fn().mockReturnValue(true);
       const parent = new ConsoleLogger({ level: LogLevel.DEBUG, filter });
-      const child = parent.child({ component: RegisteredLogger.AGENT });
+      const child = parent.child(RegisteredLogger.AGENT);
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       child.debug('test message');
@@ -49,7 +49,7 @@ describe('ConsoleLogger', () => {
 
     it('prefixes messages with [COMPONENT]', () => {
       const parent = new ConsoleLogger({ level: LogLevel.DEBUG });
-      const child = parent.child({ component: RegisteredLogger.WORKFLOW });
+      const child = parent.child(RegisteredLogger.WORKFLOW);
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       child.debug('test message');
@@ -99,7 +99,7 @@ describe('ConsoleLogger', () => {
     it('receives component in filter context', () => {
       const filter = vi.fn().mockReturnValue(true);
       const parent = new ConsoleLogger({ level: LogLevel.DEBUG, filter });
-      const child = parent.child({ component: RegisteredLogger.AGENT });
+      const child = parent.child(RegisteredLogger.AGENT);
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       child.info('hello');
@@ -151,8 +151,8 @@ describe('ConsoleLogger', () => {
         filter: ({ component }) => component === RegisteredLogger.AGENT,
       });
 
-      const agentChild = logger.child({ component: RegisteredLogger.AGENT });
-      const workflowChild = logger.child({ component: RegisteredLogger.WORKFLOW });
+      const agentChild = logger.child(RegisteredLogger.AGENT);
+      const workflowChild = logger.child(RegisteredLogger.WORKFLOW);
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 

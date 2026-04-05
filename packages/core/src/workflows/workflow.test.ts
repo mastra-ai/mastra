@@ -451,21 +451,12 @@ describe('Workflow (Default Engine Specifics)', () => {
 
   describe('Logger propagation', () => {
     it('should propagate logger to executionEngine when set via __setLogger', () => {
-      const childLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        trackException: vi.fn(),
-        child: vi.fn(),
-      };
       const mockLogger = {
         debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
         trackException: vi.fn(),
-        child: vi.fn(() => childLogger),
       };
 
       const step1 = createStep({
@@ -486,27 +477,17 @@ describe('Workflow (Default Engine Specifics)', () => {
       // Set logger on the workflow
       workflow.__setLogger(mockLogger as any);
 
-      // Verify child() was called and logger was propagated to execution engine
-      expect(mockLogger.child).toHaveBeenCalled();
-      expect((workflow as any).executionEngine.logger).toBe(childLogger);
+      // Verify logger was propagated to execution engine
+      expect((workflow as any).executionEngine.logger).toBe(mockLogger);
     });
 
     it('should propagate logger to executionEngine when set via __registerPrimitives', () => {
-      const childLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        trackException: vi.fn(),
-        child: vi.fn(),
-      };
       const mockLogger = {
         debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
         trackException: vi.fn(),
-        child: vi.fn(() => childLogger),
       };
 
       const step1 = createStep({
@@ -527,19 +508,17 @@ describe('Workflow (Default Engine Specifics)', () => {
       // Set logger via __registerPrimitives
       workflow.__registerPrimitives({ logger: mockLogger as any });
 
-      // Verify child() was called and logger was propagated to execution engine
-      expect(mockLogger.child).toHaveBeenCalled();
-      expect((workflow as any).executionEngine.logger).toBe(childLogger);
+      // Verify logger was propagated to execution engine
+      expect((workflow as any).executionEngine.logger).toBe(mockLogger);
     });
 
     it('should use custom logger for step execution errors instead of console.error', async () => {
-      const mockLogger: any = {
+      const mockLogger = {
         debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
         trackException: vi.fn(),
-        child: vi.fn(() => mockLogger),
       };
 
       const failingStep = createStep({

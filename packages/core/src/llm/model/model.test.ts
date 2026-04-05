@@ -11,15 +11,11 @@ import { MastraLLMV1 } from './model';
 
 describe('MastraLLM', () => {
   const mockMastra = {
-    logger: (() => {
-      const l: any = {
-        debug: vi.fn(),
-        warn: vi.fn(),
-        info: vi.fn(),
-        child: vi.fn(() => l),
-      };
-      return l;
-    })(),
+    logger: {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+    } as any,
   };
 
   const requestContext = new RequestContext();
@@ -748,16 +744,14 @@ describe('MastraLLM', () => {
   // Regression tests for https://github.com/mastra-ai/mastra/issues/12184
   // LLM errors must be routed through the Mastra logger instead of bypassing to console.error
   describe('error logging via Mastra logger (issue #12184)', () => {
-    const makeErrorMastra = () => {
-      const l: any = {
+    const makeErrorMastra = () => ({
+      logger: {
         debug: vi.fn(),
         warn: vi.fn(),
         info: vi.fn(),
         error: vi.fn(),
-        child: vi.fn(() => l),
-      };
-      return { logger: l };
-    };
+      } as any,
+    });
 
     const providerError = new Error('400 input too long');
 

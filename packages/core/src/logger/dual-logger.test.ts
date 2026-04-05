@@ -5,18 +5,16 @@ import { DualLogger } from './dual-logger';
 import type { IMastraLogger } from './logger';
 
 function createMockLogger(): IMastraLogger {
-  const logger: any = {
+  return {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     trackException: vi.fn(),
-    child: vi.fn(() => createMockLogger()),
     getTransports: vi.fn(() => new Map()),
     listLogs: vi.fn(async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false })),
     listLogsByRunId: vi.fn(async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false })),
   };
-  return logger as IMastraLogger;
 }
 
 function createMockLoggerVNext(): LoggerContext {

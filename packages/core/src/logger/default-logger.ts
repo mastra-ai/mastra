@@ -41,11 +41,15 @@ export class ConsoleLogger extends MastraLogger {
     this.filter = options.filter;
   }
 
-  child(bindings: Record<string, unknown>): ConsoleLogger {
+  child(componentOrBindings: RegisteredLogger | Record<string, unknown>): ConsoleLogger {
+    const component =
+      typeof componentOrBindings === 'string'
+        ? componentOrBindings
+        : ((componentOrBindings?.component as RegisteredLogger) ?? this.component);
     return new ConsoleLogger({
       name: this.name,
       level: this.level,
-      component: (bindings?.component as RegisteredLogger) ?? this.component,
+      component,
       filter: this.filter,
     });
   }

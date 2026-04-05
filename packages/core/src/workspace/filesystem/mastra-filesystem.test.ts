@@ -123,14 +123,12 @@ class TestFilesystem extends MastraFilesystem {
  * Create a mock logger for testing.
  */
 function createMockLogger(): IMastraLogger {
-  const logger: any = {
+  return {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    child: vi.fn(() => logger),
-  };
-  return logger as IMastraLogger;
+  } as unknown as IMastraLogger;
 }
 
 describe('MastraFilesystem Base Class', () => {

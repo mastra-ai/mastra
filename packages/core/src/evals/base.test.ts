@@ -56,10 +56,9 @@ function createMockSpan(traceId: string, type: SpanType) {
 }
 
 function createMockMastra(options?: { addScoreImpl?: ReturnType<typeof vi.fn>; startSpan?: () => unknown }) {
-  const logger: any = {
+  const logger = {
     debug: vi.fn(),
     warn: vi.fn(),
-    child: vi.fn(() => logger),
   };
 
   return {
