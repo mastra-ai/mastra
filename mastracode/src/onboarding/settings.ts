@@ -289,8 +289,12 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
   return parsedProviders;
 }
 
+const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser']);
+const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
+
 /**
- * Deep-merge browser settings to preserve nested defaults.
+ * Deep-merge and validate browser settings from JSON.
+ * Explicitly validates types to handle malformed settings.json gracefully.
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
@@ -299,10 +303,29 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
 
   return {
-    ...DEFAULTS.browser,
-    ...(raw as Partial<BrowserSettings>),
-    viewport: { ...DEFAULTS.browser.viewport, ...rawViewport } as { width: number; height: number },
-    stagehand: { ...DEFAULTS.browser.stagehand, ...rawStagehand } as StagehandSettings,
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
+    provider:
+      typeof raw.provider === 'string' && BROWSER_PROVIDERS.has(raw.provider as BrowserProvider)
+        ? (raw.provider as BrowserProvider)
+        : DEFAULTS.browser.provider,
+    headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
+    cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    viewport: {
+      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
+      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
+    },
+    stagehand: {
+      env:
+        typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
+          ? (rawStagehand.env as StagehandEnv)
+          : DEFAULTS.browser.stagehand!.env,
+      ...(typeof rawStagehand.apiKey === 'string' && rawStagehand.apiKey.trim()
+        ? { apiKey: rawStagehand.apiKey.trim() }
+        : {}),
+      ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
+        ? { projectId: rawStagehand.projectId.trim() }
+        : {}),
+    },
   };
 }
 
@@ -652,7 +675,7 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
     });
-  } else {
+  } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
     return new AgentBrowser({
       headless,
@@ -660,4 +683,6 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       cdpUrl,
     });
   }
+
+  throw new Error(`Unsupported browser provider: ${provider}`);
 }
