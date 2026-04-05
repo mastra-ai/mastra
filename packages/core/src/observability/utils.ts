@@ -10,6 +10,15 @@ import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
 const entityTypeValues = new Set(Object.values(EntityType));
+let currentSpanResolver: (() => AnySpan | undefined) | undefined;
+
+export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
+  currentSpanResolver = resolver;
+}
+
+export function resolveCurrentSpan(): AnySpan | undefined {
+  return currentSpanResolver?.();
+}
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
