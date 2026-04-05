@@ -104,13 +104,14 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     } else {
       const providerLabel =
         browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
-      const lines = [
-        `Browser: enabled`,
-        `  Provider: ${providerLabel}`,
-        `  Headless: ${browser.headless ? 'yes' : 'no'}`,
-      ];
+      const isBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
+      const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
       if (browser.provider === 'stagehand' && browser.stagehand) {
         lines.push(`  Environment: ${browser.stagehand.env}`);
+      }
+      // Only show headless for local browsers (not Browserbase)
+      if (!isBrowserbase) {
+        lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
       ctx.showInfo(lines.join('\n'));
     }
@@ -194,7 +195,10 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     isBrowserbase = env === 'BROWSERBASE';
 
     if (isBrowserbase) {
-      ctx.showInfo('For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables.');
+      ctx.showInfo(
+        'Browserbase requires BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID.\n' +
+          'Set these in your shell profile (~/.zshrc) or pass them when starting MastraCode.',
+      );
     }
 
     stagehandSettings = { env };
@@ -240,11 +244,15 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
   const summary = [
     'Browser automation enabled:',
     `  Provider: ${provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)'}`,
-    `  Headless: ${headless ? 'yes' : 'no'}`,
   ];
 
   if (provider === 'stagehand' && stagehandSettings) {
     summary.push(`  Environment: ${stagehandSettings.env}`);
+  }
+
+  // Only show headless for local browsers
+  if (!isBrowserbase) {
+    summary.push(`  Headless: ${headless ? 'yes' : 'no'}`);
   }
 
   ctx.showInfo(summary.join('\n'));
