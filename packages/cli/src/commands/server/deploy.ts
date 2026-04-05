@@ -84,7 +84,7 @@ export function parseEnvFile(content: string): Record<string, string> {
 
 async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
   const vars: Record<string, string> = {};
-  for (const envFile of ['.env.production', '.env.local', '.env']) {
+  for (const envFile of ['.env', '.env.local', '.env.production']) {
     try {
       const content = await readFile(join(projectDir, envFile), 'utf-8');
       Object.assign(vars, parseEnvFile(content));
@@ -189,10 +189,16 @@ async function resolveProject(
     };
   }
 
-  // Auto-create from package name
+  // Check if a project already exists matching the package name before creating
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
+  }
+
+  const existing = await fetchServerProjects(token, orgId);
+  const match = existing.find(proj => proj.name === name || proj.slug === name);
+  if (match) {
+    return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
   }
 
   const project = await createServerProject(token, orgId, name);
@@ -209,9 +215,6 @@ export async function serverDeployAction(
 ) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
-  if (isHeadless && (!process.env.MASTRA_ORG_ID || !process.env.MASTRA_PROJECT_ID)) {
-    throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
-  }
   const autoAccept = opts.yes ?? isHeadless;
 
   p.intro('mastra server deploy');
@@ -230,7 +233,15 @@ export async function serverDeployAction(
   // Step 2: Load existing project config
   const projectConfig = await loadProjectConfig(targetDir, opts.config);
 
-  // Step 3: Resolve org
+  // Step 3: Resolve org — flags and config are checked before requiring env vars
+  const hasOrg = Boolean(process.env.MASTRA_ORG_ID || opts.org || projectConfig?.organizationId);
+  const hasProject = Boolean(process.env.MASTRA_PROJECT_ID || opts.project || projectConfig?.projectId);
+  if (isHeadless && (!hasOrg || !hasProject)) {
+    throw new Error(
+      'MASTRA_ORG_ID and MASTRA_PROJECT_ID (or --org/--project flags, or .mastra-project.json) are required when MASTRA_API_TOKEN is set',
+    );
+  }
+
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project

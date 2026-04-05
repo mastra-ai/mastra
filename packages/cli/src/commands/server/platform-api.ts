@@ -168,13 +168,20 @@ async function pollServerLogs(deployId: string, token: string, orgId: string, si
 
   let printedBuild = 0;
   let printedDeploy = 0;
-  const client = createApiClient(token, orgId);
+  let currentToken = token;
+  let client = createApiClient(currentToken, orgId);
 
   while (!signal.aborted) {
     try {
-      const { data } = await client.GET('/v1/server/deploys/{id}/logs', {
+      const { data, response } = await client.GET('/v1/server/deploys/{id}/logs', {
         params: { path: { id: deployId } },
       });
+
+      if (response.status === 401) {
+        currentToken = await getToken();
+        client = createApiClient(currentToken, orgId);
+        continue;
+      }
 
       if (data) {
         const newBuild = data.buildLogs.slice(printedBuild);
