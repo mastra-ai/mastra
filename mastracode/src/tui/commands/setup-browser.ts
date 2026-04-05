@@ -176,21 +176,9 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
 
   const provider: BrowserProvider = providerChoice === 'AgentBrowser' ? 'agent-browser' : 'stagehand';
 
-  // Step 3: Headless mode
-  const headlessChoice = await askInline(ctx, 'Run in headless mode?', [
-    { label: 'No', description: 'Show browser window (easier to debug)' },
-    { label: 'Yes', description: 'Hide browser window (faster, less resource usage)' },
-  ]);
-
-  if (!headlessChoice) {
-    ctx.showInfo('Browser setup cancelled.');
-    return;
-  }
-
-  const headless = headlessChoice === 'Yes';
-
-  // Step 4: Stagehand-specific settings
+  // Step 3: Stagehand-specific settings (ask environment first)
   let stagehandSettings: BrowserSettings['stagehand'];
+  let isBrowserbase = false;
   if (provider === 'stagehand') {
     const envChoice = await askInline(ctx, 'Stagehand environment:', [
       { label: 'LOCAL', description: 'Run browser locally' },
@@ -203,12 +191,29 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     }
 
     const env = envChoice as StagehandEnv;
+    isBrowserbase = env === 'BROWSERBASE';
 
-    if (env === 'BROWSERBASE') {
+    if (isBrowserbase) {
       ctx.showInfo('For Browserbase, set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID environment variables.');
     }
 
     stagehandSettings = { env };
+  }
+
+  // Step 4: Headless mode (skip for Browserbase - runs in cloud)
+  let headless = false;
+  if (!isBrowserbase) {
+    const headlessChoice = await askInline(ctx, 'Run in headless mode?', [
+      { label: 'No', description: 'Show browser window (easier to debug)' },
+      { label: 'Yes', description: 'Hide browser window (faster, less resource usage)' },
+    ]);
+
+    if (!headlessChoice) {
+      ctx.showInfo('Browser setup cancelled.');
+      return;
+    }
+
+    headless = headlessChoice === 'Yes';
   }
 
   // Save settings
