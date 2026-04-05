@@ -380,6 +380,14 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({ agentId: params.agentId });
     if (params.resourceId) queryParams.set('resourceId', params.resourceId);
     if (params.threadId) queryParams.set('threadId', params.threadId);
+    if (params.from) {
+      queryParams.set('from', params.from instanceof Date ? params.from.toISOString() : params.from);
+    }
+    if (params.to) {
+      queryParams.set('to', params.to instanceof Date ? params.to.toISOString() : params.to);
+    }
+    if (params.offset != null) queryParams.set('offset', String(params.offset));
+    if (params.limit != null) queryParams.set('limit', String(params.limit));
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
