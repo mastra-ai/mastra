@@ -3,6 +3,7 @@ import { LogLevel } from './constants';
 import type { BaseLogMessage, LoggerTransport } from './transport';
 
 export interface IMastraLogger {
+  child(bindings: Record<string, unknown>): IMastraLogger;
   debug(message: string, ...args: any[]): void;
   info(message: string, ...args: any[]): void;
   warn(message: string, ...args: any[]): void;
@@ -50,6 +51,7 @@ export abstract class MastraLogger implements IMastraLogger {
     this.transports = new Map(Object.entries(options.transports || {}));
   }
 
+  abstract child(bindings: Record<string, unknown>): IMastraLogger;
   abstract debug(message: string, ...args: any[]): void;
   abstract info(message: string, ...args: any[]): void;
   abstract warn(message: string, ...args: any[]): void;

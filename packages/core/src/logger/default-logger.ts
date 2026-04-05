@@ -41,11 +41,11 @@ export class ConsoleLogger extends MastraLogger {
     this.filter = options.filter;
   }
 
-  child(component: RegisteredLogger): ConsoleLogger {
+  child(bindings: Record<string, unknown>): ConsoleLogger {
     return new ConsoleLogger({
       name: this.name,
       level: this.level,
-      component,
+      component: (bindings?.component as RegisteredLogger) ?? this.component,
       filter: this.filter,
     });
   }
