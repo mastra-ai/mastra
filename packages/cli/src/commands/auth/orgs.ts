@@ -23,6 +23,15 @@ export async function listOrgsAction() {
 }
 
 export async function switchOrgAction() {
+  if (process.env.MASTRA_API_TOKEN) {
+    console.error('\nCannot switch org when using MASTRA_API_TOKEN. Unset it and log in with: mastra auth login\n');
+    process.exit(1);
+  }
+  if (process.env.MASTRA_ORG_ID) {
+    console.error('\nCannot switch org when MASTRA_ORG_ID is set. Unset it to use persistent org selection.\n');
+    process.exit(1);
+  }
+
   const token = await getToken();
   const currentOrgId = await getCurrentOrgId();
   const orgs = await fetchOrgs(token);

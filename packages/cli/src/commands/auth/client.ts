@@ -2,7 +2,7 @@ import createClient from 'openapi-fetch';
 
 import type { paths } from '../platform-api.js';
 
-export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.staging.mastra.ai';
+export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
 
 /**
  * Derive the gateway URL from the platform URL when not explicitly set.

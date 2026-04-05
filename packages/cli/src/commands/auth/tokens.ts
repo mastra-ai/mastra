@@ -1,4 +1,4 @@
-import { MASTRA_PLATFORM_API_URL, authHeaders, platformFetch } from './client.js';
+import { MASTRA_PLATFORM_API_URL, authHeaders, platformFetch, throwApiError } from './client.js';
 import { getToken, getCurrentOrgId } from './credentials.js';
 
 async function resolveOrgId(): Promise<string | null> {
@@ -25,7 +25,7 @@ export async function createToken(token: string, orgId: string, name: string): P
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Failed to create token: ${resp.status} — ${text}`);
+    throwApiError('Failed to create token', resp.status, text);
   }
 
   const data = (await resp.json()) as { token: TokenInfo; secret: string };
@@ -59,7 +59,8 @@ export async function listTokensAction() {
   });
 
   if (!resp.ok) {
-    throw new Error(`Failed to list tokens: ${resp.status}`);
+    const text = await resp.text();
+    throwApiError('Failed to list tokens', resp.status, text);
   }
 
   const data = (await resp.json()) as { tokens: TokenInfo[] };
@@ -90,7 +91,7 @@ export async function revokeTokenAction(tokenId: string) {
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Failed to revoke token: ${resp.status} — ${text}`);
+    throwApiError('Failed to revoke token', resp.status, text);
   }
 
   console.info(`\nToken ${tokenId} revoked.\n`);

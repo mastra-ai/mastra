@@ -18,6 +18,11 @@ vi.mock('./client.js', () => ({
     return h;
   }),
   platformFetch: (...args: unknown[]) => mockPlatformFetch(...args),
+  throwApiError: (message: string, status: number, detail?: string) => {
+    if (status === 401) throw new Error('Session expired. Run: mastra auth login');
+    if (detail) throw new Error(detail);
+    throw new Error(`${message}: ${status}`);
+  },
 }));
 
 const mockGetToken = vi.fn().mockResolvedValue('test-token');
@@ -64,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.MASTRA_ORG_ID;
+  delete process.env.MASTRA_API_TOKEN;
 });
 
 /* ------------------------------------------------------------------ */
@@ -128,6 +134,18 @@ describe('whoamiAction', () => {
     mockExit.mockRestore();
     spy.mockRestore();
   });
+
+  it('shows env-based auth when MASTRA_API_TOKEN is set', async () => {
+    process.env.MASTRA_API_TOKEN = 'env-token';
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { whoamiAction } = await import('./whoami.js');
+    await whoamiAction();
+
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('MASTRA_API_TOKEN');
+    spy.mockRestore();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -158,6 +176,44 @@ describe('listOrgsAction', () => {
 
     const output = spy.mock.calls.map(c => c[0]).join('\n');
     expect(output).toContain('No organizations');
+    spy.mockRestore();
+  });
+});
+
+describe('switchOrgAction', () => {
+  it('rejects when MASTRA_API_TOKEN is set', async () => {
+    process.env.MASTRA_API_TOKEN = 'env-token';
+
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { switchOrgAction } = await import('./orgs.js');
+    await expect(switchOrgAction()).rejects.toThrow('process.exit');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('MASTRA_API_TOKEN');
+    mockExit.mockRestore();
+    spy.mockRestore();
+  });
+
+  it('rejects when MASTRA_ORG_ID is set', async () => {
+    process.env.MASTRA_ORG_ID = 'env-org';
+
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { switchOrgAction } = await import('./orgs.js');
+    await expect(switchOrgAction()).rejects.toThrow('process.exit');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('MASTRA_ORG_ID');
+    mockExit.mockRestore();
     spy.mockRestore();
   });
 });
@@ -263,6 +319,6 @@ describe('revokeTokenAction', () => {
     });
 
     const { revokeTokenAction } = await import('./tokens.js');
-    await expect(revokeTokenAction('bad-id')).rejects.toThrow('Failed to revoke token: 404');
+    await expect(revokeTokenAction('bad-id')).rejects.toThrow('not found');
   });
 });

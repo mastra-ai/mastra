@@ -2,6 +2,18 @@ import { fetchOrgs } from './api.js';
 import { loadCredentials, getCurrentOrgId } from './credentials.js';
 
 export async function whoamiAction() {
+  const envToken = process.env.MASTRA_API_TOKEN;
+
+  if (envToken) {
+    const orgId = process.env.MASTRA_ORG_ID ?? (await getCurrentOrgId());
+    console.info('\n  Authenticated via MASTRA_API_TOKEN');
+    if (orgId) {
+      console.info(`   Org: ${orgId}`);
+    }
+    console.info('');
+    return;
+  }
+
   const creds = await loadCredentials();
   if (!creds) {
     console.info('\nNot logged in. Run: mastra auth login\n');
@@ -23,7 +35,7 @@ export async function whoamiAction() {
   console.info(`   User ID: ${creds.user.id}`);
   if (orgName) {
     console.info(`   Org: ${orgName} (${orgId})`);
-  } else {
+  } else if (orgId) {
     console.info(`   Org: ${orgId}`);
   }
   console.info('');
