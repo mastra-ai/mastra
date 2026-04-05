@@ -46,9 +46,9 @@ describe('pruneChatContainer', () => {
     pruneChatContainer(state);
 
     expect(state.chatContainer.children).toHaveLength(100);
-    expect(state.chatContainer.children[0]).toBe(keptTool);
-    expect(state.chatContainer.children[10]).toBe(keptSlash);
-    expect(state.chatContainer.children[20]).toBe(keptReminder);
+    expect(state.chatContainer.children[70]).toBe(keptTool);
+    expect(state.chatContainer.children[80]).toBe(keptSlash);
+    expect(state.chatContainer.children[90]).toBe(keptReminder);
     expect(state.allToolComponents).toEqual([keptTool]);
     expect(state.allSlashCommandComponents).toEqual([keptSlash]);
     expect(state.allSystemReminderComponents).toEqual([keptReminder]);
