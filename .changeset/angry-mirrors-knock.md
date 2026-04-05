@@ -2,4 +2,4 @@
 '@mastra/deployer': patch
 ---
 
-Fixed `mastra build` deleting `node_modules` from the output directory, which caused `mastra start` and `wrangler dev` to fail with missing module errors (e.g. `hono`, `bufferutil`, `pino`).
+Fixed `mastra build` so deploy output keeps its installed dependencies, preventing `mastra start` and `wrangler dev` from failing on missing packages.
