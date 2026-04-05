@@ -787,10 +787,10 @@ export class ReflectorRunner {
         });
         await writer.custom(failedMarker).catch(() => {});
       }
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       if (abortSignal?.aborted) {
         throw error;
       }
-      reflectionError = error instanceof Error ? error : new Error(String(error));
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
