@@ -251,6 +251,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   toolCalls?: ToolCallInfo[];
   /** Generated text from this step */
   text?: string;
+  /** Token usage for the current step (input tokens, output tokens, etc.) */
+  usage: LanguageModelUsage;
   /** All system messages */
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */

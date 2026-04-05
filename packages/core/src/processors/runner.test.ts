@@ -1809,6 +1809,83 @@ describe('ProcessorRunner', () => {
       expect(allMessages).toHaveLength(2);
       expect(allMessages[1].role).toBe('assistant');
     });
+
+    it('should receive usage data in processOutputStep', async () => {
+      let receivedUsage: unknown = undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-processor',
+          name: 'Usage Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      };
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        usage,
+      });
+
+      expect(receivedUsage).toEqual(usage);
+    });
+
+    it('should provide default usage when not supplied', async () => {
+      let receivedUsage: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-default-processor',
+          name: 'Usage Default Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+      });
+
+      expect(receivedUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    });
   });
 
   describe('writer availability in output processors', () => {
