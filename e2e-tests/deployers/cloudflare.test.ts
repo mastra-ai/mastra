@@ -35,7 +35,9 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
       const text = await res.text();
-      console.log(`[DEBUG] GET /test status=${res.status} body=${text.slice(0, 2000)}`);
+      // Extract body content (skip CSS/head) to see actual error
+      const bodyMatch = text.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      console.log(`[DEBUG] GET /test status=${res.status} body-content=${bodyMatch?.[1]?.slice(0, 3000) ?? text.slice(-2000)}`);
       const body = JSON.parse(text);
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!' });
@@ -43,7 +45,8 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const text = await res.text();
-      console.log(`[DEBUG] GET /api/tools status=${res.status} body=${text.slice(0, 2000)}`);
+      const bodyMatch = text.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      console.log(`[DEBUG] GET /api/tools status=${res.status} body-content=${bodyMatch?.[1]?.slice(0, 3000) ?? text.slice(-2000)}`);
       const body = JSON.parse(text);
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['weatherTool']);
