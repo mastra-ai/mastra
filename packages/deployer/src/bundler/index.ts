@@ -143,13 +143,16 @@ export abstract class Bundler extends MastraBundler {
    * can use `npm ci` instead of `npm install`, skipping version resolution entirely.
    * This is a lockfile-only operation — no packages are downloaded.
    *
-   * Removes node_modules first because pnpm's symlink-based layout confuses
-   * npm's arborist when it tries to read the existing tree.
+   * Temporarily moves node_modules out of the way because pnpm's symlink-based
+   * layout confuses npm's arborist, then restores it afterwards so that
+   * `mastra start` (or wrangler) can still resolve dependencies at runtime.
    */
   private async generateNpmLockfile(outputDir: string): Promise<void> {
+    const nodeModules = join(outputDir, 'node_modules');
+    const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
     try {
-      // Remove node_modules first — pnpm's symlink layout confuses npm's arborist
-      await rm(join(outputDir, 'node_modules'), { recursive: true, force: true }).catch(() => {});
+      // Move node_modules aside — pnpm's symlink layout confuses npm's arborist
+      await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true }).catch(() => {});
       execSync('npm install --package-lock-only --force', {
         cwd: outputDir,
         stdio: 'pipe',
@@ -157,6 +160,10 @@ export abstract class Bundler extends MastraBundler {
       });
     } catch {
       this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
+    } finally {
+      // Restore node_modules so runtime resolution works
+      await rm(nodeModules, { recursive: true, force: true }).catch(() => {});
+      await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true }).catch(() => {});
     }
   }
 
