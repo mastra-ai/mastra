@@ -1,6 +1,7 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
@@ -24,8 +25,10 @@ export interface Credentials {
 }
 
 export async function saveCredentials(creds: Credentials): Promise<void> {
-  await mkdir(CREDENTIALS_DIR, { recursive: true });
-  await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2));
+  await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+  await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  await chmod(CREDENTIALS_DIR, 0o700).catch(() => {});
+  await chmod(CREDENTIALS_FILE, 0o600).catch(() => {});
 }
 
 export async function loadCredentials(): Promise<Credentials | null> {
@@ -73,17 +76,15 @@ function isWSL(): boolean {
 }
 
 function openBrowser(url: string) {
+  // Use execFileSync (shell: false) to avoid shell-injection via the URL.
   if (process.platform === 'darwin') {
-    execSync(`open "${url}"`);
+    execFileSync('open', [url]);
   } else if (process.platform === 'win32') {
-    execSync(`start "${url}"`);
+    execFileSync('cmd', ['/c', 'start', '', url]);
   } else if (isWSL()) {
-    // In WSL, use Windows interop to open the host browser.
-    // cmd.exe /c start interprets '&' in URLs as a shell operator,
-    // so we use PowerShell's Start-Process which handles URLs cleanly.
-    execSync(`powershell.exe -NoProfile -Command "Start-Process '${url}'"`);
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]);
   } else {
-    execSync(`xdg-open "${url}"`);
+    execFileSync('xdg-open', [url]);
   }
 }
 
@@ -167,9 +168,10 @@ export async function login(): Promise<Credentials> {
   console.info('\nLogging in to Mastra...\n');
 
   const server = createServer();
+  const state = randomBytes(16).toString('hex');
 
   const port = await new Promise<number>(resolve => {
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
       if (typeof addr === 'object' && addr) {
         resolve(addr.port);
@@ -177,7 +179,7 @@ export async function login(): Promise<Credentials> {
     });
   });
 
-  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}`;
+  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
   console.info(`   Opening browser...\n`);
 
   try {
@@ -207,12 +209,13 @@ export async function login(): Promise<Credentials> {
       const url = new URL(req.url!, `http://localhost:${port}`);
 
       if (url.pathname === '/callback') {
+        const callbackState = url.searchParams.get('state');
         const token = url.searchParams.get('token');
         const refreshToken = url.searchParams.get('refresh_token');
         const userParam = url.searchParams.get('user');
         const orgId = url.searchParams.get('org');
 
-        if (!token || !userParam || !orgId) {
+        if (callbackState !== state || !token || !userParam || !orgId) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
           res.end(callbackPage({ success: false }));
           return;
@@ -244,6 +247,10 @@ export async function login(): Promise<Credentials> {
   return creds;
 }
 
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
 export async function getToken(): Promise<string> {
   // CI/CD headless path
   const envToken = process.env.MASTRA_API_TOKEN;
@@ -251,7 +258,9 @@ export async function getToken(): Promise<string> {
 
   const creds = await loadCredentials();
   if (!creds) {
-    // No credentials — auto-login in interactive mode
+    if (!isInteractive()) {
+      throw new Error('Not logged in. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
+    }
     const newCreds = await login();
     return newCreds.token;
   }
@@ -272,7 +281,9 @@ export async function getToken(): Promise<string> {
   const refreshed = await tryRefreshToken(creds);
   if (refreshed) return refreshed;
 
-  // Refresh failed — auto-login in interactive mode
+  if (!isInteractive()) {
+    throw new Error('Session expired. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
+  }
   const newCreds = await login();
   return newCreds.token;
 }

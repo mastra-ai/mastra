@@ -76,6 +76,21 @@ async function authenticatedFetch(input: string | URL | Request, init?: RequestI
   // will already be consumed. Clone it up front so the retry can use the clone.
   const clonedRequest = input instanceof Request ? input.clone() : null;
 
+  // Prime _currentToken from the request headers so the 401-retry path works
+  // even when callers use platformFetch() directly instead of createApiClient().
+  if (!_currentToken) {
+    const authHeader =
+      (input instanceof Request ? input.headers.get('Authorization') : null) ??
+      (init?.headers instanceof Headers
+        ? init.headers.get('Authorization')
+        : typeof init?.headers === 'object' && init.headers && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>)['Authorization']
+          : null);
+    if (authHeader?.startsWith('Bearer ')) {
+      _currentToken = authHeader.slice(7);
+    }
+  }
+
   const response = await fetch(input, init);
 
   if (response.status !== 401 || !_currentToken) {
