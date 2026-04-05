@@ -62,6 +62,7 @@ export interface AddItemDialogProps {
 export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddItemDialogProps) {
   const [input, setInput] = useState('{}');
   const [groundTruth, setGroundTruth] = useState('');
+  const [expectedTrajectory, setExpectedTrajectory] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
 
@@ -88,11 +89,22 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    let parsedTrajectory: unknown | undefined;
+    if (expectedTrajectory.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(expectedTrajectory);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        expectedTrajectory: parsedTrajectory,
       });
 
       toast.success('Item added successfully');
@@ -101,6 +113,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       // Reset form
       setInput('{}');
       setGroundTruth('');
+      setExpectedTrajectory('');
       onOpenChange(false);
 
       onSuccess?.();
@@ -134,6 +147,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const handleCancel = () => {
     setInput('{}');
     setGroundTruth('');
+    setExpectedTrajectory('');
     setValidationErrors(null);
     onOpenChange(false);
   };
@@ -165,6 +179,16 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               {validationErrors?.field === 'groundTruth' && (
                 <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+              <CodeEditor
+                value={expectedTrajectory}
+                onChange={setExpectedTrajectory}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
             </div>
 
             <div className="flex justify-end gap-2 pt-4">

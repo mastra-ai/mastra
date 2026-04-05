@@ -981,6 +981,8 @@ export interface BufferedObservationChunk {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1018,6 +1020,17 @@ export interface BufferedObservationChunkInput {
  * - lastReflectionAt: createdAt of most recent reflection record
  * - previousGeneration: record with next-oldest createdAt
  */
+
+/** Options for filtering observational memory history queries. */
+export interface ObservationalMemoryHistoryOptions {
+  /** Only return records created at or after this date */
+  from?: Date;
+  /** Only return records created at or before this date */
+  to?: Date;
+  /** Number of records to skip (for pagination) */
+  offset?: number;
+}
+
 export interface ObservationalMemoryRecord {
   // Identity
   /** Unique record ID */

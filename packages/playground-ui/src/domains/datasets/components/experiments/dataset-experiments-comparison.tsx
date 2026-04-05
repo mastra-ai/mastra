@@ -244,7 +244,7 @@ export function DatasetExperimentsComparison({
       {/* Per-item comparison with detail panel */}
       <Columns
         className={cn({
-          'grid-cols-[auto_1fr]': !!featuredItem,
+          'grid-cols-[1fr_2fr]': !!featuredItem,
         })}
       >
         <ComparisonItemsList

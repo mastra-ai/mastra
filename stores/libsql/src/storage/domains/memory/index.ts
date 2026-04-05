@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -1526,14 +1527,32 @@ export class MemoryLibSQL extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const result = await this.#client.execute({
-        // Use generationCount DESC for reliable ordering (incremented for each new record)
-        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT ?`,
-        args: [lookupKey, limit],
-      });
+
+      const conditions = [`"lookupKey" = ?`];
+      const args: InValue[] = [lookupKey];
+
+      if (options?.from) {
+        conditions.push(`"createdAt" >= ?`);
+        args.push(options.from.toISOString());
+      }
+      if (options?.to) {
+        conditions.push(`"createdAt" <= ?`);
+        args.push(options.to.toISOString());
+      }
+
+      args.push(limit);
+      let sql = `SELECT * FROM "${OM_TABLE}" WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT ?`;
+
+      if (options?.offset != null) {
+        args.push(options.offset);
+        sql += ` OFFSET ?`;
+      }
+
+      const result = await this.#client.execute({ sql, args });
       if (!result.rows) return [];
       return result.rows.map(row => this.parseOMRow(row));
     } catch (error) {
@@ -2070,6 +2089,7 @@ export class MemoryLibSQL extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       const newChunks = [...existingChunks, newChunk];

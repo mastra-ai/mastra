@@ -367,6 +367,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
 
     it('should not call hooks when below threshold', async () => {
@@ -408,6 +411,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      // Observer failed before producing usage, so usage should be undefined and error should be present
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined, error: expect.any(Error) });
+      expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {
@@ -429,6 +435,9 @@ describe('observe()', () => {
       if (result.reflected) {
         expect(hooks.onReflectionStart).toHaveBeenCalled();
         expect(hooks.onReflectionEnd).toHaveBeenCalled();
+        expect(hooks.onReflectionEnd).toHaveBeenCalledWith({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+        });
       }
     });
   });
@@ -665,6 +674,7 @@ describe('reflect()', () => {
   it('should return reflected=false when no observations exist', async () => {
     const result = await om.reflect(threadId);
     expect(result.reflected).toBe(false);
+    expect(result.usage).toBeUndefined();
   });
 
   it('should reflect when observations exist', async () => {
@@ -676,6 +686,9 @@ describe('reflect()', () => {
     expect(result.reflected).toBe(true);
     expect(result.record.generationCount).toBeGreaterThan(0);
     expect(result.record.activeObservations).toBeTruthy();
+    expect(result.usage).toEqual(
+      expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+    );
   });
 
   it('should create a new generation on reflect', async () => {

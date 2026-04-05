@@ -32,6 +32,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -1412,11 +1413,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(OM_TABLE);
-      const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
+
+      const filter: Record<string, unknown> = { lookupKey };
+      if (options?.from || options?.to) {
+        const createdAtFilter: Record<string, unknown> = {};
+        if (options.from) createdAtFilter['$gte'] = options.from;
+        if (options.to) createdAtFilter['$lte'] = options.to;
+        filter['createdAt'] = createdAtFilter;
+      }
+
+      let cursor = collection.find(filter).sort({ generationCount: -1 });
+      if (options?.offset != null) {
+        cursor = cursor.skip(options.offset);
+      }
+      const docs = await cursor.limit(limit).toArray();
       return docs.map((doc: any) => this.parseOMDocument(doc));
     } catch (error) {
       throw new MastraError(
@@ -1893,6 +1908,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
