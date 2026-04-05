@@ -145,7 +145,13 @@ export async function handleSetupBrowserCommand(ctx: SlashCommandContext, args: 
     { label: 'No', description: 'Disable browser automation' },
   ]);
 
-  if (!enableChoice || enableChoice === 'No') {
+  // Cancel preserves current state
+  if (!enableChoice) {
+    ctx.showInfo('Browser setup cancelled.');
+    return;
+  }
+
+  if (enableChoice === 'No') {
     if (browser.enabled) {
       settings.browser.enabled = false;
       saveSettings(settings);
