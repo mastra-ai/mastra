@@ -1199,7 +1199,13 @@ Line 3 conclusion`;
       const spy = vi.spyOn(filesystem, '__setLogger');
       const workspace = new Workspace({ filesystem });
 
-      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      const mockLogger: any = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(() => mockLogger),
+      };
       workspace.__setLogger(mockLogger);
 
       expect(spy).toHaveBeenCalledWith(mockLogger);
@@ -1210,7 +1216,13 @@ Line 3 conclusion`;
       const spy = vi.spyOn(sandbox, '__setLogger');
       const workspace = new Workspace({ sandbox });
 
-      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      const mockLogger: any = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(() => mockLogger),
+      };
       workspace.__setLogger(mockLogger);
 
       expect(spy).toHaveBeenCalledWith(mockLogger);
@@ -1223,7 +1235,13 @@ Line 3 conclusion`;
       const sbSpy = vi.spyOn(sandbox, '__setLogger');
       const workspace = new Workspace({ filesystem, sandbox });
 
-      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      const mockLogger: any = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(() => mockLogger),
+      };
       workspace.__setLogger(mockLogger);
 
       expect(fsSpy).toHaveBeenCalledWith(mockLogger);
@@ -1636,11 +1654,12 @@ Line 3 conclusion`;
       vi.spyOn(searchEngine, 'index').mockRejectedValue(new Error('embedder failed'));
 
       // __setLogger is normally called by Mastra; we call it directly for unit testing
-      const mockLogger = {
+      const mockLogger: any = {
         debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        child: vi.fn(() => mockLogger),
       };
       (workspace as any).__setLogger(mockLogger);
 

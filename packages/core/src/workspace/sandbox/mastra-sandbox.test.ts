@@ -91,12 +91,14 @@ class NonMountableSandbox extends MastraSandbox {
  * Create a mock logger for testing.
  */
 function createMockLogger(): IMastraLogger {
-  return {
+  const logger: any = {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  } as unknown as IMastraLogger;
+    child: vi.fn(() => logger),
+  };
+  return logger as IMastraLogger;
 }
 
 describe('MastraSandbox Base Class', () => {

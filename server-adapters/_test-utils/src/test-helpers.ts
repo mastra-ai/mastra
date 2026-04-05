@@ -1116,6 +1116,7 @@ const mockLogger = {
   error: vi.fn(),
   cleanup: vi.fn(),
   trackException: vi.fn(),
+  child: vi.fn(() => mockLogger),
   getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
 } as unknown as MockedLogger & {
   transports: Record<string, unknown>;

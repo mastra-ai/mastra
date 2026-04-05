@@ -28,16 +28,18 @@ import { Workspace } from './workspace';
 // =============================================================================
 
 function createMockLogger(): IMastraLogger {
-  return {
+  const logger: any = {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     trackException: vi.fn(),
+    child: vi.fn(() => logger),
     getTransports: vi.fn().mockReturnValue(new Map()),
     listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
     listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
   };
+  return logger as IMastraLogger;
 }
 
 // =============================================================================
