@@ -800,13 +800,31 @@ export class ObservationalMemory {
 
   /**
    * Resolve the effective messageTokens for a record.
-   * Uses the record's stored config if it has a per-record override,
-   * otherwise falls back to the instance-level config.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot written by getOrCreateRecord() is ignored
+   * so that later instance-level changes still take effect.
+   *
+   * Overrides that fall below the instance-level buffering floor
+   * (bufferTokens / absolute bufferActivation) are clamped to the
+   * instance threshold to preserve buffering invariants.
    */
   private getEffectiveMessageTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
-    const recordConfig = record.config as { observation?: { messageTokens?: number | ThresholdRange } } | undefined;
-    const recordTokens = recordConfig?.observation?.messageTokens;
-    if (recordTokens != null) {
+    const overrides = (record.config as { _overrides?: { observation?: { messageTokens?: number | ThresholdRange } } })
+      ?._overrides;
+    const recordTokens = overrides?.observation?.messageTokens;
+    if (recordTokens) {
+      const maxOverride = getMaxThreshold(recordTokens);
+
+      // Clamp: override must not violate instance-level buffering invariants
+      const bufferTokens = this.observationConfig.bufferTokens;
+      if (bufferTokens && maxOverride <= bufferTokens) {
+        return this.observationConfig.messageTokens;
+      }
+      const bufferActivation = this.observationConfig.bufferActivation;
+      if (bufferActivation && bufferActivation >= 1000 && maxOverride <= bufferActivation) {
+        return this.observationConfig.messageTokens;
+      }
+
       return recordTokens;
     }
     return this.observationConfig.messageTokens;
@@ -814,13 +832,16 @@ export class ObservationalMemory {
 
   /**
    * Resolve the effective reflection observationTokens for a record.
-   * Uses the record's stored config if it has a per-record override,
-   * otherwise falls back to the instance-level config.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot is ignored so instance-level changes
+   * still take effect for existing records.
    */
   private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
-    const recordConfig = record.config as { reflection?: { observationTokens?: number | ThresholdRange } } | undefined;
-    const recordTokens = recordConfig?.reflection?.observationTokens;
-    if (recordTokens != null) {
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const recordTokens = overrides?.reflection?.observationTokens;
+    if (recordTokens) {
       return recordTokens;
     }
     return this.reflectionConfig.observationTokens;

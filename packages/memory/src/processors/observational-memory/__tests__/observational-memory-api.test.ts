@@ -2119,3 +2119,120 @@ describe('setPendingMessageTokens (via storage)', () => {
     expect(updated.pendingMessageTokens).toBe(7000);
   });
 });
+
+// =============================================================================
+// Per-record config overrides (_overrides)
+// =============================================================================
+
+describe('per-record config overrides', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'override-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  it('uses instance-level messageTokens when record has no _overrides', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const status = await om.getStatus({ threadId });
+    // threshold should reflect the instance-level 500
+    expect(status.threshold).toBe(500);
+  });
+
+  it('ignores the initial config snapshot (not under _overrides)', async () => {
+    // Instance-level: 500 tokens
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    // getOrCreateRecord writes observation.messageTokens=500 into record.config
+    const record = await om.getOrCreateRecord(threadId);
+    expect(record.config).toBeTruthy();
+    // The snapshot config should NOT be treated as an override
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(500);
+  });
+
+  it('applies _overrides.observation.messageTokens when set', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    // Create the record first
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Manually set _overrides on the record config (simulating what updateObservationalMemoryConfig would do)
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        observation: { messageTokens: 2000 },
+      },
+    };
+
+    // The record object is shared in InMemory storage, so the mutation above
+    // is visible to getStatus() which re-reads from the same reference.
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(2000);
+  });
+
+  it('applies _overrides.reflection.observationTokens when set', async () => {
+    const om = createOM(storage, { messageTokens: 100, observationTokens: 10_000 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set override to a lower reflection threshold
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        reflection: { observationTokens: 5_000 },
+      },
+    };
+
+    const status = await om.getStatus({ threadId });
+    // Reflection threshold should now be 5000 instead of 10000
+    // shouldReflect checks: currentObservationTokens >= reflectThreshold
+    // With 0 observation tokens, shouldReflect should be false regardless
+    expect(status.shouldReflect).toBe(false);
+  });
+
+  it('clamps observation override below bufferTokens to instance default', async () => {
+    // bufferTokens=200 means messageTokens override must be > 200
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 200 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set override below bufferTokens — should be clamped
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        observation: { messageTokens: 100 }, // Below bufferTokens of 200
+      },
+    };
+
+    const status = await om.getStatus({ threadId });
+    // Should fall back to instance-level 500, not the 100 override
+    expect(status.threshold).toBe(500);
+  });
+
+  it('falls back to instance-level config when _overrides is empty', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set empty _overrides
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {},
+    };
+
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(500);
+  });
+});
