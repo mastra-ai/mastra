@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.23.0-alpha.8
+
+### Minor Changes
+
+- Memory operations now produce observability spans and accept an optional `observabilityContext` parameter. A new `MEMORY_OPERATION` span type, `MEMORY` entity type, and `MemoryOperationAttributes` interface let you identify memory spans in your traces. Agent and network code automatically threads observability context into memory calls. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **New observability identifiers:**
+  - `SpanType.MEMORY_OPERATION` — span type for all memory operations
+  - `EntityType.MEMORY` — entity type for memory spans
+  - `MemoryOperationAttributes` — typed attributes (operationType, messageCount, embeddingTokens, etc.)
+
+  **Updated abstract methods** on `MastraMemory` now accept optional `observabilityContext`:
+
+  ```typescript
+  import type { ObservabilityContext } from '@mastra/core/observability';
+
+  // All four methods accept an optional observabilityContext
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages,
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.deleteMessages(['msg-1'], { tracingContext: { currentSpan: parentSpan } });
+
+  await memory.updateWorkingMemory({
+    threadId: 'thread-1',
+    workingMemory: 'content',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added MASTRA_OFFLINE environment variable to disable network fetches for provider data in offline/air-gapped environments. When set to 'true' or '1', all provider sync and auto-refresh operations are skipped while the static provider registry remains fully functional. ([#15101](https://github.com/mastra-ai/mastra/pull/15101))
+
+- Added `WORKSPACE_ACTION` span type for workspace tracing. All workspace tools (filesystem, sandbox, search, skill, LSP) now create child spans with metadata including category, operation, file paths, commands, exit codes, bytes transferred, and duration. Added `startWorkspaceSpan()` utility for span creation with graceful no-op when tracing is inactive. ([#14554](https://github.com/mastra-ai/mastra/pull/14554))
+
+### Patch Changes
+
+- Fixed AGENTS.md reminder persistence and deduplication across turns by storing reminder metadata on injected user messages. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
 ## 1.23.0-alpha.7
 
 ### Patch Changes
