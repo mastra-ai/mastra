@@ -14,7 +14,9 @@ import {
   Icon,
   DatasetCombobox,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { DatasetVersion } from '@mastra/playground-ui';
 import { Database, Play } from 'lucide-react';
@@ -53,6 +55,16 @@ function DatasetPage() {
         <MainContentContent>
           <div className="text-neutral3 p-4">Dataset not found</div>
         </MainContentContent>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
       </MainContentLayout>
     );
   }
