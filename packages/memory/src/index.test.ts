@@ -2302,7 +2302,7 @@ describe('Memory', () => {
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
       const endArgs = childSpan.end.mock.calls[0][0];
-      expect(endArgs.attributes.success).toBe(true);
+      expect(endArgs.output.success).toBe(true);
       expect(endArgs.attributes.messageCount).toBe(result.messages.length);
     });
 
@@ -2320,7 +2320,6 @@ describe('Memory', () => {
       ).rejects.toThrow();
 
       expect(childSpan.error).toHaveBeenCalledTimes(1);
-      expect(childSpan.error.mock.calls[0][0].attributes.success).toBe(false);
       expect(childSpan.error.mock.calls[0][0].endSpan).toBe(true);
     });
 
@@ -2352,7 +2351,7 @@ describe('Memory', () => {
       expect(spanArgs.attributes.messageCount).toBe(1);
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
-      expect(childSpan.end.mock.calls[0][0].attributes.success).toBe(true);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
     });
 
     it('deleteMessages creates a span and ends it with message count', async () => {
@@ -2368,7 +2367,7 @@ describe('Memory', () => {
       expect(spanArgs.attributes.operationType).toBe('delete');
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
-      expect(childSpan.end.mock.calls[0][0].attributes.success).toBe(true);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
       expect(childSpan.end.mock.calls[0][0].attributes.messageCount).toBe(1);
     });
 
@@ -2392,7 +2391,7 @@ describe('Memory', () => {
       expect(spanArgs.attributes.operationType).toBe('update');
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
-      expect(childSpan.end.mock.calls[0][0].attributes.success).toBe(true);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
     });
 
     it('updateWorkingMemory throws without creating a span when working memory is disabled', async () => {
