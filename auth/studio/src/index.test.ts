@@ -869,6 +869,27 @@ describe('MastraAuthStudio org-scoping', () => {
     const user = await auth.authenticateToken('', req);
     expect(user).toBeNull();
   });
+
+  it('should allow user when current org differs but memberOrgIds includes instance org (cross-org access)', async () => {
+    // This is the core fix: user's "current" org is org-1, but they're also a member of org-owner
+    // The deployed studio belongs to org-owner, so access should be allowed
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
+
+    const multiOrgResponse = {
+      ...mockMeResponse,
+      organizationId: 'org-1', // user's current org
+      memberOrgIds: ['org-1', 'org-owner'], // user is member of both orgs
+    };
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(multiOrgResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    const user = await auth.authenticateToken('', req);
+
+    expect(user).not.toBeNull();
+    expect(user!.organizationId).toBe('org-1'); // current org unchanged
+    expect(user!.memberOrgIds).toContain('org-owner'); // but they're a member of instance org
+  });
 });
 
 // ---------------------------------------------------------------------------
