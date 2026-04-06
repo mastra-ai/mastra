@@ -54,7 +54,7 @@
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
-  "homepage": "https://arthur.ai",
+  "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
