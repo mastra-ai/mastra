@@ -2119,3 +2119,77 @@ describe('setPendingMessageTokens (via storage)', () => {
     expect(updated.pendingMessageTokens).toBe(7000);
   });
 });
+
+// =============================================================================
+// updateRecordConfig()
+// =============================================================================
+
+describe('updateRecordConfig()', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+  const threadId = 'config-update-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    om = createOM(storage, { messageTokens: 100 });
+  });
+
+  it('should deep-merge observation config override into existing config', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 2000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any).observation.messageTokens).toBe(2000);
+    // Original observation config keys should still be present (model was set during creation)
+    expect((record.config as any).observation.model).toBeDefined();
+  });
+
+  it('should deep-merge reflection config override into existing config', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      reflection: { observationTokens: 8000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any).reflection.observationTokens).toBe(8000);
+  });
+
+  it('should merge both observation and reflection overrides at once', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 3000 },
+      reflection: { observationTokens: 9000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any).observation.messageTokens).toBe(3000);
+    expect((record.config as any).reflection.observationTokens).toBe(9000);
+  });
+
+  it('should apply successive updates incrementally', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 1000 },
+    });
+    await om.updateRecordConfig(threadId, undefined, {
+      reflection: { observationTokens: 5000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    // Both updates should be present
+    expect((record.config as any).observation.messageTokens).toBe(1000);
+    expect((record.config as any).reflection.observationTokens).toBe(5000);
+  });
+
+  it('should throw when no record exists for the thread', async () => {
+    await expect(
+      om.updateRecordConfig('nonexistent-thread', undefined, { observation: { messageTokens: 100 } }),
+    ).rejects.toThrow(/No observational memory record found/);
+  });
+});
