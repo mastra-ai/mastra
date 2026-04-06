@@ -119,10 +119,18 @@ function isGeminiContentArray(data: any): data is Array<{ role: string; parts: a
 
 /**
  * Converts a Gemini content item to Datadog message format.
- * Joins text parts into a single content string.
+ * Extracts text from parts, skips binary data to avoid bloating traces.
  */
 function geminiContentToMessage(item: { role: string; parts: any[] }): { role: string; content: string } {
-  const text = item.parts.map(p => (typeof p === 'string' ? p : (p?.text ?? safeStringify(p)))).join('');
+  const text = item.parts
+    .map(p => {
+      if (typeof p === 'string') return p;
+      if (p?.text) return p.text;
+      if (p?.inlineData) return `[${p.inlineData.mimeType ?? 'binary'}]`;
+      if (p?.functionCall) return `[tool: ${p.functionCall.name ?? 'unknown'}]`;
+      return safeStringify(p);
+    })
+    .join('');
   return { role: item.role, content: text };
 }
 
