@@ -29,6 +29,11 @@ class TestableMemory extends Memory {
   }
 }
 
+function getTextParts(message: MastraDBMessage): string[] {
+  const parts = Array.isArray(message.content.parts) ? message.content.parts : [];
+  return parts.filter(part => part.type === 'text').map(part => part.text);
+}
+
 describe('Memory', () => {
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
@@ -1836,6 +1841,92 @@ describe('Memory', () => {
         });
       }
       await memory.saveMessages({ messages });
+    });
+
+    it('filters system reminder user messages from recall() by default', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-metadata',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+          {
+            id: 'msg-reminder-legacy',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+            },
+            createdAt: new Date('2024-01-01T10:07:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-metadata');
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-legacy');
+    });
+
+    it('includes system reminder user messages when includeSystemReminders is true', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-visible',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+        includeSystemReminders: true,
+      });
+
+      expect(result.messages.map(message => message.id)).toContain('msg-reminder-visible');
+      expect(getTextParts(result.messages.find(message => message.id === 'msg-reminder-visible')!)).toContain(
+        reminderMarkup,
+      );
     });
 
     it('should return pagination metadata from recall()', async () => {
