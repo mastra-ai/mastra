@@ -24,6 +24,15 @@ interface RegistryData {
   version: string;
 }
 
+/**
+ * Check if running in offline/air-gapped mode.
+ * When MASTRA_OFFLINE is set to 'true' or '1', all network fetches for provider data are skipped.
+ */
+export function isOfflineMode(): boolean {
+  const value = process.env.MASTRA_OFFLINE;
+  return value === 'true' || value === '1';
+}
+
 function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
@@ -498,6 +507,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip all network fetches when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.isRefreshing && !forceRefresh) {
       // console.debug('[GatewayRegistry] Sync already in progress, skipping...');
       return;
@@ -595,6 +609,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip auto-refresh when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.refreshInterval) {
       // console.debug('[GatewayRegistry] Auto-refresh already running');
       return;
@@ -681,10 +700,12 @@ export class GatewayRegistry {
 
 // Auto-start refresh if enabled
 // Defaults to enabled when MASTRA_DEV=true (which enables dynamic loading by default)
+// Disabled entirely when MASTRA_OFFLINE is set (air-gapped/offline environments)
 const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
 const autoRefreshEnabled =
-  process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
-  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
+  !isOfflineMode() &&
+  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
+    (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev));
 
 if (autoRefreshEnabled) {
   // console.debug('[GatewayRegistry] Auto-refresh enabled');
