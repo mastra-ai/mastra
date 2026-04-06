@@ -3270,6 +3270,41 @@ ${formattedMessages}
   }
 
   /**
+   * Update per-record config overrides for observation and/or reflection thresholds.
+   * The provided config is deep-merged into the record's `_overrides` key,
+   * so you only need to specify the fields you want to change.
+   *
+   * Overrides that violate buffering invariants (e.g. messageTokens below
+   * bufferTokens) are silently ignored at read time — the helpers fall back
+   * to the instance-level config.
+   *
+   * @example
+   * ```ts
+   * await om.updateRecordConfig('thread-1', undefined, {
+   *   observation: { messageTokens: 2000 },
+   *   reflection: { observationTokens: 8000 },
+   * });
+   * ```
+   */
+  async updateRecordConfig(
+    threadId: string,
+    resourceId: string | undefined,
+    config: Record<string, unknown>,
+  ): Promise<void> {
+    const ids = this.getStorageIds(threadId, resourceId);
+    const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    if (!record) {
+      throw new Error(`No observational memory record found for thread ${ids.threadId}`);
+    }
+    // Write under _overrides so getEffectiveMessageTokens / getEffectiveReflectionTokens
+    // pick up the override values, distinct from the initial config snapshot.
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { _overrides: config },
+    });
+  }
+
+  /**
    * Get observation history (previous generations)
    */
   async getHistory(
