@@ -47,6 +47,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -1793,6 +1794,7 @@ export class MemoryPG extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -1800,10 +1802,32 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT $2`,
-        [lookupKey, limit],
-      );
+
+      const conditions = [`"lookupKey" = $1`];
+      const params: unknown[] = [lookupKey];
+      let paramIndex = 2;
+
+      if (options?.from) {
+        conditions.push(`"createdAt" >= $${paramIndex}`);
+        params.push(options.from);
+        paramIndex++;
+      }
+      if (options?.to) {
+        conditions.push(`"createdAt" <= $${paramIndex}`);
+        params.push(options.to);
+        paramIndex++;
+      }
+
+      params.push(limit);
+      let sql = `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT $${paramIndex}`;
+      paramIndex++;
+
+      if (options?.offset != null) {
+        params.push(options.offset);
+        sql += ` OFFSET $${paramIndex}`;
+      }
+
+      const result = await this.#db.client.manyOrNone(sql, params);
       if (!result) return [];
       return result.map(row => this.parseOMRow(row));
     } catch (error) {

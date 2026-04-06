@@ -19,7 +19,7 @@ async function showSubagentModelListForScope(
     return;
   }
 
-  const currentSubagentModel = await ctx.state.harness.getSubagentModelId({ agentType });
+  const currentSubagentModel = ctx.state.harness.getSubagentModelId({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -116,30 +116,23 @@ async function showSubagentScopeThenList(
 }
 
 export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
-  const configuredSubagents = ctx.state.harness.config?.subagents;
-  const agentTypes: Array<{ id: string; label: string; description: string }> = configuredSubagents?.length
-    ? configuredSubagents.map(subagent => ({
-        id: subagent.id,
-        label: subagent.name,
-        description: subagent.description,
-      }))
-    : [
-        {
-          id: 'explore',
-          label: 'Explore',
-          description: 'Read-only codebase exploration',
-        },
-        {
-          id: 'plan',
-          label: 'Plan',
-          description: 'Read-only analysis and planning',
-        },
-        {
-          id: 'execute',
-          label: 'Execute',
-          description: 'Task execution with write access',
-        },
-      ];
+  const agentTypes: Array<{ id: string; label: string; description: string }> = [
+    {
+      id: 'explore',
+      label: 'Explore',
+      description: 'Read-only codebase exploration',
+    },
+    {
+      id: 'plan',
+      label: 'Plan',
+      description: 'Read-only analysis and planning',
+    },
+    {
+      id: 'execute',
+      label: 'Execute',
+      description: 'Task execution with write access',
+    },
+  ];
 
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(

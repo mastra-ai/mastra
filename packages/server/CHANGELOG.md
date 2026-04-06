@@ -1,5 +1,42 @@
 # @mastra/server
 
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/core@1.23.0-alpha.5
+
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80)]:
+  - @mastra/core@1.23.0-alpha.3
+
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Fixed gateway memory client failing with 404 when MASTRA_GATEWAY_URL includes a /v1 suffix (e.g. https://gateway-api.mastra.ai/v1). The URL is now normalized before appending the memory base path, matching how the model router handles the same variable. ([#15054](https://github.com/mastra-ai/mastra/pull/15054))
+
+- Updated dependencies:
+  - @mastra/core@1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7)]:
+  - @mastra/core@1.23.0-alpha.1
+
 ## 1.23.0-alpha.0
 
 ### Patch Changes

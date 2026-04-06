@@ -1,5 +1,54 @@
 # @mastra/playground-ui
 
+## 22.0.1-alpha.5
+
+### Patch Changes
+
+- Improved evaluation tab design consistency by migrating detail list views (scorers, datasets, experiments, review) to use the shared EntityList component. Added padding to evaluate and review tab wrappers. Fixed experiment result split-panel layout being too narrow. Fixed sidebar highlighting when viewing experiment details from the Experiments tab. ([#14987](https://github.com/mastra-ai/mastra/pull/14987))
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/core@1.23.0-alpha.5
+  - @mastra/client-js@1.13.1-alpha.5
+  - @mastra/react@0.2.23-alpha.5
+
+## 22.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+  - @mastra/ai-sdk@1.3.2-alpha.0
+  - @mastra/client-js@1.13.1-alpha.4
+  - @mastra/react@0.2.23-alpha.4
+
+## 22.0.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80)]:
+  - @mastra/core@1.23.0-alpha.3
+  - @mastra/client-js@1.13.1-alpha.3
+  - @mastra/react@0.2.23-alpha.3
+
+## 22.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`fd8cf05`](https://github.com/mastra-ai/mastra/commit/fd8cf05151465e479504aa42eb009bcb36b9a801)]:
+  - @mastra/ai-sdk@1.3.2-alpha.0
+  - @mastra/core@1.23.0-alpha.2
+  - @mastra/client-js@1.13.1-alpha.2
+  - @mastra/react@0.2.23-alpha.2
+
+## 22.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7)]:
+  - @mastra/core@1.23.0-alpha.1
+  - @mastra/client-js@1.13.1-alpha.1
+  - @mastra/react@0.2.23-alpha.1
+
 ## 22.0.1-alpha.0
 
 ### Patch Changes

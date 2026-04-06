@@ -1,5 +1,33 @@
 # @mastra/core
 
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- Fully isolate `async_hooks` from shared chunks so importing `@mastra/core` in browser bundles never pulls in the Node-only dependency ([#15074](https://github.com/mastra-ai/mastra/pull/15074))
+
+- Fixed `__setLogger` passing a raw string to `logger.child()`, which caused PinoLogger to serialize each character as a separate log field (e.g. `0: "B", 1: "U", 2: "N"...`). Now passes `{ component }` object instead. ([#15079](https://github.com/mastra-ai/mastra/pull/15079))
+
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- Fixed a browser bundling issue where importing `@mastra/core` could pull in a Node-only dependency. ([#15072](https://github.com/mastra-ai/mastra/pull/15072))
+
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed image attachments from @ai-sdk/react and @ai-sdk/vue clients throwing errors. File parts using the AI SDK v5 UIMessage format ({ type: 'file', url: '...', mediaType: '...' }) are now handled correctly when routed through the ModelMessage code path. ([#14734](https://github.com/mastra-ai/mastra/pull/14734))
+
+## 1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7))
+
 ## 1.23.0-alpha.0
 
 ### Minor Changes
