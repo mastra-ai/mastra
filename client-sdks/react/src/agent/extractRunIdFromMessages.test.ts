@@ -49,4 +49,34 @@ describe('extractRunIdFromMessages', () => {
 
     expect(extractRunIdFromMessages(messages)).toBe('run-approval-123');
   });
+
+  it('skips entries without runId and returns a later valid runId', () => {
+    const messages: ExtendedMastraUIMessage[] = [
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: {
+          mode: 'stream',
+          suspendedTools: {
+            'workflow-first': {
+              toolCallId: 'tool-1',
+              toolName: 'workflow-first',
+              args: {},
+              suspendPayload: { question: 'First' },
+            },
+            'workflow-second': {
+              toolCallId: 'tool-2',
+              toolName: 'workflow-second',
+              args: {},
+              suspendPayload: { question: 'Second' },
+              runId: 'run-later-123',
+            },
+          },
+        },
+      },
+    ];
+
+    expect(extractRunIdFromMessages(messages)).toBe('run-later-123');
+  });
 });

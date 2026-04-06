@@ -10,10 +10,16 @@ export const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): s
     ] as Array<Record<string, any> | undefined>;
 
     for (const source of metadataSources) {
-      if (source && typeof source === 'object') {
-        const suspensionData = Object.values(source)[0];
-        if (suspensionData?.runId) {
-          return suspensionData.runId;
+      if (!source || typeof source !== 'object') continue;
+
+      for (const suspensionData of Object.values(source)) {
+        if (
+          suspensionData &&
+          typeof suspensionData === 'object' &&
+          typeof (suspensionData as { runId?: unknown }).runId === 'string' &&
+          (suspensionData as { runId: string }).runId.length > 0
+        ) {
+          return (suspensionData as { runId: string }).runId;
         }
       }
     }
