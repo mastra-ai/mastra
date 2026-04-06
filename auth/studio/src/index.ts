@@ -423,6 +423,7 @@ export class MastraAuthStudio
           lastName: string;
         };
         organizationId: string;
+        role?: string;
       };
 
       return {
@@ -430,6 +431,7 @@ export class MastraAuthStudio
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
         organizationId: data.organizationId,
+        role: data.role,
       };
     } catch {
       return null;

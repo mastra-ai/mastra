@@ -2071,6 +2071,10 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  from?: Date | string;
+  to?: Date | string;
+  offset?: number;
+  limit?: number;
   requestContext?: RequestContext | Record<string, any>;
 }
 
