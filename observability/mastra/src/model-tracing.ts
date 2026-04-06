@@ -22,18 +22,9 @@ import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/cor
 import { extractUsageMetrics } from './usage';
 
 /**
- * Extracts the messages array from a step-start request payload for use as span input.
- *
- * The AI SDK provides the raw HTTP request metadata in `request.body` as a JSON string.
- * This contains the full API request (model, messages, tools, temperature, etc.).
- * For span input, we only want the messages — not the entire request payload.
- *
- * Handles multiple provider formats:
- * - OpenAI/Anthropic: `{ messages: [{role, content}] }`
- * - Google/Gemini: `{ contents: [{role, parts}] }`
- *
- * Falls back to the raw request object if extraction fails (undefined body,
- * invalid JSON, no recognized message field, or body already parsed as object).
+ * Extract messages from the raw AI SDK request metadata for use as span input.
+ * Parses request.body and returns `messages` (OpenAI/Anthropic) or `contents` (Gemini).
+ * Falls back to the original request object when body is missing or unparseable.
  */
 function extractStepInput(request: StepStartPayload['request'] | undefined): unknown {
   if (!request) return undefined;
