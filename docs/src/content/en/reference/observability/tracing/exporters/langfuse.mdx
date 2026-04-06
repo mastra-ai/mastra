@@ -95,21 +95,6 @@ The `LangfuseClient` instance for advanced Langfuse features. Returns `undefined
 
 ## Methods
 
-### `addScoreToTrace`
-
-```typescript prettier:false
-async addScoreToTrace(params: {
-  traceId: string
-  spanId?: string
-  score: number
-  reason?: string
-  scorerName: string
-  metadata?: Record<string, any>
-}): Promise<void>
-```
-
-Adds a score to a trace via the Langfuse client. Scores are batched and flushed automatically.
-
 ### flush
 
 ```typescript prettier:false
