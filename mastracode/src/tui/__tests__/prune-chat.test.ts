@@ -18,6 +18,7 @@ function createState(childrenCount: number): TUIState {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    allShellComponents: [],
   } as unknown as TUIState;
 }
 
