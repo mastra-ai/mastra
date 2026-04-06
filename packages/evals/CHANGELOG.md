@@ -1,5 +1,19 @@
 # @mastra/evals
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fix answer-similarity scorer to align prompt guidelines with allowed match types ([#15001](https://github.com/mastra-ai/mastra/pull/15001))
+
+  The answer-similarity scorer could throw a ZodError when the LLM returned
+  "contradiction" as a matchType, since only exact/semantic/partial/missing are
+  valid. The prompt now correctly directs contradictory information to the
+  existing contradictions array instead.
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.2.0
 
 ### Minor Changes
