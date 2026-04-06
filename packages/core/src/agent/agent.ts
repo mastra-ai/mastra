@@ -616,8 +616,8 @@ export class Agent<
       : this.#outputProcessors
         ? typeof this.#outputProcessors === 'function'
           ? await this.#outputProcessors({
-            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-          })
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
           : this.#outputProcessors
         : [];
 
@@ -649,8 +649,8 @@ export class Agent<
       : this.#inputProcessors
         ? typeof this.#inputProcessors === 'function'
           ? await this.#inputProcessors({
-            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-          })
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
           : this.#inputProcessors
         : [];
 
@@ -774,8 +774,8 @@ export class Agent<
     const configuredProcessors =
       typeof this.#inputProcessors === 'function'
         ? await this.#inputProcessors({
-          requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-        })
+            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+          })
         : this.#inputProcessors;
 
     return configuredProcessors;
@@ -794,8 +794,8 @@ export class Agent<
     const configuredProcessors =
       typeof this.#outputProcessors === 'function'
         ? await this.#outputProcessors({
-          requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-        })
+            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+          })
         : this.#outputProcessors;
 
     return configuredProcessors;
@@ -1469,9 +1469,9 @@ export class Agent<
   } = {}): MastraLLM | Promise<MastraLLM> {
     const modelSelectionPromise = model
       ? this.resolveModelSelection(
-        model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
-        requestContext,
-      )
+          model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
+          requestContext,
+        )
       : this.resolveModelSelection(this.model, requestContext);
 
     return modelSelectionPromise.then(modelSelection => {
@@ -2992,19 +2992,19 @@ export class Agent<
             const subAgentThreadId = inputData.threadId
               ? `${inputData.threadId}-${randomUUID()}`
               : context?.mastra?.generateId({
-                idType: 'thread',
-                source: 'agent',
-                entityId: agentName,
-                resourceId,
-              }) || randomUUID();
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) || randomUUID();
 
             const subAgentResourceId = inputData.resourceId
               ? `${inputData.resourceId}-${agentName}`
               : context?.mastra?.generateId({
-                idType: 'generic',
-                source: 'agent',
-                entityId: agentName,
-              }) || `${slugify.default(this.id)}-${agentName}`;
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) || `${slugify.default(this.id)}-${agentName}`;
 
             const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
             const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
@@ -3231,38 +3231,38 @@ export class Agent<
               ) {
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
-                    runId: suspendedToolRunId,
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                    ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                    context: filteredContextMessages as unknown as ModelMessage[],
-                    ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                      ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                          options: { lastMessages: false },
-                        },
-                      }
-                      : {}),
-                  })
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: { lastMessages: false },
+                            },
+                          }
+                        : {}),
+                    })
                   : await agent.generate(messagesForSubAgent, {
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                    ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                    context: filteredContextMessages as unknown as ModelMessage[],
-                    ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                      ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                          options: { lastMessages: false },
-                        },
-                      }
-                      : {}),
-                  });
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: { lastMessages: false },
+                            },
+                          }
+                        : {}),
+                    });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
                 const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
@@ -3341,42 +3341,42 @@ export class Agent<
               ) {
                 const streamResult = resumeData
                   ? await agent.resumeStream(resumeData, {
-                    runId: suspendedToolRunId,
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                    ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                    context: filteredContextMessages as unknown as ModelMessage[],
-                    ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                      ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                          options: {
-                            lastMessages: false,
-                          },
-                        },
-                      }
-                      : {}),
-                  })
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
+                            },
+                          }
+                        : {}),
+                    })
                   : await agent.stream(messagesForSubAgent, {
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                    ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                    context: filteredContextMessages as unknown as ModelMessage[],
-                    ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                      ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                          options: {
-                            lastMessages: false,
-                          },
-                        },
-                      }
-                      : {}),
-                  });
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as unknown as ModelMessage[],
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
+                            },
+                          }
+                        : {}),
+                    });
 
                 let requireToolApproval;
                 let suspendedPayload;
@@ -3862,16 +3862,16 @@ export class Agent<
               } else if (methodType === 'stream') {
                 const streamResult = resumeData
                   ? run.resumeStream({
-                    resumeData,
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                  })
+                      resumeData,
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                    })
                   : run.stream({
-                    inputData: workflowInputData,
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(initialState && { initialState }),
-                  });
+                      inputData: workflowInputData,
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(initialState && { initialState }),
+                    });
 
                 if (context?.writer) {
                   const toolCallIdToUse = context?.agent?.toolCallId || (context as any).toolCallId || randomUUID();
@@ -4246,8 +4246,8 @@ export class Agent<
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
   } & ObservabilityContext) {
@@ -4724,13 +4724,13 @@ export class Agent<
           minMessages,
         } = this.resolveTitleGenerationConfig(
           config?.generateTitle as
-          | boolean
-          | {
-            model?: DynamicArgument<MastraModelConfig, TRequestContext>;
-            instructions?: DynamicArgument<string>;
-            minMessages?: number;
-          }
-          | undefined,
+            | boolean
+            | {
+                model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+                instructions?: DynamicArgument<string>;
+                minMessages?: number;
+              }
+            | undefined,
         );
 
         const uiMessages = messageList.get.all.ui();
@@ -4800,15 +4800,15 @@ export class Agent<
       },
       ...(result.tripwire
         ? {
-          attributes: {
-            tripwireAbort: {
-              reason: result.tripwire.reason,
-              processorId: result.tripwire.processorId,
-              retry: result.tripwire.retry,
-              metadata: result.tripwire.metadata,
+            attributes: {
+              tripwireAbort: {
+                reason: result.tripwire.reason,
+                processorId: result.tripwire.processorId,
+                retry: result.tripwire.retry,
+                metadata: result.tripwire.metadata,
+              },
             },
-          },
-        }
+          }
         : {}),
     });
   }
@@ -5083,11 +5083,11 @@ export class Agent<
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
-          ...mergedOptions.structuredOutput,
-          // Convert PublicSchema to StandardSchemaWithJSON at API boundary
-          // This follows the same pattern as Tool/Workflow constructors
-          schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-        }
+            ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
         : undefined,
       messages,
       methodType: 'generate',
@@ -5200,11 +5200,11 @@ export class Agent<
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
-          ...mergedOptions.structuredOutput,
-          // Convert PublicSchema to StandardSchemaWithJSON at API boundary
-          // This follows the same pattern as Tool/Workflow constructors
-          schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-        }
+            ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
         : undefined,
       messages,
       methodType: 'stream',
@@ -5324,9 +5324,9 @@ export class Agent<
       ...mergedStreamOptions,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
-          ...mergedStreamOptions.structuredOutput,
-          schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
-        }
+            ...mergedStreamOptions.structuredOutput,
+            schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+          }
         : undefined,
       messages: [],
       resumeContext: {
@@ -5450,9 +5450,9 @@ export class Agent<
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
-          ...mergedOptions.structuredOutput,
-          schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-        }
+            ...mergedOptions.structuredOutput,
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
         : undefined,
       messages: [],
       resumeContext: {
@@ -5708,10 +5708,10 @@ export class Agent<
     generateTitleConfig:
       | boolean
       | {
-        model?: DynamicArgument<MastraModelConfig, TRequestContext>;
-        instructions?: DynamicArgument<string>;
-        minMessages?: number;
-      }
+          model?: DynamicArgument<MastraModelConfig, TRequestContext>;
+          instructions?: DynamicArgument<string>;
+          minMessages?: number;
+        }
       | undefined,
   ): {
     shouldGenerate: boolean;
