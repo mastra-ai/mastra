@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -92,6 +93,8 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
+  browser?: MastraBrowser;
 }
 
 export function createAuthStorage() {
@@ -364,6 +367,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...config?.initialState,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
+    browser: config?.browser,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {

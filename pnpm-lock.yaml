@@ -1441,6 +1441,9 @@ importers:
       '@mariozechner/pi-tui':
         specifier: ^0.60.0
         version: 0.60.0
+      '@mastra/agent-browser':
+        specifier: workspace:*
+        version: link:../browser/agent-browser
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -1459,6 +1462,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../stores/pg
+      '@mastra/stagehand':
+        specifier: workspace:*
+        version: link:../browser/stagehand
       '@tavily/core':
         specifier: ^0.7.2
         version: 0.7.2
