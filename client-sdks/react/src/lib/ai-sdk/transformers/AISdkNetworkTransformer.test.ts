@@ -1770,6 +1770,115 @@ describe('AISdkNetworkTransformer', () => {
     });
   });
 
+  describe('transform - suspended execution metadata', () => {
+    it('stores payload runId for agent suspensions', () => {
+      const chunk: NetworkChunkType = {
+        type: 'agent-execution-suspended',
+        payload: {
+          agentId: 'agent-1',
+          toolCallId: 'agent-tool-1',
+          toolName: 'workflow-tool',
+          args: { input: 'test' },
+          suspendPayload: { question: 'Step 2?' },
+          resumeSchema: '{}',
+          usage: {} as any,
+          selectionReason: 'Need workflow input',
+          runId: 'agent-step-run-1',
+        },
+        runId: 'network-run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+          metadata: { mode: 'network' },
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect((result[0].metadata as any)?.suspendedTools?.['workflow-tool']).toMatchObject({
+        toolCallId: 'agent-tool-1',
+        toolName: 'workflow-tool',
+        runId: 'agent-step-run-1',
+      });
+    });
+
+    it('stores payload runId for workflow suspensions', () => {
+      const chunk: NetworkChunkType = {
+        type: 'workflow-execution-suspended',
+        payload: {
+          name: 'workflow-tool',
+          workflowId: 'workflow-1',
+          toolCallId: 'workflow-tool',
+          toolName: 'workflow-tool',
+          args: { input: 'test' },
+          suspendPayload: { question: 'Workflow step?' },
+          resumeSchema: '{}',
+          usage: {} as any,
+          selectionReason: 'Need workflow input',
+          runId: 'workflow-step-run-1',
+        },
+        runId: 'network-run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+          metadata: { mode: 'network' },
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect((result[0].metadata as any)?.suspendedTools?.['workflow-tool']).toMatchObject({
+        toolCallId: 'workflow-tool',
+        toolName: 'workflow-tool',
+        runId: 'workflow-step-run-1',
+      });
+    });
+
+    it('stores payload runId for tool suspensions', () => {
+      const chunk: NetworkChunkType = {
+        type: 'tool-execution-suspended',
+        payload: {
+          toolCallId: 'tool-call-1',
+          toolName: 'search-tool',
+          args: { query: 'test' },
+          suspendPayload: { question: 'Approve search?' },
+          resumeSchema: '{}',
+          selectionReason: 'Need approval',
+          runId: 'tool-run-1',
+        },
+        runId: 'network-run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+          metadata: { mode: 'network' },
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect((result[0].metadata as any)?.suspendedTools?.['search-tool']).toMatchObject({
+        toolCallId: 'tool-call-1',
+        toolName: 'search-tool',
+        runId: 'tool-run-1',
+      });
+    });
+  });
+
   describe('immutability', () => {
     it('should not mutate original conversation array', () => {
       const chunk: NetworkChunkType = {

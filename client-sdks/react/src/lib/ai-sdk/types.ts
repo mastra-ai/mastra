@@ -38,6 +38,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }
@@ -61,6 +62,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }
@@ -88,6 +90,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }

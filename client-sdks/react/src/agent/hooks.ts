@@ -6,8 +6,9 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useEffect, useRef, useState } from 'react';
-import type { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
+import type { MastraUIMessage } from '../lib/ai-sdk';
 import type { ModelSettings } from './types';
+import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
@@ -46,20 +47,6 @@ export type StreamArgs = SharedArgs & {
 
 export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
-};
-
-// Extract runId from any pending suspensions in initial messages
-const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
-  for (const message of messages) {
-    const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-      const suspensionData = Object.values(pendingToolApprovals)[0];
-      if (suspensionData?.runId) {
-        return suspensionData.runId;
-      }
-    }
-  }
-  return undefined;
 };
 
 export const useChat = ({
