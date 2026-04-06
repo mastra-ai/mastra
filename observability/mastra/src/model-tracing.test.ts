@@ -833,6 +833,38 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans[0]!.input).toEqual({});
     });
 
+    it('should fall back to original request when body is malformed JSON', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const malformedRequest = { body: '{"incomplete":' };
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: malformedRequest,
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual(malformedRequest);
+    });
+
     it('should handle already-parsed body object', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
