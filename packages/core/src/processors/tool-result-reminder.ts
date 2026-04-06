@@ -107,6 +107,30 @@ function getMessageText(message: MastraDBMessage): string {
     .join('\n');
 }
 
+function decodeXmlEntities(value: string): string {
+  return value.replaceAll('&quot;', '"').replaceAll('&gt;', '>').replaceAll('&lt;', '<').replaceAll('&amp;', '&');
+}
+
+function extractReminderPath(messageText: string): string | undefined {
+  const startTagIndex = messageText.indexOf('<system-reminder');
+  if (startTagIndex === -1) {
+    return undefined;
+  }
+
+  const startTagEndIndex = messageText.indexOf('>', startTagIndex);
+  if (startTagEndIndex === -1) {
+    return undefined;
+  }
+
+  const startTag = messageText.slice(startTagIndex, startTagEndIndex + 1);
+  const pathMatch = startTag.match(/\bpath="([^"]+)"/);
+  if (!pathMatch?.[1]) {
+    return undefined;
+  }
+
+  return decodeXmlEntities(pathMatch[1]);
+}
+
 function getReminderMarkup(reminderText: string, instructionPath: string): string {
   return `<system-reminder type="${REMINDER_TYPE}" path="${escapeXmlAttribute(instructionPath)}">${escapeXml(reminderText)}</system-reminder>`;
 }
@@ -306,6 +330,23 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   }
 
   private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string): boolean {
-    return messages.some(message => message.role === 'user' && getMessageText(message).includes(reminderMarkup));
+    const reminderPath = extractReminderPath(reminderMarkup);
+
+    return messages.some(message => {
+      if (message.role !== 'user') {
+        return false;
+      }
+
+      const messageText = getMessageText(message);
+      if (messageText.includes(reminderMarkup)) {
+        return true;
+      }
+
+      if (!reminderPath) {
+        return false;
+      }
+
+      return extractReminderPath(messageText) === reminderPath;
+    });
   }
 }

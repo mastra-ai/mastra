@@ -386,6 +386,34 @@ describe('AgentsMDInjector', () => {
     ]);
   });
 
+  it('does not inject duplicate reminder when a prior reminder for the same path has different content', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-duplicate-path';
+    messageList.push(
+      createUserMessage(
+        `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
+      ),
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: path => String(path) !== '/repo/src/index.ts',
+      readFile: () => 'Project guidance from AGENTS',
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' }, 'view', toolCallId)]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
+    ]);
+  });
+
   it('injects a new reminder when the path differs', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-different-path';
