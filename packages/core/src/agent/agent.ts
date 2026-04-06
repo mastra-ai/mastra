@@ -2926,16 +2926,18 @@ export class Agent<
       for (const [agentName, agent] of Object.entries(agents)) {
         const agentInputSchema = z.object({
           prompt: z.string().describe('The prompt to send to the agent'),
-          // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
-          threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
-          resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
+          // Using .optional() (not .nullish()) so the JSON Schema for tool calling avoids anyOf:[T,null]
+          // constructs that break Google Gemini function calling. The execute handler already coerces
+          // null to undefined via falsy checks, so OpenAI sending null for unfilled fields is safe.
+          threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
+          resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
           instructions: z
             .string()
-            .nullish()
+            .optional()
             .describe(
               'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
             ),
-          maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+          maxSteps: z.number().min(3).optional().describe('Maximum number of execution steps for the sub-agent'),
           // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
           // to return a proper llm response
         });

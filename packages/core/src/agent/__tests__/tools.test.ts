@@ -1395,10 +1395,10 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
   // by CoreToolBuilder.createExecute) must normalize it before validation fails.
   const agentInputSchema = z.object({
     prompt: z.string().describe('The prompt to send to the agent'),
-    threadId: z.string().nullish().describe('Thread ID'),
-    resourceId: z.string().nullish().describe('Resource ID'),
-    instructions: z.string().nullish().describe('Additional instructions'),
-    maxSteps: z.number().min(3).nullish().describe('Max steps'),
+    threadId: z.string().optional().describe('Thread ID'),
+    resourceId: z.string().optional().describe('Resource ID'),
+    instructions: z.string().optional().describe('Additional instructions'),
+    maxSteps: z.number().min(3).optional().describe('Max steps'),
   });
 
   it('should normalize "query" to "prompt" through validateToolInput', async () => {
