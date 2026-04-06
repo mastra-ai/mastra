@@ -36,6 +36,7 @@ export async function runWithExeca({
   try {
     const subprocess = execa(cmd, args, {
       cwd,
+      stdin: 'ignore',
       env: {
         ...process.env,
         ...env,
@@ -49,8 +50,10 @@ export async function runWithExeca({
     subprocess.stderr?.pipe(pinoStream, { end: false });
 
     const { stdout, stderr, exitCode } = await subprocess;
+    pinoStream.end();
     return { stdout, stderr, success: exitCode === 0 };
   } catch (error) {
+    pinoStream.end();
     logger.error('Process failed', { error });
     return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
