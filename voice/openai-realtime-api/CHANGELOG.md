@@ -1,5 +1,14 @@
 # @mastra/voice-openai-realtime
 
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- Fix requestContext propagation to tool executions during OpenAI Realtime voice sessions. Tools now correctly receive the caller's request context passed via `voice.connect({ requestContext })`. ([#15045](https://github.com/mastra-ai/mastra/pull/15045))
+
+- Updated dependencies [[`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab)]:
+  - @mastra/core@1.23.0-alpha.6
+
 ## 0.12.1
 
 ### Patch Changes

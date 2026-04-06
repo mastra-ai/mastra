@@ -125,14 +125,35 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "@mastra_blaxel-15086-dependencies",
+    "angry-mirrors-knock",
     "auth-studio-refresh",
     "automated-provider-registry-20260404-004906",
+    "better-apes-wave",
+    "brave-coins-love",
+    "cli-server-deploy",
+    "cli-studio-deploy",
+    "five-mice-prune",
+    "fix-bearer-token-role",
+    "fix-loop-resourceid-null",
+    "fix-openai-realtime-request-context",
+    "fix-scorer-threadid-resourceid-forwarding",
+    "flat-llamas-cross",
     "green-birds-knock",
     "green-impalas-slide",
+    "legal-dots-spend",
+    "little-doors-laugh",
+    "loud-tigers-march",
+    "ninety-bugs-brake",
+    "perky-mammals-wink",
     "playground-ui-fetch-refresh",
     "public-turtles-speak",
     "puny-clubs-push",
     "quick-paths-eat",
-    "server-auth-refresh"
+    "server-auth-refresh",
+    "slow-plums-invite",
+    "social-forks-flash",
+    "two-socks-train",
+    "yummy-radios-relate"
   ]
 }

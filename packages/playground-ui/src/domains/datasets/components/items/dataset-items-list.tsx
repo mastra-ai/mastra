@@ -1,10 +1,13 @@
 import type { DatasetItem } from '@mastra/client-js';
+import { format, isThisYear, isToday } from 'date-fns';
 import { Plus, Upload, FileJson } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ItemList } from '@/ds/components/ItemList';
+import { EntityList } from '@/ds/components/EntityList';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -37,6 +40,13 @@ function truncateValue(value: unknown, maxLength = 100): string {
   const str = typeof value === 'string' ? value : JSON.stringify(value);
   if (!str || str.length <= maxLength) return str || '-';
   return str.slice(0, maxLength) + '...';
+}
+
+function formatDate(date: Date): string {
+  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
+  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
+  const time = format(date, "'at' h:mm aaa");
+  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
 }
 
 export function DatasetItemsList({
@@ -95,99 +105,101 @@ export function DatasetItemsList({
     onToggleSelection(id, shiftKey, allIds);
   };
 
-  const handleEntryClick = (itemId: string) => {
-    onItemClick?.(itemId);
-  };
+  const gridColumns = [isSelectionActive ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <ItemList>
-      <ItemList.Scroller>
-        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
-          {isSelectionActive && !maxSelection && (
-            <ItemList.LabelCell>
-              <Checkbox
-                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                onCheckedChange={handleSelectAllToggle}
-                aria-label="Select all items"
-              />
-            </ItemList.LabelCell>
-          )}
-          {columns?.map(col => (
-            <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-          ))}
-        </ItemList.Header>
+    <EntityList columns={gridColumns}>
+      <EntityList.Top>
+        {isSelectionActive && !maxSelection && (
+          <EntityList.TopCell>
+            <Checkbox
+              checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+              onCheckedChange={handleSelectAllToggle}
+              aria-label="Select all items"
+            />
+          </EntityList.TopCell>
+        )}
+        {isSelectionActive && maxSelection && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
+        {columns.map(col => (
+          <EntityList.TopCell key={col.name}>{col.label || col.name}</EntityList.TopCell>
+        ))}
+      </EntityList.Top>
 
-        <ItemList.Items>
-          {items.length === 0 && searchQuery ? (
-            <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
-          ) : (
-            items.map(item => {
-              const createdAtDate = new Date(item.createdAt);
+      {items.length === 0 && searchQuery ? (
+        <EntityList.NoMatch message="No items match your search" />
+      ) : (
+        <EntityList.Rows>
+          {items.map(item => {
+            const createdAtDate = new Date(item.createdAt);
+            const isSelected = featuredItemId === item.id;
 
-              const listItem = {
-                id: item.id,
-                input: truncateValue(item.input, 60),
-                groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
-                metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                date: createdAtDate,
-              };
-
-              return (
-                <ItemList.Row key={item.id} isSelected={selectedIds.has(item.id)}>
-                  {isSelectionActive && (
-                    <ItemList.LabelCell>
-                      <Checkbox
-                        checked={selectedIds.has(item.id)}
-                        onCheckedChange={() => {}}
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleToggleSelection(item.id, e.shiftKey, allIds);
-                        }}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    </ItemList.LabelCell>
-                  )}
-                  <ItemList.RowButton
-                    item={listItem}
-                    isFeatured={featuredItemId === item.id}
-                    columns={columns}
-                    onClick={handleEntryClick}
-                  >
-                    <ItemList.IdCell id={listItem.id} />
-                    <ItemList.TextCell className="font-mono">{listItem.input}</ItemList.TextCell>
-                    {columns.some(col => col.name === 'groundTruth') && (
-                      <ItemList.TextCell className="font-mono">{listItem.groundTruth}</ItemList.TextCell>
+            return (
+              <EntityList.Row
+                key={item.id}
+                onClick={() => onItemClick?.(item.id)}
+                selected={isSelected || selectedIds.has(item.id)}
+              >
+                {isSelectionActive && (
+                  <EntityList.Cell>
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={() => {}} // no-op: selection handled by onClick for shift-key multi-select
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleToggleSelection(item.id, e.shiftKey, allIds);
+                      }}
+                      aria-label={`Select item ${item.id}`}
+                    />
+                  </EntityList.Cell>
+                )}
+                <EntityList.TextCell>
+                  <span className="truncate block font-mono">{item.id}</span>
+                </EntityList.TextCell>
+                <EntityList.TextCell>
+                  <span className="truncate block font-mono">{truncateValue(item.input, 60)}</span>
+                </EntityList.TextCell>
+                {columns.some(col => col.name === 'groundTruth') && (
+                  <EntityList.TextCell>
+                    <span className="truncate block font-mono">
+                      {item.groundTruth ? truncateValue(item.groundTruth, 40) : '-'}
+                    </span>
+                  </EntityList.TextCell>
+                )}
+                {columns.some(col => col.name === 'trajectory') && (
+                  <EntityList.TextCell>
+                    {item.expectedTrajectory ? (
+                      <span className="text-xs">
+                        {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
+                          ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
+                          : 'Yes'}
+                      </span>
+                    ) : (
+                      <span className="text-neutral4">—</span>
                     )}
-                    {columns.some(col => col.name === 'trajectory') && (
-                      <ItemList.TextCell>
-                        {item.expectedTrajectory ? (
-                          <span className="text-xs">
-                            {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
-                              ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
-                              : 'Yes'}
-                          </span>
-                        ) : (
-                          <span className="text-neutral4">—</span>
-                        )}
-                      </ItemList.TextCell>
-                    )}
-                    <ItemList.DateCell date={listItem.date} withTime />
-                  </ItemList.RowButton>
-                </ItemList.Row>
-              );
-            })
-          )}
-        </ItemList.Items>
+                  </EntityList.TextCell>
+                )}
+                <EntityList.TextCell>
+                  <span className="truncate block text-neutral2">{formatDate(createdAtDate)}</span>
+                </EntityList.TextCell>
+              </EntityList.Row>
+            );
+          })}
 
-        <ItemList.NextPageLoading
-          setEndOfListElement={setEndOfListElement}
-          loadingText="Loading more items..."
-          noMoreDataText="All items loaded"
-          isLoading={isFetchingNextPage}
-          hasMore={hasNextPage}
-        />
-      </ItemList.Scroller>
-    </ItemList>
+          <div ref={setEndOfListElement} className="h-1 col-span-full">
+            {isFetchingNextPage && (
+              <div className="flex justify-center py-4">
+                <Spinner />
+              </div>
+            )}
+            {!hasNextPage && items.length > 0 && (
+              <Txt variant="ui-xs" className="text-icon3 text-center py-4 block">
+                All items loaded
+              </Txt>
+            )}
+          </div>
+        </EntityList.Rows>
+      )}
+    </EntityList>
   );
 }
 

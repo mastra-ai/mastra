@@ -21,7 +21,9 @@ import {
   useEnvironments,
   useServiceNames,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 
 import { BookIcon, EyeIcon } from 'lucide-react';
@@ -311,6 +313,39 @@ export default function Observability() {
     }
     return ordered;
   }, [traces, groupByThread]);
+
+  // 401 check - session expired, needs re-authentication
+  if (TracesError && is401UnauthorizedError(TracesError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <EyeIcon /> Observability
+              </MainHeader.Title>
+              <MainHeader.Description>Explore observability traces for your entities</MainHeader.Description>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Observability documentation"
+                tooltipContent="Go to Observability documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
 
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {

@@ -1,5 +1,65 @@
 # @internal/playground
 
+## 1.4.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd)]:
+  - @mastra/core@1.23.0-alpha.7
+  - @mastra/client-js@1.13.1-alpha.7
+  - @mastra/react@0.2.23-alpha.7
+  - @mastra/playground-ui@22.0.1-alpha.7
+
+## 1.4.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab)]:
+  - @mastra/core@1.23.0-alpha.6
+  - @mastra/client-js@1.13.1-alpha.6
+  - @mastra/react@0.2.23-alpha.6
+  - @mastra/playground-ui@22.0.1-alpha.6
+
+## 1.4.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`462cb03`](https://github.com/mastra-ai/mastra/commit/462cb03d00cee6ad0eba97f14f072bf140881cdf)]:
+  - @mastra/core@1.23.0-alpha.5
+  - @mastra/playground-ui@22.0.1-alpha.5
+  - @mastra/client-js@1.13.1-alpha.5
+  - @mastra/react@0.2.23-alpha.5
+
+## 1.4.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+  - @mastra/client-js@1.13.1-alpha.4
+  - @mastra/react@0.2.23-alpha.4
+  - @mastra/playground-ui@22.0.1-alpha.4
+
+## 1.3.21-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80)]:
+  - @mastra/core@1.23.0-alpha.3
+  - @mastra/client-js@1.13.1-alpha.3
+  - @mastra/react@0.2.23-alpha.3
+  - @mastra/playground-ui@22.0.1-alpha.3
+
+## 1.3.21-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/playground-ui@22.0.1-alpha.2
+  - @mastra/core@1.23.0-alpha.2
+  - @mastra/client-js@1.13.1-alpha.2
+  - @mastra/react@0.2.23-alpha.2
+
 ## 1.3.21-alpha.1
 
 ### Patch Changes

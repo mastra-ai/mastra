@@ -1,5 +1,56 @@
 # mastracode
 
+## 0.12.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd)]:
+  - @mastra/core@1.23.0-alpha.7
+
+## 0.12.0-alpha.6
+
+### Minor Changes
+
+- Added `/browser` command to enable, disable, and configure browser automation providers (Stagehand or AgentBrowser) from the TUI, with settings persisted between sessions. ([#15036](https://github.com/mastra-ai/mastra/pull/15036))
+
+### Patch Changes
+
+- Fixed mastracode TUI memory usage during long sessions by pruning older rendered chat components after each agent turn. ([#15082](https://github.com/mastra-ai/mastra/pull/15082))
+
+  The chat view now keeps recent conversation history available while preventing unbounded growth from rendered messages, tool outputs, slash command boxes, and system reminders.
+
+- Updated dependencies [[`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab)]:
+  - @mastra/core@1.23.0-alpha.6
+
+## 0.11.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/core@1.23.0-alpha.5
+
+## 0.11.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`a4c0c78`](https://github.com/mastra-ai/mastra/commit/a4c0c78264013624e5fe369f9a27aa25f3401012), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/memory@1.14.0-alpha.1
+  - @mastra/core@1.23.0-alpha.4
+
+## 0.11.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80)]:
+  - @mastra/core@1.23.0-alpha.3
+
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.23.0-alpha.2
+
 ## 0.11.1-alpha.1
 
 ### Patch Changes
