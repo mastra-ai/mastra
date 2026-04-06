@@ -1,10 +1,10 @@
 import { LogIn } from 'lucide-react';
 
-import { useSSOLogin } from '@/domains/auth/hooks/use-auth-actions';
-
+import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
-import { Icon } from '../../icons/Icon';
+
+import { useSSOLogin } from '@/domains/auth/hooks/use-auth-actions';
 
 export interface SessionExpiredProps {
   /** Custom title override */

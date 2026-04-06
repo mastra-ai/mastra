@@ -27,8 +27,10 @@ export function is401UnauthorizedError(error: unknown): boolean {
 
   // Check error message for client-js pattern: "HTTP error! status: 401"
   if ('message' in error) {
-    const message = (error as { message: string }).message;
-    return message.includes('status: 401');
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*401\b/.test(message);
+    }
   }
 
   return false;
@@ -53,8 +55,10 @@ export function is403ForbiddenError(error: unknown): boolean {
 
   // Check error message for client-js pattern: "HTTP error! status: 403"
   if ('message' in error) {
-    const message = (error as { message: string }).message;
-    return message.includes('status: 403');
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*403\b/.test(message);
+    }
   }
 
   return false;
@@ -81,8 +85,10 @@ export function isNonRetryableError(error: unknown): boolean {
 
   // Check error message for client-js pattern
   if ('message' in error) {
-    const message = (error as { message: string }).message;
-    return HTTP_NO_RETRY_STATUSES.some(code => message.includes(`status: ${code}`));
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return HTTP_NO_RETRY_STATUSES.some(code => new RegExp(`\\bstatus:\\s*${code}\\b`).test(message));
+    }
   }
 
   return false;

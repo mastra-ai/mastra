@@ -179,7 +179,11 @@ export default function Scorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, scores]);
 
-  if (scorerError && is401UnauthorizedError(scorerError)) {
+  if (
+    is401UnauthorizedError(scorerError) ||
+    is401UnauthorizedError(agentsError) ||
+    is401UnauthorizedError(workflowsError)
+  ) {
     return (
       <MainContentLayout>
         <Header>
