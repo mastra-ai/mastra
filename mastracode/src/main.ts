@@ -43,6 +43,11 @@ async function tuiMain() {
   hookManager = result.hookManager;
   authStorage = result.authStorage;
 
+  // Track the initial browser settings in harness state for config drift detection
+  if (browser) {
+    harness.setState({ activeBrowserSettings: settings.browser } as any);
+  }
+
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }

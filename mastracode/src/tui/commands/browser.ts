@@ -8,6 +8,13 @@ import { AskQuestionInlineComponent } from '../components/ask-question-inline.js
 import type { SlashCommandContext } from './types.js';
 
 /**
+ * Key used to store the active browser settings in harness state.
+ * This tracks what browser config is actually running in this instance,
+ * which may differ from the settings file if another instance changed it.
+ */
+const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
+
+/**
  * /browser command - Configure browser automation for agents.
  *
  * Usage:
@@ -53,14 +60,33 @@ function askInline(
 }
 
 /**
- * Apply browser settings to all mode agents.
+ * Apply browser settings to all mode agents and track the active settings.
  */
-function applyBrowserToAgents(ctx: SlashCommandContext, browser: MastraBrowser | undefined): void {
+function applyBrowserToAgents(
+  ctx: SlashCommandContext,
+  browser: MastraBrowser | undefined,
+  browserSettings?: BrowserSettings,
+): void {
   const modes = ctx.harness.listModes();
   for (const mode of modes) {
     const agent = typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent;
     agent.setBrowser(browser);
   }
+  // Track the active browser settings in harness state
+  ctx.harness.setState({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
+}
+
+/**
+ * Get a summary key for browser settings to detect config drift.
+ */
+function getBrowserConfigKey(settings: BrowserSettings): string {
+  if (!settings.enabled) return 'disabled';
+  const parts: string[] = [settings.provider];
+  if (settings.provider === 'stagehand' && settings.stagehand?.env) {
+    parts.push(settings.stagehand.env);
+  }
+  parts.push(settings.headless ? 'headless' : 'headed');
+  return parts.join(':');
 }
 
 /**
@@ -79,6 +105,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   const arg = args[0]?.toLowerCase();
 
   if (arg === 'status') {
+    // Get the active browser settings from harness state (what's actually running)
+    const activeSettings = (ctx.harness.getState() as any)?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
+
     if (!browser.enabled) {
       ctx.showInfo('Browser: disabled');
     } else {
@@ -93,15 +122,28 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
+
+      // Check for config drift between file and active instance
+      if (activeSettings) {
+        const fileKey = getBrowserConfigKey(browser);
+        const activeKey = getBrowserConfigKey(activeSettings);
+        if (fileKey !== activeKey) {
+          lines.push('');
+          lines.push('⚠️  Settings file was modified by another instance.');
+          lines.push('   Run /browser to reconfigure, or restart to use file settings.');
+        }
+      }
+
       ctx.showInfo(lines.join('\n'));
     }
     return;
   }
 
   if (arg === 'off' || arg === 'disable') {
-    settings.browser.enabled = false;
+    const disabledSettings = { ...settings.browser, enabled: false };
+    settings.browser = disabledSettings;
     saveSettings(settings);
-    await applyBrowserToAgents(ctx, undefined);
+    applyBrowserToAgents(ctx, undefined, disabledSettings);
     ctx.showInfo('Browser disabled.');
     return;
   }
@@ -110,7 +152,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     const nextBrowser = { ...settings.browser, enabled: true };
     try {
       const browserInstance = await createBrowserFromSettings(nextBrowser);
-      applyBrowserToAgents(ctx, browserInstance);
+      applyBrowserToAgents(ctx, browserInstance, nextBrowser);
       settings.browser = nextBrowser;
       saveSettings(settings);
       const providerLabel = browser.provider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
@@ -214,7 +256,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   // Apply browser to agents first, then persist on success
   try {
     const browserInstance = await createBrowserFromSettings(nextBrowser);
-    applyBrowserToAgents(ctx, browserInstance);
+    applyBrowserToAgents(ctx, browserInstance, nextBrowser);
     settings.browser = nextBrowser;
     saveSettings(settings);
   } catch (err) {
