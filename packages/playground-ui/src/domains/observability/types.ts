@@ -22,4 +22,4 @@ export type UISpanState = {
   expanded: boolean;
 };
 
-export type UISpanType = 'agent' | 'workflow' | 'tool' | 'model' | 'other';
+export type UISpanType = 'agent' | 'workflow' | 'tool' | 'model' | 'memory' | 'other';
