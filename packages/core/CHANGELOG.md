@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.23.0-alpha.6
+
+### Patch Changes
+
+- Added `setBrowser` method to Agent class for runtime browser configuration ([#15036](https://github.com/mastra-ai/mastra/pull/15036))
+
 ## 1.23.0-alpha.5
 
 ### Patch Changes
