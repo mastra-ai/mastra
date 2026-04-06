@@ -30,6 +30,7 @@ type TestMessageContent = {
   format: 2;
   parts: Array<TestTextPart | TestToolInvocationPart>;
   toolInvocations?: TestToolInvocation[];
+  metadata?: Record<string, unknown>;
 };
 
 class TestMessageList {
@@ -43,8 +44,8 @@ class TestMessageList {
     };
   }
 
-  add(message: string, _source: 'user' | 'response' | 'input') {
-    this.messages.push(createUserMessage(message));
+  add(message: string | MastraDBMessage, _source: 'user' | 'response' | 'input') {
+    this.messages.push(typeof message === 'string' ? createUserMessage(message) : message);
     return this;
   }
 
@@ -53,13 +54,14 @@ class TestMessageList {
   }
 }
 
-function createUserMessage(text: string): MastraDBMessage {
+function createUserMessage(text: string, metadata?: Record<string, unknown>): MastraDBMessage {
   return {
     id: `msg-${Math.random().toString(36).slice(2, 8)}`,
     role: 'user',
     content: {
       format: 2,
       parts: [{ type: 'text', text }],
+      ...(metadata ? { metadata } : {}),
     } as MastraDBMessage['content'],
     createdAt: new Date(),
     threadId: 'test-thread',
@@ -188,6 +190,13 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([
       `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
     ]);
+    const injectedReminder = messageList.get.all.db().at(-1);
+    expect(injectedReminder?.content.metadata).toEqual({
+      dynamicAgentsMdReminder: {
+        path: '/repo/src/agents/nested/AGENTS.md',
+        type: 'dynamic-agents-md',
+      },
+    });
   });
 
   it('injects reminder for tool calls array format', async () => {

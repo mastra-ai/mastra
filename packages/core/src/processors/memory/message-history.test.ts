@@ -603,7 +603,7 @@ describe('MessageHistory', () => {
       expect(savedMessages.every((m: any) => m.role !== 'system')).toBe(true);
     });
 
-    it('should preserve system-reminder text when persisting non-system user messages', async () => {
+    it('should preserve dynamic system reminders in persisted non-system messages to avoid cache invalidation and re-injection', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -643,7 +643,14 @@ describe('MessageHistory', () => {
 
       const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
       expect(savedMessages).toHaveLength(1);
-      expect(savedMessages[0]?.content.parts).toEqual([{ type: 'text', text: reminderMarkup }]);
+      expect(savedMessages[0]).toEqual(
+        expect.objectContaining({
+          role: 'user',
+          content: expect.objectContaining({
+            parts: [{ type: 'text', text: reminderMarkup }],
+          }),
+        }),
+      );
     });
 
     it('should update thread metadata', async () => {

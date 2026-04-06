@@ -1,7 +1,7 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
-import { removeWorkingMemoryTags, removeSystemReminderTags } from '../../memory/working-memory-utils';
+import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -138,11 +138,9 @@ export class MessageHistory implements Processor {
           newMessage.content = { ...m.content };
         }
 
-        // Strip working memory and system-reminder tags from string content
+        // Strip working memory tags from string content
         if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-          newMessage.content.content = removeSystemReminderTags(
-            removeWorkingMemoryTags(newMessage.content.content),
-          ).trim();
+          newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
@@ -156,12 +154,12 @@ export class MessageHistory implements Processor {
               if (p.type === `tool-invocation` && p.toolInvocation.toolName === `updateWorkingMemory`) {
                 return null;
               }
-              // Strip working memory and system-reminder tags from text parts
+              // Strip working memory tags from text parts
               if (p.type === `text`) {
                 const text = typeof p.text === 'string' ? p.text : '';
                 return {
                   ...p,
-                  text: removeSystemReminderTags(removeWorkingMemoryTags(text)).trim(),
+                  text: removeWorkingMemoryTags(text).trim(),
                 };
               }
               return p;
