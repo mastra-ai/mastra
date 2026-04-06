@@ -1,5 +1,14 @@
 # @mastra/blaxel
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15086](https://github.com/mastra-ai/mastra/pull/15086))
+  - Updated dependency [`@blaxel/core@^0.2.78` ↗︎](https://www.npmjs.com/package/@blaxel/core/v/0.2.78) (from `^0.2.74`, in `dependencies`)
+- Updated dependencies [[`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd)]:
+  - @mastra/core@1.23.0-alpha.7
+
 ## 0.2.0
 
 ### Minor Changes

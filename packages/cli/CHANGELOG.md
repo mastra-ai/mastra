@@ -1,5 +1,13 @@
 # mastra
 
+## 1.4.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`1b8f0d9`](https://github.com/mastra-ai/mastra/commit/1b8f0d913877d8b99d680d847890654da8da068e)]:
+  - @mastra/core@1.23.0-alpha.7
+  - @mastra/deployer@1.23.0-alpha.7
+
 ## 1.4.0-alpha.6
 
 ### Patch Changes
