@@ -523,6 +523,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/xiaomi-token-plan-cn',
+          label: 'Xiaomi Token Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-ams',
+          label: 'Xiaomi Token Plan (Europe)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-sgp',
+          label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
           id: 'providers/zai',
           label: 'Z.AI',
         },

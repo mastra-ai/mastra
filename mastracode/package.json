@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.11.0-alpha.1",
+  "version": "0.12.0-alpha.6",
   "description": "",
   "type": "module",
   "files": [
@@ -59,6 +59,8 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai": "^3.0.41",
+    "@mastra/agent-browser": "workspace:*",
+    "@mastra/stagehand": "workspace:*",
     "@ast-grep/napi": "^0.42.0",
     "@mariozechner/pi-tui": "^0.60.0",
     "@mastra/core": "workspace:*",
