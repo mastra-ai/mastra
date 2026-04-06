@@ -340,7 +340,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
-    if (key === '_default') {
+    if (key === 'default' || key === '_default') {
       globalInitialState.subagentModelId = modelId;
     } else {
       globalInitialState[`subagentModelId_${key}`] = modelId;
