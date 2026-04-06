@@ -1076,8 +1076,8 @@
         "gemma-3-4b-it",
         "gemma-3n-e2b-it",
         "gemma-3n-e4b-it",
-        "gemma-4-26b",
-        "gemma-4-31b"
+        "gemma-4-26b-it",
+        "gemma-4-31b-it"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev",
@@ -2050,6 +2050,7 @@
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
         "arcee-ai/trinity-large-preview:free",
+        "arcee-ai/trinity-large-thinking",
         "arcee-ai/trinity-mini:free",
         "black-forest-labs/flux.2-flex",
         "black-forest-labs/flux.2-klein-4b",
@@ -2087,6 +2088,8 @@
         "google/gemma-3n-e2b-it:free",
         "google/gemma-3n-e4b-it",
         "google/gemma-3n-e4b-it:free",
+        "google/gemma-4-26b-a4b-it",
+        "google/gemma-4-31b-it",
         "inception/mercury",
         "inception/mercury-2",
         "inception/mercury-coder",
@@ -3438,7 +3441,7 @@
       "apiKeyEnvVar": "VULTR_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Vultr",
-      "models": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
+      "models": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5", "gpt-oss-120b"],
       "docUrl": "https://api.vultrinference.com/",
       "gateway": "models.dev"
     },
@@ -5296,8 +5299,8 @@
       "gemma-3-4b-it",
       "gemma-3n-e2b-it",
       "gemma-3n-e4b-it",
-      "gemma-4-26b",
-      "gemma-4-31b"
+      "gemma-4-26b-it",
+      "gemma-4-31b-it"
     ],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
@@ -6141,6 +6144,7 @@
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
       "arcee-ai/trinity-large-preview:free",
+      "arcee-ai/trinity-large-thinking",
       "arcee-ai/trinity-mini:free",
       "black-forest-labs/flux.2-flex",
       "black-forest-labs/flux.2-klein-4b",
@@ -6178,6 +6182,8 @@
       "google/gemma-3n-e2b-it:free",
       "google/gemma-3n-e4b-it",
       "google/gemma-3n-e4b-it:free",
+      "google/gemma-4-26b-a4b-it",
+      "google/gemma-4-31b-it",
       "inception/mercury",
       "inception/mercury-2",
       "inception/mercury-coder",
@@ -7270,7 +7276,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "vultr": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5"],
+    "vultr": ["DeepSeek-V3.2", "GLM-5-FP8", "Kimi-K2.5", "MiniMax-M2.5", "gpt-oss-120b"],
     "github-models": [
       "ai21-labs/ai21-jamba-1.5-large",
       "ai21-labs/ai21-jamba-1.5-mini",
