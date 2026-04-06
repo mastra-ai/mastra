@@ -515,6 +515,11 @@ const sidebars = {
                 },
                 {
                   type: 'doc',
+                  id: 'observability/tracing/exporters/arthur',
+                  label: 'Arthur',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/exporters/braintrust',
                   label: 'Braintrust',
                 },
