@@ -1809,13 +1809,13 @@ export class MemoryPG extends MemoryStorage {
       let paramIndex = 2;
 
       if (options?.from) {
-        conditions.push(`"createdAt" >= $${paramIndex}`);
-        params.push(options.from);
+        conditions.push(`"createdAtZ" >= $${paramIndex}`);
+        params.push(options.from.toISOString());
         paramIndex++;
       }
       if (options?.to) {
-        conditions.push(`"createdAt" <= $${paramIndex}`);
-        params.push(options.to);
+        conditions.push(`"createdAtZ" <= $${paramIndex}`);
+        params.push(options.to.toISOString());
         paramIndex++;
       }
 
