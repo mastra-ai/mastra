@@ -107,12 +107,17 @@ export class OctenGateway extends MastraModelGateway {
         if (options && options.body && typeof options.body === 'string') {
           try {
             const parsedBody = JSON.parse(options.body);
-            // Octen explicitly expects web_search to be "on" to activate RAG processing
-            parsedBody.web_search = 'on';
+            // Default to web search when caller did not specify a value
+            if (parsedBody.web_search === undefined) {
+              parsedBody.web_search = 'on';
+            }
 
             // Ensure the model includes the provider logic since octen natively expects it
-            if (providerId && !String(parsedBody.model).includes(providerId)) {
-              parsedBody.model = `${providerId}/${parsedBody.model}`;
+            if (providerId) {
+              const currentModel = typeof parsedBody.model === 'string' ? parsedBody.model : cleanModelId;
+              if (!currentModel.startsWith(`${providerId}/`)) {
+                parsedBody.model = `${providerId}/${currentModel}`;
+              }
             }
 
             options.body = JSON.stringify(parsedBody);
