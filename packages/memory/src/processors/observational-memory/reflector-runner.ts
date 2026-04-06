@@ -32,6 +32,7 @@ import { withOmTracingSpan } from './tracing';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
+  ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -324,6 +325,7 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -338,7 +340,11 @@ export class ReflectorRunner {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
+    reflectionHooks?.onReflectionStart?.();
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext, observabilityContext)
+      .then(usage => {
+        reflectionHooks?.onReflectionEnd?.({ usage });
+      })
       .catch(async error => {
         if (writer) {
           const failedMarker = createBufferingFailedMarker({
@@ -354,6 +360,10 @@ export class ReflectorRunner {
           await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
+        reflectionHooks?.onReflectionEnd?.({
+          usage: undefined,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
         // Clear the boundary so a failed reflection doesn't permanently block
         // future async reflection attempts (line 554 checks this map).
         BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
@@ -379,7 +389,7 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
-  ): Promise<void> {
+  ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
@@ -468,6 +478,8 @@ export class ReflectorRunner {
       void writer.custom(endMarker).catch(() => {});
       await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
+
+    return reflectResult.usage;
   }
 
   /**
@@ -621,6 +633,7 @@ export class ReflectorRunner {
           writer,
           requestContext,
           observabilityContext,
+          reflectionHooks,
         );
       }
     }
@@ -664,6 +677,7 @@ export class ReflectorRunner {
           writer,
           requestContext,
           observabilityContext,
+          reflectionHooks,
         );
         return;
       }
@@ -712,6 +726,8 @@ export class ReflectorRunner {
         }
       : undefined;
 
+    let reflectionUsage: ObserveHookUsage | undefined;
+    let reflectionError: Error | undefined;
     try {
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
       const reflectResult = await this.call(
@@ -725,6 +741,7 @@ export class ReflectorRunner {
         requestContext,
         observabilityContext,
       );
+      reflectionUsage = reflectResult.usage;
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
@@ -770,13 +787,14 @@ export class ReflectorRunner {
         });
         await writer.custom(failedMarker).catch(() => {});
       }
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       if (abortSignal?.aborted) {
         throw error;
       }
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
-      reflectionHooks?.onReflectionEnd?.();
+      reflectionHooks?.onReflectionEnd?.({ usage: reflectionUsage, error: reflectionError });
       unregisterOp(record.id, 'reflecting');
     }
   }

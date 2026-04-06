@@ -641,6 +641,7 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'google/gemma-3n-e2b-it',
     'google/gemma-3n-e4b-it',
+    'google/gemma-4-31b-it',
     'meta/codellama-70b',
     'meta/llama-3.1-405b-instruct',
     'meta/llama-3.1-70b-instruct',
@@ -756,18 +757,14 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'Qwen/Qwen3-Coder-Next-FP8',
-    'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'Qwen/Qwen3.5-397B-A17B',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-1',
     'essentialai/Rnj-1-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2.5',
     'openai/gpt-oss-120b',
-    'zai-org/GLM-4.6',
-    'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
   readonly firmware: readonly [
@@ -832,8 +829,8 @@ export type ProviderModelsMap = {
     'gemma-3-4b-it',
     'gemma-3n-e2b-it',
     'gemma-3n-e4b-it',
-    'gemma-4-26b',
-    'gemma-4-31b',
+    'gemma-4-26b-it',
+    'gemma-4-31b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -1677,6 +1674,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
     'arcee-ai/trinity-large-preview:free',
+    'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-mini:free',
     'black-forest-labs/flux.2-flex',
     'black-forest-labs/flux.2-klein-4b',
@@ -1714,6 +1712,8 @@ export type ProviderModelsMap = {
     'google/gemma-3n-e2b-it:free',
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
+    'google/gemma-4-26b-a4b-it',
+    'google/gemma-4-31b-it',
     'inception/mercury',
     'inception/mercury-2',
     'inception/mercury-coder',
@@ -1804,7 +1804,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
-    'qwen/qwen3.6-plus-preview:free',
     'qwen/qwen3.6-plus:free',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
@@ -1854,7 +1853,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
-    'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'inclusionai/ling-1t',
@@ -1892,6 +1890,8 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-flash',
     'qwen/qwen3.5-plus',
     'qwen/qwen3.6-plus',
+    'sapiens-ai/agnes-1.5-lite',
+    'sapiens-ai/agnes-1.5-pro',
     'stepfun/step-3',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.5-flash-free',
@@ -1909,7 +1909,6 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.2-fast-non-reasoning',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
-    'xiaomi/mimo-v2-flash-free',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
@@ -1961,7 +1960,10 @@ export type ProviderModelsMap = {
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.2-codex',
+    'gpt-5.3-codex',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
   ];
   readonly helicone: readonly [
     'chatgpt-4o-latest',
@@ -2073,6 +2075,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-plus',
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2',
@@ -2732,6 +2735,7 @@ export type ProviderModelsMap = {
     'qwen3-vl-plus',
     'qwen3.5-397b-a17b',
     'qwen3.5-plus',
+    'qwen3.6-plus',
     'qwq-plus',
   ];
   readonly mistral: readonly [
@@ -2808,7 +2812,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5'];
+  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5', 'gpt-oss-120b'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -3537,6 +3541,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-plus',
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly inception: readonly ['mercury', 'mercury-2', 'mercury-coder', 'mercury-edit'];
   readonly 'zhipuai-coding-plan': readonly [

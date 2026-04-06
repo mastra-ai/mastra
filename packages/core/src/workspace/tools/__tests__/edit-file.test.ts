@@ -22,7 +22,7 @@ describe('workspace_edit_file', () => {
   it('should replace unique string in file', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
@@ -44,7 +44,7 @@ describe('workspace_edit_file', () => {
   it('should fail when old_string not found', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
@@ -62,7 +62,7 @@ describe('workspace_edit_file', () => {
   it('should fail when old_string not unique without replace_all', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'hello hello hello');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
@@ -80,7 +80,7 @@ describe('workspace_edit_file', () => {
   it('should replace all occurrences with replace_all', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'hello hello hello');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {

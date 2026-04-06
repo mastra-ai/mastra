@@ -23,9 +23,12 @@
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
+import { isProcessorWorkflow } from '../processors/index';
+import type { InputProcessor, InputProcessorOrWorkflow } from '../processors/index';
 import type { Tool } from '../tools/tool';
 import { createError } from './errors';
 import type { BrowserToolError, ErrorCode } from './errors';
+import { BrowserContextProcessor } from './processor';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
 import type { BrowserState, BrowserTabState, BrowserScope, ThreadManager } from './thread-manager';
@@ -61,11 +64,16 @@ export type BrowserLifecycleHook = (args: { browser: MastraBrowser }) => void | 
 export type CdpUrlProvider = string | (() => string | Promise<string>);
 
 /**
- * Base configuration shared by all browser providers.
- * Provider packages extend this with their own options.
+ * Base configuration properties shared by all browser providers.
+ * This interface contains fields common to all browser configurations.
+ *
+ * **For extending**: Use this interface when creating provider-specific configs
+ * (e.g., `interface MyProviderConfig extends BrowserConfigBase`).
+ *
+ * **For consuming**: Use {@link BrowserConfig} which adds compile-time validation
+ * that `cdpUrl` and `scope: 'thread'` cannot be used together.
  */
-
-export interface BrowserConfig {
+export interface BrowserConfigBase {
   /**
    * Whether to run the browser in headless mode (no visible UI).
    * @default true
@@ -91,14 +99,52 @@ export interface BrowserConfig {
    * CDP WebSocket URL or async provider function.
    * When provided, connects to an existing browser instead of launching a new one.
    * Useful for cloud providers (Browserbase, Browserless, Kernel, etc.).
+   *
+   * **Important:** When using `cdpUrl`, you must use `scope: 'shared'` (or omit `scope`
+   * to let it default to 'shared' behavior). Using `cdpUrl` with `scope: 'thread'`
+   * will throw an error because thread isolation requires spawning separate browser
+   * instances, which isn't possible when connecting to an existing browser via CDP.
+   *
+   * @example
+   * ```ts
+   * // Connect to a local Chrome with remote debugging enabled
+   * { cdpUrl: 'ws://localhost:9222' }
+   *
+   * // Connect to Browserless cloud provider
+   * { cdpUrl: 'wss://chrome.browserless.io?token=YOUR_TOKEN', scope: 'shared' }
+   *
+   * // Use an async provider function for dynamic URLs
+   * { cdpUrl: async () => await fetchBrowserlessUrl() }
+   * ```
    */
   cdpUrl?: CdpUrlProvider;
 
   /**
    * Browser instance scope across threads.
-   * - 'shared': All threads share a single browser instance
-   * - 'thread': Each thread gets its own browser instance (full isolation)
+   *
+   * - `'thread'` (default): Each thread gets its own isolated browser instance.
+   *   Best for parallel agents that need separate browser states.
+   *
+   * - `'shared'`: All threads share a single browser instance.
+   *   Required when using `cdpUrl` to connect to an existing browser.
+   *
+   * **Important:** `scope: 'thread'` cannot be used with `cdpUrl` because thread
+   * isolation requires spawning new browser instances, which isn't possible when
+   * connecting to an existing browser via CDP. This configuration will throw an error.
+   *
    * @default 'thread'
+   *
+   * @example
+   * ```ts
+   * // Isolated browsers per thread (default)
+   * { scope: 'thread' }
+   *
+   * // Shared browser for all threads
+   * { scope: 'shared' }
+   *
+   * // When using cdpUrl, scope must be 'shared'
+   * { cdpUrl: 'ws://localhost:9222', scope: 'shared' }
+   * ```
    */
   scope?: BrowserScope;
 
@@ -119,6 +165,30 @@ export interface BrowserConfig {
   screencast?: ScreencastOptions;
 }
 
+/**
+ * Browser configuration with compile-time enforcement of cdpUrl/scope compatibility.
+ *
+ * This type enforces that `cdpUrl` and `scope: 'thread'` cannot be used together:
+ * - When `cdpUrl` is provided, `scope` must be `'shared'` or omitted
+ * - When `scope: 'thread'` is used, `cdpUrl` must not be provided
+ *
+ * @example
+ * ```ts
+ * // Valid configurations:
+ * { headless: true }                              // Local browser, thread scope (default)
+ * { scope: 'thread' }                             // Explicit thread isolation
+ * { scope: 'shared' }                             // Shared browser
+ * { cdpUrl: 'ws://localhost:9222' }               // CDP connection, defaults to shared
+ * { cdpUrl: 'ws://localhost:9222', scope: 'shared' }  // CDP with explicit shared
+ *
+ * // Invalid configuration (TypeScript error):
+ * { cdpUrl: 'ws://localhost:9222', scope: 'thread' }  // Error: cannot combine cdpUrl with thread scope
+ * ```
+ */
+export type BrowserConfig =
+  | (BrowserConfigBase & { cdpUrl?: undefined; scope?: BrowserScope })
+  | (BrowserConfigBase & { cdpUrl: CdpUrlProvider; scope?: 'shared' });
+
 // =============================================================================
 // Screencast Types (re-exported from ./screencast/types)
 // =============================================================================
@@ -132,6 +202,8 @@ export interface ScreencastStream {
   stop(): Promise<void>;
   /** Check if screencast is active */
   isActive(): boolean;
+  /** Reconnect the screencast (e.g., after tab change) */
+  reconnect(): Promise<void>;
   /** Register event handlers */
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): this;
   on(event: 'stop', handler: (reason: string) => void): this;
@@ -217,6 +289,13 @@ export abstract class MastraBrowser extends MastraBase {
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
 
+  /**
+   * Shared manager instance for 'shared' scope mode.
+   * Type varies by provider (e.g., BrowserManager for agent-browser, Stagehand for stagehand).
+   * Providers should cast this to their specific type when accessing.
+   */
+  protected sharedManager: unknown = null;
+
   /** Configuration */
   protected readonly config: BrowserConfig;
 
@@ -233,6 +312,85 @@ export abstract class MastraBrowser extends MastraBase {
   protected currentThreadId: string = DEFAULT_THREAD_ID;
 
   // ---------------------------------------------------------------------------
+  // Screencast State
+  // ---------------------------------------------------------------------------
+
+  /** Default key for shared scope screencast streams */
+  protected static readonly SHARED_STREAM_KEY = '__shared__';
+
+  /** Active screencast streams per thread (for triggering reconnects on tab changes) */
+  protected activeScreencastStreams = new Map<string, ScreencastStream>();
+
+  /**
+   * Get the stream key for a thread (or shared key for shared scope).
+   * @param threadId - Optional thread ID
+   * @returns The stream key to use for the screencast streams map
+   */
+  protected getStreamKey(threadId?: string): string {
+    return threadId || MastraBrowser.SHARED_STREAM_KEY;
+  }
+
+  /**
+   * Reconnect the active screencast for a specific thread.
+   * Called internally when tabs are switched or closed.
+   */
+  protected async reconnectScreencastForThread(threadId: string | undefined, reason: string): Promise<void> {
+    const streamKey = this.getStreamKey(threadId);
+    const stream = this.activeScreencastStreams.get(streamKey);
+    if (!stream || !stream.isActive()) {
+      return;
+    }
+
+    // Check if browser is still running before attempting reconnect
+    if (!this.isBrowserRunning()) {
+      this.logger.debug?.('Skipping screencast reconnect - browser not running');
+      return;
+    }
+
+    // For thread scope, also check if this specific thread still has a session
+    const scope = this.getScope();
+    if (scope === 'thread' && threadId && !this.threadManager?.getExistingManagerForThread(threadId)) {
+      this.logger.debug?.(`Skipping screencast reconnect - no session for thread ${threadId}`);
+      return;
+    }
+
+    this.logger.debug?.(`Reconnecting screencast: ${reason}`);
+
+    try {
+      // Small delay to let tab state settle
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await stream.reconnect();
+
+      // Emit the URL of the new active page after reconnecting
+      const activePage = await this.getActivePage(threadId);
+      if (activePage) {
+        const url = activePage.url();
+        if (url) {
+          stream.emitUrl(url);
+        }
+      }
+    } catch (error) {
+      this.logger.debug?.('Screencast reconnect failed', error);
+    }
+  }
+
+  /**
+   * Update the browser state in the thread session.
+   * Called on navigation, tab open/close to keep state fresh.
+   */
+  protected updateSessionBrowserState(threadId?: string): void {
+    try {
+      const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+      const state = this.getBrowserStateForThread(effectiveThreadId);
+      if (state) {
+        this.threadManager?.updateBrowserState(effectiveThreadId, state);
+      }
+    } catch {
+      // Silently ignore errors during state update
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
 
@@ -246,6 +404,24 @@ export abstract class MastraBrowser extends MastraBase {
   constructor(config: BrowserConfig = {}) {
     super({ name: 'MastraBrowser', component: RegisteredLogger.BROWSER });
     this.config = config;
+
+    // Validate configuration: cdpUrl and scope: 'thread' are mutually exclusive
+    // When connecting to an external browser via cdpUrl, we connect to a single existing browser.
+    // Thread isolation requires spawning separate browser instances, which isn't possible with cdpUrl.
+    // Note: The BrowserConfig type enforces this at compile-time, but we keep this runtime check
+    // for better error messages when users bypass TypeScript (e.g., from JavaScript or casting).
+    // We capture scope before checking cdpUrl to avoid TypeScript narrowing the union type.
+    const scope = config.scope;
+    if (config.cdpUrl && scope === 'thread') {
+      throw new Error(
+        'Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together.\n\n' +
+          '• cdpUrl connects to a single existing browser instance (all threads share it)\n' +
+          '• scope: "thread" requires spawning separate browser instances per thread\n\n' +
+          'To fix this, either:\n' +
+          '1. Remove cdpUrl to let the provider spawn separate browser instances (supports thread isolation)\n' +
+          '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -527,13 +703,33 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Handle browser disconnection by updating status and notifying listeners.
    * Called when browser is detected as externally closed.
-   * Subclasses should call this and also clear their internal instance references.
+   *
+   * For 'thread' scope: clears only the specific thread's session (other threads unaffected)
+   * For 'shared' scope: clears the shared manager and updates global status
    */
   handleBrowserDisconnected(): void {
-    if (this.status !== 'closed') {
-      this.status = 'closed';
-      this.logger.debug?.('Browser was externally closed, status set to closed');
-      this.notifyBrowserClosed();
+    const scope = this.threadManager?.getScope();
+    const threadId = this.getCurrentThread();
+
+    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
+      // Only clear the specific thread's session - other threads have independent browsers
+      this.threadManager!.clearSession(threadId);
+      this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+      // Notify only this thread's callbacks - do NOT set global status to 'closed'
+      // since other threads may still have active browsers
+      this.notifyBrowserClosed(threadId);
+    } else {
+      // For 'shared' scope or default thread, the shared browser is gone
+      this.sharedManager = null;
+      // Also clear the shared manager in the thread manager so getManagerForThread
+      // doesn't return the dead manager
+      this.threadManager?.clearSharedManager();
+      // Update global status and notify all callbacks
+      if (this.status !== 'closed') {
+        this.status = 'closed';
+        this.logger.debug?.('Browser was externally closed, status set to closed');
+        this.notifyBrowserClosed();
+      }
     }
   }
 
@@ -892,6 +1088,41 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Close a specific thread's browser session.
+   * Delegates to ThreadManager and notifies registered callbacks.
+   *
+   * For 'thread' scope, this closes only that thread's browser instance.
+   * For 'shared' scope, this is a no-op (use close() to close the shared browser).
+   *
+   * @param threadId - The thread ID whose session should be closed
+   */
+  async closeThreadSession(threadId: string): Promise<void> {
+    if (!this.threadManager) {
+      return;
+    }
+    await this.threadManager.destroySession(threadId);
+    // Notify callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
+  }
+
+  /**
+   * Handle browser disconnection for a specific thread.
+   * Called when a thread's browser is closed externally (e.g., user closes browser window).
+   * Clears the thread session and notifies registered callbacks.
+   *
+   * @param threadId - The thread ID whose session was disconnected
+   */
+  protected handleThreadBrowserDisconnected(threadId: string): void {
+    if (!this.threadManager) {
+      return;
+    }
+    this.threadManager.clearSession(threadId);
+    this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
+    // Notify only the callbacks registered for this specific thread
+    this.notifyBrowserClosed(threadId);
+  }
+
+  /**
    * Get a session identifier for a specific thread.
    * In thread scope, returns a composite ID (browser:threadId).
    * In shared scope or without thread manager, returns the browser instance ID.
@@ -967,7 +1198,51 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Abstract Tools Method
+  // Abstract Methods (providers must implement)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the active page for a thread.
+   * Used by screencast reconnection to emit the current URL.
+   *
+   * @param threadId - Optional thread ID (uses current thread if not provided)
+   * @returns The active Playwright Page, or null if not available
+   */
+  protected abstract getActivePage(threadId?: string): Promise<{ url(): string } | null>;
+
+  /**
+   * Get the current browser state for a thread.
+   * Used to persist and restore browser state across sessions.
+   *
+   * @param threadId - Optional thread ID (uses current thread if not provided)
+   * @returns Browser state including URL, tabs, and active tab index
+   */
+  protected abstract getBrowserStateForThread(threadId?: string): BrowserState | null;
+
+  // ---------------------------------------------------------------------------
+  // Input Processors
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns browser input processors (e.g., BrowserContextProcessor for context injection).
+   * Skips if the user already added a processor with the same id.
+   *
+   * This method is similar to AgentChannels.getInputProcessors() and allows
+   * browser implementations to provide their own processors.
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @returns Array of input processors for this browser instance
+   */
+  getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
+    );
+    if (hasProcessor) return [];
+    return [new BrowserContextProcessor()];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Abstract Methods - Must be implemented by providers
   // ---------------------------------------------------------------------------
 
   /**

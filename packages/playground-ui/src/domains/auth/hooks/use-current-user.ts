@@ -2,12 +2,16 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { CurrentUser } from '../types';
+import { fetchWithRefresh } from './fetch-with-refresh';
 
 /**
  * Hook to fetch the current authenticated user.
  *
  * Returns the current user if authenticated, null otherwise.
  * Includes roles and permissions if RBAC is available.
+ *
+ * Uses fetchWithRefresh to automatically refresh the session on 401 errors,
+ * preventing users from being logged out when the access token expires.
  *
  * @example
  * ```tsx
@@ -30,11 +34,12 @@ import type { CurrentUser } from '../types';
  */
 export function useCurrentUser() {
   const client = useMastraClient();
+  const baseUrl = (client as any).options?.baseUrl || '';
 
   return useQuery<CurrentUser>({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
-      const response = await fetch(`${(client as any).options?.baseUrl || ''}/api/auth/me`, {
+      const response = await fetchWithRefresh(baseUrl, `${baseUrl}/api/auth/me`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',

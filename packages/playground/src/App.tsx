@@ -27,8 +27,10 @@ import {
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
+  createFetchWithRefresh,
 } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -63,6 +65,7 @@ import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -138,6 +141,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
     `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/evaluation/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -297,6 +301,7 @@ const routes = [
               element: <DatasetItemVersionsComparePage />,
             },
             { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/evaluation/experiments/:experimentId', element: <ExperimentPage /> },
             { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
             { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
@@ -313,6 +318,12 @@ function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
+  // Create a stable fetch function that auto-refreshes on 401
+  const customFetch = useMemo(
+    () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
+    [baseUrl, apiPrefix],
+  );
+
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
@@ -326,7 +337,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
