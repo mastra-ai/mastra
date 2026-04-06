@@ -1,7 +1,7 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
-import { removeWorkingMemoryTags, removeSystemReminderTags } from '../../memory/working-memory-utils';
+import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';

@@ -419,7 +419,7 @@ export class Memory extends MastraMemory {
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = list.get.all.db();
+      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
 
       const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
@@ -438,48 +438,6 @@ export class Memory extends MastraMemory {
       span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
-
-    // Get raw messages from storage
-    const memoryStore = await this.getMemoryStore();
-
-    // When history is disabled by config, use perPage: 0 so only semantic recall
-    // include results are returned (not the full message history)
-    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
-
-    const paginatedResult = await memoryStore.listMessages({
-      threadId,
-      resourceId,
-      perPage: effectivePerPage,
-      page,
-      orderBy: effectiveOrderBy,
-      filter,
-      ...(vectorResults?.length
-        ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
-        : {}),
-    });
-    // Reverse to restore chronological order if we queried DESC to get newest messages
-    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
-
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
-
-    // Always return mastra-db format (V2)
-    const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
-
-    const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
-    return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
