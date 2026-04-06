@@ -45,7 +45,7 @@ export const UserMessage = () => {
       data-message-index={message?.index}
     >
       <DatasetSaveAction />
-      <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
+      <div className="max-w-[366px] break-words px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
           components={{
             File: p => {
