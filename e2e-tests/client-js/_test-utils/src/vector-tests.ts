@@ -40,7 +40,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
     describe('createIndex and getIndexes', () => {
       it('should list indexes including the created one', async () => {
         const vector = client.getVector(vectorName);
-        // TODO: SDK type mismatch — client declares Promise<{ indexes: string[] }>
+        // TODO(#15089): SDK type mismatch — client declares Promise<{ indexes: string[] }>
         // but the server handler returns string[] directly (see vector.ts handler).
         const result: any = await vector.getIndexes();
         expect(result).toBeDefined();
@@ -61,7 +61,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
     describe('upsert and query', () => {
       it('should upsert vectors', async () => {
         const vector = client.getVector(vectorName);
-        // TODO: SDK type mismatch — client declares Promise<string[]>
+        // TODO(#15089): SDK type mismatch — client declares Promise<string[]>
         // but the server handler returns { ids: string[] } (see vector.ts handler).
         const result: any = await vector.upsert({
           indexName,
@@ -80,7 +80,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
 
       it('should query vectors and return closest matches', async () => {
         const vector = client.getVector(vectorName);
-        // TODO: SDK type mismatch — client declares Promise<{ results: QueryResult[] }>
+        // TODO(#15089): SDK type mismatch — client declares Promise<{ results: QueryResult[] }>
         // but the server handler returns QueryResult[] directly (see vector.ts handler).
         const results: any = await vector.query({
           indexName,
