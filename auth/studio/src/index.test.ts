@@ -37,6 +37,7 @@ const mockMeResponse = {
   organizationId: 'org-1',
   role: 'admin',
   permissions: ['projects:read', 'projects:write'],
+  memberOrgIds: ['org-1'],
 };
 
 const mockVerifyResponse = {
@@ -48,6 +49,7 @@ const mockVerifyResponse = {
   },
   organizationId: 'org-2',
   role: 'member',
+  memberOrgIds: ['org-2'],
 };
 
 // ---------------------------------------------------------------------------
@@ -125,6 +127,7 @@ describe('MastraAuthStudio', () => {
         organizationId: 'org-1',
         role: 'admin',
         permissions: ['projects:read', 'projects:write'],
+        memberOrgIds: ['org-1'],
       });
 
       // Should have called /auth/me with the cookie
@@ -150,6 +153,7 @@ describe('MastraAuthStudio', () => {
         name: 'Bob',
         organizationId: 'org-2',
         role: 'member',
+        memberOrgIds: ['org-2'],
       });
 
       // Should have called /auth/verify with the bearer token
@@ -178,6 +182,7 @@ describe('MastraAuthStudio', () => {
         name: 'Bob',
         organizationId: 'org-2',
         role: 'member',
+        memberOrgIds: ['org-2'],
       });
 
       expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -337,6 +342,7 @@ describe('MastraAuthStudio', () => {
         organizationId: 'org-1',
         role: 'admin',
         permissions: ['projects:read', 'projects:write'],
+        memberOrgIds: ['org-1'],
       });
       expect(result.tokens.accessToken).toBe('sealed-session-token');
       // cookies should NOT be returned — the Mastra server fallback path
