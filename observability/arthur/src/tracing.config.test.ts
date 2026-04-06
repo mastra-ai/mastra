@@ -182,9 +182,7 @@ describe('ArthurExporterConfig', () => {
     });
 
     // The exporter should have called setDisabled
-    expect((exporter as any).setDisabled).toHaveBeenCalledWith(
-      expect.stringContaining('API key is required'),
-    );
+    expect((exporter as any).setDisabled).toHaveBeenCalledWith(expect.stringContaining('API key is required'));
   });
 
   it('disables exporter when endpoint is missing', () => {
@@ -192,9 +190,7 @@ describe('ArthurExporterConfig', () => {
       apiKey: 'test-api-key',
     });
 
-    expect((exporter as any).setDisabled).toHaveBeenCalledWith(
-      expect.stringContaining('Endpoint is required'),
-    );
+    expect((exporter as any).setDisabled).toHaveBeenCalledWith(expect.stringContaining('Endpoint is required'));
   });
 
   it('warns when neither taskId nor serviceName is provided', () => {

@@ -85,7 +85,7 @@ new ArthurExporter({
   resourceAttributes: {
     'custom.attribute': 'value',
   },
-})
+});
 ```
 
 ### Custom metadata

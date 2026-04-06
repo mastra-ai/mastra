@@ -72,16 +72,14 @@ export class ArthurExporter extends OtelExporter {
 
     if (!apiKey) {
       disabledReason =
-        `${LOG_PREFIX} API key is required. ` +
-        `Set ARTHUR_API_KEY environment variable or pass apiKey in config.`;
+        `${LOG_PREFIX} API key is required. ` + `Set ARTHUR_API_KEY environment variable or pass apiKey in config.`;
     } else {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
     if (!disabledReason && !endpoint) {
       disabledReason =
-        `${LOG_PREFIX} Endpoint is required. ` +
-        `Set ARTHUR_BASE_URL environment variable or pass endpoint in config.`;
+        `${LOG_PREFIX} Endpoint is required. ` + `Set ARTHUR_BASE_URL environment variable or pass endpoint in config.`;
     }
 
     // Ensure the endpoint ends with /api/v1/traces
