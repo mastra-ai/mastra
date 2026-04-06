@@ -829,8 +829,8 @@ export type ProviderModelsMap = {
     'gemma-3-4b-it',
     'gemma-3n-e2b-it',
     'gemma-3n-e4b-it',
-    'gemma-4-26b',
-    'gemma-4-31b',
+    'gemma-4-26b-it',
+    'gemma-4-31b-it',
   ];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -1674,6 +1674,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
     'arcee-ai/trinity-large-preview:free',
+    'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-mini:free',
     'black-forest-labs/flux.2-flex',
     'black-forest-labs/flux.2-klein-4b',
@@ -1711,6 +1712,8 @@ export type ProviderModelsMap = {
     'google/gemma-3n-e2b-it:free',
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
+    'google/gemma-4-26b-a4b-it',
+    'google/gemma-4-31b-it',
     'inception/mercury',
     'inception/mercury-2',
     'inception/mercury-coder',
@@ -1850,13 +1853,10 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
-    'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'inclusionai/ling-1t',
     'inclusionai/ring-1t',
-    'kuaishou/kat-coder-pro-v1',
-    'kuaishou/kat-coder-pro-v1-free',
     'kuaishou/kat-coder-pro-v2',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
@@ -1888,6 +1888,8 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-flash',
     'qwen/qwen3.5-plus',
     'qwen/qwen3.6-plus',
+    'sapiens-ai/agnes-1.5-lite',
+    'sapiens-ai/agnes-1.5-pro',
     'stepfun/step-3',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.5-flash-free',
@@ -1905,7 +1907,6 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.2-fast-non-reasoning',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
-    'xiaomi/mimo-v2-flash-free',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
@@ -2809,7 +2810,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5'];
+  readonly vultr: readonly ['DeepSeek-V3.2', 'GLM-5-FP8', 'Kimi-K2.5', 'MiniMax-M2.5', 'gpt-oss-120b'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',

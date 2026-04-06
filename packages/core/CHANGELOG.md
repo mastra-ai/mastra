@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.23.0-alpha.7
+
+### Patch Changes
+
+- Fixed resourceId being overwritten to NULL during workflow execution of loop, foreach, parallel, and conditional steps. The resourceId set via `createRun()` is now correctly preserved throughout the entire workflow lifecycle. ([#14958](https://github.com/mastra-ai/mastra/pull/14958))
+
+- Fix onScorerRun hook payloads missing threadId and resourceId so hooks now receive correct identifiers ([#13835](https://github.com/mastra-ai/mastra/pull/13835))
+
+## 1.23.0-alpha.6
+
+### Patch Changes
+
+- Added `setBrowser` method to Agent class for runtime browser configuration ([#15036](https://github.com/mastra-ai/mastra/pull/15036))
+
 ## 1.23.0-alpha.5
 
 ### Patch Changes
