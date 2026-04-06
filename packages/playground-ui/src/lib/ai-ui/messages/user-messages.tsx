@@ -2,6 +2,7 @@ import { MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 import { DatasetSaveAction } from './dataset-save-action';
+import { SystemReminderBadge } from './system-reminder-badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 export interface InMessageAttachmentProps {
   type: string;
@@ -65,6 +66,10 @@ export const UserMessage = () => {
               return <InMessageAttachment type="image" nameSlot="Unknown filename" src={p.image} />;
             },
             Text: p => {
+              if (p.text.trimStart().startsWith('<system-reminder')) {
+                return <SystemReminderBadge text={p.text} />;
+              }
+
               if (p.text.includes('<attachment name=')) {
                 return (
                   <InMessageAttachment

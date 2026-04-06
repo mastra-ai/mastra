@@ -617,7 +617,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];

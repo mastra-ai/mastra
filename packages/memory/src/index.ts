@@ -6,7 +6,12 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import {
+  MastraMemory,
+  extractWorkingMemoryContent,
+  filterSystemReminderMessages,
+  removeWorkingMemoryTags,
+} from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -207,6 +212,7 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      includeSystemReminders?: boolean;
       threadId: string;
     },
   ): Promise<{
@@ -217,7 +223,17 @@ export class Memory extends MastraMemory {
     perPage: number | false;
     hasMore: boolean;
   }> {
-    const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
+    const {
+      threadId,
+      resourceId,
+      perPage: perPageArg,
+      page,
+      orderBy,
+      threadConfig,
+      vectorSearchString,
+      includeSystemReminders,
+      filter,
+    } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -360,7 +376,7 @@ export class Memory extends MastraMemory {
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
     // Always return mastra-db format (V2)
-    const messages = list.get.all.db();
+    const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
 
     const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
     return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
