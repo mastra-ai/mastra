@@ -5,10 +5,19 @@ import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
 
+/**
+ * Gateway implementation for the Octen AI Web-chat API.
+ * Handles fetching providers, building URLs, getting API keys, and resolving language models
+ * via OpenAI protocol compatibility.
+ */
 export class OctenGateway extends MastraModelGateway {
   readonly id = 'octen';
   readonly name = 'Octen AI Gateway';
 
+  /**
+   * Fetches the supported LLM providers and their configurations from the Octen gateway.
+   * @returns A promise that resolves to a record of provider configurations.
+   */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     const config: ProviderConfig = {
       apiKeyEnvVar: 'OCTEN_API_KEY',
@@ -33,10 +42,22 @@ export class OctenGateway extends MastraModelGateway {
     return { octen: config };
   }
 
+  /**
+   * Builds the base URL for the Octen AI API.
+   * @param _modelId - The ID of the model being requested.
+   * @param _envVars - Optional environment variables object.
+   * @returns A promise that resolves to the root API v1 endpoint URL.
+   */
   async buildUrl(_modelId: string, _envVars?: typeof process.env): Promise<string> {
     return 'https://api.octen.ai/v1';
   }
 
+  /**
+   * Retrieves the OCTEN_API_KEY from environment variables.
+   * @param modelId - The model ID using the key.
+   * @returns A promise that resolves to the active API key.
+   * @throws {MastraError} If the OCTEN_API_KEY environment variable is not defined.
+   */
   async getApiKey(modelId: string): Promise<string> {
     const key = process.env['OCTEN_API_KEY'];
     if (!key) {
@@ -50,6 +71,16 @@ export class OctenGateway extends MastraModelGateway {
     return key;
   }
 
+  /**
+   * Resolves the language model using the AI SDK's OpenAI compatibility layer.
+   * Customizes fetch to append routing metadata explicitly expected by Octen.
+   * @param params - The resolution parameters.
+   * @param params.modelId - The model ID string.
+   * @param params.providerId - The identifier of the specific provider.
+   * @param params.apiKey - The API key used for the request.
+   * @param params.headers - Optional additional headers.
+   * @returns A promise resolving to an AI SDK LanguageModelV2 instance.
+   */
   async resolveLanguageModel({
     modelId,
     providerId,
@@ -109,7 +140,6 @@ export class OctenGateway extends MastraModelGateway {
             // Unparseable JSON, return original
             return response;
           }
-        }
         }
 
         return response;
