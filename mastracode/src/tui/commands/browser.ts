@@ -106,11 +106,52 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (arg === 'status') {
     // Get the active browser settings from harness state (what's actually running)
-    const activeSettings = (ctx.harness.getState() as any)?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
+    const state = ctx.harness.getState() as any;
+    const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
 
-    if (!browser.enabled) {
+    // Check for config drift between file and active instance
+    const hasDrift = activeSettings && getBrowserConfigKey(browser) !== getBrowserConfigKey(activeSettings);
+
+    if (hasDrift && activeSettings) {
+      // Show both active and file settings when they differ
+      const lines: string[] = [];
+
+      // Active session settings
+      const activeProvider =
+        activeSettings.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
+      const activeIsBrowserbase =
+        activeSettings.provider === 'stagehand' && activeSettings.stagehand?.env === 'BROWSERBASE';
+      lines.push('Browser (active):');
+      lines.push(`  Provider: ${activeProvider}`);
+      if (activeSettings.provider === 'stagehand' && activeSettings.stagehand) {
+        lines.push(`  Environment: ${activeSettings.stagehand.env}`);
+      }
+      if (!activeIsBrowserbase) {
+        lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
+      }
+
+      lines.push('');
+
+      // Pending changes from file
+      const fileProvider = browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
+      const fileIsBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
+      lines.push('Pending changes (not yet applied):');
+      lines.push(`  Provider: ${fileProvider}`);
+      if (browser.provider === 'stagehand' && browser.stagehand) {
+        lines.push(`  Environment: ${browser.stagehand.env}`);
+      }
+      if (!fileIsBrowserbase) {
+        lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
+      }
+
+      lines.push('');
+      lines.push('⚠️  /browser on to apply, /browser to reconfigure, or restart.');
+
+      ctx.showInfo(lines.join('\n'));
+    } else if (!browser.enabled) {
       ctx.showInfo('Browser: disabled');
     } else {
+      // Normal status (no drift)
       const providerLabel =
         browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
       const isBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
@@ -118,22 +159,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (browser.provider === 'stagehand' && browser.stagehand) {
         lines.push(`  Environment: ${browser.stagehand.env}`);
       }
-      // Only show headless for local browsers (not Browserbase)
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
-
-      // Check for config drift between file and active instance
-      if (activeSettings) {
-        const fileKey = getBrowserConfigKey(browser);
-        const activeKey = getBrowserConfigKey(activeSettings);
-        if (fileKey !== activeKey) {
-          lines.push('');
-          lines.push('⚠️  Settings file was modified by another instance.');
-          lines.push('   Run /browser to reconfigure, or restart to use file settings.');
-        }
-      }
-
       ctx.showInfo(lines.join('\n'));
     }
     return;
@@ -179,7 +207,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     if (browser.enabled) {
       settings.browser.enabled = false;
       saveSettings(settings);
-      await applyBrowserToAgents(ctx, undefined);
+      applyBrowserToAgents(ctx, undefined);
       ctx.showInfo('Browser automation disabled.');
     } else {
       ctx.showInfo('Browser automation remains disabled.');
