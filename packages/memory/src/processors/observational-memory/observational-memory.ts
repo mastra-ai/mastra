@@ -799,6 +799,34 @@ export class ObservationalMemory {
   }
 
   /**
+   * Resolve the effective messageTokens for a record.
+   * Uses the record's stored config if it has a per-record override,
+   * otherwise falls back to the instance-level config.
+   */
+  private getEffectiveMessageTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const recordConfig = record.config as { observation?: { messageTokens?: number | ThresholdRange } } | undefined;
+    const recordTokens = recordConfig?.observation?.messageTokens;
+    if (recordTokens != null) {
+      return recordTokens;
+    }
+    return this.observationConfig.messageTokens;
+  }
+
+  /**
+   * Resolve the effective reflection observationTokens for a record.
+   * Uses the record's stored config if it has a per-record override,
+   * otherwise falls back to the instance-level config.
+   */
+  private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const recordConfig = record.config as { reflection?: { observationTokens?: number | ThresholdRange } } | undefined;
+    const recordTokens = recordConfig?.reflection?.observationTokens;
+    if (recordTokens != null) {
+      return recordTokens;
+    }
+    return this.reflectionConfig.observationTokens;
+  }
+
+  /**
    * Check whether the unobserved message tokens meet the observation threshold.
    */
   private meetsObservationThreshold(opts: {
@@ -809,7 +837,7 @@ export class ObservationalMemory {
     const { record, unobservedTokens, extraTokens = 0 } = opts;
     const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
     const currentObservationTokens = record.observationTokenCount ?? 0;
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
     return pendingTokens >= threshold;
   }
 
@@ -2376,7 +2404,7 @@ ${formattedMessages}
       const projectedMessageRemoval = calculateProjectedMessageRemoval(
         bufferedChunks,
         this.observationConfig.bufferActivation ?? 1,
-        getMaxThreshold(this.observationConfig.messageTokens),
+        getMaxThreshold(this.getEffectiveMessageTokens(record)),
         pendingTokens,
       );
 
@@ -2488,8 +2516,8 @@ ${formattedMessages}
     }
     const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
-    // Calculate observation threshold
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    // Calculate observation threshold (use per-record override if set)
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
 
     // Buffering status
     const bufferedChunks = getBufferedChunks(record);
@@ -2513,16 +2541,17 @@ ${formattedMessages}
     // Should observe?
     const shouldObserve = pendingTokens >= threshold;
 
-    // Should reflect?
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    // Should reflect? (use per-record override if set)
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
     const shouldReflect = currentObservationTokens >= reflectThreshold;
 
     // Can activate?
     const canActivate = bufferedChunkCount > 0;
 
     // Effective observation tokens threshold (for shared budget UI display)
-    const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
-    const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
+    const effectiveMessageTokens = this.getEffectiveMessageTokens(record);
+    const isSharedBudget = typeof effectiveMessageTokens !== 'number';
+    const totalBudget = isSharedBudget ? (effectiveMessageTokens as { min: number; max: number }).max : 0;
     const effectiveObservationTokensThreshold = isSharedBudget
       ? Math.max(totalBudget - threshold, 1000)
       : reflectThreshold;
@@ -2962,8 +2991,8 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
-    // Calculate activation parameters
-    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
+    // Calculate activation parameters (use per-record override if set)
+    const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
@@ -3167,7 +3196,7 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
-      const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
         prompt,
