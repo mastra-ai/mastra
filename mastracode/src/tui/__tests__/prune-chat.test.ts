@@ -1,4 +1,4 @@
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@mariozechner/pi-tui';
 import { describe, expect, it } from 'vitest';
 
 import { SlashCommandComponent } from '../components/slash-command.js';
@@ -6,47 +6,38 @@ import { SystemReminderComponent } from '../components/system-reminder.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import type { TUIState } from '../state.js';
 
-function createState(): TUIState {
+function createState(childrenCount: number): TUIState {
+  const chatContainer = new Container();
+
+  for (let i = 0; i < childrenCount; i++) {
+    chatContainer.addChild(new Text(`child-${i}`, 0, 0));
+  }
+
   return {
-    chatContainer: new Container(),
+    chatContainer,
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
   } as unknown as TUIState;
 }
 
-function addEntry(chatContainer: Container, component: Text | SlashCommandComponent | SystemReminderComponent) {
-  chatContainer.addChild(new Spacer(1));
-  chatContainer.addChild(component);
-  chatContainer.addChild(new Spacer(1));
-}
-
 describe('pruneChatContainer', () => {
-  it('keeps recent whole entries and removes tracked components that were pruned', () => {
-    const state = createState();
+  it('keeps the last 100 children and removes tracked components that were pruned', () => {
+    const state = createState(250);
 
-    const removedTool = new Text('removed-tool', 0, 0);
-    const keptTool = new Text('kept-tool', 0, 0);
+    const removedTool = { toolName: 'removed-tool' };
+    const keptTool = { toolName: 'kept-tool' };
     const removedSlash = new SlashCommandComponent('removed', 'echo removed');
     const keptSlash = new SlashCommandComponent('kept', 'echo kept');
     const removedReminder = new SystemReminderComponent({ message: 'Removed body' });
     const keptReminder = new SystemReminderComponent({ message: 'Kept body' });
 
-    for (let i = 0; i < 20; i++) {
-      addEntry(state.chatContainer, new Text(`child-${i}`, 0, 0));
-    }
-
-    addEntry(state.chatContainer, removedTool);
-    addEntry(state.chatContainer, removedSlash);
-    addEntry(state.chatContainer, removedReminder);
-
-    for (let i = 20; i < 210; i++) {
-      addEntry(state.chatContainer, new Text(`child-${i}`, 0, 0));
-    }
-
-    addEntry(state.chatContainer, keptTool);
-    addEntry(state.chatContainer, keptSlash);
-    addEntry(state.chatContainer, keptReminder);
+    state.chatContainer.children[10] = removedTool as any;
+    state.chatContainer.children[20] = removedSlash as any;
+    state.chatContainer.children[30] = removedReminder as any;
+    state.chatContainer.children[220] = keptTool as any;
+    state.chatContainer.children[230] = keptSlash as any;
+    state.chatContainer.children[240] = keptReminder as any;
 
     state.allToolComponents = [removedTool as any, keptTool as any];
     state.allSlashCommandComponents = [removedSlash, keptSlash];
@@ -54,28 +45,22 @@ describe('pruneChatContainer', () => {
 
     pruneChatContainer(state);
 
-    expect(state.chatContainer.children.length).toBeLessThan(400);
-    expect(state.chatContainer.children).toContain(keptTool);
-    expect(state.chatContainer.children).toContain(keptSlash);
-    expect(state.chatContainer.children).toContain(keptReminder);
-    expect(state.chatContainer.children).not.toContain(removedTool);
-    expect(state.chatContainer.children).not.toContain(removedSlash);
-    expect(state.chatContainer.children).not.toContain(removedReminder);
-    expect(state.allToolComponents).toEqual([keptTool as any]);
+    expect(state.chatContainer.children).toHaveLength(100);
+    expect(state.chatContainer.children[70]).toBe(keptTool);
+    expect(state.chatContainer.children[80]).toBe(keptSlash);
+    expect(state.chatContainer.children[90]).toBe(keptReminder);
+    expect(state.allToolComponents).toEqual([keptTool]);
     expect(state.allSlashCommandComponents).toEqual([keptSlash]);
     expect(state.allSystemReminderComponents).toEqual([keptReminder]);
   });
 
   it('does nothing when the container is already within the limit', () => {
-    const state = createState();
-    for (let i = 0; i < 66; i++) {
-      addEntry(state.chatContainer, new Text(`child-${i}`, 0, 0));
-    }
+    const state = createState(200);
     const originalChildren = [...state.chatContainer.children];
 
     pruneChatContainer(state);
 
-    expect(state.chatContainer.children).toHaveLength(originalChildren.length);
+    expect(state.chatContainer.children).toHaveLength(200);
     expect(state.chatContainer.children).toEqual(originalChildren);
   });
 });
