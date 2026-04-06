@@ -24,7 +24,9 @@ import {
   toast,
   Spinner,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
@@ -176,6 +178,30 @@ export default function Scorer() {
     setDialogIsOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, scores]);
+
+  if (scorerError && is401UnauthorizedError(scorerError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (scorerError && is403ForbiddenError(scorerError)) {
     return (
