@@ -401,7 +401,6 @@ export interface MemoryOperationAttributes extends AIBaseAttributes {
   vectorResultCount?: number;
   workingMemoryEnabled?: boolean;
   lastMessages?: number | false;
-  success?: boolean;
 }
 
 /**

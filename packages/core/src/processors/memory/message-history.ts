@@ -134,7 +134,8 @@ export class MessageHistory implements Processor {
 
       if (chronologicalMessages.length === 0) {
         span?.end({
-          attributes: { success: true, messageCount: 0 },
+          output: { success: true },
+          attributes: { messageCount: 0 },
         });
         return messageList;
       }
@@ -149,12 +150,13 @@ export class MessageHistory implements Processor {
       }
 
       span?.end({
-        attributes: { success: true, messageCount: chronologicalMessages.length },
+        output: { success: true },
+        attributes: { messageCount: chronologicalMessages.length },
       });
 
       return messageList;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
   }
@@ -258,12 +260,12 @@ export class MessageHistory implements Processor {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       span?.end({
-        attributes: { success: true },
+        output: { success: true },
       });
 
       return messageList;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
   }

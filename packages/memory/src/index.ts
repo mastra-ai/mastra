@@ -346,7 +346,7 @@ export class Memory extends MastraMemory {
           perPage: 0,
           hasMore: false,
         };
-        span?.end({ attributes: { success: true, messageCount: 0 } });
+        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
         return result;
       }
 
@@ -425,8 +425,8 @@ export class Memory extends MastraMemory {
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
 
       span?.end({
+        output: { success: true },
         attributes: {
-          success: true,
           messageCount: messages.length,
           embeddingTokens: usage?.tokens,
           vectorResultCount: vectorResults.length,
@@ -435,7 +435,7 @@ export class Memory extends MastraMemory {
 
       return recallResult;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
 
@@ -690,9 +690,9 @@ export class Memory extends MastraMemory {
         release();
       }
 
-      span?.end({ attributes: { success: true } });
+      span?.end({ output: { success: true } });
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
   }
@@ -1063,8 +1063,8 @@ ${workingMemory}`;
       const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
 
       span?.end({
+        output: { success: true },
         attributes: {
-          success: true,
           messageCount: dbMessages.length,
           embeddingTokens: saveResult.usage?.tokens,
           semanticRecallEnabled: Boolean(config.semanticRecall),
@@ -1073,7 +1073,7 @@ ${workingMemory}`;
 
       return saveResult;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
   }
@@ -2121,9 +2121,9 @@ Notes:
         void this.deleteMessageVectors(messageIds);
       }
 
-      span?.end({ attributes: { success: true, messageCount: messageIds.length } });
+      span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      span?.error({ error: error as Error, endSpan: true });
       throw error;
     }
   }
