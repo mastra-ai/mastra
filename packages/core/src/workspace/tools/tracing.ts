@@ -3,7 +3,12 @@
  *
  * Creates and manages WORKSPACE_ACTION spans for workspace tool operations.
  * Each workspace tool wraps its core operation in a span that captures
- * category, operation name, and operation-specific attributes.
+ * category, operation name, and operation-specific input/output.
+ *
+ * Data placement follows span conventions:
+ * - `input`: what the operation receives (path, command, query, etc.)
+ * - `output`: what the operation produces (results, bytes, exit codes, etc.)
+ * - `attributes`: span metadata (category, workspaceId, provider, success)
  */
 
 import type { AnySpan, WorkspaceActionAttributes } from '../../observability/types/tracing';
@@ -19,10 +24,10 @@ export interface WorkspaceSpanOptions {
   category: WorkspaceActionAttributes['category'];
   /** Operation name (e.g. 'readFile', 'executeCommand') */
   operation: string;
-  /** Input data to record on the span */
+  /** Input data to record on the span (path, command, query, etc.) */
   input?: unknown;
-  /** Initial attributes (merged with workspace metadata at span end) */
-  attributes?: Partial<Omit<WorkspaceActionAttributes, 'category' | 'operation'>>;
+  /** Initial attributes (workspace metadata, provider info) */
+  attributes?: Partial<Omit<WorkspaceActionAttributes, 'category'>>;
 }
 
 /**
@@ -31,7 +36,7 @@ export interface WorkspaceSpanOptions {
 export interface WorkspaceSpanHandle {
   /** The underlying span (undefined when tracing is not active) */
   span: AnySpan | undefined;
-  /** End the span successfully with final attributes */
+  /** End the span with final attributes and output */
   end(attrs?: Partial<WorkspaceActionAttributes>, output?: unknown): void;
   /** End the span with an error */
   error(err: unknown, attrs?: Partial<WorkspaceActionAttributes>): void;
@@ -49,14 +54,14 @@ export interface WorkspaceSpanHandle {
  *   category: 'filesystem',
  *   operation: 'readFile',
  *   input: { path },
- *   attributes: { filePath: path },
+ *   attributes: { filesystemProvider: filesystem.provider },
  * });
  * try {
  *   const result = await filesystem.readFile(path);
- *   span.end({ success: true, bytesTransferred: result.length }); // success must be explicit
+ *   span.end({ success: true }, { bytesTransferred: result.length });
  *   return result;
  * } catch (err) {
- *   span.error(err, { filePath: path });
+ *   span.error(err);
  *   throw err;
  * }
  * ```
@@ -73,7 +78,6 @@ export function startWorkspaceSpan(
   }
 
   const { category, operation, input, attributes } = options;
-  const startTime = Date.now();
 
   const span = currentSpan.createChildSpan<SpanType.WORKSPACE_ACTION>({
     type: SpanType.WORKSPACE_ACTION,
@@ -81,7 +85,6 @@ export function startWorkspaceSpan(
     input,
     attributes: {
       category,
-      operation,
       workspaceId: workspace?.id,
       workspaceName: workspace?.name,
       ...attributes,
@@ -94,7 +97,6 @@ export function startWorkspaceSpan(
       span?.end({
         output,
         attributes: {
-          durationMs: Date.now() - startTime,
           ...attrs,
         },
       });
@@ -105,7 +107,6 @@ export function startWorkspaceSpan(
         error,
         attributes: {
           success: false,
-          durationMs: Date.now() - startTime,
           ...attrs,
         },
       });

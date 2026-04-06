@@ -86,10 +86,8 @@ describe('startWorkspaceSpan', () => {
     expect(childSpans[0]!.name).toBe('workspace:filesystem:readFile');
     expect(childSpans[0]!.attributes).toMatchObject({
       category: 'filesystem',
-      operation: 'readFile',
       workspaceId: 'ws-1',
       workspaceName: 'test-workspace',
-      filePath: '/data/file.txt',
     });
   });
 
@@ -116,7 +114,7 @@ describe('startWorkspaceSpan', () => {
     handle.error(new Error('test'));
   });
 
-  it('end() records durationMs and passes through attributes without implicit success', async () => {
+  it('end() passes through attributes and output separately', async () => {
     const { mockParentSpan, childSpans } = createMockSpan();
 
     const handle = startWorkspaceSpan({ tracing: { currentSpan: mockParentSpan } } as any, undefined, {
@@ -124,14 +122,11 @@ describe('startWorkspaceSpan', () => {
       operation: 'search',
     });
 
-    // Small delay to ensure durationMs > 0
-    await new Promise(r => setTimeout(r, 5));
-    handle.end({ success: true, resultCount: 3 });
+    handle.end({ success: true }, { resultCount: 3 });
 
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBe(true);
-    expect(childSpans[0]!.endAttributes?.durationMs).toBeGreaterThanOrEqual(0);
-    expect(childSpans[0]!.endAttributes?.resultCount).toBe(3);
+    expect(childSpans[0]!.endOutput).toEqual({ resultCount: 3 });
   });
 
   it('end() does not set success when caller omits it', () => {
@@ -142,11 +137,11 @@ describe('startWorkspaceSpan', () => {
       operation: 'readFile',
     });
 
-    handle.end({ bytesTransferred: 100 });
+    handle.end(undefined, { bytesTransferred: 100 });
 
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBeUndefined();
-    expect(childSpans[0]!.endAttributes?.bytesTransferred).toBe(100);
+    expect(childSpans[0]!.endOutput).toEqual({ bytesTransferred: 100 });
   });
 
   it('error() sets success=false and records the error', () => {
@@ -158,12 +153,11 @@ describe('startWorkspaceSpan', () => {
     });
 
     const testError = new Error('disk full');
-    handle.error(testError, { filePath: '/data/out.txt' });
+    handle.error(testError);
 
     expect(childSpans[0]!.errored).toBe(true);
     expect(childSpans[0]!.errorObj).toBe(testError);
     expect(childSpans[0]!.errorAttributes?.success).toBe(false);
-    expect(childSpans[0]!.errorAttributes?.filePath).toBe('/data/out.txt');
   });
 
   it('error() wraps non-Error values in an Error', () => {
@@ -221,11 +215,10 @@ describe('workspace tool tracing integration', () => {
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.type).toBe(SpanType.WORKSPACE_ACTION);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('readFile');
-    expect(childSpans[0]!.attributes?.filePath).toBe('hello.txt');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:readFile');
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBe(true);
-    expect(childSpans[0]!.endAttributes?.bytesTransferred).toBe(11);
+    expect(childSpans[0]!.endOutput).toEqual({ bytesTransferred: 11 });
   });
 
   it('writeFile tool creates a WORKSPACE_ACTION span on success', async () => {
@@ -241,9 +234,9 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('writeFile');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:writeFile');
     expect(childSpans[0]!.ended).toBe(true);
-    expect(childSpans[0]!.endAttributes?.bytesTransferred).toBe(12);
+    expect(childSpans[0]!.endOutput).toEqual({ bytesTransferred: 12 });
   });
 
   it('editFile tool creates a WORKSPACE_ACTION span on success', async () => {
@@ -260,7 +253,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('editFile');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:editFile');
     expect(childSpans[0]!.ended).toBe(true);
   });
 
@@ -278,7 +271,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('delete');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:delete');
     expect(childSpans[0]!.ended).toBe(true);
     expect(childSpans[0]!.endAttributes?.success).toBe(true);
   });
@@ -298,7 +291,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('listFiles');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:listFiles');
     expect(childSpans[0]!.ended).toBe(true);
   });
 
@@ -316,9 +309,9 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('stat');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:stat');
     expect(childSpans[0]!.ended).toBe(true);
-    expect(childSpans[0]!.endAttributes?.bytesTransferred).toBe(5);
+    expect(childSpans[0]!.endOutput).toEqual({ bytesTransferred: 5 });
   });
 
   it('fileStat tool ends span with success=false for missing file', async () => {
@@ -351,7 +344,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('mkdir');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:mkdir');
     expect(childSpans[0]!.ended).toBe(true);
   });
 
@@ -369,10 +362,9 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('filesystem');
-    expect(childSpans[0]!.attributes?.operation).toBe('grep');
-    expect(childSpans[0]!.attributes?.query).toBe('function');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:grep');
     expect(childSpans[0]!.ended).toBe(true);
-    expect(childSpans[0]!.endAttributes?.resultCount).toBe(2);
+    expect(childSpans[0]!.endOutput).toEqual({ resultCount: 2 });
   });
 
   it('search tool creates a WORKSPACE_ACTION span with error when search not configured', async () => {
@@ -389,8 +381,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('search');
-    expect(childSpans[0]!.attributes?.operation).toBe('search');
-    expect(childSpans[0]!.attributes?.query).toBe('test query');
+    expect(childSpans[0]!.name).toBe('workspace:search:search');
     expect(childSpans[0]!.errored).toBe(true);
     expect(childSpans[0]!.errorAttributes?.success).toBe(false);
   });
@@ -409,7 +400,7 @@ describe('workspace tool tracing integration', () => {
 
     expect(childSpans).toHaveLength(1);
     expect(childSpans[0]!.attributes?.category).toBe('search');
-    expect(childSpans[0]!.attributes?.operation).toBe('index');
+    expect(childSpans[0]!.name).toBe('workspace:search:index');
     expect(childSpans[0]!.errored).toBe(true);
     expect(childSpans[0]!.errorAttributes?.success).toBe(false);
   });

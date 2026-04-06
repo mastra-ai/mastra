@@ -64,7 +64,7 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
       category: 'filesystem',
       operation: 'listFiles',
       input: { path, maxDepth, pattern },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -83,10 +83,10 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
         workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
         'end',
       );
-      span.end({ success: true, resultCount: result.fileCount });
+      span.end({ success: true }, { resultCount: result.fileCount });
       return output;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

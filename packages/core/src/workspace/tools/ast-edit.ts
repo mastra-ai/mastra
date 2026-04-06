@@ -439,7 +439,7 @@ Pattern replace (for everything else):
       category: 'filesystem',
       operation: 'astEdit',
       input: { path, transform, pattern },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -552,10 +552,10 @@ Pattern replace (for everything else):
 
       let output = `${path}: ${changes.join('; ')}`;
       output += await getEditDiagnosticsText(workspace, path, modifiedContent);
-      span.end({ success: true, bytesTransferred: Buffer.byteLength(modifiedContent, 'utf-8') });
+      span.end({ success: true }, { bytesTransferred: Buffer.byteLength(modifiedContent, 'utf-8') });
       return output;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

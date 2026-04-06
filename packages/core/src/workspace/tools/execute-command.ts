@@ -84,7 +84,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     category: 'sandbox',
     operation: background ? 'spawnProcess' : 'executeCommand',
     input: { command, cwd, timeout: input.timeout, background },
-    attributes: { command, sandboxProvider: sandbox.provider },
+    attributes: { sandboxProvider: sandbox.provider },
   });
 
   // Background mode: spawn via process manager and return immediately
@@ -129,7 +129,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       });
     }
 
-    span.end({ success: true, pid: Number(handle.pid) || undefined });
+    span.end({ success: true }, { pid: Number(handle.pid) || undefined });
     return `Started background process (PID: ${handle.pid})`;
   }
 
@@ -176,11 +176,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
 
-    span.end({
-      exitCode: result.exitCode,
-      success: result.success,
-      durationMs: result.executionTimeMs,
-    });
+    span.end({ success: result.success }, { exitCode: result.exitCode });
 
     if (!result.success) {
       const parts = [
@@ -202,7 +198,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         toolCallId,
       },
     });
-    span.end({ success: false, command, exitCode: -1, durationMs: Date.now() - startedAt });
+    span.end({ success: false }, { exitCode: -1 });
     const parts = [
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),

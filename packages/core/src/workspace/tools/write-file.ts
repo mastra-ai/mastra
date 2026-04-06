@@ -21,7 +21,7 @@ export const writeFileTool = createTool({
       category: 'filesystem',
       operation: 'writeFile',
       input: { path, overwrite, contentLength: content.length },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -37,10 +37,10 @@ export const writeFileTool = createTool({
       const size = Buffer.byteLength(content, 'utf-8');
       let output = `Wrote ${size} bytes to ${path}`;
       output += await getEditDiagnosticsText(workspace, path, content);
-      span.end({ success: true, bytesTransferred: size });
+      span.end({ success: true }, { bytesTransferred: size });
       return output;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

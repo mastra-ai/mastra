@@ -68,14 +68,14 @@ Usage:
       category: 'filesystem',
       operation: 'grep',
       input: { pattern, path: inputPath, contextLines, maxCount },
-      attributes: { filePath: inputPath, query: pattern, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
       // Guard against excessively long patterns as a cheap ReDoS heuristic
       const MAX_PATTERN_LENGTH = 1000;
       if (pattern.length > MAX_PATTERN_LENGTH) {
-        span.end({ success: false, resultCount: 0 });
+        span.end({ success: false });
         return `Error: Pattern too long (${pattern.length} chars, max ${MAX_PATTERN_LENGTH}). Use a shorter pattern.`;
       }
 
@@ -84,7 +84,7 @@ Usage:
       try {
         regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
       } catch (e) {
-        span.end({ success: false, resultCount: 0 });
+        span.end({ success: false });
         return `Error: Invalid regex pattern: ${(e as Error).message}`;
       }
 
@@ -245,10 +245,10 @@ Usage:
         workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
         'end',
       );
-      span.end({ success: true, resultCount: totalMatchCount });
+      span.end({ success: true }, { resultCount: totalMatchCount });
       return output;
     } catch (err) {
-      span.error(err, { filePath: inputPath });
+      span.error(err);
       throw err;
     }
   },

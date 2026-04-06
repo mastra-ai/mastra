@@ -20,7 +20,7 @@ export const fileStatTool = createTool({
       category: 'filesystem',
       operation: 'stat',
       input: { path },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -30,14 +30,14 @@ export const fileStatTool = createTool({
       const parts = [`${path}`, `Type: ${stat.type}`];
       if (stat.size !== undefined) parts.push(`Size: ${stat.size} bytes`);
       parts.push(`Modified: ${modifiedAt}`);
-      span.end({ success: true, bytesTransferred: stat.size });
+      span.end({ success: true }, { bytesTransferred: stat.size });
       return parts.join(' ');
     } catch (error) {
       if (error instanceof FileNotFoundError) {
         span.end({ success: false });
         return `${path}: not found`;
       }
-      span.error(error, { filePath: path });
+      span.error(error);
       throw error;
     }
   },

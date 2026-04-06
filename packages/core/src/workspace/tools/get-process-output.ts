@@ -35,7 +35,7 @@ Use this after starting a background command with execute_command (background: t
       category: 'sandbox',
       operation: 'getProcessOutput',
       input: { pid, tail, wait: shouldWait },
-      attributes: { pid: Number(pid) || undefined, sandboxProvider: sandbox.provider },
+      attributes: { sandboxProvider: sandbox.provider },
     });
 
     const toolCallId = context?.agent?.toolCallId;
@@ -99,7 +99,7 @@ Use this after starting a background command with execute_command (background: t
       const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
       if (!stdout && !stderr) {
-        span.end({ success: true, exitCode: handle.exitCode });
+        span.end({ success: true }, { exitCode: handle.exitCode });
         return '(no output yet)';
       }
 
@@ -118,7 +118,7 @@ Use this after starting a background command with execute_command (background: t
         parts.push('', `Exit code: ${handle.exitCode}`);
       }
 
-      span.end({ success: true, exitCode: handle.exitCode });
+      span.end({ success: true }, { exitCode: handle.exitCode });
       return parts.join('\n');
     } catch (err) {
       span.error(err);

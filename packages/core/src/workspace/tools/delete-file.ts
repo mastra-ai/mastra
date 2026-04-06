@@ -24,7 +24,7 @@ export const deleteFileTool = createTool({
       category: 'filesystem',
       operation: 'delete',
       input: { path, recursive },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -42,7 +42,7 @@ export const deleteFileTool = createTool({
       span.end({ success: true });
       return `Deleted ${path}`;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

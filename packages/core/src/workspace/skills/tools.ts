@@ -122,18 +122,18 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
         category: 'skill',
         operation: 'search',
         input: { query, skillNames, topK },
-        attributes: { query },
+        attributes: {},
       });
 
       try {
         const results = await skills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
-          span.end({ success: true, resultCount: 0 });
+          span.end({ success: true }, { resultCount: 0 });
           return 'No results found.';
         }
 
-        span.end({ success: true, resultCount: results.length });
+        span.end({ success: true }, { resultCount: results.length });
         return results
           .map(r => {
             const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
@@ -142,7 +142,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
           })
           .join('\n\n');
       } catch (err) {
-        span.error(err, { query });
+        span.error(err);
         throw err;
       }
     },
@@ -177,7 +177,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         category: 'skill',
         operation: 'read',
         input: { skillName, path, startLine, endLine },
-        attributes: { filePath: path },
+        attributes: {},
       });
 
       try {
@@ -210,16 +210,16 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         if (textContent.slice(0, 1000).includes('\0')) {
           const fullPath = `${resolved.skill.path}/${path}`;
           const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-          span.end({ success: true, bytesTransferred: size });
+          span.end({ success: true }, { bytesTransferred: size });
           return `Binary file: ${fullPath} (${size} bytes)`;
         }
         content = textContent;
 
         const result = extractLines(content, startLine, endLine);
-        span.end({ success: true, bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
+        span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
         return result.content;
       } catch (err) {
-        span.error(err, { filePath: path });
+        span.error(err);
         throw err;
       }
     },

@@ -24,7 +24,7 @@ export const mkdirTool = createTool({
       category: 'filesystem',
       operation: 'mkdir',
       input: { path, recursive },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -36,7 +36,7 @@ export const mkdirTool = createTool({
       span.end({ success: true });
       return `Created directory ${path}`;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

@@ -33,7 +33,7 @@ Usage:
       category: 'filesystem',
       operation: 'editFile',
       input: { path, replace_all },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -56,7 +56,7 @@ Usage:
 
       let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
       output += await getEditDiagnosticsText(workspace, path, result.content);
-      span.end({ success: true, bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
+      span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
       return output;
     } catch (error) {
       if (error instanceof StringNotFoundError) {
@@ -67,7 +67,7 @@ Usage:
         span.end({ success: false });
         return error.message;
       }
-      span.error(error, { filePath: path });
+      span.error(error);
       throw error;
     }
   },

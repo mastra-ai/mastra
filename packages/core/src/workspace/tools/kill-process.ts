@@ -25,7 +25,7 @@ Use this to stop a long-running background process that was started with execute
       category: 'sandbox',
       operation: 'killProcess',
       input: { pid },
-      attributes: { pid: Number(pid) || undefined, sandboxProvider: sandbox.provider },
+      attributes: { sandboxProvider: sandbox.provider },
     });
 
     const toolCallId = context?.agent?.toolCallId;
@@ -80,7 +80,7 @@ Use this to stop a long-running background process that was started with execute
         }
       }
 
-      span.end({ success: true, exitCode: handle?.exitCode ?? 137 });
+      span.end({ success: true }, { exitCode: handle?.exitCode ?? 137 });
       return parts.join('\n');
     } catch (err) {
       span.error(err);

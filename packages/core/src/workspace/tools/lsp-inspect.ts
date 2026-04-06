@@ -106,7 +106,7 @@ export const lspInspectTool = createTool({
       category: 'filesystem',
       operation: 'lspInspect',
       input: { path: filePath, line },
-      attributes: { filePath },
+      attributes: {},
     });
 
     // Parse cursor position from match

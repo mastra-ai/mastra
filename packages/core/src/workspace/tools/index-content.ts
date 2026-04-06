@@ -20,15 +20,15 @@ export const indexContentTool = createTool({
       category: 'search',
       operation: 'index',
       input: { path, contentLength: content.length },
-      attributes: { filePath: path },
+      attributes: {},
     });
 
     try {
       await workspace.index(path, content, { metadata });
-      span.end({ success: true, bytesTransferred: Buffer.byteLength(content, 'utf-8') });
+      span.end({ success: true }, { bytesTransferred: Buffer.byteLength(content, 'utf-8') });
       return `Indexed ${path}`;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },

@@ -35,7 +35,7 @@ export const readFileTool = createTool({
       category: 'filesystem',
       operation: 'readFile',
       input: { path, encoding, offset, limit },
-      attributes: { filePath: path, filesystemProvider: filesystem.provider },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
     try {
@@ -53,7 +53,7 @@ export const readFileTool = createTool({
           tokenLimit,
           'end',
         );
-        span.end({ success: true, bytesTransferred: stat.size });
+        span.end({ success: true }, { bytesTransferred: stat.size });
         return output;
       }
 
@@ -63,7 +63,7 @@ export const readFileTool = createTool({
           tokenLimit,
           'end',
         );
-        span.end({ success: true, bytesTransferred: stat.size });
+        span.end({ success: true }, { bytesTransferred: stat.size });
         return output;
       }
 
@@ -83,10 +83,10 @@ export const readFileTool = createTool({
       }
 
       const output = await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
-      span.end({ success: true, bytesTransferred: stat.size });
+      span.end({ success: true }, { bytesTransferred: stat.size });
       return output;
     } catch (err) {
-      span.error(err, { filePath: path });
+      span.error(err);
       throw err;
     }
   },
