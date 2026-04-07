@@ -25,12 +25,12 @@ export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
 
 Ensure `.env` has the required API key:
 
-| Provider | Environment Variable |
-|----------|---------------------|
-| openai | `OPENAI_API_KEY` |
-| anthropic | `ANTHROPIC_API_KEY` |
-| groq | `GROQ_API_KEY` |
-| google | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| Provider  | Environment Variable           |
+| --------- | ------------------------------ |
+| openai    | `OPENAI_API_KEY`               |
+| anthropic | `ANTHROPIC_API_KEY`            |
+| groq      | `GROQ_API_KEY`                 |
+| google    | `GOOGLE_GENERATIVE_AI_API_KEY` |
 
 ## Authenticate with Platform
 
@@ -51,6 +51,7 @@ pnpx mastra@latest studio deploy -y
 ```
 
 Wait for deployment. Note the URL:
+
 - Staging: `https://<project>.studio.staging.mastra.cloud`
 - Production: `https://<project>.studio.mastra.cloud`
 
@@ -65,6 +66,7 @@ pnpx mastra@latest server deploy -y
 The `-y` flag auto-confirms settings.
 
 Note the URL:
+
 - Staging: `https://<project>.server.staging.mastra.cloud`
 - Production: `https://<project>.server.mastra.cloud`
 
@@ -88,6 +90,7 @@ Use the helper script:
 ```
 
 The script:
+
 1. Checks `/health` endpoint
 2. Calls agent's `/generate` endpoint
 3. Parses and displays response
@@ -106,9 +109,9 @@ If traces don't appear, see `gcp-debugging.md`.
 
 ## Server Trace Verification
 
-| Source | How to Identify |
-|--------|-----------------|
-| Studio traces | Generated from Studio UI interactions |
+| Source        | How to Identify                                    |
+| ------------- | -------------------------------------------------- |
+| Studio traces | Generated from Studio UI interactions              |
 | Server traces | Generated from direct API calls to deployed server |
 
 Both should appear in the Studio's Traces page. If only Studio traces appear, there's a trace pipeline issue.
@@ -125,6 +128,7 @@ curl https://<project>.server.<env>.mastra.cloud/hello
 ## Browser Agent (Deployed)
 
 When testing browser agents in deployed environments:
+
 - Set `headless: true` in the browser config
 - Browser runs server-side in the deployed container
 

@@ -80,15 +80,15 @@ curl -X POST https://<project>.server.<env>.mastra.cloud/api/agents/weather-agen
 
 ## Extended Test Verification Checklist
 
-| Category | Test | Expected Result | Status |
-|----------|------|-----------------|--------|
-| **Account** | Studio sign-up | New account created, dashboard accessible | ⬜ |
-| **Account** | Gateway sign-up | New account created, API key accessible | ⬜ |
-| **Invites** | Send invitation | Email sent to invitee | ⬜ |
-| **Invites** | Accept invitation | Invitee can access project | ⬜ |
-| **RBAC** | Viewer role | Read-only access, no modifications | ⬜ |
-| **RBAC** | Editor role | Can modify, cannot manage team | ⬜ |
-| **RBAC** | Admin role | Full access to all features | ⬜ |
-| **BYOK** | Header key | Agent uses key from header | ⬜ |
-| **BYOK** | Settings key | Agent uses key from project settings | ⬜ |
-| **Storage** | DB connector | Project works with selected DB | ⬜ |
+| Category    | Test              | Expected Result                           | Status |
+| ----------- | ----------------- | ----------------------------------------- | ------ |
+| **Account** | Studio sign-up    | New account created, dashboard accessible | ⬜     |
+| **Account** | Gateway sign-up   | New account created, API key accessible   | ⬜     |
+| **Invites** | Send invitation   | Email sent to invitee                     | ⬜     |
+| **Invites** | Accept invitation | Invitee can access project                | ⬜     |
+| **RBAC**    | Viewer role       | Read-only access, no modifications        | ⬜     |
+| **RBAC**    | Editor role       | Can modify, cannot manage team            | ⬜     |
+| **RBAC**    | Admin role        | Full access to all features               | ⬜     |
+| **BYOK**    | Header key        | Agent uses key from header                | ⬜     |
+| **BYOK**    | Settings key      | Agent uses key from project settings      | ⬜     |
+| **Storage** | DB connector      | Project works with selected DB            | ⬜     |

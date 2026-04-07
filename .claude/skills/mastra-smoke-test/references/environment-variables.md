@@ -7,20 +7,22 @@ For detailed internal infrastructure variables, see the Notion page:
 
 ### For Smoke Testing
 
-| Variable | Purpose | When to Set |
-|----------|---------|-------------|
+| Variable                  | Purpose                      | When to Set                |
+| ------------------------- | ---------------------------- | -------------------------- |
 | `MASTRA_PLATFORM_API_URL` | Target staging vs production | Before `mastra auth login` |
-| `OPENAI_API_KEY` | LLM API access | Before running agents |
-| `ANTHROPIC_API_KEY` | Alternative LLM | If using Anthropic |
+| `OPENAI_API_KEY`          | LLM API access               | Before running agents      |
+| `ANTHROPIC_API_KEY`       | Alternative LLM              | If using Anthropic         |
 
 ### Environment Values
 
 **Staging:**
+
 ```bash
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai
 ```
 
 **Production (default):**
+
 ```bash
 export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
 # Or just don't set it — production is the default

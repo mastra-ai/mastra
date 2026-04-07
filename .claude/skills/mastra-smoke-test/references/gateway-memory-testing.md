@@ -58,6 +58,7 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 Test each provider's BYOK functionality:
 
 #### OpenAI
+
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
@@ -66,6 +67,7 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 ```
 
 #### Anthropic
+
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
@@ -74,6 +76,7 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 ```
 
 #### Google
+
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
@@ -91,14 +94,14 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 
 ## Verification Checklist
 
-| Test | Expected Result | Status |
-|------|-----------------|--------|
-| Token usage tracking | Credits deducted match tokens used | ⬜ |
-| Memory persistence | Agent recalls previous conversation | ⬜ |
-| BYOK via header (OpenAI) | Request succeeds with user's key | ⬜ |
-| BYOK via header (Anthropic) | Request succeeds with user's key | ⬜ |
-| BYOK via header (Google) | Request succeeds with user's key | ⬜ |
-| BYOK via settings | Project key used when no header | ⬜ |
+| Test                        | Expected Result                     | Status |
+| --------------------------- | ----------------------------------- | ------ |
+| Token usage tracking        | Credits deducted match tokens used  | ⬜     |
+| Memory persistence          | Agent recalls previous conversation | ⬜     |
+| BYOK via header (OpenAI)    | Request succeeds with user's key    | ⬜     |
+| BYOK via header (Anthropic) | Request succeeds with user's key    | ⬜     |
+| BYOK via header (Google)    | Request succeeds with user's key    | ⬜     |
+| BYOK via settings           | Project key used when no header     | ⬜     |
 
 ## Troubleshooting
 

@@ -13,16 +13,17 @@ If browser tools are not available, run `/browser` to configure.
 
 Based on the selected LLM provider, ensure the API key is available:
 
-| Provider | Environment Variable |
-|----------|---------------------|
-| openai | `OPENAI_API_KEY` |
-| anthropic | `ANTHROPIC_API_KEY` |
-| groq | `GROQ_API_KEY` |
-| google | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| cerebras | `CEREBRAS_API_KEY` |
-| mistral | `MISTRAL_API_KEY` |
+| Provider  | Environment Variable           |
+| --------- | ------------------------------ |
+| openai    | `OPENAI_API_KEY`               |
+| anthropic | `ANTHROPIC_API_KEY`            |
+| groq      | `GROQ_API_KEY`                 |
+| google    | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| cerebras  | `CEREBRAS_API_KEY`             |
+| mistral   | `MISTRAL_API_KEY`              |
 
 **Check order:**
+
 1. Global environment: `echo $<ENV_VAR_NAME>`
 2. Project `.env` file
 3. Ask user only if not found
@@ -59,11 +60,13 @@ export const mastra = new Mastra({
 ### 2. Check Dependencies
 
 Verify `package.json` includes:
+
 - `@mastra/observability`
 
 ### 3. Check Dev Server Output
 
 When starting the dev server, look for:
+
 - "OpenTelemetry initialized" or similar success message
 - Should NOT see "MASTRA_CLOUD_ACCESS_TOKEN not set" (that's for cloud only)
 
