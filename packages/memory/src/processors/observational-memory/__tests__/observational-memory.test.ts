@@ -1412,8 +1412,8 @@ describe('Observer Agent Helpers', () => {
       assistant.content = {
         format: 2,
         parts: [
-          { type: 'text', text: 'first', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
-          { type: 'text', text: 'next day', createdAt: new Date('2024-12-05T12:01:00Z') } as any,
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
         ],
       } as any;
 
