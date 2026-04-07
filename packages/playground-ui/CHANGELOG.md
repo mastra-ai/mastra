@@ -1,5 +1,27 @@
 # @mastra/playground-ui
 
+## 22.1.0-alpha.0
+
+### Minor Changes
+
+- Search input can now be collapsed into a compact icon button with tooltip and auto-focuses when expanded ([#15130](https://github.com/mastra-ai/mastra/pull/15130))
+
+- Added DataKeysAndValues component — a compound component for displaying key-value pairs in a grid layout with support for single or two-column modes and section headers ([#15126](https://github.com/mastra-ai/mastra/pull/15126))
+
+- Added DateTimeRangePicker component — a date range selector with preset options (last 24h, 7d, 30d, etc.) and a custom range mode with dual calendar and time pickers ([#15128](https://github.com/mastra-ai/mastra/pull/15128))
+
+- Added DataCodeSection component — a read-only code viewer with JSON syntax highlighting, search, multiline toggle, and an expandable fullscreen dialog ([#15125](https://github.com/mastra-ai/mastra/pull/15125))
+
+- Added DataPanel compound component — a container for detail panels with header, navigation, close button, loading, and empty states ([#15127](https://github.com/mastra-ai/mastra/pull/15127))
+
+### Patch Changes
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`b0190af`](https://github.com/mastra-ai/mastra/commit/b0190af9179181aa051fa62162dc0dc686999ffe)]:
+  - @mastra/core@1.23.1-alpha.0
+  - @mastra/ai-sdk@1.3.3-alpha.0
+  - @mastra/client-js@1.13.2-alpha.0
+  - @mastra/react@0.2.24-alpha.0
+
 ## 22.0.1
 
 ### Patch Changes

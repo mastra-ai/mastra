@@ -126,7 +126,21 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "breezy-queens-bake",
+    "bus-honors-serialization-options",
+    "clever-paths-love",
+    "cold-ideas-grab",
+    "deepclean-all-signals",
+    "deepclean-map-set-error",
+    "eighty-cows-appear",
     "every-colts-reply",
-    "green-birds-knock"
+    "green-birds-knock",
+    "lazy-cooks-shine",
+    "major-hounds-visit",
+    "old-numbers-tap",
+    "slimy-donuts-ask",
+    "some-worlds-tease",
+    "steady-dingos-repair",
+    "tasty-bobcats-marry"
   ]
 }
