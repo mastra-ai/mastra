@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.13.1-alpha.8
+
+### Patch Changes
+
+- Added an `includeSystemReminders` option to `listThreadMessages()` and memory thread message listing so clients can opt into raw system reminder history when needed. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.13.1-alpha.7
 
 ### Patch Changes

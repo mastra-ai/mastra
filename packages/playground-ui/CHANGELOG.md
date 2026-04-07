@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 22.0.1-alpha.8
+
+### Patch Changes
+
+- Added SessionExpired component and is401UnauthorizedError utility to handle 401 Unauthorized errors gracefully. When a user's token expires and refresh fails, they now see a clear 'Session Expired' message with a 'Log In' button instead of a broken/empty UI state. ([#15093](https://github.com/mastra-ai/mastra/pull/15093))
+
+- Added Memory as a recognized span type in the trace timeline. Memory operation spans now display with a dedicated icon, color, and filter toggle alongside Agent, Workflow, Model, MCP, and Tool spans. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+- Improved chat rendering for system reminder messages by showing a collapsible reminder badge instead of raw XML text. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+  - @mastra/client-js@1.13.1-alpha.8
+  - @mastra/react@0.2.23-alpha.8
+  - @mastra/ai-sdk@1.3.2-alpha.0
+
 ## 22.0.1-alpha.7
 
 ### Patch Changes

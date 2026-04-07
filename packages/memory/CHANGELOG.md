@@ -1,5 +1,40 @@
 # @mastra/memory
 
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Added tracing support to Memory operations (recall, save, delete, update working memory). When an `observabilityContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `observabilityContext` is unaffected. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **Example usage:**
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+  import { InMemoryStore } from '@mastra/core/storage';
+
+  const memory = new Memory({ storage: new InMemoryStore() });
+
+  // Pass observabilityContext to create observable spans
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages: [userMessage, assistantMessage],
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added per-record config overrides for observation and reflection thresholds in Observational Memory. Each thread can now have its own `messageTokens` and `observationTokens` thresholds that override the instance-level defaults, without requiring a process restart or cache invalidation. If no per-record override is set, the instance-level config is used as before. ([#15102](https://github.com/mastra-ai/mastra/pull/15102))
+
+### Patch Changes
+
+- Fixed recall() to hide dynamic system reminder messages by default, with includeSystemReminders available when callers need raw reminder history. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.14.0-alpha.1
 
 ### Minor Changes

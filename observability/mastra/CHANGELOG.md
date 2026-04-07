@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.7.3-alpha.0
+
+### Patch Changes
+
+- Fixed MODEL_STEP span input containing the entire raw HTTP request body instead of just the messages. Observability exporters (Datadog, Langfuse, etc.) now receive clean message arrays as MODEL_STEP span input. ([#15099](https://github.com/mastra-ai/mastra/pull/15099))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.7.2
 
 ### Patch Changes

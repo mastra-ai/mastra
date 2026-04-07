@@ -42,6 +42,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -1882,6 +1883,43 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Read current config
+      const doc = await collection.findOne({ id: input.id }, { projection: { config: 1 } });
+
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existing: Record<string, unknown> = (doc.config as Record<string, unknown>) ?? {};
+      const merged = this.deepMergeConfig(existing, input.config);
+
+      await collection.updateOne({ id: input.id }, { $set: { config: merged, updatedAt: new Date() } });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
         },
         error,
       );

@@ -346,6 +346,30 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Browser',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {

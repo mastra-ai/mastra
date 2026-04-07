@@ -1774,6 +1774,37 @@ Notes:
   }
 
   /**
+   * Update per-record observational memory config overrides for a thread.
+   * The provided config is deep-merged, so you only need to specify fields you want to change.
+   *
+   * @example
+   * ```ts
+   * await memory.updateObservationalMemoryConfig({
+   *   threadId: 'thread-1',
+   *   config: {
+   *     observation: { messageTokens: 2000 },
+   *     reflection: { observationTokens: 8000 },
+   *   },
+   * });
+   * ```
+   */
+  public async updateObservationalMemoryConfig({
+    threadId,
+    resourceId,
+    config,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    config: Record<string, unknown>;
+  }): Promise<void> {
+    const omEngine = await this.omEngine;
+    if (!omEngine) {
+      throw new Error('Observational memory is not enabled');
+    }
+    await omEngine.updateRecordConfig(threadId, resourceId, config);
+  }
+
+  /**
    * Index a list of messages directly (without querying storage).
    * Used by observe-time indexing to vectorize newly-observed messages.
    */

@@ -1,5 +1,19 @@
 # @internal/playground
 
+## 1.4.0-alpha.9
+
+## 1.4.0-alpha.8
+
+### Patch Changes
+
+- Updated all pages to display SessionExpired component when 401 Unauthorized errors occur after token refresh failure. ([#15093](https://github.com/mastra-ai/mastra/pull/15093))
+
+- Updated dependencies [[`e327e94`](https://github.com/mastra-ai/mastra/commit/e327e94146bc9b609d15001c48a8e163b6ad1033), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/playground-ui@22.0.1-alpha.8
+  - @mastra/core@1.23.0-alpha.8
+  - @mastra/client-js@1.13.1-alpha.8
+  - @mastra/react@0.2.23-alpha.8
+
 ## 1.4.0-alpha.7
 
 ### Patch Changes

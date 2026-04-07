@@ -15,7 +15,11 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
-        { type: 'doc', id: 'agents/channels', label: 'Channels', customProps: { tags: ['new'] } },
+        {
+          type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+        },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -77,6 +81,16 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Browser',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
+        { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
+        { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -94,7 +108,6 @@ const sidebars = {
           type: 'doc',
           id: 'client-js/conversations',
           label: 'Conversations API',
-          customProps: { tags: ['new'] },
         },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
@@ -105,7 +118,6 @@ const sidebars = {
           type: 'doc',
           id: 'client-js/responses',
           label: 'Responses API',
-          customProps: { tags: ['new'] },
         },
         { type: 'doc', id: 'client-js/telemetry', label: 'Telemetry API' },
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
