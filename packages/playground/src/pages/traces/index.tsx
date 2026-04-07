@@ -402,6 +402,7 @@ export default function Traces() {
               href="https://mastra.ai/en/docs/observability/tracing/overview"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Traces documentation"
               tooltipContent="Go to Traces documentation"
             >
               <BookIcon />

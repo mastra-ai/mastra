@@ -4,6 +4,8 @@ import { EntityType } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { SpanScoresList } from './span-scores-list';
 import { SpanScoring } from './span-scoring';
 import { SpanTokenUsage } from './span-token-usage';
@@ -88,6 +90,12 @@ export function SpanDataPanel({
           </TabList>
 
           <TabContent value="details">
+            {isTokenLimitExceeded(span) && (
+              <Alert variant="warning" className="mb-3">
+                <AlertTitle>Token Limit Exceeded</AlertTitle>
+                <AlertDescription as="p">{getTokenLimitMessage(span)}</AlertDescription>
+              </Alert>
+            )}
             {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
             <DataKeysAndValues numOfCol={2}>

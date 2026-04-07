@@ -156,16 +156,8 @@ const mainNavigation: SidebarSection[] = [
         requiredPermission: 'observability:read',
       },
       {
-        name: 'OLD Traces',
-        url: '/observability',
-        icon: <EyeIcon />,
-        isOnMastraPlatform: true,
-        indent: true,
-        requiredPermission: 'observability:read',
-      },
-      {
         name: 'Traces',
-        url: '/traces',
+        url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         indent: true,

@@ -72,7 +72,6 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import Observability from './pages/observability';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
@@ -211,13 +210,12 @@ const routes = [
           ]),
 
       { path: '/logs', element: <Logs /> },
-      { path: '/traces', element: <Traces /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
       { path: '/observability-overview', element: <ObservabilityOverview /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/observability', element: <Traces /> },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {

@@ -151,14 +151,17 @@ export function ObservabilityTracesList({
 
   const handleSpanSelect = useCallback((span: SpanRecord | undefined) => {
     const id = span?.spanId ?? null;
+    const isSameSpan = id === featuredSpanId;
     setFeaturedSpanId(id);
     setFeaturedSpanRecord(span);
-    setFeaturedScore(undefined);
-    setSpanTab('details');
+    if (!isSameSpan) {
+      setFeaturedScore(undefined);
+      setSpanTab('details');
+      onScoreChange?.(null);
+      onSpanTabChange?.('details');
+    }
     onSpanChange?.(id);
-    onScoreChange?.(null);
-    onSpanTabChange?.('details');
-  }, [onSpanChange, onScoreChange, onSpanTabChange]);
+  }, [featuredSpanId, onSpanChange, onScoreChange, onSpanTabChange]);
 
   const handleSpanClose = useCallback(() => {
     setFeaturedSpanId(null);
@@ -198,6 +201,17 @@ export function ObservabilityTracesList({
 
   const { data: traceData } = useTraceSpans(featuredTraceId);
   const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
+
+  const handleEvaluateTrace = useCallback(() => {
+    const rootSpan = traceSpans.find(s => s.parentSpanId == null);
+    if (rootSpan) {
+      setFeaturedSpanId(rootSpan.spanId);
+      setFeaturedSpanRecord(rootSpan);
+      setSpanTab('scoring');
+      onSpanChange?.(rootSpan.spanId);
+      onSpanTabChange?.('scoring');
+    }
+  }, [traceSpans, onSpanChange, onSpanTabChange]);
 
   const timelineSpanIds = useMemo(() => getAllSpanIds(formatHierarchicalSpans(traceSpans)), [traceSpans]);
 
@@ -373,6 +387,7 @@ export function ObservabilityTracesList({
             traceId={featuredTraceId}
             onClose={handleTraceClose}
             onSpanSelect={handleSpanSelect}
+            onEvaluateTrace={handleEvaluateTrace}
             initialSpanId={featuredSpanId}
             onPrevious={handlePreviousTrace}
             onNext={handleNextTrace}

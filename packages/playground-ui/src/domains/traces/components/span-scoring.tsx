@@ -80,7 +80,7 @@ export function SpanScoring({
   if (scorerList.length === 0) {
     return (
       <Notification isVisible={true} dismissible={false}>
-        <InfoIcon /> No eligible scorers have been defined to run.
+        No eligible scorers have been defined to run.
       </Notification>
     );
   }
