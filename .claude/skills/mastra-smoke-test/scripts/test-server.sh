@@ -11,6 +11,14 @@
 
 set -e
 
+# Check required dependencies
+for cmd in curl jq; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "Error: required dependency '$cmd' is not installed."
+    exit 1
+  fi
+done
+
 SERVER_URL="${1:-}"
 AGENT_ID="${2:-weather-agent}"
 MESSAGE="${3:-What is the weather in Paris?}"
@@ -55,14 +63,14 @@ echo ""
 
 # Use jq for safe JSON construction (handles special characters in MESSAGE)
 JSON_BODY=$(jq -n --arg msg "$MESSAGE" '{"messages":[{"role":"user","content":$msg}]}')
-RESPONSE=$(curl -sS --connect-timeout 10 --max-time 60 -w "\n---HTTP_STATUS:%{http_code}---" \
+RESPONSE=$(curl -sS --connect-timeout 10 --max-time 60 -w "\n%{http_code}" \
     -X POST "$SERVER_URL/api/agents/$AGENT_ID/generate" \
     -H "Content-Type: application/json" \
     -d "$JSON_BODY")
 
-# Parse response and status
-BODY=$(echo "$RESPONSE" | sed 's/---HTTP_STATUS:[0-9]*---$//')
-STATUS=$(echo "$RESPONSE" | grep -o 'HTTP_STATUS:[0-9]*' | cut -d: -f2)
+# Parse response and status (status is always last line)
+STATUS=$(printf '%s\n' "$RESPONSE" | tail -n 1)
+BODY=$(printf '%s\n' "$RESPONSE" | sed '$d')
 
 if [ "$STATUS" = "200" ]; then
     echo "✅ Agent response (HTTP $STATUS):"
