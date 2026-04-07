@@ -157,7 +157,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           traverseSpan?.error({ error: err as Error, endSpan: true });
           throw err;
         }
-        traverseSpan?.end({ output: { returned: rerankedResults.length, visited: rerankedResults.length } });
+        traverseSpan?.end({ output: { returned: rerankedResults.length } });
         if (logger) {
           logger.debug('GraphRAG query returned results', { count: rerankedResults.length });
         }

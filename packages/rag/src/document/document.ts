@@ -347,8 +347,6 @@ export class MDocument {
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
 
-    validateChunkParams(strategy, chunkOptions);
-
     const parentSpan = options?.observabilityContext?.tracingContext?.currentSpan;
     const chunkSpan = parentSpan?.createChildSpan({
       type: SpanType.RAG_ACTION,
@@ -363,6 +361,8 @@ export class MDocument {
     });
 
     try {
+      validateChunkParams(strategy, chunkOptions);
+
       // Apply the appropriate chunking strategy
       await this.chunkBy(strategy, chunkOptions);
 
@@ -385,14 +385,14 @@ export class MDocument {
         }
         extractSpan?.end();
       }
+
+      chunkSpan?.end({ output: { chunkCount: this.chunks.length } });
+
+      return this.chunks;
     } catch (err) {
       chunkSpan?.error({ error: err as Error, endSpan: true });
       throw err;
     }
-
-    chunkSpan?.end({ output: { chunkCount: this.chunks.length } });
-
-    return this.chunks;
   }
 
   getDocs(): Chunk[] {

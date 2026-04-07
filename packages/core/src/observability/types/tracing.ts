@@ -508,20 +508,27 @@ export interface RagVectorOperationAttributes extends AIBaseAttributes {
  *
  * Per-call result counts (chunk count, etc.) belong on `output`.
  */
-export interface RagActionAttributes extends AIBaseAttributes {
+export interface RagChunkAction extends AIBaseAttributes {
   /** RAG action kind */
-  action: 'chunk' | 'extract_metadata' | 'rerank';
-  // chunk
+  action: 'chunk';
   /** Chunking strategy / transformer name */
   strategy?: string;
   chunkSize?: number;
   chunkOverlap?: number;
-  // extract_metadata
+}
+
+export interface RagExtractMetadataAction extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'extract_metadata';
   /** Metadata extractor name */
   extractor?: string;
   model?: string;
   provider?: string;
-  // rerank
+}
+
+export interface RagRerankAction extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'rerank';
   /** Number of candidates fed into rerank (input array length) */
   candidateCount?: number;
   /** Configured top-N to keep after reranking */
@@ -529,6 +536,8 @@ export interface RagActionAttributes extends AIBaseAttributes {
   /** Scorer/provider name */
   scorer?: string;
 }
+
+export type RagActionAttributes = RagChunkAction | RagExtractMetadataAction | RagRerankAction;
 
 /**
  * Graph Action attributes - non-RAG, used for any graph operation.
