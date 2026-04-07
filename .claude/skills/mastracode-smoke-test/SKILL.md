@@ -6,7 +6,7 @@ model: claude-opus-4-5
 
 # MastraCode Smoke Test Skill
 
-Creates a new Mastra project using `create-mastra@<tag>` and performs smoke testing of the Mastra Studio using MastraCode's built-in browser tools.
+Creates or uses an existing Mastra project and performs smoke testing of the Mastra Studio using MastraCode's built-in browser tools.
 
 **This skill is for MastraCode with browser support enabled.** It works with either Stagehand or AgentBrowser providers. For Claude Code with external browser tools, use `smoke-test` instead.
 
@@ -15,20 +15,29 @@ Creates a new Mastra project using `create-mastra@<tag>` and performs smoke test
 Activate this skill and provide the parameters:
 
 ```text
+# Create new project
 smoke test with directory ~/projects, name my-test-app, tag latest
 smoke test -d ~/projects -n my-test-app -t alpha --pm pnpm --llm anthropic
+
+# Use existing project
+smoke test --existing-project ~/my-existing-app
+smoke test --existing-project ~/my-app --tag alpha  # Updates deps to alpha
 ```
 
 ## Parameters
 
-| Parameter     | Short | Description                                                                  | Required | Default  |
-| ------------- | ----- | ---------------------------------------------------------------------------- | -------- | -------- |
-| `--directory` | `-d`  | Parent directory where project will be created                               | **Yes**  | -        |
-| `--name`      | `-n`  | Project name (will be created as subdirectory)                               | **Yes**  | -        |
-| `--tag`       | `-t`  | Version tag for create-mastra (e.g., `latest`, `alpha`, `0.10.6`)            | **Yes**  | -        |
-| `--pm`        | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`                             | No       | `npm`    |
-| `--llm`       | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
-| `--db`        |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
+| Parameter            | Short | Description                                                                  | Required | Default  |
+| -------------------- | ----- | ---------------------------------------------------------------------------- | -------- | -------- |
+| `--directory`        | `-d`  | Parent directory where project will be created                               | *        | -        |
+| `--name`             | `-n`  | Project name (will be created as subdirectory)                               | *        | -        |
+| `--existing-project` |       | Path to existing Mastra project (mutually exclusive with --directory/--name) | *        | -        |
+| `--tag`              | `-t`  | Version tag for create-mastra or dependency update (e.g., `latest`, `alpha`) | **       | `latest` |
+| `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`                             | No       | `npm`    |
+| `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
+| `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
+
+\* Either `--directory` + `--name` OR `--existing-project` is required
+\** Required for new projects, optional for existing (updates deps when provided)
 
 ## Prerequisites
 
@@ -41,7 +50,9 @@ If browser tools are not available, run `/browser` to configure browser support.
 
 ## Execution Steps
 
-### Step 1: Create the Mastra Project
+### Step 1: Project Setup
+
+**Option A: Create New Project**
 
 Run the create-mastra command with explicit parameters to avoid interactive prompts:
 
@@ -66,6 +77,29 @@ bunx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <ll
 - `-e` - Include example code
 
 Wait for the installation to complete. This may take 1-2 minutes.
+
+**Option B: Use Existing Project**
+
+```sh
+cd <existing-project-path>
+```
+
+Verify it has:
+- `package.json` with `@mastra/core`
+- `src/mastra/index.ts` with a Mastra instance
+- At least one agent configured
+
+**If `--tag` is provided with existing project**, update dependencies:
+
+```sh
+# Update all @mastra/* packages to the specified tag
+<pm> add @mastra/core@<tag> @mastra/memory@<tag> @mastra/libsql@<tag> mastra@<tag>
+
+# Or for alpha/latest, use the tag directly
+<pm> add @mastra/core@alpha @mastra/memory@alpha mastra@alpha
+```
+
+Only update packages that exist in the project's `package.json`.
 
 ### Storage Backend Selection (--db)
 
@@ -243,15 +277,33 @@ Perform the following smoke tests:
 - [ ] Navigate to `/settings`
 - [ ] Extract/snapshot to verify settings page loads
 
-**Observability Page** (`/observability`)
+**Observability - Traces** (`/observability`)
 
 - [ ] Navigate to `/observability`
-- [ ] Extract/snapshot to check for traces (may be empty initially)
+- [ ] Extract/snapshot to check for traces
+- [ ] Verify traces from agent chat (Step 5.2) appear
+- [ ] Click on a trace to view details
+- [ ] Verify trace shows: agent name, input/output, duration, status
+
+**Traces Verification Checklist:**
+
+| Action | Expected Trace |
+|--------|---------------|
+| Agent chat | `agent run: 'weather-agent'` |
+| Tool execution | `tool call: 'get-weather'` |
+| Workflow run | `workflow run: 'weather-workflow'` |
+| Scorer execution | `scorer run: '<scorer-name>'` (if scorers configured) |
+
+If traces are missing:
+1. Check that `@mastra/observability` is installed
+2. Verify `observability` is configured in `src/mastra/index.ts`
+3. Check browser console for export errors
 
 **Logs Page** (`/logs`)
 
 - [ ] Navigate to `/logs`
 - [ ] Extract/snapshot to check for server logs
+- [ ] Verify logs show recent activity
 
 **MCP Servers Page** (`/mcps`)
 
@@ -272,6 +324,25 @@ Provide a summary:
 - Total tests passed/failed
 - Any errors encountered
 - Recommendations for issues found
+
+## Test Verification Checklist
+
+| Category | Test | Expected Result | Status |
+|----------|------|-----------------|--------|
+| **Setup** | Project created/found | Directory exists with package.json | ⬜ |
+| **Setup** | Dependencies installed | node_modules present | ⬜ |
+| **Setup** | Dev server starts | localhost:4111 accessible | ⬜ |
+| **Agents** | Agent list loads | At least one agent shown | ⬜ |
+| **Agents** | Agent chat works | Agent responds to message | ⬜ |
+| **Tools** | Tool list loads | Tools displayed | ⬜ |
+| **Tools** | Tool execution | Returns valid JSON output | ⬜ |
+| **Workflows** | Workflow list loads | Workflows displayed | ⬜ |
+| **Workflows** | Workflow run | Executes successfully | ⬜ |
+| **Scorers** | Scorers list loads | Scorers displayed | ⬜ |
+| **Traces** | Traces page loads | No errors | ⬜ |
+| **Traces** | Agent traces visible | Traces from chat appear | ⬜ |
+| **Traces** | Tool traces visible | Traces from tool calls appear | ⬜ |
+| **Logs** | Logs page loads | Server logs visible | ⬜ |
 
 ## Studio Routes Reference
 

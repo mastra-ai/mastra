@@ -33,6 +33,7 @@ deploy test --env production --existing-project ~/my-existing-app
 | `--skip-browser`     |       | Skip browser-based UI testing, use curl only                   | No       | `false`      |
 | `--test`             |       | Run specific test: `studio`, `server`, `traces`, `tools`, `workflows`, `account`, `invites`, `rbac` | No | (full test) |
 | `--byok`             |       | Test bring-your-own-key flow (requires user's API keys)        | No       | `false`      |
+| `--browser-agent`    |       | Add a browser-enabled agent to the project for testing         | No       | `false`      |
 
 ## Prerequisites
 
@@ -127,6 +128,49 @@ Verify it has:
 - `package.json` with `@mastra/core`
 - `src/mastra/index.ts` with a Mastra instance
 - At least one agent configured
+
+### Browser Agent Setup (--browser-agent)
+
+If `--browser-agent` flag is provided, add a browser-enabled agent to the project:
+
+1. **Install browser packages**:
+
+```bash
+<pm> add @mastra/stagehand @mastra/memory
+```
+
+2. **Create browser-agent.ts** in `src/mastra/agents/`:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { StagehandBrowser } from '@mastra/stagehand';
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  instructions: `You are a helpful assistant that can browse the web to find information.`,
+  model: '<provider>/<model>', // e.g., 'openai/gpt-4o'
+  memory: new Memory(),
+  browser: new StagehandBrowser({
+    headless: true, // Use headless for deployed environments
+  }),
+});
+```
+
+3. **Update index.ts** to register the browser agent:
+
+```typescript
+import { browserAgent } from './agents/browser-agent';
+
+// In Mastra config:
+agents: { weatherAgent, browserAgent },
+```
+
+4. **Test browser agent after deploy**:
+   - Navigate to deployed Studio → Agents → Browser Agent
+   - Send: "Go to example.com and tell me what you see"
+   - Verify agent browses and returns page content
 
 ### Step 2: Configure Environment
 
