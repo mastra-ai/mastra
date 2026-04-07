@@ -542,6 +542,10 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
+/**
+ * @deprecated The server returns `QueryResult[]` directly, not a wrapped object.
+ * Use `QueryResult[]` from `@mastra/core/vector` instead.
+ */
 export interface QueryVectorResponse {
   results: QueryResult[];
 }
