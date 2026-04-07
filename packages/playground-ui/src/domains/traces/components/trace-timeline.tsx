@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from 'react';
 import type { UISpan } from '../types';
 import { TraceTimelineSpan } from '@/domains/logs/components/trace/trace-timeline-span';
 import { Spinner } from '@/ds/components/Spinner';
@@ -10,7 +11,7 @@ type TraceTimelineProps = {
   isLoading?: boolean;
   fadedTypes?: string[];
   expandedSpanIds?: string[];
-  setExpandedSpanIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
   featuredSpanIds?: string[];
 };
 

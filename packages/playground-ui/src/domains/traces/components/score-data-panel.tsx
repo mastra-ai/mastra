@@ -1,6 +1,6 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { format } from 'date-fns/format';
-import { BracesIcon, FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText } from 'lucide-react';
+import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText } from 'lucide-react';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { ButtonsGroup } from '@/index';
@@ -87,7 +87,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
 
         <div className="grid gap-3 mt-3">
           <DataPanel.CodeSection
-            title={`Score: ${Number.isNaN(score.score) ? 'n/a' : score.score}`}
+            title={`Score: ${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}
             dialogTitle={buildDialogTitle('Score', <GaugeIcon />, score)}
             icon={<GaugeIcon />}
             codeStr={
@@ -100,13 +100,13 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             title="Input"
             dialogTitle={buildDialogTitle('Input', <FileInputIcon />, score)}
             icon={<FileInputIcon />}
-            codeStr={JSON.stringify(score.input || null, null, 2)}
+            codeStr={JSON.stringify(score.input ?? null, null, 2)}
           />
           <DataPanel.CodeSection
             title="Output"
             dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, score)}
             icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(score.output || null, null, 2)}
+            codeStr={JSON.stringify(score.output ?? null, null, 2)}
           />
           <DataPanel.CodeSection
             title="Preprocess Prompt"

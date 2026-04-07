@@ -10,8 +10,15 @@ type MessageLike = { role?: string; content?: unknown };
 export function getInputPreview(input: unknown, maxLength = 100): string {
   if (input == null) return '';
 
-  if (Array.isArray(input)) {
-    const messages = input as MessageLike[];
+  // Unwrap legacy { messages: [...] } wrapper from agent_run spans
+  const messageArray = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object' && !Array.isArray(input) && Array.isArray((input as any).messages)
+      ? (input as any).messages
+      : null;
+
+  if (messageArray) {
+    const messages = messageArray as MessageLike[];
     const userMessages = messages
       .filter(m => m?.role === 'user')
       .map(m => {

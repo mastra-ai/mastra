@@ -97,9 +97,7 @@ export function TracesToolbar({
       cats.push({
         id: 'status',
         label: 'Status',
-        values: [
-          { value: 'error', label: 'Error only' },
-        ],
+        values: [{ value: 'error', label: 'Error only' }],
         mode: 'multi',
       });
     }
@@ -260,16 +258,18 @@ export function TracesToolbar({
     ],
   );
 
-  const hasActiveFilters = useMemo(
-    () => Object.values(filterState).some(v => v.length > 0),
-    [filterState],
-  );
+  const hasActiveFilters = useMemo(() => Object.values(filterState).some(v => v.length > 0), [filterState]);
 
   return (
     <div className={cn('grid gap-3')}>
       <div className={cn('flex items-center gap-3')}>
         {onSearchChange && (
-          <ListSearch onSearch={onSearchChange} size="md" label="Search traces" placeholder="Search name, ID, content..." />
+          <ListSearch
+            onSearch={onSearchChange}
+            size="md"
+            label="Search traces"
+            placeholder="Search name, ID, content..."
+          />
         )}
 
         <DateTimeRangePicker

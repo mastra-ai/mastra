@@ -101,6 +101,13 @@ export function ObservabilityTracesList({
     }
   }, [initialSpanId]);
 
+  // Sync with external initialSpanTab
+  useEffect(() => {
+    if (initialSpanTab !== undefined) {
+      setSpanTab(initialSpanTab);
+    }
+  }, [initialSpanTab]);
+
   // Resolve initialScoreId once scores data loads
   useEffect(() => {
     if (initialScoreId && spanScoresData?.scores && !featuredScore) {
@@ -149,19 +156,22 @@ export function ObservabilityTracesList({
     onSpanTabChange?.('details');
   }, [onTraceClick, onSpanChange, onScoreChange, onSpanTabChange]);
 
-  const handleSpanSelect = useCallback((span: SpanRecord | undefined) => {
-    const id = span?.spanId ?? null;
-    const isSameSpan = id === featuredSpanId;
-    setFeaturedSpanId(id);
-    setFeaturedSpanRecord(span);
-    if (!isSameSpan) {
-      setFeaturedScore(undefined);
-      setSpanTab('details');
-      onScoreChange?.(null);
-      onSpanTabChange?.('details');
-    }
-    onSpanChange?.(id);
-  }, [featuredSpanId, onSpanChange, onScoreChange, onSpanTabChange]);
+  const handleSpanSelect = useCallback(
+    (span: SpanRecord | undefined) => {
+      const id = span?.spanId ?? null;
+      const isSameSpan = id === featuredSpanId;
+      setFeaturedSpanId(id);
+      setFeaturedSpanRecord(span);
+      if (!isSameSpan) {
+        setFeaturedScore(undefined);
+        setSpanTab('details');
+        onScoreChange?.(null);
+        onSpanTabChange?.('details');
+      }
+      onSpanChange?.(id);
+    },
+    [featuredSpanId, onSpanChange, onScoreChange, onSpanTabChange],
+  );
 
   const handleSpanClose = useCallback(() => {
     setFeaturedSpanId(null);
@@ -173,15 +183,21 @@ export function ObservabilityTracesList({
     onSpanTabChange?.('details');
   }, [onSpanChange, onScoreChange, onSpanTabChange]);
 
-  const handleSpanTabChange = useCallback((tab: string) => {
-    setSpanTab(tab as SpanTab);
-    onSpanTabChange?.(tab as SpanTab);
-  }, [onSpanTabChange]);
+  const handleSpanTabChange = useCallback(
+    (tab: string) => {
+      setSpanTab(tab as SpanTab);
+      onSpanTabChange?.(tab as SpanTab);
+    },
+    [onSpanTabChange],
+  );
 
-  const handleScoreSelect = useCallback((score: ScoreRowData) => {
-    setFeaturedScore(score);
-    onScoreChange?.(score.id);
-  }, [onScoreChange]);
+  const handleScoreSelect = useCallback(
+    (score: ScoreRowData) => {
+      setFeaturedScore(score);
+      onScoreChange?.(score.id);
+    },
+    [onScoreChange],
+  );
 
   const handleScoreClose = useCallback(() => {
     setFeaturedScore(undefined);
@@ -410,12 +426,7 @@ export function ObservabilityTracesList({
               onTabChange={handleSpanTabChange}
             />
           )}
-          {featuredScore && (
-            <ScoreDataPanel
-              score={featuredScore}
-              onClose={handleScoreClose}
-            />
-          )}
+          {featuredScore && <ScoreDataPanel score={featuredScore} onClose={handleScoreClose} />}
         </div>
       )}
     </div>

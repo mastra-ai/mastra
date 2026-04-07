@@ -25,13 +25,13 @@ export function DataListPagination({ currentPage, hasMore, onNextPage, onPrevPag
           )}
         >
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <button onClick={onPrevPage}>
+            <button type="button" onClick={onPrevPage}>
               <ArrowLeftIcon />
               Previous
             </button>
           )}
           {hasMore && (
-            <button onClick={onNextPage}>
+            <button type="button" onClick={onNextPage}>
               Next
               <ArrowRightIcon />
             </button>

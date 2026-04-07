@@ -188,6 +188,10 @@ export default function Traces() {
       if (t.name?.toLowerCase().includes(q)) return true;
       if (t.entityId?.toLowerCase().includes(q)) return true;
       if (t.entityName?.toLowerCase().includes(q)) return true;
+      if (t.input != null) {
+        const inputStr = typeof t.input === 'string' ? t.input : JSON.stringify(t.input);
+        if (inputStr.toLowerCase().includes(q)) return true;
+      }
       const meta = t.metadata;
       if (meta && typeof meta === 'object') {
         for (const val of Object.values(meta)) {
@@ -309,7 +313,7 @@ export default function Traces() {
 
   const handleReset = () => {
     setSearchParams({ entity: 'all' }, { replace: true });
-    setSelectedDateFrom(undefined);
+    setSelectedDateFrom(new Date(Date.now() - 24 * 60 * 60 * 1000));
     setSelectedDateTo(undefined);
     setGroupByThread(false);
     setSearchQuery('');

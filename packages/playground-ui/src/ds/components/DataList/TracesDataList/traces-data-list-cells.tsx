@@ -144,11 +144,13 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // StatusCell
 // ---------------------------------------------------------------------------
 
+import { Colors } from '@/ds/tokens/colors';
+
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: '#22c55e' },
-  ok: { label: 'OK', color: '#22c55e' },
-  error: { label: 'ERR', color: '#f87171' },
-  unset: { label: '-', color: '#71717a' },
+  completed: { label: 'OK', color: Colors.accent2 },
+  ok: { label: 'OK', color: Colors.accent2 },
+  error: { label: 'ERR', color: Colors.error },
+  unset: { label: '-', color: Colors.neutral4 },
 };
 
 export interface TracesDataListStatusCellProps {

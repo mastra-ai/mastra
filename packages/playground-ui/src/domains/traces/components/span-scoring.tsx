@@ -52,11 +52,11 @@ export function SpanScoring({
   const isWaiting = isPending || isLoadingScorers;
 
   const handleStartScoring = () => {
-    if (selectedScorer) {
+    if (selectedScorer && traceId) {
       setNotificationIsVisible(false);
       triggerScorer({
         scorerName: selectedScorer,
-        traceId: traceId || '',
+        traceId,
         spanId,
       });
     }
@@ -67,7 +67,7 @@ export function SpanScoring({
     setNotificationIsVisible(false);
   };
 
-  const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
+  const selectedScorerDescription = scorerList.find(s => s.id === selectedScorer)?.description || '';
 
   if (scorers === undefined && !isLoadingScorers) {
     return (
@@ -77,7 +77,7 @@ export function SpanScoring({
     );
   }
 
-  if (scorerList.length === 0) {
+  if (!isLoadingScorers && scorerList.length === 0) {
     return (
       <Notification isVisible={true} dismissible={false}>
         No eligible scorers have been defined to run.

@@ -5,11 +5,11 @@ import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
-import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { SpanScoresList } from './span-scores-list';
 import { SpanScoring } from './span-scoring';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
@@ -86,7 +86,9 @@ export function SpanDataPanel({
         <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
           <TabList>
             <Tab value="details">Details</Tab>
-            <Tab value="scoring">Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}</Tab>
+            <Tab value="scoring">
+              Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}
+            </Tab>
           </TabList>
 
           <TabContent value="details">

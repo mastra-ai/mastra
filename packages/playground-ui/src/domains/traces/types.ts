@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { EntityType } from '@mastra/core/observability';
 
 export type UISpan = {
@@ -12,7 +13,7 @@ export type UISpan = {
 };
 
 export type UISpanStyle = {
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   color?: string;
   label?: string;
   bgColor?: string;

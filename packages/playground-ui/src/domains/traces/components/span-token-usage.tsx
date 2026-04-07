@@ -72,7 +72,15 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   };
 
   const usageKeyOrder = isV5
-    ? ['totalTokens', 'inputTokens', 'outputTokens', 'reasoningTokens', 'cachedInputTokens', 'inputDetails', 'outputDetails']
+    ? [
+        'totalTokens',
+        'inputTokens',
+        'outputTokens',
+        'reasoningTokens',
+        'cachedInputTokens',
+        'inputDetails',
+        'outputDetails',
+      ]
     : ['totalTokens', 'promptTokens', 'completionTokens'];
 
   const usageAsArray = Object.entries(usage)
