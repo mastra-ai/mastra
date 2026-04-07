@@ -576,11 +576,9 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
 
 function formatObserverDate(createdAt?: Date): string {
   return createdAt
-    ? createdAt.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-      })
+    ? `${createdAt.toLocaleDateString('en-US', {
+        month: 'short',
+      })} ${createdAt.getDate()} ${createdAt.getFullYear()}`
     : '';
 }
 
@@ -730,7 +728,7 @@ function formatObserverLines(
 
   for (const line of lines) {
     if (line.date && line.date !== previousDate) {
-      output.push(`Date ${line.date}:`);
+      output.push(`${line.date}:`);
       previousDate = line.date;
       previousTime = undefined;
     }

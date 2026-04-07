@@ -1227,7 +1227,7 @@ describe('Observer Agent Helpers', () => {
       const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
 
       const formatted = formatMessagesForObserver(messages);
-      expect(formatted).toContain('Date ');
+      expect(formatted).toMatch(/^[A-Z][a-z]{2} \d{1,2} \d{4}:/);
       expect(formatted).toContain('User');
       expect(formatted).toContain('Hello');
       expect(formatted).toContain('Assistant');
@@ -1251,8 +1251,8 @@ describe('Observer Agent Helpers', () => {
       second.createdAt = new Date('2024-12-05T12:01:00Z');
 
       const formatted = formatMessagesForObserver([first, second]);
-      expect((formatted.match(/Date 12\/4\/2024:/g) ?? []).length).toBe(1);
-      expect((formatted.match(/Date 12\/5\/2024:/g) ?? []).length).toBe(1);
+      expect((formatted.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((formatted.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
       expect(formatted).toMatch(/Assistant \([^)]*\): first/);
       expect(formatted).toContain('Reasoning: thinking');
       expect(formatted).toMatch(/Assistant \([^)]*\): second/);
@@ -1426,10 +1426,70 @@ describe('Observer Agent Helpers', () => {
         .map((part: any) => part.text)
         .join('\n');
 
-      expect((joinedText.match(/Date 12\/4\/2024:/g) ?? []).length).toBe(1);
-      expect((joinedText.match(/Date 12\/5\/2024:/g) ?? []).length).toBe(1);
+      expect((joinedText.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((joinedText.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
       expect(joinedText).not.toContain('---');
       expect(joinedText).toContain('\nUser: later');
+    });
+
+    it('should render mixed content parts into the exact observer history text the model sees', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date(2024, 11, 4, 10, 30);
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'I found two candidate vendors.', createdAt: new Date(2024, 11, 4, 10, 30) },
+          {
+            type: 'reasoning',
+            reasoning: 'Comparing price and delivery windows.',
+            createdAt: new Date(2024, 11, 4, 10, 30),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+              result: { topVendor: 'Acme Print', etaDays: 3 },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'file',
+            data: 'https://example.com/quote.pdf',
+            mimeType: 'application/pdf',
+            filename: 'quote.pdf',
+            createdAt: new Date(2024, 11, 5, 9, 0),
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([assistant]) as any;
+      const textParts = historyMessage.content.filter((part: any) => part.type === 'text');
+
+      expect(textParts[0].text).toContain('## New Message History to Observe');
+      expect(textParts[1].text).toBe(
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+      );
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/quote.pdf',
+          mimeType: 'application/pdf',
+          filename: 'quote.pdf',
+        }),
+      );
     });
 
     it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
@@ -4010,7 +4070,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     const formatted = formatMessagesForObserver([msg]);
 
     // Should include the date for temporal context
-    expect(formatted).toContain('Date 12/4/2024:');
+    expect(formatted).toContain('Dec 4 2024:');
   });
 
   it('observer system prompt should require Current Task section', () => {
