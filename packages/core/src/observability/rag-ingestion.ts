@@ -19,11 +19,15 @@
  *
  *  - **Duration**: every span has start/end, so per-operation latency
  *    falls out for free.
- *  - **Embedding cost**: `RAG_EMBEDDING` spans expose `attributes.usage`
- *    using the same `UsageStats` shape as `MODEL_GENERATION`, so any
- *    existing LLM cost-extraction pipeline that parses `usage.inputTokens`
- *    handles embeddings uniformly. Cost dimensions are
- *    `{model, provider, mode}` (mode is `'ingest'` or `'query'`).
+ *  - **Embedding cost**: `RAG_EMBEDDING` spans (and only `RAG_EMBEDDING`
+ *    spans) expose `attributes.usage` using the same `UsageStats` shape as
+ *    `MODEL_GENERATION`, so any existing LLM cost-extraction pipeline that
+ *    parses `usage.inputTokens` handles embeddings uniformly. Cost
+ *    dimensions are `{model, provider, mode}` (mode is `'ingest'` or
+ *    `'query'`). Token counts are deliberately NOT duplicated on the
+ *    `RAG_INGESTION` root — aggregating at the root would double-count
+ *    when summing child spans. Mirrors how `AGENT_RUN` does not carry
+ *    aggregated `MODEL_GENERATION` usage.
  *  - **Vector store throughput**: `RAG_VECTOR_OPERATION` spans carry
  *    `{operation, store, indexName}` as attributes; result counts live on
  *    `output` (e.g. `output.returned`, `output.vectorCount`).

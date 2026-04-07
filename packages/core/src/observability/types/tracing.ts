@@ -440,8 +440,11 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
  *
  * Attributes are stable, low-cardinality dimensions describing the run.
  * Per-run results (final chunk count, etc.) belong on the span's `output`.
- * Token usage for cost calculation is exposed via `usage` so existing
- * `UsageStats`-aware exporters work without changes.
+ *
+ * Note: token usage / cost lives ONLY on `RAG_EMBEDDING` child spans.
+ * Aggregating at the root would double-count when an exporter sums child
+ * spans. Mirrors how `AGENT_RUN` does not carry aggregated `MODEL_GENERATION`
+ * usage.
  */
 export interface RagIngestionAttributes extends AIBaseAttributes {
   /** User-supplied pipeline name */
@@ -456,8 +459,6 @@ export interface RagIngestionAttributes extends AIBaseAttributes {
   embeddingModel?: string;
   /** Embedding model provider */
   embeddingProvider?: string;
-  /** Aggregate token usage across the run (sum of all RAG_EMBEDDING children). */
-  usage?: UsageStats;
 }
 
 /**
