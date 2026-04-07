@@ -89,6 +89,71 @@ export function truncateString(s: string, maxChars: number): string {
   return s.slice(0, maxChars) + '…[truncated]';
 }
 
+export type SerializedMapEntry = [keyType: string, key: any, value: any];
+
+export interface SerializedMap {
+  __type: 'Map';
+  __map_entries: SerializedMapEntry[];
+  __truncated?: string;
+}
+
+function formatSerializationError(error: unknown): string {
+  return `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+}
+
+function getMapKeyType(key: unknown): string {
+  if (key === null) {
+    return 'null';
+  }
+  if (key instanceof Date) {
+    return 'date';
+  }
+  if (Array.isArray(key)) {
+    return 'array';
+  }
+  if (key instanceof Map) {
+    return 'map';
+  }
+  if (key instanceof Set) {
+    return 'set';
+  }
+  if (key instanceof Error) {
+    return 'error';
+  }
+
+  return typeof key;
+}
+
+function restoreSerializedMapKey(keyType: string, key: any): unknown {
+  switch (keyType) {
+    case 'undefined':
+      return undefined;
+    case 'null':
+      return null;
+    case 'bigint':
+      return typeof key === 'string' && key.endsWith('n') ? BigInt(key.slice(0, -1)) : key;
+    case 'date':
+      return typeof key === 'string' ? new Date(key) : key;
+    default:
+      return key;
+  }
+}
+
+export function isSerializedMap(value: unknown): value is SerializedMap {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as SerializedMap).__type === 'Map' &&
+    Array.isArray((value as SerializedMap).__map_entries)
+  );
+}
+
+export function reconstructSerializedMap(value: SerializedMap): Map<unknown, unknown> {
+  return new Map(
+    value.__map_entries.map(([keyType, key, mapValue]) => [restoreSerializedMapKey(keyType, key), mapValue]),
+  );
+}
+
 /**
  * Detect if an object is a JSON Schema.
  * Looks for typical JSON Schema markers like $schema, type with properties, etc.
@@ -273,40 +338,94 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       // Done inside the try so the ancestor set is cleaned up in finally,
       // which also means cycles via `cause` are caught.
       if (val instanceof Error) {
-        const cleanedError: Record<string, any> = {
-          name: val.name,
-          message: val.message ? truncateString(val.message, maxStringLength) : undefined,
-        };
-        if (typeof val.stack === 'string') {
-          cleanedError.stack = truncateString(val.stack, maxStringLength);
+        let errorName: unknown;
+        let errorMessage: unknown;
+        let errorStack: unknown;
+        let rawCause: unknown;
+        let causeReadFailed = false;
+
+        try {
+          errorName = val.name;
+        } catch (error) {
+          errorName = formatSerializationError(error);
         }
-        if ((val as any).cause !== undefined) {
+
+        try {
+          errorMessage = val.message;
+        } catch (error) {
+          errorMessage = formatSerializationError(error);
+        }
+
+        try {
+          errorStack = val.stack;
+        } catch (error) {
+          errorStack = formatSerializationError(error);
+        }
+
+        try {
+          rawCause = (val as any).cause;
+        } catch (error) {
+          causeReadFailed = true;
+          rawCause = formatSerializationError(error);
+        }
+
+        const cleanedError: Record<string, any> = {
+          name: typeof errorName === 'string' ? truncateString(errorName, maxStringLength) : errorName,
+          message: typeof errorMessage === 'string' ? truncateString(errorMessage, maxStringLength) : errorMessage,
+        };
+        if (typeof errorStack === 'string') {
+          cleanedError.stack = truncateString(errorStack, maxStringLength);
+        } else if (errorStack !== undefined) {
+          cleanedError.stack = errorStack;
+        }
+        if (causeReadFailed) {
+          cleanedError.cause = rawCause;
+        } else if (rawCause !== undefined) {
           try {
-            cleanedError.cause = helper((val as any).cause, depth + 1);
+            cleanedError.cause = helper(rawCause, depth + 1);
           } catch (error) {
-            cleanedError.cause = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+            cleanedError.cause = formatSerializationError(error);
           }
         }
         return cleanedError;
       }
 
-      // Handle Map - convert to a plain object of entries.
+      // Handle Map - emit a tagged wrapper so key type/value identity is preserved.
       if (val instanceof Map) {
-        const cleanedMap: Record<string, any> = {};
+        const cleanedMap: SerializedMap = { __type: 'Map', __map_entries: [] };
         let mapKeyCount = 0;
-        const totalMapSize = val.size;
+        let omittedMapEntries = 0;
         for (const [mapKey, mapVal] of val) {
+          if (typeof mapKey === 'string' && stripSet.has(mapKey)) {
+            continue;
+          }
+
           if (mapKeyCount >= maxObjectKeys) {
-            cleanedMap['__truncated'] = `${totalMapSize - mapKeyCount} more keys omitted`;
-            break;
+            omittedMapEntries++;
+            continue;
           }
-          const keyStr = typeof mapKey === 'string' ? mapKey : String(mapKey);
+
+          const mapKeyType = getMapKeyType(mapKey);
+          let cleanedMapKey: any;
+          let cleanedMapValue: any;
+
           try {
-            cleanedMap[keyStr] = helper(mapVal, depth + 1);
+            cleanedMapKey = helper(mapKey, depth + 1);
           } catch (error) {
-            cleanedMap[keyStr] = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+            cleanedMapKey = formatSerializationError(error);
           }
+
+          try {
+            cleanedMapValue = helper(mapVal, depth + 1);
+          } catch (error) {
+            cleanedMapValue = formatSerializationError(error);
+          }
+
+          cleanedMap.__map_entries.push([mapKeyType, cleanedMapKey, cleanedMapValue]);
           mapKeyCount++;
+        }
+        if (omittedMapEntries > 0) {
+          cleanedMap.__truncated = `${omittedMapEntries} more keys omitted`;
         }
         return cleanedMap;
       }
@@ -321,7 +440,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           try {
             cleanedSet.push(helper(item, depth + 1));
           } catch (error) {
-            cleanedSet.push(`[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`);
+            cleanedSet.push(formatSerializationError(error));
           }
           i++;
         }
@@ -339,7 +458,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           try {
             cleaned.push(helper(val[i], depth + 1));
           } catch (error) {
-            cleaned.push(`[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`);
+            cleaned.push(formatSerializationError(error));
           }
         }
 
@@ -413,7 +532,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
           keyCount++;
         } catch (error) {
-          cleaned[key] = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+          cleaned[key] = formatSerializationError(error);
           keyCount++;
         }
       }
