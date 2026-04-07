@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fixed the client JS Responses types to allow omitting the model override. ([#15140](https://github.com/mastra-ai/mastra/pull/15140))
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.13.1
 
 ### Patch Changes

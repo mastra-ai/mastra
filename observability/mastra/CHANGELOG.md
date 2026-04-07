@@ -1,5 +1,47 @@
 # @mastra/observability
 
+## 1.8.0-alpha.0
+
+### Minor Changes
+
+- Added CloudExporter support for Mastra Observability logs, metrics, scores, and feedback. ([#15124](https://github.com/mastra-ai/mastra/pull/15124))
+
+  CloudExporter now batches and uploads all Mastra Observability signals to Mastra Cloud, not just tracing spans.
+
+  This includes a breaking change to the CloudExporter endpoint format. We now pass a base endpoint URL and let let the exporter derive the standard publish paths automatically.
+
+  ```ts
+  import { CloudExporter, Observability } from '@mastra/observability';
+
+  const observability = new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          new CloudExporter({
+            endpoint: 'https://collector.example.com',
+          }),
+        ],
+      },
+    },
+  });
+
+  // Traces, logs, metrics, scores, and feedback now all publish through CloudExporter.
+  ```
+
+  After updating the exporter endpoint config, the exporter will continue to work for traces, and the same exporter will now also publish structured logs, auto-extracted metrics, scores, and feedback records.
+
+### Patch Changes
+
+- ObservabilityBus now honors per-instance `serializationOptions` (maxStringLength, maxDepth, maxArrayLength, maxObjectKeys) when deep-cleaning log/metric/score/feedback payloads, matching the behavior of tracing spans. Previously these signals always used the built-in defaults regardless of user configuration. ([#15138](https://github.com/mastra-ai/mastra/pull/15138))
+
+- Apply `deepClean()` to all observability signals (logs, metrics, scores, feedback) before fanning out to exporters and bridges. Previously only tracing spans were deep-cleaned at construction time, leaving free-form payload fields on other signals (e.g. `log.data`, `log.metadata`, `metric.metadata`, `metric.costContext.costMetadata`, `score.metadata`, `feedback.metadata`) susceptible to circular references, oversized strings, and other non-serializable values. Sanitization now happens centrally in `ObservabilityBus.emit()` so every signal leaving the bus is bounded and JSON-safe. ([#15135](https://github.com/mastra-ai/mastra/pull/15135))
+
+- `deepClean()` now preserves data for `Map`, `Set`, and richer `Error` objects. Previously Maps and Sets were serialized as empty `{}` (entries silently dropped) and Errors only kept `name`/`message`. Maps are now converted to plain objects of entries, Sets to arrays (both respecting `maxObjectKeys`/`maxArrayLength` and cycle detection), and Errors additionally preserve `stack` and recursively cleaned `cause`. ([#15136](https://github.com/mastra-ai/mastra/pull/15136))
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.7.3
 
 ### Patch Changes
