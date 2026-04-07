@@ -8,7 +8,7 @@ packages:
 
 # Agents
 
-The editor lets subject-matter experts, prompt engineers, and product teams change a code-defined agent's behavior without modifying source files. They can update instructions, swap tools, and tune variables — then test the result immediately. Your code stays unchanged as the baseline, and every override is versioned so you can roll back or compare changes at any point. You can manage overrides through the Studio UI or programmatically through the server API and Client SDK.
+The editor lets subject-matter experts, prompt engineers, and product teams change a code-defined agent's behavior without modifying source files. They can update instructions, swap tools, and tune variables, then test the result immediately. Your code stays unchanged as the baseline, and every override is versioned so you can roll back or compare changes at any point. You can manage overrides through the Studio UI or programmatically through the server API and Client SDK.
 
 ## When to use editor agents
 
@@ -67,8 +67,8 @@ Fields like the agent's `id`, `name`, and `model` come from your code and can't 
 
 When you call `mastra.getAgentById()`, Mastra checks if a stored override exists for the agent. If one is found, the stored instructions and tools are merged with the code defaults:
 
-- **Instructions**: The stored instruction blocks replace the code-defined instructions.
-- **Tools**: Stored tools are merged with code-defined tools. The merge order is: code tools, then registry tools, then MCP tools, then integration tools. If a stored tool has the same key as a code tool, the stored version takes priority.
+- **Instructions**: Stored instruction blocks replace the code-defined instructions.
+- **Tools**: Stored tools are merged with code-defined tools. The merge order is code tools, then registry tools, then MCP tools, then integration tools. If a stored tool has the same key as a code tool, the stored version takes priority.
 
 No extra code is needed — `mastra.getAgentById()` handles this automatically when an editor is configured.
 
@@ -76,7 +76,7 @@ No extra code is needed — `mastra.getAgentById()` handles this automatically w
 
 By default, `mastra.getAgentById()` loads the published (active) version of the stored override. You can request a specific version — useful for testing a draft before publishing, running A/B experiments, or pinning a user to a known-good configuration:
 
-```typescript
+```typescript title="Version selection"
 // Load the published version (default)
 const agent = mastra.getAgentById('support-agent')
 
@@ -93,7 +93,7 @@ const agent = mastra.getAgentById('support-agent', {
 
 When calling the agent through the Mastra server, pass version parameters as query strings:
 
-```bash
+```bash title="Version selection via API"
 # Published version (default)
 curl http://localhost:4111/agents/support-agent
 
@@ -108,7 +108,7 @@ See the [Editor overview](/docs/editor/overview#versioning) for the full version
 
 ## Related
 
-- [Editor overview](/docs/editor/overview) — setup and versioning.
-- [Prompts](/docs/editor/prompts) — reusable instruction templates for agent prompts.
-- [Tools](/docs/editor/tools) — add integration tools, MCP clients, and override descriptions.
-- [Agents reference](/reference/agents/agent) — full Agent class reference.
+- [Editor overview](/docs/editor/overview): Setup and versioning.
+- [Prompts](/docs/editor/prompts): Reusable instruction templates for agent prompts.
+- [Tools](/docs/editor/tools): Add integration tools, MCP clients, and override descriptions.
+- [Agents reference](/reference/agents/agent): Full Agent class reference.

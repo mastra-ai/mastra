@@ -10,11 +10,11 @@ packages:
 
 The editor gives you three ways to add tools to agents:
 
-- **Code tools** — tools already registered in your Mastra instance.
-- **Integration providers** — third-party tool platforms like Composio and Arcade.
-- **MCP clients** — tools from MCP servers, configured as reusable client definitions.
+- **Code tools**: Tools already registered in your Mastra instance.
+- **Integration providers**: Third-party tool platforms like Composio and Arcade.
+- **MCP clients**: Tools from MCP servers, configured as reusable client definitions.
 
-You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs, add tools to agents, and test different tool combinations — all without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes, compare versions, and experiment safely.
+You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs, add tools to agents, and test different tool combinations without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes, compare versions, and experiment safely.
 
 ## When to use editor tools
 
@@ -29,7 +29,7 @@ Use the editor to manage tools when you want to:
 
 ## Description overrides
 
-Every tool — regardless of source — can have its description overridden at the agent level. This changes the description the agent sees during tool selection without modifying the original tool definition.
+Every tool, regardless of source, can have its description overridden at the agent level. This changes the description the agent sees during tool selection without modifying the original tool definition.
 
 This is useful when you want to:
 
@@ -37,7 +37,7 @@ This is useful when you want to:
 - Add instructions about when or how to use a tool.
 - Clarify ambiguous tool descriptions.
 
-In the Studio, click a tool in the agent's tool list and edit the **Description** field. The override applies only to that agent.
+In the Studio, select a tool in the agent's tool list and edit the **Description** field. The override applies only to that agent.
 
 ## Display conditions
 
@@ -119,7 +119,7 @@ Arcade tools use a `Toolkit.ToolName` format (for example, `Github.GetRepository
 
 1. Open an agent's edit page in the Studio.
 1. Go to the **Tools** section.
-1. Click **Add integration tool** and pick a provider.
+1. Select **Add integration tool** and pick a provider.
 1. Browse toolkits or search for a specific tool.
 1. Select the tools you want and save.
 
@@ -154,7 +154,7 @@ MCP client references in an agent can have display conditions, just like [prompt
 ### Creating an MCP client in the Studio
 
 1. Go to the **MCP** tab in the Studio.
-1. Click **Create MCP client**.
+1. Select **Create MCP client**.
 1. Choose a transport type (stdio or HTTP).
 1. Fill in the connection details.
 1. Test the connection and save.
@@ -163,7 +163,7 @@ MCP client references in an agent can have display conditions, just like [prompt
 
 1. Open an agent's edit page.
 1. Go to the **Tools** section.
-1. Click **Add MCP client**.
+1. Select **Add MCP client**.
 1. Pick a stored MCP client from the list.
 1. Optionally filter which tools to expose.
 1. Save the agent.
@@ -186,8 +186,8 @@ See the [ToolProvider reference](/reference/editor/tool-provider) for the full p
 
 ## Related
 
-- [Editor overview](/docs/editor/overview) — setup and versioning.
-- [Agents](/docs/editor/agents) — override tools on code-defined agents.
-- [Prompts](/docs/editor/prompts) — display conditions reference for prompt blocks.
-- [ToolProvider reference](/reference/editor/tool-provider) — Composio and Arcade API details.
-- [MCP overview](/docs/mcp/overview) — general MCP documentation.
+- [Editor overview](/docs/editor/overview): Setup and versioning.
+- [Agents](/docs/editor/agents): Override tools on code-defined agents.
+- [Prompts](/docs/editor/prompts): Display conditions reference for prompt blocks.
+- [ToolProvider reference](/reference/editor/tool-provider): Composio and Arcade API details.
+- [MCP overview](/docs/mcp/overview): General MCP documentation.

@@ -14,17 +14,17 @@ Prompt blocks are reusable instruction templates that you compose into an agent'
 
 Use prompt blocks when you want to:
 
-- Let SMEs and prompt engineers iterate on instructions without code changes or deploys.
+- Let SMEs and prompt engineers iterate on instructions without code changes.
 - Share instruction fragments across agents without copying text.
 - Add template variables (`{{userName}}`) that resolve at runtime from agent variables or request context.
-- Show or hide instructions based on conditions — for example, include a block only when `language` equals `"es"`.
+- Show or hide instructions based on conditions. For example, include a block only when `language` equals `"es"`.
 - Version prompt content independently from agent configuration for separate experimentation and rollback.
 
 ## Quickstart
 
 1. Open the Studio and go to the **Prompts** tab.
-1. Click **Create prompt block** and write your instruction text.
-1. Open an agent's **Instructions** section and click **Add block**.
+1. Select **Create prompt block** and write your instruction text.
+1. Open an agent's **Instructions** section and select **Add block**.
 1. Pick the saved prompt block from the block picker dialog.
 
 The block appears as a reference in the agent's instruction list. Changes to the original prompt block update every agent that references it.
@@ -39,7 +39,7 @@ An agent's instructions are made up of an ordered list of blocks. Each block is 
 | **Prompt block** | A standalone block with its own content, stored in the agent snapshot. You can save an inline block as a prompt block to reuse it. |
 | **Prompt block reference** | A pointer to a saved prompt block. The content is resolved at runtime from the referenced block. |
 
-To turn an inline block into a reusable prompt block, click the block's menu and choose **Save as prompt block**. To reference an existing prompt block, click **Add block** and pick one from the dialog.
+To turn an inline block into a reusable prompt block, open the block's menu and select **Save as prompt block**. To reference an existing prompt block, select **Add block** and pick one from the dialog.
 
 ## Template variables
 
@@ -74,7 +74,7 @@ A rule group uses **AND** or **OR** logic with one or more conditions. Each cond
 
 Rule groups can be nested, so you can combine AND and OR conditions for complex logic.
 
-In the Studio, click a block's **Display conditions** button to set up rules visually. You can also configure conditions programmatically through the API. Blocks without conditions are always included.
+In the Studio, open a block's **Display conditions** panel to set up rules visually. You can also configure conditions programmatically through the API. Blocks without conditions are always included.
 
 ## Versioning
 
@@ -84,6 +84,6 @@ When an agent references a prompt block, the resolved content comes from the blo
 
 ## Related
 
-- [Agents](/docs/editor/agents) — edit code-defined agents through the editor.
-- [Editor overview](/docs/editor/overview) — setup and versioning.
-- [MastraEditor reference](/reference/editor/mastra-editor) — full configuration options for the editor.
+- [Agents](/docs/editor/agents): Edit code-defined agents through the editor.
+- [Editor overview](/docs/editor/overview): Setup and versioning.
+- [MastraEditor reference](/reference/editor/mastra-editor): Full configuration options for the editor.
