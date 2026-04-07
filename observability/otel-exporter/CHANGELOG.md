@@ -1,5 +1,23 @@
 # @mastra/otel-exporter
 
+## 1.0.13-alpha.0
+
+### Patch Changes
+
+- Upgraded Langfuse integration to the official v5 SDK, replacing the deprecated v3 package. ([#14985](https://github.com/mastra-ai/mastra/pull/14985))
+
+  **New features:**
+  - Access Langfuse's full platform via `exporter.client` — prompt management, datasets, evaluations, and scoring
+  - New `environment` and `release` config options for filtering traces in the Langfuse dashboard
+
+  **No breaking changes to your existing code** — `LangfuseExporter`, `LangfuseExporterConfig`, and `withLangfusePrompt()` work the same way. Just upgrade the package and your traces will use the latest Langfuse format.
+
+  **Note:** `withLangfusePrompt({ id })` is deprecated — Langfuse v5 requires `name` + `version` for prompt linking.
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`d26ad28`](https://github.com/mastra-ai/mastra/commit/d26ad2899edd83b9c4dceb8a8a428e64b8775aef), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+  - @mastra/observability@1.7.3-alpha.0
+
 ## 1.0.12
 
 ### Patch Changes

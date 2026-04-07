@@ -1,5 +1,87 @@
 # @mastra/memory
 
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Added tracing support to Memory operations (recall, save, delete, update working memory). When an `observabilityContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `observabilityContext` is unaffected. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **Example usage:**
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+  import { InMemoryStore } from '@mastra/core/storage';
+
+  const memory = new Memory({ storage: new InMemoryStore() });
+
+  // Pass observabilityContext to create observable spans
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages: [userMessage, assistantMessage],
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added per-record config overrides for observation and reflection thresholds in Observational Memory. Each thread can now have its own `messageTokens` and `observationTokens` thresholds that override the instance-level defaults, without requiring a process restart or cache invalidation. If no per-record override is set, the instance-level config is used as before. ([#15102](https://github.com/mastra-ai/mastra/pull/15102))
+
+### Patch Changes
+
+- Fixed recall() to hide dynamic system reminder messages by default, with includeSystemReminders available when callers need raw reminder history. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
+## 1.14.0-alpha.1
+
+### Minor Changes
+
+- Added usage data to ObserveHooks callbacks and standalone reflect() return. ([#15047](https://github.com/mastra-ai/mastra/pull/15047))
+
+  **ObserveHooks:** `onObservationEnd` and `onReflectionEnd` now receive a result object containing token usage from the underlying LLM call. This enables reliable usage tracking across all observation and reflection paths (sync, async buffered, and resource-scoped).
+
+  **Standalone reflect():** `reflect()` now returns `{ reflected, record, usage? }` so callers can capture token usage without hooks.
+
+  **Examples**
+
+  ```ts
+  // Via hooks
+  await memory.observe({
+    threadId,
+    messages,
+    hooks: {
+      onObservationEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+      onReflectionEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+    },
+  });
+
+  // Via standalone reflect()
+  const { reflected, usage } = await memory.reflect(threadId, resourceId);
+  ```
+
+  Existing callbacks that accept no arguments continue to work without changes.
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fixed observational memory buffering so sealed assistant chunks stay split instead of being merged back into one persisted message during long tool runs. ([#14995](https://github.com/mastra-ai/mastra/pull/14995))
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a)]:
+  - @mastra/core@1.23.0-alpha.0
+
 ## 1.13.1
 
 ### Patch Changes

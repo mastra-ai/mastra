@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Fixed an issue where nested agent sub-tool streams dropped the 'uiMessages' and 'messages' properties during chunk propagation. The response payloads are now merged into the buffered pipeline execution correctly. ([#15053](https://github.com/mastra-ai/mastra/pull/15053))
+
+- Updated dependencies:
+  - @mastra/core@1.23.0-alpha.2
+
 ## 1.3.1
 
 ### Patch Changes

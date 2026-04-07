@@ -254,6 +254,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       }
     }
 
+    // Completion start time (TTFT) - used by observability backends for time-to-first-token metrics
+    if (modelAttrs.completionStartTime) {
+      attributes['mastra.completion_start_time'] = modelAttrs.completionStartTime.toISOString();
+    }
+
     // Response attributes
     if (modelAttrs.finishReason) {
       attributes[ATTR_GEN_AI_RESPONSE_FINISH_REASONS] = JSON.stringify([modelAttrs.finishReason]);

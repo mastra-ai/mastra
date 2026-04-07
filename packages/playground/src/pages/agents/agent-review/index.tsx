@@ -2,7 +2,9 @@ import {
   AgentPlaygroundReview,
   Spinner,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
   useLinkComponent,
   useAgent,
 } from '@mastra/playground-ui';
@@ -13,6 +15,14 @@ function AgentReview() {
   const { navigate } = useLinkComponent();
 
   const { data: codeAgent, isLoading, error } = useAgent(agentId!);
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

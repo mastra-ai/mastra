@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const deleteFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
@@ -16,20 +17,33 @@ export const deleteFileTool = createTool({
       .describe('If true, delete directories and their contents recursively. Required for non-empty directories.'),
   }),
   execute: async ({ path, recursive }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.DELETE);
 
-    if (filesystem.readOnly) {
-      throw new WorkspaceReadOnlyError('delete');
-    }
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'delete',
+      input: { path, recursive },
+      attributes: { filesystemProvider: filesystem.provider },
+    });
 
-    const stat = await filesystem.stat(path);
-    if (stat.type === 'directory') {
-      await filesystem.rmdir(path, { recursive, force: recursive });
-    } else {
-      await filesystem.deleteFile(path);
-    }
+    try {
+      if (filesystem.readOnly) {
+        throw new WorkspaceReadOnlyError('delete');
+      }
 
-    return `Deleted ${path}`;
+      const stat = await filesystem.stat(path);
+      if (stat.type === 'directory') {
+        await filesystem.rmdir(path, { recursive, force: recursive });
+      } else {
+        await filesystem.deleteFile(path);
+      }
+
+      span.end({ success: true });
+      return `Deleted ${path}`;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });
