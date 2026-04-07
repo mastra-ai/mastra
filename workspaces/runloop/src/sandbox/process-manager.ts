@@ -67,7 +67,7 @@ class RunloopProcessHandle extends ProcessHandle {
       return this._waitPromise;
     }
 
-    this._waitPromise = (async () => {
+    this._waitPromise = (async (): Promise<CommandResult> => {
       const timeoutMs = this._spawnOptions?.timeout ?? 300_000;
       const result = await this._execution.result({
         longPoll: { timeoutMs },
@@ -75,12 +75,13 @@ class RunloopProcessHandle extends ProcessHandle {
       });
 
       this._exitCode = result.exitCode ?? (result.success ? 0 : 1);
+      const [stdout, stderr] = await Promise.all([result.stdout(), result.stderr()]);
 
       return {
         success: result.success,
         exitCode: this._exitCode,
-        stdout: this.stdout,
-        stderr: this.stderr,
+        stdout,
+        stderr,
         executionTimeMs: Date.now() - this._startTime,
       };
     })();
@@ -125,15 +126,9 @@ export class RunloopProcessManager extends SandboxProcessManager<RunloopSandbox>
       const wrapped = wrapCommand(command, { ...mergedOpts, env: envOnly });
       const start = Date.now();
 
-      let handle!: RunloopProcessHandle;
+      const execution = await devbox.cmd.execAsync(wrapped, { attach_stdin: true });
 
-      const execution = await devbox.cmd.execAsync(wrapped, {
-        attach_stdin: true,
-        stdout: (line: string) => handle.emitStdout(line.endsWith('\n') ? line : `${line}\n`),
-        stderr: (line: string) => handle.emitStderr(line.endsWith('\n') ? line : `${line}\n`),
-      });
-
-      handle = new RunloopProcessHandle(this.sandbox.runloopApi, devbox.id, execution, start, mergedOpts);
+      const handle = new RunloopProcessHandle(this.sandbox.runloopApi, devbox.id, execution, start, mergedOpts);
       handle.command = command;
       this._tracked.set(handle.pid, handle);
 
