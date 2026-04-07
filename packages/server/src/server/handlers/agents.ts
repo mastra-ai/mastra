@@ -170,6 +170,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -313,7 +315,7 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     try {
       const mod = await import('@mastra/core/workspace');
       if (typeof mod.createWorkspaceTools === 'function') {
-        return Object.keys(mod.createWorkspaceTools(workspace));
+        return Object.keys(await mod.createWorkspaceTools(workspace));
       }
     } catch {
       // Older core version without workspace module — fall through
@@ -325,59 +327,65 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();
 
+    // Build context for dynamic config resolution
+    const configContext = {
+      workspace,
+      requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+    };
+
     // Helper to check if a tool is enabled
-    const isEnabled = (toolName: WorkspaceToolName) => {
-      return resolveToolConfig(toolsConfig, toolName).enabled;
+    const isEnabled = async (toolName: WorkspaceToolName) => {
+      return (await resolveToolConfig(toolsConfig, toolName, configContext)).enabled;
     };
 
     // Filesystem tools
     if (workspace.filesystem) {
       // Read tools
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
       }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
       }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
       }
 
       // Write tools only if not readonly
       if (!isReadOnly) {
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
         }
       }
 
       // Grep tool (filesystem-based, not BM25/vector)
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
       }
     }
 
     // Search tools (available if BM25 or vector search is enabled)
     if (workspace.canBM25 || workspace.canVector) {
-      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+      if (await isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
         tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
       }
-      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
+      if (!isReadOnly && (await isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX))) {
         tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
       }
     }
 
     // Sandbox tools
     if (workspace.sandbox) {
-      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+      if (workspace.sandbox.executeCommand && (await isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND))) {
         tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
       }
     }
@@ -386,6 +394,30 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
   } catch {
     return [];
   }
+}
+
+/**
+ * Get the list of browser tool names for an agent.
+ * Returns the tool names from the agent's browser provider if configured.
+ */
+export function getBrowserToolsFromAgent(agent: Agent, onError?: (error: unknown) => void): string[] {
+  try {
+    const browser = agent.browser;
+    if (!browser) {
+      return [];
+    }
+    return Object.keys(browser.getTools());
+  } catch (error) {
+    onError?.(error);
+    return [];
+  }
+}
+
+function createBrowserToolsErrorLogger(
+  logger: ReturnType<Context['mastra']['getLogger']>,
+  agentId: string,
+): (error: unknown) => void {
+  return error => logger.warn('Failed to get browser tools for agent', { agentId, error });
 }
 
 interface SerializedAgentDefinition {
@@ -483,6 +515,7 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(logger, agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -524,6 +557,7 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -738,6 +772,7 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -767,6 +802,7 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -1198,7 +1234,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       const allProviders: Record<string, ProviderConfig> = {};
 
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider;
+        allProviders[id] = provider as ProviderConfig;
       }
 
       // Include gateway providers (defaults + user-registered)
@@ -1211,7 +1247,12 @@ export const GET_PROVIDERS_ROUTE = createRoute({
             try {
               const gatewayProviders = await gateway.fetchProviders();
               for (const [providerId, config] of Object.entries(gatewayProviders)) {
-                allProviders[providerId] = config;
+                // Apply the same prefixing logic as registry-generator to avoid
+                // creating duplicate entries alongside PROVIDER_REGISTRY data.
+                // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+                // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+                const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+                allProviders[prefixedId] = config;
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);

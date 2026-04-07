@@ -1,7 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { createBufferingEndMarker, createBufferingFailedMarker } from '../markers';
+import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
 import { wrapInObservationGroup } from '../observation-groups';
@@ -118,6 +119,33 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     });
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+
+    // Update thread title immediately — don't wait for activation.
+    const newTitle = processed.threadTitle?.trim();
+    if (newTitle && newTitle.length >= 3) {
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const oldTitle = thread.title?.trim();
+        if (newTitle !== oldTitle) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            threadTitle: processed.threadTitle,
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: newMetadata,
+          });
+
+          const marker = createThreadUpdateMarker({
+            cycleId: this.cycleId,
+            threadId,
+            oldTitle,
+            newTitle,
+          });
+          await this.streamMarker(marker);
+        }
+      }
+    }
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {

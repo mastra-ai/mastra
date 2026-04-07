@@ -111,6 +111,30 @@ function isMessageArray(data: any): data is Array<{ role: string; content: any }
 }
 
 /**
+ * Checks if data is in Gemini content array format ({role, parts}[]).
+ */
+function isGeminiContentArray(data: any): data is Array<{ role: string; parts: any[] }> {
+  return Array.isArray(data) && data.every(m => m?.role && Array.isArray(m?.parts));
+}
+
+/**
+ * Converts a Gemini content item to Datadog message format.
+ * Extracts text from parts, skips binary data to avoid bloating traces.
+ */
+function geminiContentToMessage(item: { role: string; parts: any[] }): { role: string; content: string } {
+  const text = item.parts
+    .map(p => {
+      if (typeof p === 'string') return p;
+      if (p?.text) return p.text;
+      if (p?.inlineData) return `[${p.inlineData.mimeType ?? 'binary'}]`;
+      if (p?.functionCall) return `[tool: ${p.functionCall.name ?? 'unknown'}]`;
+      return safeStringify(p);
+    })
+    .join('');
+  return { role: item.role, content: text };
+}
+
+/**
  * Formats input data for Datadog annotations.
  * LLM spans use message array format; others use raw or stringified data.
  */
@@ -123,6 +147,10 @@ export function formatInput(input: any, spanType: SpanType): any {
         role: m.role,
         content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
       }));
+    }
+    // Gemini format: {role, parts} → normalize to {role, content}
+    if (isGeminiContentArray(input)) {
+      return input.map(geminiContentToMessage);
     }
     // String input becomes user message
     if (typeof input === 'string') {

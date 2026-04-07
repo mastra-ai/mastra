@@ -135,16 +135,27 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
-    it('should throw 404 when agent is not found', async () => {
+    it('should return false when agent is not found and no storage is configured', async () => {
       const mastra = new Mastra({
         logger: false,
       });
-      await expect(
-        GET_MEMORY_STATUS_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          agentId: 'non-existent',
-        }),
-      ).rejects.toThrow(HTTPException);
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'non-existent',
+      });
+      expect(result).toEqual({ result: false });
+    });
+
+    it('should return true when agent is not found but storage is configured (stored agent fallback)', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'non-existent-stored-agent',
+      });
+      expect(result).toEqual({ result: true });
     });
   });
 
@@ -422,6 +433,47 @@ describe('Memory Handlers', () => {
       expect(result.total).toBe(0);
       expect(result.hasMore).toBe(false);
       expect(spy).toHaveBeenCalled();
+    });
+
+    it('should fall back to storage when agentId is a stored agent not resolvable via getAgentById', async () => {
+      // Simulate a stored agent scenario: storage has threads, but the agent
+      // is not in the registered agents map and no editor is configured.
+      // This reproduces the bug where listMemoryThreads with a stored agent ID
+      // returns empty/errors instead of falling back to storage.
+      const sharedStorage = new InMemoryStore();
+      const mastra = new Mastra({
+        logger: false,
+        storage: sharedStorage,
+        // No agents registered, no editor configured
+      });
+
+      // Create threads directly in storage (as if a stored agent had chatted)
+      const memoryStore = await sharedStorage.getStore('memory');
+      await memoryStore!.saveThread({
+        thread: createThread({
+          id: 'stored-agent-thread-1',
+          resourceId: 'user-123',
+        }),
+      });
+      await memoryStore!.saveThread({
+        thread: createThread({
+          id: 'stored-agent-thread-2',
+          resourceId: 'user-123',
+        }),
+      });
+
+      // Calling with agentId that is a stored agent (not in registered agents)
+      // should fall back to storage and return the threads
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        resourceId: 'user-123',
+        agentId: 'stored-agent-id',
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.total).toBe(2);
     });
   });
 

@@ -6,11 +6,12 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { MaskedInput } from './masked-input.js';
 import { getThinkingLevelsForModel } from './thinking-settings.js';
 
 // =============================================================================
@@ -66,7 +67,7 @@ class StorageBackendSubmenu extends Container {
   private phase: 'select' | 'connection' = 'select';
   private pendingBackend: StorageBackend = 'libsql';
   private selectList: SelectList;
-  private input!: Input;
+  private input!: MaskedInput;
   private onDone: (backend: StorageBackend, connectionUrl?: string) => void;
   private onBack: () => void;
   private currentPgConnectionString: string;
@@ -129,7 +130,7 @@ class StorageBackendSubmenu extends Container {
     }
     this.addChild(new Spacer(1));
 
-    this.input = new Input();
+    this.input = new MaskedInput();
     const currentValue = this.pendingBackend === 'pg' ? this.currentPgConnectionString : this.currentLibsqlUrl;
     if (currentValue) {
       this.input.setValue(currentValue);

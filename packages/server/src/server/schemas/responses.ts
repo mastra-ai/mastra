@@ -54,12 +54,7 @@ export type ResponseTextConfig = z.infer<typeof responseTextSchema>;
 export const createResponseBodySchema = z
   .object({
     model: z.string().describe('Model identifier used to generate the response, such as openai/gpt-5'),
-    agent_id: z
-      .string()
-      .optional()
-      .describe(
-        'Mastra agent ID for the request. Required on initial requests; follow-up stored turns can omit it when using previous_response_id',
-      ),
+    agent_id: z.string().describe('Mastra agent ID for the request'),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),
     text: responseTextSchema
@@ -75,17 +70,7 @@ export const createResponseBodySchema = z
     store: z.boolean().optional().default(false),
     previous_response_id: z.string().optional(),
   })
-  .passthrough()
-  .superRefine((body, ctx) => {
-    if (!body.agent_id && !body.previous_response_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['agent_id'],
-        message:
-          'Responses requests require an agent_id, or a previous_response_id from a stored agent-backed response',
-      });
-    }
-  });
+  .passthrough();
 
 export type CreateResponseBody = z.infer<typeof createResponseBodySchema>;
 
