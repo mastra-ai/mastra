@@ -38,6 +38,28 @@ describe('GoogleSchemaCompatLayer', () => {
       expect(layer.shouldApply()).toBe(true);
     });
 
+    it('should apply for gemini models via gateway providers like OpenRouter', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'openrouter',
+        modelId: 'google/gemini-3-flash-preview',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it('should apply for gemini models via gateway with no google prefix', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'some-gateway',
+        modelId: 'gemini-2.5-flash',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
+    });
+
     it('should not apply for non-Google models', () => {
       const modelInfo: ModelInformation = {
         provider: 'openai',

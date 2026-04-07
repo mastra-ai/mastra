@@ -106,7 +106,8 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
-    return this.getModel().provider.includes('google') || this.getModel().modelId.includes('google');
+    const model = this.getModel();
+    return model.provider.includes('google') || model.modelId.includes('google') || model.modelId.includes('gemini');
   }
   processZodType(value: ZodTypeV3): ZodTypeV3;
   processZodType(value: ZodTypeV4): ZodTypeV4;
