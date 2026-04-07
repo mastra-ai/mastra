@@ -1,5 +1,13 @@
-import type { TracingEvent, AnyExportedSpan, CreateSpanOptions } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  CreateSpanOptions,
+  LogEvent,
+  MetricEvent,
+  ScoreEvent,
+  FeedbackEvent,
+} from '@mastra/core/observability';
+import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
 
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,6 +30,17 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
   return `${headerB64}.${payloadB64}.${signature}`;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
 function getMockSpan<TType extends SpanType>(
   options: CreateSpanOptions<TType> & { id: string; traceId: string },
 ): AnyExportedSpan {
@@ -32,6 +51,92 @@ function getMockSpan<TType extends SpanType>(
     isEvent: options.isEvent ?? false,
     isRootSpan: true,
     parentSpanId: undefined,
+  };
+}
+
+function getMockLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
+  return {
+    type: 'log',
+    log: {
+      timestamp: new Date('2026-04-06T12:00:00.000Z'),
+      traceId: 'trace-log-123',
+      spanId: 'span-log-123',
+      level: 'info',
+      message: 'test log',
+      data: { requestId: 'req-123' },
+      correlationContext: {
+        organizationId: 'team-123',
+        resourceId: 'project-456',
+        serviceName: 'cloud-exporter-test',
+      },
+      metadata: { source: 'test-suite' },
+      ...overrides,
+    },
+  };
+}
+
+function getMockMetricEvent(overrides: Partial<MetricEvent['metric']> = {}): MetricEvent {
+  return {
+    type: 'metric',
+    metric: {
+      timestamp: new Date('2026-04-06T12:01:00.000Z'),
+      traceId: 'trace-metric-123',
+      spanId: 'span-metric-123',
+      name: 'mastra.tokens',
+      value: 42,
+      labels: { provider: 'openai' },
+      correlationContext: {
+        organizationId: 'team-123',
+        resourceId: 'project-456',
+        serviceName: 'cloud-exporter-test',
+      },
+      metadata: { unit: 'tokens' },
+      ...overrides,
+    },
+  };
+}
+
+function getMockScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreEvent {
+  return {
+    type: 'score',
+    score: {
+      timestamp: new Date('2026-04-06T12:02:00.000Z'),
+      traceId: 'trace-score-123',
+      spanId: 'span-score-123',
+      scorerId: 'relevance',
+      scoreSource: 'manual',
+      score: 0.9,
+      reason: 'high confidence',
+      correlationContext: {
+        organizationId: 'team-123',
+        resourceId: 'project-456',
+        serviceName: 'cloud-exporter-test',
+      },
+      metadata: { rubric: 'v1' },
+      ...overrides,
+    },
+  };
+}
+
+function getMockFeedbackEvent(overrides: Partial<FeedbackEvent['feedback']> = {}): FeedbackEvent {
+  return {
+    type: 'feedback',
+    feedback: {
+      timestamp: new Date('2026-04-06T12:03:00.000Z'),
+      traceId: 'trace-feedback-123',
+      spanId: 'span-feedback-123',
+      feedbackSource: 'user',
+      feedbackType: 'thumbs',
+      value: 'up',
+      comment: 'looks good',
+      correlationContext: {
+        organizationId: 'team-123',
+        resourceId: 'project-456',
+        serviceName: 'cloud-exporter-test',
+      },
+      metadata: { locale: 'en-US' },
+      ...overrides,
+    },
   };
 }
 
@@ -56,15 +161,25 @@ describe('CloudExporter', () => {
   });
 
   describe('Core Event Filtering', () => {
-    const mockSpan = getMockSpan({
-      id: 'span-123',
-      name: 'test-span',
-      type: SpanType.MODEL_GENERATION,
-      isEvent: false,
-      traceId: 'trace-456',
-      input: { prompt: 'test' },
-      output: { response: 'result' },
-    });
+    const mockSpan: AnyExportedSpan = {
+      ...getMockSpan({
+        id: 'span-123',
+        name: 'test-span',
+        type: SpanType.MODEL_GENERATION,
+        entityType: EntityType.AGENT,
+        entityId: 'agent-123',
+        entityName: 'Support Agent',
+        isEvent: false,
+        traceId: 'trace-456',
+        tags: ['prod', 'customer-facing'],
+        input: { prompt: 'test' },
+        output: { response: 'result' },
+      }),
+      errorInfo: {
+        message: 'generation failed',
+        name: 'Error',
+      },
+    };
 
     it('should process SPAN_ENDED events', async () => {
       const spanEndedEvent: TracingEvent = {
@@ -210,20 +325,30 @@ describe('CloudExporter', () => {
       const spanRecord = buffer.spans[0];
 
       expect(spanRecord).toMatchObject({
+        id: mockSpan.id,
         traceId: mockSpan.traceId,
         spanId: mockSpan.id,
-        parentSpanId: null,
         name: mockSpan.name,
+        type: mockSpan.type,
         spanType: mockSpan.type,
+        entityType: mockSpan.entityType,
+        entityId: mockSpan.entityId,
+        entityName: mockSpan.entityName,
+        tags: mockSpan.tags,
+        startTime: mockSpan.startTime,
         startedAt: mockSpan.startTime,
+        endTime: mockSpan.endTime,
         endedAt: mockSpan.endTime,
         input: mockSpan.input,
         output: mockSpan.output,
+        errorInfo: mockSpan.errorInfo,
         error: mockSpan.errorInfo,
         isEvent: mockSpan.isEvent,
+        isRootSpan: mockSpan.isRootSpan,
         updatedAt: null,
       });
 
+      expect(spanRecord.parentSpanId).toBeUndefined();
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
     });
 
@@ -306,6 +431,72 @@ describe('CloudExporter', () => {
 
       expect(shouldFlushSpy).toHaveReturnedWith(true);
       expect(flushSpy).toHaveBeenCalled();
+      await smallBatchExporter.shutdown();
+    });
+
+    it('should not wait for a size-triggered upload before exportTracingEvent resolves', async () => {
+      const deferredUpload = createDeferred<Response>();
+      mockFetchWithRetry.mockReturnValue(deferredUpload.promise);
+
+      const smallBatchExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'test-team', projectId: 'test-project' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchSize: 1,
+      });
+
+      let exportResolved = false;
+      const exportPromise = smallBatchExporter
+        .exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        })
+        .then(() => {
+          exportResolved = true;
+        });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+      expect(exportResolved).toBe(true);
+
+      deferredUpload.resolve(new Response('{}', { status: 200 }));
+
+      await exportPromise;
+      await smallBatchExporter.shutdown();
+    });
+
+    it('should wait for already-started uploads when flush is called', async () => {
+      const deferredUpload = createDeferred<Response>();
+      mockFetchWithRetry.mockReturnValue(deferredUpload.promise);
+
+      const smallBatchExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'test-team', projectId: 'test-project' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchSize: 1,
+      });
+
+      await smallBatchExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+
+      expect((smallBatchExporter as any).buffer.totalSize).toBe(0);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+
+      let flushResolved = false;
+      const flushPromise = smallBatchExporter.flush().then(() => {
+        flushResolved = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(flushResolved).toBe(false);
+
+      deferredUpload.resolve(new Response('{}', { status: 200 }));
+
+      await flushPromise;
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+
       await smallBatchExporter.shutdown();
     });
 
@@ -593,13 +784,24 @@ describe('CloudExporter', () => {
       expect(requestBody).toMatchObject({
         spans: [
           {
+            id: mockSpan.id,
             traceId: mockSpan.traceId,
             spanId: mockSpan.id,
             name: mockSpan.name,
+            type: mockSpan.type,
             spanType: mockSpan.type,
+            entityType: mockSpan.entityType,
+            entityId: mockSpan.entityId,
+            entityName: mockSpan.entityName,
+            tags: mockSpan.tags,
+            startTime: mockSpan.startTime.toISOString(),
+            endTime: mockSpan.endTime?.toISOString(),
             input: mockSpan.input,
             output: mockSpan.output,
+            errorInfo: mockSpan.errorInfo,
+            error: mockSpan.errorInfo,
             isEvent: mockSpan.isEvent,
+            isRootSpan: mockSpan.isRootSpan,
           },
         ],
       });
@@ -671,6 +873,204 @@ describe('CloudExporter', () => {
         flushReason: 'time',
         durationMs: expect.any(Number),
       });
+    });
+  });
+
+  describe('Additional Signal Support', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    it('should upload logs, metrics, scores, and feedback to their configured endpoints', async () => {
+      const multiSignalExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+        logsEndpoint: 'http://localhost:3000/logs',
+        metricsEndpoint: 'http://localhost:3000/metrics',
+        scoresEndpoint: 'http://localhost:3000/scores',
+        feedbackEndpoint: 'http://localhost:3000/feedback',
+      });
+
+      await multiSignalExporter.onLogEvent(getMockLogEvent());
+      await multiSignalExporter.onMetricEvent(getMockMetricEvent());
+      await multiSignalExporter.onScoreEvent(getMockScoreEvent());
+      await multiSignalExporter.onFeedbackEvent(getMockFeedbackEvent());
+
+      const buffer = (multiSignalExporter as any).buffer;
+      expect(buffer.totalSize).toBe(4);
+      expect(buffer.logs).toHaveLength(1);
+      expect(buffer.metrics).toHaveLength(1);
+      expect(buffer.scores).toHaveLength(1);
+      expect(buffer.feedback).toHaveLength(1);
+
+      await multiSignalExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(4);
+
+      const getCallByUrl = (url: string) => {
+        const call = mockFetchWithRetry.mock.calls.find(([callUrl]) => callUrl === url);
+        expect(call).toBeDefined();
+        return call!;
+      };
+
+      const logCall = getCallByUrl('http://localhost:3000/logs');
+      const metricCall = getCallByUrl('http://localhost:3000/metrics');
+      const scoreCall = getCallByUrl('http://localhost:3000/scores');
+      const feedbackCall = getCallByUrl('http://localhost:3000/feedback');
+
+      expect(logCall[0]).toBe('http://localhost:3000/logs');
+      expect(JSON.parse((logCall[1] as RequestInit).body as string)).toMatchObject({
+        logs: [{ message: 'test log', level: 'info' }],
+      });
+
+      expect(metricCall[0]).toBe('http://localhost:3000/metrics');
+      expect(JSON.parse((metricCall[1] as RequestInit).body as string)).toMatchObject({
+        metrics: [{ name: 'mastra.tokens', value: 42 }],
+      });
+
+      expect(scoreCall[0]).toBe('http://localhost:3000/scores');
+      expect(JSON.parse((scoreCall[1] as RequestInit).body as string)).toMatchObject({
+        scores: [{ scorerId: 'relevance', score: 0.9 }],
+      });
+
+      expect(feedbackCall[0]).toBe('http://localhost:3000/feedback');
+      expect(JSON.parse((feedbackCall[1] as RequestInit).body as string)).toMatchObject({
+        feedback: [{ feedbackType: 'thumbs', value: 'up' }],
+      });
+
+      await multiSignalExporter.shutdown();
+    });
+
+    it('should derive sibling signal endpoints from the traces endpoint', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'https://collector.example.com/ai/spans/publish',
+      });
+
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
+    it('should derive project-scoped sibling signal endpoints from the traces endpoint', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'https://collector.example.com/ai/projects/project-456/spans/publish',
+      });
+
+      await derivedExporter.onFeedbackEvent(getMockFeedbackEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/ai/projects/project-456/feedback/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
+    it('should sanitize circular log payloads before upload', async () => {
+      const circularMetadata: Record<string, unknown> = { label: 'metadata-root' };
+      circularMetadata.self = circularMetadata;
+
+      const circularData: Record<string, unknown> = {
+        metadata: circularMetadata,
+        values: [1, 2],
+      };
+      circularData.parent = circularData;
+
+      const circularExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+        logsEndpoint: 'http://localhost:3000/logs',
+      });
+
+      await circularExporter.onLogEvent(
+        getMockLogEvent({
+          metadata: circularMetadata,
+          data: circularData,
+        }),
+      );
+
+      await circularExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'http://localhost:3000/logs',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      const logCall = mockFetchWithRetry.mock.calls.find(([callUrl]) => callUrl === 'http://localhost:3000/logs');
+      expect(logCall).toBeDefined();
+
+      const requestBody = JSON.parse((logCall![1] as RequestInit).body as string);
+      expect(requestBody).toMatchObject({
+        logs: [
+          {
+            metadata: {
+              label: 'metadata-root',
+              self: '[Circular]',
+            },
+            data: {
+              metadata: {
+                label: 'metadata-root',
+                self: '[Circular]',
+              },
+              values: [1, 2],
+              parent: '[Circular]',
+            },
+          },
+        ],
+      });
+
+      await circularExporter.shutdown();
+    });
+
+    it('should reuse the traces endpoint when sibling derivation is not possible', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'https://collector.example.com/custom-ingest',
+      });
+
+      await derivedExporter.onLogEvent(getMockLogEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/custom-ingest',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      const logCall = mockFetchWithRetry.mock.calls.find(
+        ([callUrl]) => callUrl === 'https://collector.example.com/custom-ingest',
+      );
+      expect(logCall).toBeDefined();
+      expect(JSON.parse((logCall![1] as RequestInit).body as string)).toMatchObject({
+        logs: [{ message: 'test log', level: 'info' }],
+      });
+
+      await derivedExporter.shutdown();
     });
   });
 
@@ -866,6 +1266,37 @@ describe('CloudExporter', () => {
 
       // Should not call API since exporter is disabled
       expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    });
+
+    it('should ignore log, metric, score, and feedback events when exporter is disabled', async () => {
+      const originalToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+      delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+
+      try {
+        const disabledExporter = new CloudExporter({
+          accessToken: undefined,
+          endpoint: 'http://localhost:3000',
+        });
+
+        await disabledExporter.onLogEvent(getMockLogEvent());
+        await disabledExporter.onMetricEvent(getMockMetricEvent());
+        await disabledExporter.onScoreEvent(getMockScoreEvent());
+        await disabledExporter.onFeedbackEvent(getMockFeedbackEvent());
+
+        const buffer = (disabledExporter as any).buffer;
+        expect(buffer.totalSize).toBe(0);
+        expect(buffer.logs).toHaveLength(0);
+        expect(buffer.metrics).toHaveLength(0);
+        expect(buffer.scores).toHaveLength(0);
+        expect(buffer.feedback).toHaveLength(0);
+        expect(mockFetchWithRetry).not.toHaveBeenCalled();
+      } finally {
+        if (originalToken === undefined) {
+          delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+        } else {
+          process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
+        }
+      }
     });
   });
 
