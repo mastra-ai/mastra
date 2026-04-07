@@ -26,7 +26,8 @@ type LegacyToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 't
 type LegacySourcePart = Extract<UIMessageV4['parts'][number], { type: 'source' }>;
 type LegacyToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
 export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
-type PartWithProviderMetadata<T> = T & { providerMetadata?: MastraProviderMetadata };
+type MastraPartExtensions = { providerMetadata?: MastraProviderMetadata; createdAt?: number };
+type PartWithProviderMetadata<T> = T & MastraPartExtensions;
 
 // Approval payload stored alongside tool invocations so v6 approval flows can
 // round-trip through MessageList.
@@ -50,6 +51,7 @@ export type MastraToolInvocationPart = Omit<LegacyToolInvocationPart, 'toolInvoc
   providerExecuted?: boolean;
   title?: string;
   preliminary?: boolean;
+  createdAt?: number;
 };
 
 export type MastraSourceDocumentPart = {
@@ -59,10 +61,12 @@ export type MastraSourceDocumentPart = {
   title: string;
   filename?: string;
   providerMetadata?: MastraProviderMetadata;
+  createdAt?: number;
 };
 
 export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
   providerMetadata?: MastraProviderMetadata;
+  createdAt?: number;
 };
 
 // Canonical stored part type. It starts from the v4 UI part model and extends
@@ -76,7 +80,7 @@ export type MastraMessagePart =
   | PartWithProviderMetadata<AIV5Type.DataUIPart<AIV5.UIDataTypes>>;
 
 // V4-compatible part type (excludes DataUIPart which V4 doesn't support)
-export type UIMessageV4Part = UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata };
+export type UIMessageV4Part = UIMessageV4['parts'][number] & MastraPartExtensions;
 
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
