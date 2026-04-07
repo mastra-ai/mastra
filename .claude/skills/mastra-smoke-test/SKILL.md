@@ -179,12 +179,47 @@ import { helloRoute } from './routes/hello';
 server: { routes: [helloRoute] },
 ```
 
-### Step 5: Environment-Specific Setup
+### Step 5: Start/Deploy
 
-- **Local**: See `references/local-setup.md`
-- **Staging/Production**: See `references/cloud-deploy.md`
+#### Local (`--env local`)
+
+```bash
+<pm> run dev
+```
+
+Wait for "Server ready" message, then open browser to `http://localhost:4111`.
+
+See `references/local-setup.md` for OTel verification and troubleshooting.
+
+#### Staging/Production (`--env staging` / `--env production`)
+
+```bash
+# Set environment (staging only)
+export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai  # skip for production
+
+# Authenticate
+pnpx mastra@latest auth login
+
+# Deploy Studio
+pnpx mastra@latest studio deploy
+# ⚠️ Capture the Studio URL from deploy output
+
+# Deploy Server  
+pnpx mastra@latest server deploy -y
+# ⚠️ Capture the Server URL from deploy output
+```
+
+**Important**: The deploy commands output the actual URLs. Capture and use these exact URLs — don't assume the format.
+
+Open browser to the **Studio URL from deploy output** and sign in.
+
+See `references/cloud-deploy.md` for detailed deploy verification and trace testing.
 
 ### Step 6: Run Test Flows
+
+Open the Studio in browser:
+- **Local**: `http://localhost:4111`
+- **Cloud**: Use the Studio URL from deploy output
 
 #### Agents (`/agents`)
 - [ ] Navigate to `/agents`
