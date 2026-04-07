@@ -1,5 +1,12 @@
 # mastracode
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`f308d62`](https://github.com/mastra-ai/mastra/commit/f308d6206a083eeaccbca782be062c57076935d7)]:
+  - @mastra/memory@1.15.0-alpha.0
+
 ## 0.12.0
 
 ### Minor Changes

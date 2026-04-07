@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Updated the recall tool to support more precise message browsing for agents. ([#15116](https://github.com/mastra-ai/mastra/pull/15116))
+
+  Agents using `recall` can now pass `partType` and `toolName` to narrow message results to specific parts, such as tool calls or tool results for one tool. This change also adds `threadId: "current"` support across recall modes and `anchor: "start" | "end"` for no-cursor message paging, making it easier to inspect recent thread activity and past tool usage.
+
 ## 1.14.0
 
 ### Minor Changes
