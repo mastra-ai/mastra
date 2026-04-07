@@ -77,16 +77,45 @@ export MASTRA_API_KEY="msk_..."
 
 #### Onboarding State Persistence (`--test onboarding`)
 
-Test that onboarding state survives tab/window switches:
+Test that onboarding state survives interruptions:
 
+**Tab Switch Test:**
 1. Start onboarding flow (new account or "Create Project")
-2. **Before completing**: Switch to another browser tab or window
-3. Switch back to the Gateway tab
-4. [ ] Verify onboarding modal/flow is still visible
-5. [ ] Verify entered data is preserved
-6. [ ] Complete onboarding and verify API key is shown
+2. **Before completing**: Switch to another browser tab
+3. Wait 5-10 seconds
+4. Switch back to the Gateway tab
+5. [ ] Verify onboarding modal/flow is still visible
+6. [ ] Verify any entered data is preserved
 
-**Known Issue**: If onboarding disappears after tab switch, this is a bug - report it.
+**Window Switch Test:**
+1. Start a fresh onboarding flow
+2. **Before completing**: Switch to a different macOS/Windows workspace or minimize the browser
+3. Return to the browser
+4. [ ] Verify onboarding is still in progress
+5. [ ] Complete onboarding and verify API key is shown
+
+**Rapid Switch Test:**
+1. Start onboarding
+2. Rapidly switch tabs/windows multiple times (5-6 times)
+3. Return to Gateway
+4. [ ] Verify onboarding state is preserved
+
+#### Sign-up Methods Test
+
+1. Navigate to `$GATEWAY_URL`
+2. Click "Sign up"
+3. [ ] Verify Google SSO option is available
+4. [ ] Verify email/password signup option is available
+5. [ ] Test both methods work (if testing with new accounts)
+
+#### Curl Command Accessibility
+
+After completing onboarding:
+1. [ ] Verify curl command example is shown with your API key
+2. [ ] Copy the curl command
+3. Navigate away from the page (e.g., to Projects)
+4. [ ] Check if there's a way to see the curl command again (Settings? Docs?)
+5. [ ] Note if the command includes the correct provider prefix in the model
 
 ### 3. API Endpoint Testing (`--test api`)
 
@@ -264,38 +293,85 @@ curl -X DELETE "$API_URL/v1/threads/$THREAD_ID" \
 
 ### 6. Observational Memory Testing (`--test om`)
 
-Test OM features (Observer, Reflector, thresholds):
+Test OM features comprehensively to verify Observer, Reflector, and token tracking work correctly.
 
-#### Verify OM Activation
+#### Extended Conversation Test
 
-Send multiple messages in a thread to trigger OM:
+Send many messages in a single thread to build substantial context and trigger OM processing:
 
 ```bash
-THREAD_ID="om-test-$(date +%s)"
+THREAD_ID="om-extended-$(date +%s)"
 
-# Send several messages to build context
-for i in 1 2 3 4 5; do
-  curl -X POST "$API_URL/v1/chat/completions" \
+# Send 10+ messages to build significant context
+for i in {1..12}; do
+  RESPONSE=$(curl -s -X POST "$API_URL/v1/chat/completions" \
     -H "Authorization: Bearer $MASTRA_API_KEY" \
     -H "Content-Type: application/json" \
     -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Message $i: Tell me something interesting\"}]}"
-  sleep 1
+    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Message $i: Tell me an interesting fact about the number $i\"}]}")
+  
+  # Extract and log token usage for each message
+  echo "Message $i tokens: $(echo $RESPONSE | jq '.usage')"
+  sleep 2
 done
 ```
 
-#### Check OM Token Usage
+**Verification:**
+1. [ ] Check that prompt_tokens stays reasonable (should NOT grow to 100k+)
+2. [ ] Verify completion_tokens are consistent
+3. [ ] Note if any requests show unusually high token counts
 
-Navigate to Dashboard → Project → Usage to verify:
-- OM tokens are being tracked separately
-- Token counts match expected usage
+#### Token Usage Analysis
 
-#### OM Thresholds
+After the extended conversation:
+1. Navigate to Dashboard → Project → Logs
+2. Find the requests from the test thread
+3. [ ] Verify prompt_tokens for later messages aren't dramatically higher than earlier ones
+4. [ ] Check that token counts displayed match the actual request content size
+5. [ ] Verify cache tokens (cached_tokens, cache_write_tokens) are displayed correctly
+
+#### OM Token Tracking in Usage Dashboard
+
+1. Navigate to Dashboard → Project → Usage
+2. [ ] Verify OM tokens are tracked separately from inference tokens
+3. [ ] Check that the OM token count makes sense relative to conversation length
+4. [ ] Verify usage charts render correctly with OM data
+
+#### OM Threshold Settings
 
 1. Navigate to Dashboard → Project → Settings
-2. Check OM Threshold settings
-3. Verify defaults are displayed correctly
-4. (Optional) Modify thresholds and verify behavior changes
+2. [ ] Verify OM Threshold settings are displayed
+3. [ ] Check default threshold values are shown
+4. [ ] (Optional) Modify thresholds and send more messages to verify behavior changes
+
+#### Multi-Model OM Test
+
+Test OM with different providers to verify consistent behavior:
+
+```bash
+THREAD_ID="om-multi-model-$(date +%s)"
+
+# OpenAI
+curl -s -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: $THREAD_ID" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Start a conversation about AI"}]}'
+
+sleep 2
+
+# Anthropic (if available)
+curl -s -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: $THREAD_ID" \
+  -d '{"model": "anthropic/claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "Continue the conversation about AI safety"}]}'
+```
+
+**Verification:**
+1. [ ] Both models can access the shared thread context
+2. [ ] Token counts are reasonable for both providers
+3. [ ] Check Logs for both requests and compare token tracking
 
 ### 7. BYOK Testing (`--test byok`)
 
@@ -381,10 +457,22 @@ Navigate and verify each section:
 - Timeline/flame graph working
 
 #### Logs Page
-- Request logs displayed
-- Can filter by date/status
-- Log details expand correctly
-- Token counts shown
+- [ ] Request logs displayed in table
+- [ ] Can filter by date/status
+- [ ] Log details expand correctly when clicked
+
+**Token Count Verification:**
+1. Find a recent request in the logs
+2. Expand the log entry
+3. [ ] Verify prompt_tokens is displayed (not just cached_tokens)
+4. [ ] Verify completion_tokens is displayed
+5. [ ] Verify total_tokens is displayed
+6. [ ] Check cache_write_tokens - should not always be 0
+
+**Multi-Provider Logs:**
+1. Send requests with different providers (OpenAI, Anthropic)
+2. [ ] Verify logs show correct provider for each
+3. [ ] Compare token display between providers - should be consistent
 
 #### Usage Page
 - Charts render correctly
@@ -513,9 +601,12 @@ After generating errors above:
 | Category       | Test                          | Expected Result                              | Status |
 | -------------- | ----------------------------- | -------------------------------------------- | ------ |
 | **Onboarding** | Sign up flow                  | Account + project + API key created          | ⬜     |
-| **Onboarding** | API key visible               | Can copy key immediately after creation      | ⬜     |
-| **Onboarding** | State persistence             | Survives tab/window switch                   | ⬜     |
+| **Onboarding** | API key visible               | Can copy key immediately                     | ⬜     |
+| **Onboarding** | State after tab switch        | Survives tab/window switch                   | ⬜     |
+| **Onboarding** | State after window switch     | Survives workspace/minimize                  | ⬜     |
 | **Onboarding** | Provider attached             | Project has provider in settings             | ⬜     |
+| **Onboarding** | Signup methods                | Google SSO and email both available          | ⬜     |
+| **Onboarding** | Curl command shown            | Displays with correct model format           | ⬜     |
 | **API**        | Chat completions              | 200 response with completion                 | ⬜     |
 | **API**        | With x-thread-id              | 200 response, thread created                 | ⬜     |
 | **API**        | With x-resource-id            | 200 response, resource tracked               | ⬜     |
@@ -526,7 +617,9 @@ After generating errors above:
 | **Threads**    | List threads                  | Returns array of threads                     | ⬜     |
 | **Threads**    | Get thread                    | Returns thread details                       | ⬜     |
 | **Threads**    | Get messages                  | Returns messages in thread                   | ⬜     |
-| **OM**         | Token tracking                | OM tokens shown in usage                     | ⬜     |
+| **OM**         | Extended conversation         | Tokens stay reasonable (not 100k+)           | ⬜     |
+| **OM**         | Token tracking                | OM tokens shown separately in usage          | ⬜     |
+| **OM**         | Multi-model thread            | Both providers access shared context         | ⬜     |
 | **OM**         | Thresholds                    | Settings display correct defaults            | ⬜     |
 | **BYOK**       | Via header (OpenAI)           | `is_byok: true` in response                  | ⬜     |
 | **BYOK**       | Via header (Anthropic)        | `is_byok: true` in response                  | ⬜     |
@@ -537,8 +630,12 @@ After generating errors above:
 | **Usage**      | Charts                        | Render correctly                             | ⬜     |
 | **Dashboard**  | Projects page                 | Lists projects correctly                     | ⬜     |
 | **Dashboard**  | Threads page                  | Lists threads, details work                  | ⬜     |
-| **Dashboard**  | Logs page                     | Shows request logs                           | ⬜     |
-| **Dashboard**  | Usage page                    | Shows usage/cost data                        | ⬜     |
+| **Logs**       | Request logs displayed        | Shows recent requests                        | ⬜     |
+| **Logs**       | Prompt tokens shown           | Not just cached_tokens                       | ⬜     |
+| **Logs**       | Completion tokens shown       | Displays correctly                           | ⬜     |
+| **Logs**       | Cache tokens                  | cache_write_tokens not always 0              | ⬜     |
+| **Errors**     | Rate limit in dashboard       | 429 errors appear in logs                    | ⬜     |
+| **Errors**     | Invalid key logged            | 401 errors appear in logs                    | ⬜     |
 | **Account**    | Sign up flow                  | Org + project + API key created              | ⬜     |
 | **Account**    | API key visible               | Can copy key immediately                     | ⬜     |
 | **Invites**    | Send invitation               | Email sent to invitee                        | ⬜     |
