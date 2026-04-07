@@ -1,5 +1,23 @@
 # @mastra/datadog
 
+## 1.0.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`a0a516d`](https://github.com/mastra-ai/mastra/commit/a0a516db7e522c7463fa406ba0ca67e69e0ab923), [`b6a7e06`](https://github.com/mastra-ai/mastra/commit/b6a7e06175d5f4b16151e2b7ffcff9ed266af89a), [`02b9227`](https://github.com/mastra-ai/mastra/commit/02b9227ce1fefe33c80e0025eb6bf38aae8e2df5), [`ed46416`](https://github.com/mastra-ai/mastra/commit/ed464161f590aa7538f2c6272f17166d8b93e6c8), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/observability@1.8.0-alpha.0
+  - @mastra/core@1.23.1-alpha.0
+
+## 1.0.14
+
+### Patch Changes
+
+- Added support for Gemini content format in Datadog input formatting. Gemini messages with {role, parts} are now normalized to {role, content} instead of being stringified. ([#15099](https://github.com/mastra-ai/mastra/pull/15099))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`d26ad28`](https://github.com/mastra-ai/mastra/commit/d26ad2899edd83b9c4dceb8a8a428e64b8775aef), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+  - @mastra/observability@1.7.3
+
 ## 1.0.14-alpha.0
 
 ### Patch Changes

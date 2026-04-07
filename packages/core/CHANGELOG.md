@@ -1,5 +1,104 @@
 # @mastra/core
 
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Added AI SDK v6 UI message support to MessageList in @mastra/core. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  MessageList can now accept AI SDK v6 UI and model messages in add(...), and project stored messages with messageList.get.all.aiV6.ui(). This adds first-class handling for v6 approval request and response message flows.
+
+## 1.23.0
+
+### Minor Changes
+
+- Added `UpdateObservationalMemoryConfigInput` type, `updateObservationalMemoryConfig()` method stub, and `deepMergeConfig()` utility to the `MemoryStorage` base class. These additions support per-record observational memory config overrides introduced in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+- Memory operations now produce observability spans and accept an optional `observabilityContext` parameter. A new `MEMORY_OPERATION` span type, `MEMORY` entity type, and `MemoryOperationAttributes` interface let you identify memory spans in your traces. Agent and network code automatically threads observability context into memory calls. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **New observability identifiers:**
+  - `SpanType.MEMORY_OPERATION` — span type for all memory operations
+  - `EntityType.MEMORY` — entity type for memory spans
+  - `MemoryOperationAttributes` — typed attributes (operationType, messageCount, embeddingTokens, etc.)
+
+  **Updated abstract methods** on `MastraMemory` now accept optional `observabilityContext`:
+
+  ```typescript
+  import type { ObservabilityContext } from '@mastra/core/observability';
+
+  // All four methods accept an optional observabilityContext
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages,
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.deleteMessages(['msg-1'], { tracingContext: { currentSpan: parentSpan } });
+
+  await memory.updateWorkingMemory({
+    threadId: 'thread-1',
+    workingMemory: 'content',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added dynamic function support for workspace tool config. The `enabled`, `requireApproval`, and `requireReadBeforeWrite` options now accept async functions in addition to static booleans, enabling context-aware tool behavior like disabling tools based on user tier or requiring approval only for certain file paths. ([#14528](https://github.com/mastra-ai/mastra/pull/14528))
+
+  **Example**
+
+  ```typescript
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: async ({ args }) => {
+        return (args.path as string).startsWith('/protected')
+      },
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      enabled: async ({ requestContext }) => {
+        return requestContext['allowExecution'] === 'true'
+      },
+    },
+  }
+  ```
+
+- Added MASTRA_OFFLINE environment variable to disable network fetches for provider data in offline/air-gapped environments. When set to 'true' or '1', all provider sync and auto-refresh operations are skipped while the static provider registry remains fully functional. ([#15101](https://github.com/mastra-ai/mastra/pull/15101))
+
+- Added `WORKSPACE_ACTION` span type for workspace tracing. All workspace tools (filesystem, sandbox, search, skill, LSP) now create child spans with metadata including category, operation, file paths, commands, exit codes, bytes transferred, and duration. Added `startWorkspaceSpan()` utility for span creation with graceful no-op when tracing is inactive. ([#14554](https://github.com/mastra-ai/mastra/pull/14554))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7))
+
+- Added `setBrowser` method to Agent class for runtime browser configuration ([#15036](https://github.com/mastra-ai/mastra/pull/15036))
+
+- Fixed resourceId being overwritten to NULL during workflow execution of loop, foreach, parallel, and conditional steps. The resourceId set via `createRun()` is now correctly preserved throughout the entire workflow lifecycle. ([#14958](https://github.com/mastra-ai/mastra/pull/14958))
+
+- Fix onScorerRun hook payloads missing threadId and resourceId so hooks now receive correct identifiers ([#13835](https://github.com/mastra-ai/mastra/pull/13835))
+
+- Fixed AGENTS.md reminder persistence and deduplication across turns by storing reminder metadata on injected user messages. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Fixed sub-agent memory isolation so sub-agents no longer inherit parent requestContext keys and write to their own threads when `mastra__threadId` or `mastra__resourceId` are set. ([#15022](https://github.com/mastra-ai/mastra/pull/15022))
+
+- Fully isolate `async_hooks` from shared chunks so importing `@mastra/core` in browser bundles never pulls in the Node-only dependency ([#15074](https://github.com/mastra-ai/mastra/pull/15074))
+
+- Fixed `__setLogger` passing a raw string to `logger.child()`, which caused PinoLogger to serialize each character as a separate log field (e.g. `0: "B", 1: "U", 2: "N"...`). Now passes `{ component }` object instead. ([#15079](https://github.com/mastra-ai/mastra/pull/15079))
+
+- Fixed observational memory buffering so sealed assistant chunks stay split instead of being merged back into one persisted message during long tool runs. ([#14995](https://github.com/mastra-ai/mastra/pull/14995))
+
+- Fixed image attachments from @ai-sdk/react and @ai-sdk/vue clients throwing errors. File parts using the AI SDK v5 UIMessage format ({ type: 'file', url: '...', mediaType: '...' }) are now handled correctly when routed through the ModelMessage code path. ([#14734](https://github.com/mastra-ai/mastra/pull/14734))
+
+- Fixed a browser bundling issue where importing `@mastra/core` could pull in a Node-only dependency. ([#15072](https://github.com/mastra-ai/mastra/pull/15072))
+
+## 1.23.0-alpha.9
+
+### Minor Changes
+
+- Added `UpdateObservationalMemoryConfigInput` type, `updateObservationalMemoryConfig()` method stub, and `deepMergeConfig()` utility to the `MemoryStorage` base class. These additions support per-record observational memory config overrides introduced in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
 ## 1.23.0-alpha.8
 
 ### Minor Changes
