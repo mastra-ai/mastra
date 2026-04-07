@@ -2,11 +2,6 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory formatting and repro capture for buffered runs.
+Improved observational memory formatting to use part timestamps when rendering dates and times.
 
-Observer history now uses part timestamps when it renders dates and times. Buffering repro capture also writes `observer-exchange.json`, so buffered observer runs are easier to inspect when debugging.
-
-After:
-```ts
-// .mastra-om-repro/<thread>/<run>/observer-exchange.json
-```
+Observer history now follows part-level timing more closely, so the rendered memory context is more accurate when messages contain parts created at different times.
