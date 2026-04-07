@@ -17,18 +17,6 @@ import type { MastraModelGateway } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
-// Side-effect import: registers the AsyncLocalStorage-backed `getCurrentSpan`
-// resolver used by DualLogger to correlate logs to the active span.
-//
-// `observability/utils.ts` (the browser-safe entry point) holds the resolver
-// slot and starts undefined; `context-storage.ts` calls
-// `setCurrentSpanResolver(getCurrentSpan)` at module load. Without this import
-// somewhere in the server-only code path, `resolveCurrentSpan()` returns
-// undefined, DualLogger falls back to the global uncorrelated `loggerVNext`,
-// and every log emitted from inside an agent run lands in storage with
-// `entityId`/`runId`/`traceId`/etc. all `null`. Mastra is server-only, so
-// importing it here is safe and runs before any agent executes.
-import '../observability/context-storage';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type {
@@ -40,6 +28,7 @@ import type {
   MetricsContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -576,6 +565,10 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
+    // Register AsyncLocalStorage-backed context resolvers so that DualLogger
+    // can correlate logs to the active span. Must happen before any agent runs.
+    initContextStorage();
+
     // This is only used internally for server handlers that require temporary persistence
     this.#serverCache = new InMemoryServerCache();
 

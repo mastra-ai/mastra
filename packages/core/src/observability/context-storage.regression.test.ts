@@ -4,30 +4,23 @@
  * #15072 split the AsyncLocalStorage-backed `getCurrentSpan` out of
  * `observability/utils.ts` into `observability/context-storage.ts`, and made
  * `utils.resolveCurrentSpan()` look up the resolver via a slot that's
- * populated as a side effect when `context-storage.ts` is imported.
+ * populated when `initContextStorage()` is called.
  *
- * Nothing in production code was importing `context-storage.ts`, so the side
- * effect never ran in real apps. The result: `DualLogger` always saw
- * `resolveCurrentSpan() === undefined`, fell back to the global uncorrelated
- * `loggerVNext`, and every log emitted from inside an agent run lost its
- * `correlationContext` (entityId/runId/traceId/etc were all `null` in
- * storage).
+ * The fix is an explicit `initContextStorage()` call in the `Mastra`
+ * constructor (rather than a side-effect import that gets tree-shaken by tsup).
  *
- * The fix is a side-effect import in the server-only `Mastra` class
- * (`packages/core/src/mastra/index.ts`), which guarantees the resolver is
- * registered before any agent executes.
- *
- * This test imports `../mastra` (which transitively triggers the registration)
- * and then verifies that `resolveCurrentSpan()` actually returns the active
- * span when called from inside `executeWithContext`.
+ * This test instantiates `Mastra` and verifies that the constructor-triggered
+ * registration makes `resolveCurrentSpan()` work inside `executeWithContext`.
  */
 import { describe, it, expect } from 'vitest';
-// Importing Mastra runs the side-effect import of context-storage.
-import '../mastra';
+import { Mastra } from '../mastra';
 import { executeWithContext, resolveCurrentSpan } from './utils';
 
+// Instantiate Mastra — this is the production path that triggers initContextStorage().
+new Mastra();
+
 describe('context-storage resolver registration (regression for #15072)', () => {
-  it('resolveCurrentSpan returns the active span inside executeWithContext after Mastra is loaded', async () => {
+  it('resolveCurrentSpan returns the active span inside executeWithContext after Mastra is constructed', async () => {
     const span = { id: 'test-span', traceId: 'test-trace' } as any;
 
     let resolved: unknown;
