@@ -272,6 +272,74 @@ describe('ObservabilityInMemory', () => {
     expect(result.costChangePercent).toBeCloseTo(87.5);
   });
 
+  it('getMetricAggregate sums scorer cost over a time window filtered by scorer name', async () => {
+    const now = new Date('2026-04-07T12:00:00.000Z');
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    await storage.batchCreateMetrics({
+      metrics: [
+        // answer-relevancy scorer LLM call inside the window
+        {
+          timestamp: new Date('2026-04-02T10:00:00.000Z'),
+          name: 'mastra_model_total_input_tokens',
+          value: 100,
+          rootEntityType: 'scorer',
+          rootEntityName: 'answer-relevancy',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.12,
+          costUnit: 'usd',
+        },
+        // second answer-relevancy call inside the window
+        {
+          timestamp: new Date('2026-04-05T08:00:00.000Z'),
+          name: 'mastra_model_total_input_tokens',
+          value: 50,
+          rootEntityType: 'scorer',
+          rootEntityName: 'answer-relevancy',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.06,
+          costUnit: 'usd',
+        },
+        // different scorer — must be excluded
+        {
+          timestamp: new Date('2026-04-05T09:00:00.000Z'),
+          name: 'mastra_model_total_input_tokens',
+          value: 999,
+          rootEntityType: 'scorer',
+          rootEntityName: 'faithfulness',
+          estimatedCost: 9.99,
+          costUnit: 'usd',
+        },
+        // answer-relevancy but outside the window — must be excluded
+        {
+          timestamp: new Date('2026-03-20T12:00:00.000Z'),
+          name: 'mastra_model_total_input_tokens',
+          value: 999,
+          rootEntityType: 'scorer',
+          rootEntityName: 'answer-relevancy',
+          estimatedCost: 9.99,
+          costUnit: 'usd',
+        },
+      ],
+    });
+
+    const result = await storage.getMetricAggregate({
+      name: ['mastra_model_total_input_tokens'],
+      aggregation: 'sum',
+      filters: {
+        rootEntityType: 'scorer',
+        rootEntityName: 'answer-relevancy',
+        timestamp: { start: oneWeekAgo, end: now },
+      },
+    });
+
+    expect(result.value).toBe(150);
+    expect(result.estimatedCost).toBeCloseTo(0.18);
+    expect(result.costUnit).toBe('usd');
+  });
+
   it('getMetricBreakdown returns grouped cost alongside grouped value', async () => {
     await storage.batchCreateMetrics({
       metrics: [
