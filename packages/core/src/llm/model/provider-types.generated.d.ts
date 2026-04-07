@@ -21,6 +21,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.7',
     'glm-5',
+    'glm-5.1',
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
@@ -1833,6 +1834,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
     'z-ai/glm-5-turbo',
+    'z-ai/glm-5.1',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -2126,8 +2128,9 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
+    'zai-org/GLM-5.1',
   ];
-  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash'];
+  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
     'anthropic/claude-sonnet-4',
@@ -2735,6 +2738,13 @@ export type ProviderModelsMap = {
     'qwen3.5-plus',
     'qwen3.6-plus',
     'qwq-plus',
+  ];
+  readonly mixlayer: readonly [
+    'qwen/qwen3.5-122b-a10b',
+    'qwen/qwen3.5-27b',
+    'qwen/qwen3.5-35b-a3b',
+    'qwen/qwen3.5-397b-a17b',
+    'qwen/qwen3.5-9b',
   ];
   readonly mistral: readonly [
     'codestral-latest',
