@@ -269,19 +269,46 @@ Open the Studio in browser:
 - [ ] Verify scorers list loads
 
 #### Observability - Traces (`/observability`)
+
+**Step 1: Verify Studio-originated traces**
 - [ ] Navigate to `/observability`
-- [ ] Verify traces from previous actions appear
+- [ ] Verify traces from previous actions (agent chat, tool runs) appear
 - [ ] Click on a trace to view details
 - [ ] Verify trace shows: agent name, input/output, duration, status
 
+**Step 2: Generate Server-originated traces** (staging/production only)
+- [ ] Call the Server API directly:
+```bash
+curl -X POST https://<server-url>/api/agents/weather-agent/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Weather in Paris?"}]}'
+```
+- [ ] Note the response (should succeed)
+
+**Step 3: Verify Server traces appear in Studio**
+- [ ] Refresh `/observability` page
+- [ ] Look for new trace from the Server API call
+- [ ] This trace should appear within 30 seconds
+
 **Traces Verification:**
 
-| Action | Expected Trace |
-|--------|---------------|
-| Agent chat | `agent run: 'weather-agent'` |
-| Tool execution | `tool call: 'get-weather'` |
-| Workflow run | `workflow run: 'weather-workflow'` |
-| Scorer execution | `scorer run: '<scorer-name>'` |
+| Source | Action | Expected Trace |
+|--------|--------|---------------|
+| Studio | Agent chat | `agent run: 'weather-agent'` |
+| Studio | Tool execution | `tool call: 'get-weather'` |
+| Studio | Workflow run | `workflow run: 'weather-workflow'` |
+| Server | API call | `agent run: 'weather-agent'` |
+
+**If traces are missing:**
+
+| Symptom | Likely Cause | Action |
+|---------|--------------|--------|
+| No traces at all | Observability not configured | Check `@mastra/observability` installed, `telemetry` in mastra config |
+| Studio traces work, Server traces missing | Server JWT/endpoint issue | Check deploy logs for `CLOUD_EXPORTER` warnings |
+| `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_LOGS` in logs | Traces endpoint misconfigured | Note as known issue — infrastructure problem |
+| `mastra-cloud-observability-exporter disabled` | Missing `MASTRA_CLOUD_ACCESS_TOKEN` | Infrastructure env var issue |
+
+For detailed debugging, see `references/gcp-debugging.md`.
 
 #### Logs (`/logs`)
 - [ ] Navigate to `/logs`
