@@ -140,7 +140,7 @@ export class ShellStreamComponent extends Container {
     if (displayLines.length > 0) {
       const maxVisible = this.expanded ? MAX_LINES : COLLAPSED_LINES;
       const truncated = displayLines.length > maxVisible;
-      const visibleLines = truncated ? displayLines.slice(0, maxVisible) : displayLines;
+      const visibleLines = truncated ? displayLines.slice(-maxVisible) : displayLines;
 
       const borderedLines = visibleLines.map(line => {
         const truncatedLine = truncateAnsi(line, maxLineWidth);
