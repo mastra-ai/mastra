@@ -213,6 +213,21 @@ pnpx mastra@latest server deploy -y
 
 **Important**: The deploy commands output the actual URLs. Capture and use these exact URLs — don't assume the format.
 
+**Deploy Output Handling**:
+
+| Output Type | Action |
+|-------------|--------|
+| **Error** (non-zero exit, "failed", "error") | **STOP** — Report error to user, do not continue |
+| **Warning** (e.g., "observability-exporter disabled", "Session expired") | **Log and continue** — Note the warning, proceed with testing |
+| **Success** | Capture URLs and continue |
+
+Common warnings to watch for:
+- `mastra-cloud-observability-exporter disabled` — traces won't be sent (may need env var fix)
+- `Session expired` — may need to re-authenticate
+- Build warnings — usually OK to continue
+
+If deploy fails, check `references/common-errors.md` for solutions.
+
 Open browser to the **Studio URL from deploy output** and sign in.
 
 See `references/cloud-deploy.md` for detailed deploy verification and trace testing.
