@@ -7,11 +7,7 @@ export interface DataPanelCloseButtonProps {
   className?: string;
 }
 
-export function DataPanelCloseButton({
-  onClick,
-  tooltip = 'Close panel',
-  className,
-}: DataPanelCloseButtonProps) {
+export function DataPanelCloseButton({ onClick, tooltip = 'Close panel', className }: DataPanelCloseButtonProps) {
   return (
     <ButtonWithTooltip
       size="md"
