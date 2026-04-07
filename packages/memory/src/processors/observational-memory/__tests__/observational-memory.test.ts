@@ -1234,7 +1234,7 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('Hi there!');
     });
 
-    it('should include a date header and only repeat times when they change', () => {
+    it('should include date headers on part day changes and only repeat times when they change', () => {
       const first = createTestMessage('ignored', 'assistant');
       first.createdAt = new Date('2024-12-04T10:30:00Z');
       first.content = {
@@ -1243,19 +1243,21 @@ describe('Observer Agent Helpers', () => {
           { type: 'text', text: 'first', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
           { type: 'reasoning', reasoning: 'thinking', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
           { type: 'text', text: 'second', createdAt: new Date('2024-12-04T10:31:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: new Date('2024-12-05T12:01:00Z') } as any,
         ],
       } as any;
 
       const second = createTestMessage('later', 'user');
-      second.createdAt = new Date('2024-12-04T11:00:00Z');
+      second.createdAt = new Date('2024-12-05T12:01:00Z');
 
       const formatted = formatMessagesForObserver([first, second]);
-      expect(formatted).toContain('Date 12/4/2024:');
       expect((formatted.match(/Date 12\/4\/2024:/g) ?? []).length).toBe(1);
+      expect((formatted.match(/Date 12\/5\/2024:/g) ?? []).length).toBe(1);
       expect(formatted).toMatch(/Assistant \([^)]*\): first/);
       expect(formatted).toContain('Reasoning: thinking');
       expect(formatted).toMatch(/Assistant \([^)]*\): second/);
-      expect(formatted).toMatch(/User \([^)]*\): later/);
+      expect(formatted).toMatch(/Assistant \([^)]*\): next day/);
+      expect(formatted).toContain('\nUser: later');
     });
 
     it('should include attachment placeholders for image and file parts', () => {
@@ -1402,6 +1404,32 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should reuse part-level date grouping without message separators', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date('2024-12-04T10:30:00Z');
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: new Date('2024-12-05T12:01:00Z') } as any,
+        ],
+      } as any;
+
+      const user = createTestMessage('later', 'user');
+      user.createdAt = new Date('2024-12-05T12:01:00Z');
+
+      const historyMessage = buildObserverHistoryMessage([assistant, user]) as any;
+      const joinedText = historyMessage.content
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('\n');
+
+      expect((joinedText.match(/Date 12\/4\/2024:/g) ?? []).length).toBe(1);
+      expect((joinedText.match(/Date 12\/5\/2024:/g) ?? []).length).toBe(1);
+      expect(joinedText).not.toContain('---');
+      expect(joinedText).toContain('\nUser: later');
     });
 
     it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {

@@ -533,14 +533,31 @@ type ObserverInputAttachmentPart =
       experimental_providerMetadata?: unknown;
     };
 
+interface ObserverFormattedLine {
+  date: string;
+  time: string;
+  title: string;
+  body: string;
+}
+
 interface ObserverFormattedMessage {
-  text: string;
+  lines: ObserverFormattedLine[];
   attachments: ObserverInputAttachmentPart[];
 }
 
 interface ObserverAttachmentCounter {
   nextImageId: number;
   nextFileId: number;
+}
+
+interface ObserverFormattingContext {
+  previousDate?: string;
+  previousTime?: string;
+}
+
+interface ObserverFormattedOutput {
+  text: string;
+  context: ObserverFormattingContext;
 }
 
 const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
@@ -557,9 +574,9 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverDate(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverDate(createdAt?: Date): string {
   return createdAt
-    ? new Date(createdAt).toLocaleDateString('en-US', {
+    ? createdAt.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
@@ -567,9 +584,9 @@ function formatObserverDate(createdAt: MastraDBMessage['createdAt']): string {
     : '';
 }
 
-function formatObserverTime(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverTime(createdAt?: Date): string {
   return createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', {
+    ? createdAt.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -683,6 +700,51 @@ function formatObserverPartLine(title: string, body: string, time: string, previ
   return `${title}${timeLabel}: ${body}`;
 }
 
+function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
+  if (createdAt instanceof Date) {
+    // Invalid Date objects still satisfy `instanceof Date`, so reject them explicitly.
+    if (Number.isNaN(createdAt.getTime())) {
+      return undefined;
+    }
+    return createdAt;
+  }
+
+  if (typeof createdAt === 'number' || typeof createdAt === 'string') {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
+  }
+
+  return undefined;
+}
+
+function formatObserverLines(
+  lines: ObserverFormattedLine[],
+  context: ObserverFormattingContext = {},
+): ObserverFormattedOutput {
+  const output: string[] = [];
+  let previousDate = context.previousDate;
+  let previousTime = context.previousTime;
+
+  for (const line of lines) {
+    if (line.date && line.date !== previousDate) {
+      output.push(`Date ${line.date}:`);
+      previousDate = line.date;
+      previousTime = undefined;
+    }
+
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    previousTime = line.time || previousTime;
+  }
+
+  return {
+    text: output.join('\n'),
+    context: { previousDate, previousTime },
+  };
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -692,96 +754,87 @@ function formatObserverMessage(
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const attachments: ObserverInputAttachmentPart[] = [];
-  const messageDate = formatObserverDate(msg.createdAt);
-  const messageTime = formatObserverTime(msg.createdAt);
+  const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
-  let previousTime: string | undefined;
-  let lines: string[] = [];
+  let lines: ObserverFormattedLine[] = [];
+
+  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+    if (!body) {
+      return;
+    }
+
+    const normalizedCreatedAt = normalizeObserverCreatedAt(createdAt) ?? messageCreatedAt;
+    lines.push({
+      date: formatObserverDate(normalizedCreatedAt),
+      time: formatObserverTime(normalizedCreatedAt),
+      title,
+      body,
+    });
+  };
 
   if (typeof msg.content === 'string') {
-    const body = maybeTruncate(msg.content, maxLen);
-    if (body) {
-      lines = [formatObserverPartLine(role, body, messageTime, undefined)];
-    }
+    pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    lines = msg.content.parts
-      .map(part => {
-        const partCreatedAt = (part as { createdAt?: Date }).createdAt;
-        const partTime = formatObserverTime(partCreatedAt ?? msg.createdAt);
+    msg.content.parts.forEach(part => {
+      const partCreatedAt = normalizeObserverCreatedAt((part as { createdAt?: unknown }).createdAt) ?? messageCreatedAt;
 
-        if (part.type === 'text') {
-          const body = maybeTruncate(part.text, maxLen);
-          if (!body) {
-            return '';
-          }
-          const line = formatObserverPartLine(role, body, partTime, previousTime);
-          previousTime = partTime;
-          return line;
-        }
-        if (part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
-          if (inv.state === 'result') {
-            const { value: resultForObserver } = resolveToolResultValue(
-              part as { providerMetadata?: Record<string, any> },
-              inv.result,
-            );
-            const resultStr = maybeTruncate(
-              formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }),
-              maxLen,
-            );
-            const line = formatObserverPartLine(`Tool Result ${inv.toolName}`, resultStr, partTime, previousTime);
-            previousTime = partTime;
-            return line;
-          }
-          const argsStr = maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen);
-          const line = formatObserverPartLine(`Tool Call ${inv.toolName}`, argsStr, partTime, previousTime);
-          previousTime = partTime;
-          return line;
-        }
+      if (part.type === 'text') {
+        pushLine(role, maybeTruncate(part.text, maxLen), partCreatedAt);
+        return;
+      }
 
-        const partType = (part as { type?: string }).type;
-        if (partType === 'reasoning') {
-          const reasoning = (part as { reasoning?: string }).reasoning;
-          if (!reasoning) return '';
-          const line = formatObserverPartLine('Reasoning', maybeTruncate(reasoning, maxLen), partTime, previousTime);
-          previousTime = partTime;
-          return line;
-        }
-        if (partType === 'image' || partType === 'file') {
-          const attachment = part as ObserverAttachmentPart;
-          const inputAttachment = toObserverInputAttachmentPart(attachment);
-          if (inputAttachment) {
-            attachments.push(inputAttachment);
-          }
-          const line = formatObserverPartLine(
-            partType === 'image' ? 'Image' : 'File',
-            formatObserverAttachmentPlaceholder(attachment, counter),
-            partTime,
-            previousTime,
+      if (part.type === 'tool-invocation') {
+        const inv = part.toolInvocation;
+        if (inv.state === 'result') {
+          const { value: resultForObserver } = resolveToolResultValue(
+            part as { providerMetadata?: Record<string, any> },
+            inv.result,
           );
-          previousTime = partTime;
-          return line;
+          pushLine(
+            `Tool Result ${inv.toolName}`,
+            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            partCreatedAt,
+          );
+          return;
         }
-        if (partType?.startsWith('data-')) return '';
-        return '';
-      })
-      .filter(Boolean);
+
+        pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+        return;
+      }
+
+      const partType = (part as { type?: string }).type;
+      if (partType === 'reasoning') {
+        const reasoning = (part as { reasoning?: string }).reasoning;
+        if (!reasoning) {
+          return;
+        }
+        pushLine('Reasoning', maybeTruncate(reasoning, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (partType === 'image' || partType === 'file') {
+        const attachment = part as ObserverAttachmentPart;
+        const inputAttachment = toObserverInputAttachmentPart(attachment);
+        if (inputAttachment) {
+          attachments.push(inputAttachment);
+        }
+        pushLine(
+          partType === 'image' ? 'Image' : 'File',
+          formatObserverAttachmentPlaceholder(attachment, counter),
+          partCreatedAt,
+        );
+      }
+    });
   } else if (msg.content?.content) {
-    const body = maybeTruncate(msg.content.content, maxLen);
-    if (body) {
-      lines = [formatObserverPartLine(role, body, messageTime, undefined)];
-    }
+    pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
   }
 
   if (lines.length === 0 && attachments.length === 0) {
-    return { text: '', attachments };
+    return { lines: [], attachments };
   }
 
-  const dayHeader = messageDate ? `Date ${messageDate}:` : '';
-  const text = [dayHeader, ...lines].filter(Boolean).join('\n');
-
   return {
-    text,
+    lines,
     attachments,
   };
 }
@@ -789,40 +842,48 @@ function formatObserverMessage(
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const sections: string[] = [];
-  let previousDate = '';
+  let context: ObserverFormattingContext = {};
 
   for (const message of messages) {
     const formatted = formatObserverMessage(message, counter, options);
-    if (!formatted.text) {
+    if (formatted.lines.length === 0) {
       continue;
     }
 
-    const currentDate = formatObserverDate(message.createdAt);
-    if (currentDate && currentDate === previousDate) {
-      sections.push(formatted.text.replace(`Date ${currentDate}:\n`, ''));
-    } else {
-      sections.push(formatted.text);
-      previousDate = currentDate;
+    const rendered = formatObserverLines(formatted.lines, context);
+    if (!rendered.text) {
+      continue;
     }
+
+    sections.push(rendered.text);
+    context = rendered.context;
   }
 
   return sections.join('\n');
+}
+
+function appendFormattedObserverMessage(
+  content: any[],
+  formatted: ObserverFormattedMessage,
+  context: ObserverFormattingContext,
+): ObserverFormattingContext {
+  const rendered = formatObserverLines(formatted.lines, context);
+  if (rendered.text) {
+    content.push({ type: 'text', text: rendered.text });
+  }
+  content.push(...formatted.attachments);
+  return rendered.context;
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  let visibleCount = 0;
+  let context: ObserverFormattingContext = {};
   messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter, options);
-    if (!formatted.text && formatted.attachments.length === 0) return;
-    if (visibleCount > 0) {
-      content.push({ type: 'text', text: '\n\n---\n\n' });
-    }
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    visibleCount++;
+    if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+    context = appendFormattedObserverMessage(content, formatted, context);
   });
 
   return {
@@ -879,19 +940,16 @@ export function buildMultiThreadObserverHistoryMessage(
     if (!messages || messages.length === 0) return;
 
     const threadContent: any[] = [];
-    let visibleCount = 0;
+    let context: ObserverFormattingContext = {};
+    let hasVisibleContent = false;
     messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter, options);
-      if (!formatted.text && formatted.attachments.length === 0) return;
-      if (visibleCount > 0) {
-        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
-      }
-      threadContent.push({ type: 'text', text: formatted.text });
-      threadContent.push(...formatted.attachments);
-      visibleCount++;
+      if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+      context = appendFormattedObserverMessage(threadContent, formatted, context);
+      hasVisibleContent = true;
     });
 
-    if (visibleCount === 0) return;
+    if (!hasVisibleContent) return;
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
     content.push(...threadContent);
