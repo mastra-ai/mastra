@@ -4,6 +4,7 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys, createGatewayMock } from '@internal/test-utils';
 import { describe, beforeAll, afterAll } from 'vitest';
 import { getAgentMemoryTests } from './shared/agent-memory';
+import { transformRequest } from './transform-request';
 import { weatherTool as weatherToolV4, weatherToolCity as weatherToolCityV4 } from './v4/mastra/tools/weather';
 import { weatherTool as weatherToolV5, weatherToolCity as weatherToolCityV5 } from './v5/mastra/tools/weather';
 
@@ -20,6 +21,7 @@ describe('V4', async () => {
   const mock = createGatewayMock({
     exactMatch: true,
     name: RECORDING_NAME + '-v4',
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
@@ -37,6 +39,7 @@ describe('V5', async () => {
   const mock = createGatewayMock({
     exactMatch: true,
     name: RECORDING_NAME + '-v5',
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
@@ -55,6 +58,7 @@ describe('V6', async () => {
   const mock = createGatewayMock({
     exactMatch: true,
     name: RECORDING_NAME + '-v6',
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
