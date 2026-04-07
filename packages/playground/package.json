@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.4.0-alpha.10",
+  "version": "1.4.0",
   "type": "module",
   "homepage": "https://mastra.ai",
   "files": [
