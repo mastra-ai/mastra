@@ -2,6 +2,7 @@ import { format, isToday } from 'date-fns';
 import { DataListCell } from '../data-list-cells';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { Colors } from '@/ds/tokens/colors';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -143,8 +144,6 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // ---------------------------------------------------------------------------
 // StatusCell
 // ---------------------------------------------------------------------------
-
-import { Colors } from '@/ds/tokens/colors';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   completed: { label: 'OK', color: Colors.accent2 },
