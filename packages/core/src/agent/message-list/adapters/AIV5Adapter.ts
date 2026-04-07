@@ -266,6 +266,8 @@ export class AIV5Adapter {
           }
 
           parts.push(v5UIPart);
+        } else if (part.type === 'source-document') {
+          continue;
         } else if (part.type === 'text') {
           const v5UIPart: AIV5Type.TextUIPart = {
             type: 'text' as const,
