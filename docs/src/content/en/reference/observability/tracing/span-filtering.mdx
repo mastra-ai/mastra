@@ -69,6 +69,8 @@ export const mastra = new Mastra({
 
 Use `excludeSpanTypes` when you want to suppress whole categories of spans with minimal configuration.
 
+For the current set of supported values, see the [`SpanType` enum](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/observability/types/tracing.ts).
+
 ```ts title="src/mastra/index.ts"
 import { SpanType } from '@mastra/core/observability'
 
@@ -99,31 +101,6 @@ spanFilter: span => span.metadata?.environment === 'production'
 // Exclude spans from a specific entity
 spanFilter: span => span.entityId !== 'noisy-agent'
 ```
-
-## Available span types
-
-The following span types can be used with `excludeSpanTypes`:
-
-| Span type | Description |
-| - | - |
-| `AGENT_RUN` | Root span for agent execution |
-| `MODEL_GENERATION` | LLM API call with token usage |
-| `MODEL_STEP` | Single model execution step within a generation |
-| `MODEL_CHUNK` | Individual streaming chunk |
-| `TOOL_CALL` | Tool execution |
-| `MCP_TOOL_CALL` | MCP tool execution |
-| `WORKFLOW_RUN` | Root span for workflow execution |
-| `WORKFLOW_STEP` | Individual workflow step |
-| `WORKFLOW_CONDITIONAL` | Conditional branch evaluation |
-| `WORKFLOW_CONDITIONAL_EVAL` | Individual condition evaluation |
-| `WORKFLOW_PARALLEL` | Parallel execution |
-| `WORKFLOW_LOOP` | Loop execution |
-| `WORKFLOW_SLEEP` | Sleep or delay operation |
-| `WORKFLOW_WAIT_EVENT` | Wait-for-event operation |
-| `PROCESSOR_RUN` | Input or output processor execution |
-| `SCORER_RUN` | Scorer execution |
-| `SCORER_STEP` | Individual scorer pipeline step |
-| `GENERIC` | Generic custom span |
 
 ## Processing order
 

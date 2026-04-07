@@ -1,6 +1,6 @@
 import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
 import type { TracingEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Mock console to avoid noise in test output
@@ -12,6 +12,10 @@ const mockConsole = {
   debug: vi.fn(),
 };
 vi.stubGlobal('console', mockConsole);
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
