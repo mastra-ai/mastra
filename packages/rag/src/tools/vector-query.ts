@@ -33,6 +33,11 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     inputSchema,
     outputSchema,
     execute: async (inputData, context) => {
+      // The `context` parameter from `createTool` is loosely typed and the
+      // generated tool types don't always surface `tracingContext`. The cast
+      // is intentional: when `context` or `tracingContext` is undefined,
+      // `createObservabilityContext` falls back to `noOpTracingContext`, so
+      // downstream span creation safely no-ops.
       const { requestContext, mastra, tracingContext } = (context as any) || {};
       const observabilityContext = createObservabilityContext(tracingContext);
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;

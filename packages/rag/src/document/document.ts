@@ -367,7 +367,9 @@ export class MDocument {
       await this.chunkBy(strategy, chunkOptions);
 
       if (extract) {
-        const extractSpan = parentSpan?.createChildSpan({
+        // Nest under chunkSpan: extract_metadata operates on the chunks
+        // produced by chunkBy() above and is part of the same chunk() call.
+        const extractSpan = chunkSpan?.createChildSpan({
           type: SpanType.RAG_ACTION,
           name: 'rag extract metadata',
           attributes: {

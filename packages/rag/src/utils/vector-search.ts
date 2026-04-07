@@ -123,6 +123,8 @@ export const vectorQuerySearch = async ({
   const querySpan = parentSpan?.createChildSpan({
     type: SpanType.RAG_VECTOR_OPERATION,
     name: `rag vector: query`,
+    // Pass filter as-is; the observability layer's deepClean handles
+    // size limits and sanitization centrally.
     input: { topK, filter: queryFilter },
     attributes: {
       operation: 'query',

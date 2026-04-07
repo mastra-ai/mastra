@@ -40,6 +40,9 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     outputSchema,
     description: toolDescription,
     execute: async (inputData, context) => {
+      // See vector-query.ts for the same pattern: `context` from `createTool`
+      // is loosely typed; cast is safe because `createObservabilityContext`
+      // falls back to `noOpTracingContext` when `tracingContext` is undefined.
       const { requestContext, mastra, tracingContext } = (context as any) || {};
       const observabilityContext = createObservabilityContext(tracingContext);
       const parentSpan = observabilityContext.tracingContext?.currentSpan;
