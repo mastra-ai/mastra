@@ -338,6 +338,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/mixlayer',
+          label: 'Mixlayer',
+        },
+        {
+          type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
         },
