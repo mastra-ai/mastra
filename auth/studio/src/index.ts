@@ -19,6 +19,8 @@ export interface StudioUser extends EEUser {
   organizationId?: string;
   role?: string;
   permissions?: string[];
+  /** All organization IDs the user is a member of (for cross-org access checks) */
+  memberOrgIds?: string[];
 }
 
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
@@ -121,8 +123,9 @@ export class MastraAuthStudio
 
     if (!user) return null;
 
-    // Org-scoping: if this instance belongs to a specific org, reject users not in that org
-    if (this.organizationId && user.organizationId !== this.organizationId) {
+    // Org-scoping: if this instance belongs to a specific org, reject users not a member of that org
+    // Check memberOrgIds (all orgs user belongs to) rather than organizationId (current org)
+    if (this.organizationId && !user.memberOrgIds?.includes(this.organizationId)) {
       return null;
     }
 
@@ -385,6 +388,7 @@ export class MastraAuthStudio
         organizationId: string;
         role?: string;
         permissions?: string[];
+        memberOrgIds?: string[];
       };
 
       return {
@@ -395,6 +399,7 @@ export class MastraAuthStudio
         organizationId: data.organizationId,
         role: data.role,
         permissions: data.permissions,
+        memberOrgIds: data.memberOrgIds,
       };
     } catch {
       return null;
@@ -424,6 +429,7 @@ export class MastraAuthStudio
         };
         organizationId: string;
         role?: string;
+        memberOrgIds?: string[];
       };
 
       return {
@@ -432,6 +438,7 @@ export class MastraAuthStudio
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
         organizationId: data.organizationId,
         role: data.role,
+        memberOrgIds: data.memberOrgIds,
       };
     } catch {
       return null;

@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
@@ -59,20 +60,34 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
-    const result = await formatAsTree(filesystem, path, {
-      maxDepth,
-      showHidden,
-      dirsOnly,
-      exclude: exclude || undefined,
-      extension: extension || undefined,
-      pattern: pattern || undefined,
-      respectGitignore,
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'listFiles',
+      input: { path, maxDepth, pattern },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
-    return await applyTokenLimit(
-      `${result.tree}\n\n${result.summary}`,
-      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
-      'end',
-    );
+    try {
+      const result = await formatAsTree(filesystem, path, {
+        maxDepth,
+        showHidden,
+        dirsOnly,
+        exclude: exclude || undefined,
+        extension: extension || undefined,
+        pattern: pattern || undefined,
+        respectGitignore,
+      });
+
+      const output = await applyTokenLimit(
+        `${result.tree}\n\n${result.summary}`,
+        workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
+        'end',
+      );
+      span.end({ success: true }, { resultCount: result.fileCount });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

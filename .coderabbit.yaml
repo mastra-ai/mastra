@@ -6,7 +6,8 @@ reviews:
   profile: chill
   request_changes_workflow: false
   high_level_summary: true
-  high_level_summary_instructions: ''
+  high_level_summary_instructions: |
+    Start the summary with an "ELI5" (Explain Like I'm 5) section at the very top that gives a simple, jargon-free explanation of what the PR does and why, in 1-3 sentences that anyone could understand.
   high_level_summary_placeholder: '@coderabbitai summary'
   high_level_summary_in_walkthrough: false
   auto_title_placeholder: '@coderabbitai'
