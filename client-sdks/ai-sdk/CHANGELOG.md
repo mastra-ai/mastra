@@ -1,5 +1,16 @@
 # @mastra/ai-sdk
 
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added toAISdkMessages() for loading stored Mastra messages into AI SDK v5 or v6 chat UIs. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  Use the default v5 behavior or pass { version: 'v6' } when your app is typed against AI SDK v6 useChat() message types.
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.3.2
 
 ### Patch Changes

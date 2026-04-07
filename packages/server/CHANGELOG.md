@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Fixed the Responses API to use the agent default model when create requests omit model. ([#15140](https://github.com/mastra-ai/mastra/pull/15140))
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.23.0
 
 ### Patch Changes

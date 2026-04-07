@@ -72,7 +72,6 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import Observability from './pages/observability';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
@@ -85,6 +84,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -215,7 +215,7 @@ const routes = [
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
       { path: '/observability-overview', element: <ObservabilityOverview /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/observability', element: <Traces /> },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {

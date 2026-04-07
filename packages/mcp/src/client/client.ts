@@ -45,6 +45,7 @@ import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
+import { isReconnectableMCPError } from './error-utils';
 import type {
   FetchLike,
   LogHandler,
@@ -505,44 +506,6 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Checks if an error indicates a session invalidation that requires reconnection.
-   *
-   * Common session-related errors include:
-   * - "No valid session ID provided" (HTTP 400)
-   * - "Server not initialized" (HTTP 400)
-   * - "Not connected" (protocol state error)
-   * - Connection refused errors
-   *
-   * @param error - The error to check
-   * @returns true if the error indicates a session problem requiring reconnection
-   *
-   * @internal
-   */
-  private isSessionError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    const errorMessage = error.message.toLowerCase();
-
-    // Check for session-related error patterns
-    return (
-      errorMessage.includes('no valid session') ||
-      errorMessage.includes('session') ||
-      errorMessage.includes('server not initialized') ||
-      errorMessage.includes('not connected') ||
-      errorMessage.includes('http 400') ||
-      errorMessage.includes('http 401') ||
-      errorMessage.includes('http 403') ||
-      errorMessage.includes('econnrefused') ||
-      errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused') ||
-      errorMessage.includes('sse stream disconnected') ||
-      errorMessage.includes('typeerror: terminated')
-    );
-  }
-
-  /**
    * Forces a reconnection to the MCP server by disconnecting and reconnecting.
    *
    * This is useful when the session becomes invalid (e.g., after server restart)
@@ -774,7 +737,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 return await executeToolCall();
               } catch (e) {
                 // Check if this is a session-related error that requires reconnection
-                if (this.isSessionError(e)) {
+                if (isReconnectableMCPError(e)) {
                   this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
                     error: e instanceof Error ? e.message : String(e),
                   });

@@ -18,6 +18,7 @@
         "glm-4.6",
         "glm-4.7",
         "glm-5",
+        "glm-5.1",
         "gpt-oss:120b",
         "gpt-oss:20b",
         "kimi-k2-thinking",
@@ -2208,7 +2209,8 @@
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash",
         "z-ai/glm-5",
-        "z-ai/glm-5-turbo"
+        "z-ai/glm-5-turbo",
+        "z-ai/glm-5.1"
       ],
       "docUrl": "https://openrouter.ai/models",
       "gateway": "models.dev",
@@ -2593,7 +2595,8 @@
         "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.7",
         "zai-org/GLM-4.7-Flash",
-        "zai-org/GLM-5"
+        "zai-org/GLM-5",
+        "zai-org/GLM-5.1"
       ],
       "docUrl": "https://huggingface.co/docs/inference-providers",
       "gateway": "models.dev"
@@ -2603,7 +2606,7 @@
       "apiKeyEnvVar": "STEPFUN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "StepFun",
-      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
+      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
       "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
       "gateway": "models.dev"
     },
@@ -3326,6 +3329,21 @@
         "qwq-plus"
       ],
       "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models",
+      "gateway": "models.dev"
+    },
+    "mixlayer": {
+      "url": "https://models.mixlayer.ai/v1",
+      "apiKeyEnvVar": "MIXLAYER_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Mixlayer",
+      "models": [
+        "qwen/qwen3.5-122b-a10b",
+        "qwen/qwen3.5-27b",
+        "qwen/qwen3.5-35b-a3b",
+        "qwen/qwen3.5-397b-a17b",
+        "qwen/qwen3.5-9b"
+      ],
+      "docUrl": "https://docs.mixlayer.com",
       "gateway": "models.dev"
     },
     "mistral": {
@@ -4489,6 +4507,7 @@
       "glm-4.6",
       "glm-4.7",
       "glm-5",
+      "glm-5.1",
       "gpt-oss:120b",
       "gpt-oss:20b",
       "kimi-k2-thinking",
@@ -6300,7 +6319,8 @@
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash",
       "z-ai/glm-5",
-      "z-ai/glm-5-turbo"
+      "z-ai/glm-5-turbo",
+      "z-ai/glm-5.1"
     ],
     "zenmux": [
       "anthropic/claude-3.5-haiku",
@@ -6587,9 +6607,10 @@
       "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.7",
       "zai-org/GLM-4.7-Flash",
-      "zai-org/GLM-5"
+      "zai-org/GLM-5",
+      "zai-org/GLM-5.1"
     ],
-    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
+    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
     "fastrouter": [
       "anthropic/claude-opus-4.1",
       "anthropic/claude-sonnet-4",
@@ -7197,6 +7218,13 @@
       "qwen3.5-plus",
       "qwen3.6-plus",
       "qwq-plus"
+    ],
+    "mixlayer": [
+      "qwen/qwen3.5-122b-a10b",
+      "qwen/qwen3.5-27b",
+      "qwen/qwen3.5-35b-a3b",
+      "qwen/qwen3.5-397b-a17b",
+      "qwen/qwen3.5-9b"
     ],
     "mistral": [
       "codestral-latest",
