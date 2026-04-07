@@ -40,6 +40,7 @@ smoke test --existing-project ~/my-app --test traces
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
 | `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
 | `--test`             |       | Run specific test only: `agents`, `tools`, `workflows`, `traces`, `scorers`  | No       | (full)   |
+| `--browser-agent`    |       | Add a browser-enabled agent to the project for testing                       | No       | `false`  |
 
 \* Either `--directory` + `--name` OR `--existing-project` is required
 \** Required for new projects, optional for existing (updates deps when provided)
@@ -145,7 +146,9 @@ After creation, verify the project has:
 - `src/mastra/index.ts` exporting a Mastra instance
 - `.env` file (may need to be created)
 
-### Step 2.5: Add Browser Agent for Browser Testing
+### Step 2.5: Add Browser Agent (--browser-agent)
+
+**Skip this step if `--browser-agent` flag is NOT provided.**
 
 To test browser functionality, add a browser-enabled agent:
 
@@ -247,7 +250,7 @@ Perform the following smoke tests:
 - [ ] Extract/snapshot to verify response appears
 - [ ] Confirm agent chat works
 
-**Browser Agent** (`/agents/browser-agent/chat`) - if browser agent was added
+**Browser Agent** (`/agents/browser-agent/chat`) - only if `--browser-agent` was provided
 
 - [ ] Navigate to the browser-agent
 - [ ] Send a message: "Go to example.com and tell me what you see"
