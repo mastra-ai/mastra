@@ -138,6 +138,7 @@
     "five-mice-prune",
     "fix-answer-similarity-prompt",
     "fix-bearer-token-role",
+    "fix-cli-project-creation-timing",
     "fix-loop-resourceid-null",
     "fix-openai-realtime-request-context",
     "fix-scorer-threadid-resourceid-forwarding",

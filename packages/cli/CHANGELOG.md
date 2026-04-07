@@ -1,5 +1,11 @@
 # mastra
 
+## 1.4.0-alpha.9
+
+### Patch Changes
+
+- Fixed `mastra studio deploy` creating orphan projects when user cancels. Project creation is now deferred until after the user confirms the deploy settings. ([#15109](https://github.com/mastra-ai/mastra/pull/15109))
+
 ## 1.4.0-alpha.8
 
 ### Patch Changes
