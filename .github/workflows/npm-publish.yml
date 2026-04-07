@@ -88,11 +88,24 @@ jobs:
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Upload studio assets to R2
+      - name: Upload studio assets to R2 (staging)
+        if: ${{ !inputs.dry_run }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
           STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload studio assets to R2 (production)
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: studio-assets
           STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
@@ -195,12 +208,24 @@ jobs:
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Upload studio assets to R2
+      - name: Upload studio assets to R2 (staging)
         if: ${{ !inputs.dry_run }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
           STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload studio assets to R2 (production)
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: studio-assets
           STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
@@ -387,11 +412,24 @@ jobs:
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Upload studio assets to R2
+      - name: Upload studio assets to R2 (staging)
+        if: ${{ !inputs.dry_run }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
           STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload studio assets to R2 (production)
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: studio-assets
           STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
