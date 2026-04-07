@@ -23,6 +23,7 @@ interface AgentPlaygroundViewProps {
   readOnly: boolean;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  isViewingPreviousVersion?: boolean;
 }
 
 function LeftPanel({
@@ -38,6 +39,7 @@ function LeftPanel({
   readOnly,
   onSaveDraft,
   onPublish,
+  isViewingPreviousVersion,
 }: {
   agentId: string;
   activeVersionId?: string;
@@ -51,6 +53,7 @@ function LeftPanel({
   readOnly: boolean;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  isViewingPreviousVersion?: boolean;
 }) {
   const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
     agentId,
@@ -64,6 +67,7 @@ function LeftPanel({
     readOnly,
     onSaveDraft,
     onPublish,
+    isViewingPreviousVersion,
   });
 
   return (
@@ -106,6 +110,7 @@ export function AgentPlaygroundView({
   readOnly,
   onSaveDraft,
   onPublish,
+  isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-playground-${agentId}`,
@@ -130,6 +135,7 @@ export function AgentPlaygroundView({
             readOnly={readOnly}
             onSaveDraft={onSaveDraft}
             onPublish={onPublish}
+            isViewingPreviousVersion={isViewingPreviousVersion}
           />
         </Panel>
 

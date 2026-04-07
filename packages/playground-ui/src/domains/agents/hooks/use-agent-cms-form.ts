@@ -279,11 +279,14 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     ],
   );
 
-  const handlePublish = useCallback(async () => {
-    const isValid = await form.trigger();
-    if (!isValid) {
-      toast.error('Please fill in all required fields');
-      return;
+  const handlePublish = useCallback(async (publishVersionId?: string) => {
+    // When publishing a specific older version, skip form validation since the form is read-only
+    if (!publishVersionId) {
+      const isValid = await form.trigger();
+      if (!isValid) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
     }
 
     const values = form.getValues();
@@ -291,7 +294,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
     try {
       if (isEdit) {
-        if (needsCreate) {
+        if (publishVersionId) {
+          // Publishing a specific version (e.g. an older read-only version)
+          await client.getStoredAgent(options.agentId).activateVersion(publishVersionId);
+        } else if (needsCreate) {
           // First publish for a code agent — create and immediately publish
           const sharedParams = await buildSharedParams(values);
           const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);

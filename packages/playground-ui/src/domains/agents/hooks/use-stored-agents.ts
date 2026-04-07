@@ -12,14 +12,29 @@ export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   });
 };
 
-export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published' }) => {
+export const useStoredAgent = (
+  agentId?: string,
+  options?: { status?: 'draft' | 'published'; enabled?: boolean },
+) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
+  const { enabled = true, ...queryOptions } = options ?? {};
 
   return useQuery({
-    queryKey: ['stored-agent', agentId, options?.status, requestContext],
-    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext, options) : null),
-    enabled: Boolean(agentId),
+    queryKey: ['stored-agent', agentId, queryOptions.status, requestContext],
+    queryFn: async () => {
+      if (!agentId) return null;
+      try {
+        return await client.getStoredAgent(agentId).details(requestContext, queryOptions);
+      } catch (error) {
+        // 404 is expected for code-only agents that haven't been stored yet
+        if (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    enabled: Boolean(agentId) && enabled,
   });
 };
 
