@@ -7,8 +7,13 @@ import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SelectItem } from '@mariozechner/pi-tui';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
+import type { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { getSelectListTheme, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
+
+interface InlineInputHandler {
+  handleInput(data: string): void;
+}
 
 interface ProviderInfo {
   provider: string;
@@ -82,8 +87,6 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
     container.addChild(new Spacer(1));
 
-    const items = buildItems(providers);
-    const selectList = new SelectList(items, Math.min(items.length, 15), getSelectListTheme());
     const detailText = new Text('', 0, 0);
 
     // Track which provider is currently highlighted
@@ -104,6 +107,79 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       ctx.state.ui.requestRender();
     };
 
+    // Build a SelectList with all event handlers wired up.
+    // Called on initial render and again after save/remove to refresh status labels.
+    let selectList: SelectList;
+    const buildSelectList = (): SelectList => {
+      const items = buildItems(providers);
+      const list = new SelectList(items, Math.min(items.length, 15), getSelectListTheme());
+
+      list.onSelect = (item: SelectItem) => {
+        const info = providers.find(p => p.provider === item.value);
+        if (!info) return;
+
+        if (info.source === 'env') {
+          ctx.showInfo(
+            `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Update it in your shell environment.`,
+          );
+          return;
+        }
+
+        showKeyDialog(info);
+      };
+
+      list.onCancel = () => {
+        ctx.state.activeInlineQuestion = undefined;
+        container.clear();
+        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} API Keys (closed)`), 0, 0));
+        ctx.state.ui.requestRender();
+        resolve();
+      };
+
+      list.onSelectionChange = (item: SelectItem) => {
+        currentSelection = item.value;
+        updateDetail(item.value);
+      };
+
+      // Handle Delete key to remove stored keys
+      const originalHandleInput = list.handleInput.bind(list);
+      list.handleInput = (data: string) => {
+        // Delete or Backspace
+        if (data === '\x7f' || data === '\x1b[3~') {
+          const info = providers.find(p => p.provider === currentSelection);
+          if (info?.source === 'stored') {
+            ctx.authStorage?.remove(`apikey:${info.provider}`);
+            if (info.envVar) {
+              delete process.env[info.envVar];
+            }
+            info.source = 'none';
+            ctx.showInfo(`API key removed for ${info.provider}`);
+            rebuildList();
+            return;
+          }
+        }
+        originalHandleInput(data);
+      };
+
+      return list;
+    };
+
+    const rebuildList = () => {
+      container.clear();
+      container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
+      container.addChild(new Spacer(1));
+      selectList = buildSelectList();
+      container.addChild(selectList);
+      container.addChild(new Spacer(1));
+      container.addChild(detailText);
+      container.addChild(new Spacer(1));
+      container.addChild(
+        new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0),
+      );
+      updateDetail(currentSelection);
+      ctx.state.ui.requestRender();
+    };
+
     const showKeyDialog = (info: ProviderInfo) => {
       const dialog = new ApiKeyDialogComponent({
         providerName: info.provider,
@@ -113,7 +189,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           ctx.authStorage?.setStoredApiKey(info.provider, key, info.envVar);
           ctx.showInfo(`API key saved for ${info.provider}`);
           info.source = 'stored';
-          updateDetail(info.provider);
+          rebuildList();
         },
         onCancel: () => {
           ctx.state.ui.hideOverlay();
@@ -128,53 +204,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       dialog.focused = true;
     };
 
-    selectList.onSelect = (item: SelectItem) => {
-      const info = providers.find(p => p.provider === item.value);
-      if (!info) return;
-
-      if (info.source === 'env') {
-        ctx.showInfo(
-          `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Update it in your shell environment.`,
-        );
-        return;
-      }
-
-      showKeyDialog(info);
-    };
-
-    selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} API Keys (closed)`), 0, 0));
-      ctx.state.ui.requestRender();
-      resolve();
-    };
-
-    selectList.onSelectionChange = (item: SelectItem) => {
-      currentSelection = item.value;
-      updateDetail(item.value);
-    };
-
-    // Handle Delete key to remove stored keys
-    const originalHandleInput = selectList.handleInput.bind(selectList);
-    selectList.handleInput = (data: string) => {
-      // Delete or Backspace
-      if (data === '\x7f' || data === '\x1b[3~') {
-        const info = providers.find(p => p.provider === currentSelection);
-        if (info?.source === 'stored') {
-          ctx.authStorage?.remove(`apikey:${info.provider}`);
-          if (info.envVar) {
-            delete process.env[info.envVar];
-          }
-          info.source = 'none';
-          ctx.showInfo(`API key removed for ${info.provider}`);
-          updateDetail(info.provider);
-          return;
-        }
-      }
-      originalHandleInput(data);
-    };
-
+    selectList = buildSelectList();
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
@@ -185,8 +215,8 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
     updateDetail(providers[0]!.provider);
 
-    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
-    ctx.state.activeInlineQuestion = inputShim;
+    const inputShim: InlineInputHandler = { handleInput: (data: string) => selectList.handleInput(data) };
+    ctx.state.activeInlineQuestion = inputShim as unknown as AskQuestionInlineComponent;
 
     ctx.state.chatContainer.addChild(new Spacer(1));
     ctx.state.chatContainer.addChild(container);
