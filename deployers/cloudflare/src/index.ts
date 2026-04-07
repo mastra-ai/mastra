@@ -1,12 +1,33 @@
 import { writeFile } from 'node:fs/promises';
+import { builtinModules } from 'node:module';
 import { join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
+import type { Plugin } from 'rollup';
 import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is unstable, and no stable alternative exists. However, `wrangler` is a peerDep, allowing users to use latest properties.
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
+
+const nodeBuiltins = new Set(builtinModules);
+
+/**
+ * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
+ * as external. Cloudflare Workers with `nodejs_compat` provides these at runtime,
+ * so they must not be resolved to npm polyfill packages during bundling.
+ */
+function nodeBuiltinsExternal(): Plugin {
+  return {
+    name: 'node-builtins-external',
+    resolveId(id) {
+      if (nodeBuiltins.has(id)) {
+        return { id, external: true };
+      }
+      return null;
+    },
+  };
+}
 
 /** @deprecated */
 interface D1DatabaseBinding {
@@ -235,6 +256,7 @@ export default stream;
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
+        nodeBuiltinsExternal(),
         virtual({
           '#polyfills': `
 process.versions = process.versions || {};

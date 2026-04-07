@@ -15,7 +15,11 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
     queryKey: ['memory', 'messages', threadId, agentId, 'requestContext'],
     queryFn: async () => {
       if (!threadId) return null;
-      const result = await client.listThreadMessages(threadId, { agentId, requestContext });
+      const result = await client.listThreadMessages(threadId, {
+        agentId,
+        requestContext,
+        includeSystemReminders: true,
+      });
       return result;
     },
     enabled: memory && Boolean(threadId),

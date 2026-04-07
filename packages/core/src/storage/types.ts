@@ -1322,6 +1322,15 @@ export interface CreateReflectionGenerationInput {
   tokenCount: number;
 }
 
+/**
+ * Input for updating the config of an existing observational memory record.
+ * The provided config is deep-merged into the record's existing config.
+ */
+export interface UpdateObservationalMemoryConfigInput {
+  id: string;
+  config: Record<string, unknown>;
+}
+
 // ============================================
 // MCP Client Storage Types
 // ============================================

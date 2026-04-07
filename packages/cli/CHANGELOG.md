@@ -1,5 +1,45 @@
 # mastra
 
+## 1.4.0
+
+### Minor Changes
+
+- Added `mastra server deploy` command for deploying to Mastra Server. Builds, zips, and uploads your project with environment variable support and deploy polling. ([#15080](https://github.com/mastra-ai/mastra/pull/15080))
+
+- Added `mastra studio deploy` command for deploying studio to the Mastra platform. Includes `deploy`, `deploy list`, `deploy status`, `deploy logs`, and `projects` subcommands. Also generates a `package-lock.json` during build for faster deploys. ([#15067](https://github.com/mastra-ai/mastra/pull/15067))
+
+- Added `mastra auth` commands to log in, log out, show the current account, switch organizations, and manage API tokens. ([#15066](https://github.com/mastra-ai/mastra/pull/15066))
+
+### Patch Changes
+
+- Fixed `mastra studio deploy` creating orphan projects when user cancels. Project creation is now deferred until after the user confirms the deploy settings. ([#15109](https://github.com/mastra-ai/mastra/pull/15109))
+
+- Updated dependencies [[`c3899d0`](https://github.com/mastra-ai/mastra/commit/c3899d0829eae0c9844672da817578dcf1a11eba), [`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`ef36607`](https://github.com/mastra-ai/mastra/commit/ef36607c05142900dd6de2dff1a0a575830d78bd), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`1b8f0d9`](https://github.com/mastra-ai/mastra/commit/1b8f0d913877d8b99d680d847890654da8da068e), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/deployer@1.23.0
+  - @mastra/core@1.23.0
+
+## 1.4.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+  - @mastra/deployer@1.23.0-alpha.9
+
+## 1.4.0-alpha.9
+
+### Patch Changes
+
+- Fixed `mastra studio deploy` creating orphan projects when user cancels. Project creation is now deferred until after the user confirms the deploy settings. ([#15109](https://github.com/mastra-ai/mastra/pull/15109))
+
+## 1.4.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+  - @mastra/deployer@1.23.0-alpha.8
+
 ## 1.4.0-alpha.7
 
 ### Patch Changes
