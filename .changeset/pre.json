@@ -125,5 +125,8 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "every-colts-reply",
+    "green-birds-knock"
+  ]
 }
