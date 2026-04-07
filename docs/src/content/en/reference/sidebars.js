@@ -15,12 +15,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
-        {
-          type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
-          customProps: { tags: ['new'] },
-        },
+        { type: 'doc', id: 'agents/channels', label: 'Channels', customProps: { tags: ['new'] } },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -157,16 +152,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Editor',
-      collapsed: true,
-      customProps: { tags: ['new'] },
-      items: [
-        { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
-        { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Deployer',
       collapsed: true,
       items: [
@@ -174,6 +159,16 @@ const sidebars = {
         { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Editor',
+      collapsed: true,
+      customProps: { tags: ['new'] },
+      items: [
+        { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
+        { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
       ],
     },
     {
@@ -286,7 +281,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
-          items: [{ type: 'doc', id: 'observability/metrics/automatic-metrics', label: 'Automatic Metrics' }],
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/automatic-metrics',
+              label: 'Automatic Metrics',
+            },
+          ],
         },
         {
           type: 'category',
