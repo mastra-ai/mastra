@@ -1,4 +1,4 @@
-import { type ReactNode, type Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 export interface DataPanelContentProps {
   children: ReactNode;
