@@ -436,7 +436,12 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
 }
 
 /**
- * RAG Ingestion attributes (root span for an ingestion pipeline run)
+ * RAG Ingestion attributes (root span for an ingestion pipeline run).
+ *
+ * Attributes are stable, low-cardinality dimensions describing the run.
+ * Per-run results (final chunk count, etc.) belong on the span's `output`.
+ * Token usage for cost calculation is exposed via `usage` so existing
+ * `UsageStats`-aware exporters work without changes.
  */
 export interface RagIngestionAttributes extends AIBaseAttributes {
   /** User-supplied pipeline name */
@@ -451,14 +456,17 @@ export interface RagIngestionAttributes extends AIBaseAttributes {
   embeddingModel?: string;
   /** Embedding model provider */
   embeddingProvider?: string;
-  /** Total chunks produced across the run */
-  totalChunks?: number;
-  /** Total embedding tokens consumed across the run */
-  totalTokens?: number;
+  /** Aggregate token usage across the run (sum of all RAG_EMBEDDING children). */
+  usage?: UsageStats;
 }
 
 /**
- * RAG Embedding attributes (single embed call, batch)
+ * RAG Embedding attributes (single embed call, batch).
+ *
+ * The texts being embedded belong on the span's `input`. Returned vectors
+ * are summarized via `output` (count + dims) rather than dumped wholesale.
+ * Token usage uses the same `UsageStats` shape as `MODEL_GENERATION` so
+ * cost-extraction pipelines work uniformly across LLM and embedding spans.
  */
 export interface RagEmbeddingAttributes extends AIBaseAttributes {
   /** Embedding model id */
@@ -467,16 +475,19 @@ export interface RagEmbeddingAttributes extends AIBaseAttributes {
   provider?: string;
   /** Embedding vector dimensions */
   dimensions?: number;
-  /** Number of inputs in this batch */
+  /** Number of inputs in this batch (cardinality of the input array) */
   inputCount?: number;
-  /** Total tokens consumed by the batch */
-  totalTokens?: number;
   /** Whether this embed call is part of ingestion or query */
   mode?: 'ingest' | 'query';
+  /** Token usage for this embed call. Drives cost metrics. */
+  usage?: UsageStats;
 }
 
 /**
- * RAG Vector Operation attributes (vector store I/O)
+ * RAG Vector Operation attributes (vector store I/O).
+ *
+ * Query vectors / filters belong on `input`. Result counts belong on
+ * `output`.
  */
 export interface RagVectorOperationAttributes extends AIBaseAttributes {
   /** Vector store operation kind */
@@ -485,20 +496,16 @@ export interface RagVectorOperationAttributes extends AIBaseAttributes {
   store?: string;
   /** Index/collection name */
   indexName?: string;
-  /** Number of vectors written (upsert) */
-  vectorCount?: number;
   /** Top-K parameter (query) */
   topK?: number;
-  /** Filter passed to query */
-  filter?: unknown;
   /** Vector dimensions */
   dimensions?: number;
-  /** Number of results returned (query/fetch) */
-  returned?: number;
 }
 
 /**
- * RAG Action attributes - chunk / extract_metadata / rerank
+ * RAG Action attributes - chunk / extract_metadata / rerank.
+ *
+ * Per-call result counts (chunk count, etc.) belong on `output`.
  */
 export interface RagActionAttributes extends AIBaseAttributes {
   /** RAG action kind */
@@ -508,20 +515,25 @@ export interface RagActionAttributes extends AIBaseAttributes {
   strategy?: string;
   chunkSize?: number;
   chunkOverlap?: number;
-  chunkCount?: number;
   // extract_metadata
   /** Metadata extractor name */
   extractor?: string;
   model?: string;
   provider?: string;
   // rerank
+  /** Number of candidates fed into rerank (input array length) */
   candidateCount?: number;
+  /** Configured top-N to keep after reranking */
   topN?: number;
+  /** Scorer/provider name */
   scorer?: string;
 }
 
 /**
- * Graph Action attributes - non-RAG, used for any graph operation
+ * Graph Action attributes - non-RAG, used for any graph operation.
+ *
+ * Per-call traversal results (visited count, returned count) belong on
+ * `output`. `nodeCount` / `edgeCount` describe the graph itself.
  */
 export interface GraphActionAttributes extends AIBaseAttributes {
   /** Graph action kind */
@@ -536,10 +548,6 @@ export interface GraphActionAttributes extends AIBaseAttributes {
   startNodes?: number;
   /** Maximum traversal depth */
   maxDepth?: number;
-  /** Number of nodes visited during traversal */
-  visited?: number;
-  /** Number of nodes returned */
-  returned?: number;
 }
 
 /**

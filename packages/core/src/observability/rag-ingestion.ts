@@ -10,16 +10,31 @@
  *  - `withRagIngestion(opts, fn)` — scoped: runs `fn(observabilityContext)`,
  *    automatically attaches the return value as the span's `output` and
  *    routes thrown errors to `span.error(...)`.
+ *
+ * ## Observability data
+ *
+ * Mastra emits raw span data (start/end timestamps, attributes, input,
+ * output) — exporters and downstream consumers do their own aggregation.
+ * The shapes below are designed to make the common derivations cheap:
+ *
+ *  - **Duration**: every span has start/end, so per-operation latency
+ *    falls out for free.
+ *  - **Embedding cost**: `RAG_EMBEDDING` spans expose `attributes.usage`
+ *    using the same `UsageStats` shape as `MODEL_GENERATION`, so any
+ *    existing LLM cost-extraction pipeline that parses `usage.inputTokens`
+ *    handles embeddings uniformly. Cost dimensions are
+ *    `{model, provider, mode}` (mode is `'ingest'` or `'query'`).
+ *  - **Vector store throughput**: `RAG_VECTOR_OPERATION` spans carry
+ *    `{operation, store, indexName}` as attributes; result counts live on
+ *    `output` (e.g. `output.returned`, `output.vectorCount`).
+ *  - **Ingestion roll-ups**: `RAG_INGESTION` (root) carries
+ *    `{vectorStore, indexName, embeddingModel, embeddingProvider}` as
+ *    attributes and aggregate `usage` summed across child embed calls.
  */
 
 import { createObservabilityContext } from './context-factory';
 import { SpanType } from './types';
-import type {
-  GetOrCreateSpanOptions,
-  ObservabilityContext,
-  RagIngestionAttributes,
-  Span,
-} from './types';
+import type { GetOrCreateSpanOptions, ObservabilityContext, RagIngestionAttributes, Span } from './types';
 import { getOrCreateSpan } from './utils';
 
 export type StartRagIngestionOptions = Omit<GetOrCreateSpanOptions<SpanType.RAG_INGESTION>, 'type'>;

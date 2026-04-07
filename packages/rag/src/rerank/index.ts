@@ -170,7 +170,7 @@ async function executeRerank({
 
   // Sort by score and take top K
   const final = scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
-  rerankSpan?.end({ attributes: { topN: final.length } });
+  rerankSpan?.end({ output: { returned: final.length } });
   return final;
 }
 

@@ -342,10 +342,7 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(
-    params?: ChunkParams,
-    options?: { observabilityContext?: ObservabilityContext },
-  ): Promise<Chunk[]> {
+  async chunk(params?: ChunkParams, options?: { observabilityContext?: ObservabilityContext }): Promise<Chunk[]> {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
@@ -391,7 +388,7 @@ export class MDocument {
       throw err;
     }
 
-    chunkSpan?.end({ attributes: { chunkCount: this.chunks.length } });
+    chunkSpan?.end({ output: { chunkCount: this.chunks.length } });
 
     return this.chunks;
   }

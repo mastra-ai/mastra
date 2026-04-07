@@ -97,10 +97,18 @@ export const vectorQuerySearch = async ({
   }
 
   const embedding = embeddingResult.embedding;
+  // `embedV*` returns provider-shaped results; `usage` is present on v2/v3.
+  const embedUsage = (embeddingResult as any)?.usage;
   embedSpan?.end({
     attributes: {
       dimensions: embedding?.length,
+      ...(embedUsage && {
+        usage: {
+          inputTokens: embedUsage.tokens ?? embedUsage.promptTokens ?? embedUsage.inputTokens,
+        },
+      }),
     },
+    output: { dimensions: embedding?.length },
   });
 
   // ----- Vector store query -----
@@ -120,7 +128,6 @@ export const vectorQuerySearch = async ({
       operation: 'query',
       indexName,
       topK,
-      filter: queryFilter,
       dimensions: embedding?.length,
     },
   });
@@ -134,9 +141,7 @@ export const vectorQuerySearch = async ({
   }
 
   querySpan?.end({
-    attributes: {
-      returned: results?.length ?? 0,
-    },
+    output: { returned: results?.length ?? 0 },
   });
 
   return { results, queryEmbedding: embedding };
