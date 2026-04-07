@@ -7,19 +7,24 @@ import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, beforeAll, afterAll } from 'vitest';
 import { setupStreamingMemoryTest } from './shared/streaming-memory';
 import { setupUseChatV4, setupUseChatV5Plus } from './shared/useChat';
+import { transformRequest } from './transform-request';
 import { memory } from './v4/mastra/agents/weather';
 import { weatherTool as weatherToolV4 } from './v4/mastra/tools/weather';
 import { weatherTool as weatherToolV5 } from './v5/mastra/tools/weather';
 import { weatherTool as weatherToolV6 } from './v6/mastra/tools/weather';
 
 const RECORDING_NAME = 'memory-integration-tests-src-streaming-memory';
+const RECORDING_NAME_V4 = `${RECORDING_NAME}-v4`;
+const RECORDING_NAME_V5 = `${RECORDING_NAME}-v5`;
+const RECORDING_NAME_V6 = `${RECORDING_NAME}-v6`;
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
 
 describe('v4', () => {
   const mock = createGatewayMock({
-    name: RECORDING_NAME,
+    name: RECORDING_NAME_V4,
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
@@ -34,7 +39,8 @@ describe('v4', () => {
 
 describe('v5', () => {
   const mock = createGatewayMock({
-    name: RECORDING_NAME,
+    name: RECORDING_NAME_V5,
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
@@ -49,7 +55,8 @@ describe('v5', () => {
 
 describe('v6', () => {
   const mock = createGatewayMock({
-    name: RECORDING_NAME,
+    name: RECORDING_NAME_V6,
+    transformRequest,
   });
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());

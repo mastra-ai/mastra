@@ -3,11 +3,12 @@
     "name": "memory-integration-tests-src-observer-thread-title",
     "testFile": "src/observer-thread-title.test.ts",
     "testName": "Observer thread title generation",
-    "createdAt": "2026-04-07T12:56:12.180Z"
+    "createdAt": "2026-04-07T12:56:12.180Z",
+    "updatedAt": "2026-04-07T14:06:20.952Z"
   },
   "recordings": [
     {
-      "hash": "09c3a03dbf1c1a6c",
+      "hash": "15bf91b4f718e848",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -59,7 +60,7 @@
             ]
           }
         },
-        "timestamp": 1775566569644
+        "timestamp": 1775570778605
       },
       "response": {
         "status": 200,
@@ -68,23 +69,22 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Tue, 07 Apr 2026 12:56:11 GMT",
+          "date": "Tue, 07 Apr 2026 14:06:20 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1689",
+          "server-timing": "gfet4t7; dur=1498",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\u003cobservations\\u003e\\nDate: Apr 2, 2026\\n* 🔴 (20:00) User is\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 28,\"totalTokenCount\": 4959,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" building a React dashboard for their support team.\\n* 🔴 (20:00) The dashboard needs filters, charts, and a ticket queue.\\n* 🔴 (20:00) User wants to start with\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 76,\"totalTokenCount\": 5007,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the analytics summary cards and the queue table components.\\n* 🔴 (20:00) User requested the thread title reflect the dashboard work.\\n* 🟡 (20:00) Assistant proposed breaking the dashboard into layout, filtering\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 127,\"totalTokenCount\": 5058,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" state, chart summaries, and queue table components.\\n\\u003c/observations\\u003e\\n\\u003ccurrent-task\\u003e\\nBuilding a React dashboard for the user's support team, starting with analytics summary cards and the queue table.\\n\\u003c/current-task\\u003e\\n\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 176,\"totalTokenCount\": 5107,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\u003csuggested-response\\u003e\\nOkay, I'll start by outlining the structure for the analytics summary cards and the queue table components.\\n\\u003c/suggested-response\\u003e\\n\\u003cthread-title\\u003e\\nReact Dashboard Build\\n\\u003c/thread-\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 225,\"totalTokenCount\": 5156,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"title\\u003e\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 227,\"totalTokenCount\": 5158,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 192},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6f7UadTwOJqQxN8P-v-o4AQ\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\u003cobservations\\u003e\\nDate: Apr 2, 2026\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 15,\"totalTokenCount\": 4958,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 204},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"Wg_VaeuBOO_m7M8PhKHsQA\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n* 🔴 (20:00) User is building a React dashboard.\\n* 🔴 (20:00) The React dashboard is for the user's support team.\\n* 🔴 (20:00\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 65,\"totalTokenCount\": 5008,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 204},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"Wg_VaeuBOO_m7M8PhKHsQA\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \") The dashboard needs filters, charts, and a ticket queue.\\n* 🔴 (20:00) User wants to start building the dashboard with analytics summary cards and the queue table components.\\n\\u003c/observations\\u003e\\n\\u003ccurrent-task\\u003e\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 116,\"totalTokenCount\": 5059,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 204},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"Wg_VaeuBOO_m7M8PhKHsQA\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\nBuilding a React dashboard for the support team, starting with analytics summary cards and the queue table.\\n\\u003c/current-task\\u003e\\n\\u003csuggested-response\\u003e\\nOkay, I'll start by outlining the structure for the analytics summary\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 163,\"totalTokenCount\": 5106,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 204},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"Wg_VaeuBOO_m7M8PhKHsQA\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" cards and the queue table components.\\n\\u003c/suggested-response\\u003e\\n\\u003cthread-title\\u003e\\nReact Dashboard Build\\n\\u003c/thread-title\\u003e\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 4739,\"candidatesTokenCount\": 193,\"totalTokenCount\": 5136,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4739}],\"thoughtsTokenCount\": 204},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"Wg_VaeuBOO_m7M8PhKHsQA\"}\r\n\r\n"
         ],
-        "chunkTimings": [1, 91, 222, 200, 197, 10],
+        "chunkTimings": [0, 169, 181, 247, 139],
         "isStreaming": true
       }
     }

@@ -47,6 +47,17 @@ describe('GoogleSchemaCompatLayer', () => {
       expect(layer.shouldApply()).toBe(true);
     });
 
+    it('should apply for gemini models via random provider', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'random',
+        modelId: 'gemini-1.5-flash',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
+    });
+
     it('should not apply for non-Google models', () => {
       const modelInfo: ModelInformation = {
         provider: 'openai',

@@ -61,6 +61,31 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
+function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>): unknown {
+  if (Array.isArray(value)) {
+    const itemSchema = (schema.items as Record<string, unknown>) ?? {};
+    return value.map(item => stripNullsFromOptional(item, itemSchema));
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
+    const required = (schema.required as string[]) ?? [];
+    const result: Record<string, unknown> = {};
+
+    for (const [key, propertyValue] of Object.entries(value as Record<string, unknown>)) {
+      if (propertyValue === null && !required.includes(key)) {
+        continue;
+      }
+
+      result[key] = stripNullsFromOptional(propertyValue, properties[key] ?? {});
+    }
+
+    return result;
+  }
+
+  return value;
+}
+
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
@@ -107,7 +132,9 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
                 return result;
               }
 
-              return wrappedSchema['~standard'].validate({ memory: value });
+              return wrappedSchema['~standard'].validate({
+                memory: stripNullsFromOptional(value, jsonSchema as Record<string, unknown>),
+              });
             });
           }
 
@@ -121,7 +148,9 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
             return wrappedResult;
           }
 
-          return wrappedSchema['~standard'].validate({ memory: value });
+          return wrappedSchema['~standard'].validate({
+            memory: stripNullsFromOptional(value, jsonSchema as Record<string, unknown>),
+          });
         },
         jsonSchema: {
           input: props => wrappedSchema['~standard'].jsonSchema.input(props),

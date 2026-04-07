@@ -9,6 +9,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { transformRequest } from './transform-request';
 
 const RECORDING_NAME = 'memory-integration-tests-src-observer-thread-title';
 const MODE = getLLMTestMode();
@@ -38,6 +39,7 @@ describe('Observer thread title generation', () => {
   const mock = createGatewayMock({
     name: RECORDING_NAME,
     exactMatch: true,
+    transformRequest,
   });
 
   beforeAll(async () => {

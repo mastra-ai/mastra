@@ -233,7 +233,7 @@ export class CoreToolBuilder extends MastraBase {
         } else if (isStandardSchemaWithJSON(parameters)) {
           // StandardSchemaWithJSON - extract the JSON schema and wrap it
           // Use input since parameters represent tool input
-          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'output' });
+          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'input' });
           processedParameters = { jsonSchema };
         } else {
           // Assume Zod schema - convert to AI SDK Schema
@@ -670,7 +670,7 @@ export class CoreToolBuilder extends MastraBase {
 
         processedInputSchema = jsonSchema(
           standardSchemaToJSONSchema(schemaToUse, {
-            io: 'output',
+            io: 'input',
           }),
           {
             validate: (value: unknown) => {
