@@ -35,24 +35,29 @@ Add to `SpanType` in `packages/core/src/observability/types/tracing.ts`:
   (load → chunk → extract → embed → upsert).
 
 ### Children
-Keep this small. Three child types cover everything:
+Keep this small. Four child types cover everything:
 
 - `RAG_EMBEDDING` — embedding call (batch). Used by both ingestion and query.
   Kept distinct because it's the fundamental RAG primitive and users will
   filter on it constantly.
 - `RAG_VECTOR_OPERATION` — vector store I/O. Single span type with an
   `operation: 'query' | 'upsert' | 'delete' | 'fetch'` attribute.
-- `RAG_ACTION` — catch-all for everything else, distinguished by an
-  `action` attribute:
+- `RAG_ACTION` — catch-all for the remaining RAG-specific operations,
+  distinguished by an `action` attribute:
   - `'chunk'` — `MDocument.chunk` / a transformer pass
   - `'extract_metadata'` — title/summary/questions/keywords/schema extractor
     (LLM calls inside still nest as `MODEL_GENERATION`)
   - `'rerank'` — rerank pass
-  - `'graph_build'` — `GraphRAG.createGraph`
-  - `'graph_traverse'` — `GraphRAG.query` walk
+- `GRAPH_ACTION` — **non-RAG**, lives in core observability. Graph
+  build/traversal is a primitive that shows up in knowledge graphs, memory
+  graphs, entity resolution, etc.; `GraphRAG` is just the first caller.
+  Distinguished by an `action` attribute:
+  - `'build'` — e.g. `GraphRAG.createGraph`
+  - `'traverse'` — e.g. `GraphRAG.query` walk
+  - (room for `'update'`, `'prune'` later)
 
-That's 1 root + 3 children. We can promote any `RAG_ACTION` variant to its own
-type later if a UI affordance demands it; demoting is harder.
+That's 1 root + 4 children. We can promote any `RAG_ACTION` variant to its
+own type later if a UI affordance demands it; demoting is harder.
 
 ### Attribute shapes
 
@@ -66,11 +71,12 @@ into `SpanTypeMap`:
 - `RagVectorOperationAttributes`: `{ operation: 'query'|'upsert'|'delete'|
   'fetch', store, indexName, vectorCount?, topK?, filter?, dimensions?,
   returned? }`
-- `RagActionAttributes`: `{ action: 'chunk'|'extract_metadata'|'rerank'|
-  'graph_build'|'graph_traverse', /* discriminated extras */ strategy?,
-  chunkSize?, chunkOverlap?, chunkCount?, extractor?, model?, provider?,
-  candidateCount?, topN?, scorer?, nodeCount?, edgeCount?, maxDepth?,
-  visited?, returned? }`
+- `RagActionAttributes`: `{ action: 'chunk'|'extract_metadata'|'rerank',
+  /* discriminated extras */ strategy?, chunkSize?, chunkOverlap?,
+  chunkCount?, extractor?, model?, provider?, candidateCount?, topN?,
+  scorer? }`
+- `GraphActionAttributes`: `{ action: 'build'|'traverse', nodeCount?,
+  edgeCount?, threshold?, startNodes?, maxDepth?, visited?, returned? }`
 
 ## Wiring (query path)
 
@@ -95,8 +101,8 @@ Files to change:
      Inner LLM-based scorers will already create `MODEL_GENERATION` children
      if they receive the context.
 4. `packages/rag/src/tools/graph-rag.ts` + `packages/rag/src/graph-rag/index.ts`
-   - Wrap `createGraph` in `RAG_ACTION` (action: 'graph_build') and `query` in
-     `RAG_ACTION` (action: 'graph_traverse'). The embed + vector query inside
+   - Wrap `createGraph` in `GRAPH_ACTION` (action: 'build') and `query` in
+     `GRAPH_ACTION` (action: 'traverse'). The embed + vector query inside
      still produce `RAG_EMBEDDING` + `RAG_VECTOR_OPERATION` children as in (2).
 5. `packages/rag/src/tools/document-chunker.ts`
    - Accept `observabilityContext`, wrap `MDocument.chunk` in `RAG_ACTION`
