@@ -157,9 +157,16 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
     for (const line of lines) {
       if (line.startsWith('data:')) {
         const data = line.slice(5).trim();
-        if (data) {
-          process.stdout.write(`${data}\n`);
-        }
+        if (!data) continue;
+        // Filter internal server startup logs — the public URL is shown by the CLI after deploy.
+        // The pino-pretty "url:" continuation line is also filtered (follows the filtered log entry).
+        if (
+          data.includes('Mastra API running') ||
+          data.includes('Studio available') ||
+          /^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)
+        )
+          continue;
+        process.stdout.write(`${data}\n`);
       }
     }
   }
