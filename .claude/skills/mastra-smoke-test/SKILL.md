@@ -58,9 +58,6 @@ smoke test --env staging --existing-project ~/my-app --test traces
 | `errors`    | Test error handling           | All                 |
 | `studio`    | Test Studio deploy only       | staging, production |
 | `server`    | Test Server deploy only       | staging, production |
-| `account`   | Test account creation flow    | staging, production |
-| `invites`   | Test team invitation flow     | staging, production |
-| `rbac`      | Test role-based access        | staging, production |
 
 ## Prerequisites
 
@@ -419,8 +416,10 @@ Provide summary:
 
 View all projects and deployments:
 
-- **Production**: `https://studio.mastra.ai`
-- **Staging**: `https://studio.staging.mastra.ai`
+- **Production**: `https://projects.mastra.ai`
+- **Staging**: `https://projects.staging.mastra.ai` (requires Vercel SSO)
+
+> **Note**: `gateway.mastra.ai` is the Gateway dashboard (API keys, threads, usage). For Gateway testing, use the `gateway-smoke-test` skill.
 
 ## Studio Routes Reference
 
@@ -439,13 +438,14 @@ View all projects and deployments:
 
 ## Environment-Specific References
 
-| Reference                              | When to Use                           |
-| -------------------------------------- | ------------------------------------- |
-| `references/local-setup.md`            | `--env local`                         |
-| `references/cloud-deploy.md`           | `--env staging` or `--env production` |
-| `references/cloud-advanced.md`         | Account, invites, RBAC, BYOK testing  |
-| `references/gcp-debugging.md`          | Debugging cloud trace issues          |
-| `references/gateway-memory-testing.md` | Gateway memory/threads testing        |
+| Reference                      | When to Use                              |
+| ------------------------------ | ---------------------------------------- |
+| `references/local-setup.md`    | `--env local`                            |
+| `references/cloud-deploy.md`   | `--env staging` or `--env production`    |
+| `references/cloud-advanced.md` | BYOK and storage backend testing         |
+| `references/gcp-debugging.md`  | Debugging cloud trace issues             |
+
+> **Note**: For Gateway API testing (memory, threads, BYOK, account creation, team invites, RBAC via `gateway.mastra.ai`), use the `gateway-smoke-test` skill instead.
 
 ## Troubleshooting
 
