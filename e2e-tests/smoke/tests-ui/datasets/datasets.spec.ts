@@ -4,7 +4,7 @@ test.describe('Datasets', () => {
   test('datasets list page shows create button and heading', async ({ page }) => {
     await page.goto('/evaluation?tab=datasets');
 
-    await expect(page.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Datasets', level: 1 })).toBeVisible();
     // "Create Dataset" should always be available
     await expect(page.getByRole('button', { name: 'Create Dataset' })).toBeVisible();
   });
@@ -28,10 +28,15 @@ test.describe('Datasets', () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    // Dialog should close and navigate to dataset detail
-    await expect(page.getByRole('dialog', { name: 'Create Dataset' })).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'E2E Test Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Created by smoke tests')).toBeVisible();
+    // Dialog should close
+    await expect(page.getByRole('dialog', { name: 'Create Dataset' })).not.toBeVisible({ timeout: 10_000 });
+
+    // Reload the page to ensure the new dataset is visible in the list
+    await page.goto('/evaluation?tab=datasets');
+
+    // Dataset should appear in the list
+    await expect(page.getByRole('link', { name: /E2E Test Dataset/ }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Created by smoke tests').first()).toBeVisible();
   });
 
   test('add item to dataset and view its detail', async ({ page, request }) => {
@@ -77,9 +82,8 @@ test.describe('Datasets', () => {
     await expect(page.getByText('"Hello world"')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('"Hi there"')).toBeVisible();
 
-    // Click the item row to open detail panel
-    const itemRow = page.getByRole('listitem').filter({ hasText: 'Hello world' });
-    await itemRow.getByRole('button').click();
+    // Click the item button to open detail panel
+    await page.getByRole('button', { name: /Hello world/ }).click();
 
     // Detail panel should show Input and Ground Truth headings
     await expect(page.getByRole('heading', { name: 'Input', level: 2 })).toBeVisible({ timeout: 5_000 });
@@ -140,16 +144,15 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     const itemRes = await request.post(`/api/datasets/${datasetId}/items`, {
-      data: { input: { original: 'value' }, groundTruth: { expected: 'result' } },
+      data: { input: { original: 'value' }, groundTruth: { expected: 'result' }, expectedTrajectory: {} },
     });
     expect(itemRes.ok()).toBeTruthy();
 
     await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Edit Item Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    // Click item to open detail panel
-    const itemRow = page.getByRole('listitem').filter({ hasText: 'original' });
-    await itemRow.getByRole('button').click();
+    // Click item button to open detail panel
+    await page.getByRole('button', { name: /original/ }).click();
 
     // Detail panel should show read-only content
     await expect(page.getByRole('heading', { name: 'Input', level: 2 })).toBeVisible({ timeout: 5_000 });
@@ -161,8 +164,8 @@ test.describe('Datasets', () => {
     // Should switch to edit mode
     await expect(page.getByRole('heading', { name: 'Edit Item', level: 3 })).toBeVisible();
 
-    // Modify the input JSON — the CodeMirror editor in edit mode
-    const inputEditor = page.locator('.cm-content').first();
+    // Modify the input JSON — use the text content to find the right editor
+    const inputEditor = page.getByText('"original": "value"');
     await inputEditor.click();
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('{"modified": "updated-value"}');
@@ -196,9 +199,8 @@ test.describe('Datasets', () => {
     await page.goto(`/evaluation/datasets/${datasetId}`);
     await expect(page.getByText('to_delete')).toBeVisible({ timeout: 10_000 });
 
-    // Click item to open detail panel
-    const itemRow = page.getByRole('listitem').filter({ hasText: 'to_delete' });
-    await itemRow.getByRole('button').click();
+    // Click item button to open detail panel
+    await page.getByRole('button', { name: /to_delete/ }).click();
     await expect(page.getByRole('heading', { name: 'Input', level: 2 })).toBeVisible({ timeout: 5_000 });
 
     // Open item actions menu → Delete Item
