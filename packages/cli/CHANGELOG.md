@@ -1,5 +1,18 @@
 # mastra
 
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Filtered confusing internal server logs (like 'Mastra API running on http://0.0.0.0:3000') from 'mastra studio deploy' output ([#15146](https://github.com/mastra-ai/mastra/pull/15146))
+
+- Upload Studio assets to R2 during snapshot, prerelease, and stable publishes so each published CLI version has matching hosted Studio files. ([#15153](https://github.com/mastra-ai/mastra/pull/15153))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`2c4d99c`](https://github.com/mastra-ai/mastra/commit/2c4d99c619ef5029e1203022f48f3186c6084850), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+  - @mastra/loggers@1.1.1-alpha.0
+  - @mastra/deployer@1.24.0-alpha.1
+
 ## 1.4.1-alpha.0
 
 ### Patch Changes
