@@ -9,7 +9,7 @@ export function stampPart<T extends MastraMessagePart>(part: T): T {
 }
 
 export function stampMessageParts<T extends MastraDBMessage>(message: T, source: MessageSource): T {
-  if (source === 'memory') {
+  if (source === 'memory' || !Array.isArray(message.content.parts)) {
     return message;
   }
 
