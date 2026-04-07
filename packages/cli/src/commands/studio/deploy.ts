@@ -220,7 +220,7 @@ async function resolveProject(
     if (match) {
       return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
-    return { existing: true, projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
+    return { existing: false, projectName: flagProject };
   }
 
   // 2. project.json (only if same org)
@@ -288,39 +288,31 @@ export async function deployAction(
 
     const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
 
-    if (!isAlreadyLinked) {
-      // Show confirmation for linking to existing project
-      p.note(
-        [
-          `Organization:  ${orgName}`,
-          `Project:       ${projectName}`,
-          `Directory:     ${targetDir}`,
-          ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
-          ...(mastraVersion ? [`Mastra:        ${mastraVersion}`] : []),
-        ].join('\n'),
-        'Deploy settings',
-      );
+    p.note(
+      [
+        `Organization:  ${orgName}`,
+        `Project:       ${projectName}`,
+        `Directory:     ${targetDir}`,
+        ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
+        ...(mastraVersion ? [`Mastra:        ${mastraVersion}`] : []),
+      ].join('\n'),
+      'Deploy settings',
+    );
 
-      if (!autoAccept) {
-        const confirmed = await p.confirm({
-          message: 'Deploy with these settings?',
-        });
+    if (!autoAccept) {
+      const confirmed = await p.confirm({
+        message: 'Deploy with these settings?',
+      });
 
-        if (p.isCancel(confirmed) || !confirmed) {
-          p.cancel('Deploy cancelled.');
-          process.exit(0);
-        }
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.cancel('Deploy cancelled.');
+        process.exit(0);
       }
+    }
 
-      // Save the project link
+    if (!isAlreadyLinked) {
       await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
       p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
-    } else {
-      // Already linked — just show a summary line
-      p.log.info(`Organization: ${orgName} (${orgId})`);
-      p.log.info(`Project: ${projectName} (${projectId})`);
-      if (gitBranch) p.log.info(`Git branch: ${gitBranch}`);
-      if (mastraVersion) p.log.info(`Mastra: ${mastraVersion}`);
     }
   } else {
     // New project — show confirmation BEFORE creating
