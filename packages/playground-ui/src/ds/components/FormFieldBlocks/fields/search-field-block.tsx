@@ -59,7 +59,7 @@ export function SearchFieldBlock({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size={size || 'sm'} aria-label={label || 'Search'} onClick={() => onMinimizedChange?.(false)}>
+          <Button size={size || 'sm'} aria-label={label || 'Search'} disabled={disabled} onClick={() => onMinimizedChange?.(false)}>
             <SearchIcon />
           </Button>
         </TooltipTrigger>
@@ -115,7 +115,9 @@ export function SearchFieldBlock({
               size={size || 'default'}
               aria-label="Clear search"
               onClick={() => {
-                onReset();
+                if (value) {
+                  onReset();
+                }
                 if (isMinimized === false) {
                   onMinimizedChange?.(true);
                 }
