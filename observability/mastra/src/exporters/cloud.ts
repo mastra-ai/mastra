@@ -441,20 +441,6 @@ export class CloudExporter extends BaseExporter {
     }, this.cloudConfig.maxBatchWaitMs);
   }
 
-  private startTrackedFlush(): Promise<void> {
-    const flushPromise = this.flushBuffer();
-    this.inFlightFlushes.add(flushPromise);
-    void flushPromise.then(
-      () => {
-        this.inFlightFlushes.delete(flushPromise);
-      },
-      () => {
-        this.inFlightFlushes.delete(flushPromise);
-      },
-    );
-    return flushPromise;
-  }
-
   private async flushBuffer(): Promise<void> {
     // Clear timer since we're flushing
     if (this.flushTimer) {
@@ -590,7 +576,16 @@ export class CloudExporter extends BaseExporter {
         this.logger.debug('Flushing buffered events', {
           bufferedEvents: this.buffer.totalSize,
         });
-        await this.startTrackedFlush();
+
+        const flushPromise = this.flushBuffer();
+        this.inFlightFlushes.add(flushPromise);
+
+        try {
+          await flushPromise;
+        } finally {
+          this.inFlightFlushes.delete(flushPromise);
+        }
+
         continue;
       }
 
@@ -610,7 +605,6 @@ export class CloudExporter extends BaseExporter {
       this.flushTimer = null;
     }
 
-    // Flush any remaining events
     try {
       await this.flush();
     } catch (error) {

@@ -1217,6 +1217,7 @@ describe('CloudExporter', () => {
 
     it('should flush buffered events without shutting down', async () => {
       const loggerDebugSpy = vi.spyOn((exporter as any).logger, 'debug');
+      const flushBufferSpy = vi.spyOn(exporter as any, 'flushBuffer');
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -1229,6 +1230,7 @@ describe('CloudExporter', () => {
       // Call public flush() method
       await exporter.flush();
 
+      expect(flushBufferSpy).toHaveBeenCalled();
       expect(loggerDebugSpy).toHaveBeenCalledWith('Flushing buffered events', { bufferedEvents: 1 });
       expect(mockFetchWithRetry).toHaveBeenCalled();
 
@@ -1245,12 +1247,13 @@ describe('CloudExporter', () => {
 
     it('should be a no-op when buffer is empty', async () => {
       const buffer = (exporter as any).buffer;
+      const flushBufferSpy = vi.spyOn(exporter as any, 'flushBuffer');
       expect(buffer.totalSize).toBe(0);
 
       // Call flush on empty buffer
       await exporter.flush();
 
-      // Should not have called the API
+      expect(flushBufferSpy).not.toHaveBeenCalled();
       expect(mockFetchWithRetry).not.toHaveBeenCalled();
     });
 
@@ -1332,7 +1335,7 @@ describe('CloudExporter', () => {
     });
 
     it('should flush remaining events on shutdown', async () => {
-      const flushSpy = vi.spyOn(exporter, 'flush').mockResolvedValue(undefined);
+      const flushSpy = vi.spyOn(exporter, 'flush');
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Add events to buffer
@@ -1364,14 +1367,13 @@ describe('CloudExporter', () => {
 
       await exporter.shutdown();
 
-      // flush() is called but it's a no-op for empty buffer
       expect(flushSpy).toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown flush errors gracefully', async () => {
       const flushError = new Error('Shutdown flush failed');
-      vi.spyOn(exporter as any, 'flush').mockRejectedValue(flushError);
+      vi.spyOn(exporter, 'flush').mockRejectedValue(flushError);
       const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
