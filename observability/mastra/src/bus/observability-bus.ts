@@ -10,24 +10,17 @@
  * events of that type are silently skipped for that handler.
  */
 
-import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent } from '@mastra/core/observability';
+import type {
+  ObservabilityExporter,
+  ObservabilityBridge,
+  ObservabilityEvent,
+  SerializationOptions,
+} from '@mastra/core/observability';
 
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
-
-/**
- * User-supplied serialization options forwarded to deepClean. Mirrors the
- * shape accepted by spans (see `mergeSerializationOptions`) so logs/metrics/
- * scores/feedback honor the same per-instance limits as tracing spans.
- */
-export interface ObservabilityBusSerializationOptions {
-  maxStringLength?: number;
-  maxDepth?: number;
-  maxArrayLength?: number;
-  maxObjectKeys?: number;
-}
 
 /**
  * Apply deepClean() to non-tracing observability events. Tracing events are
@@ -78,7 +71,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   /** Resolved deepClean options applied to non-tracing events before fan-out. */
   private deepCleanOptions: DeepCleanOptions;
 
-  constructor(opts?: { serializationOptions?: ObservabilityBusSerializationOptions }) {
+  constructor(opts?: { serializationOptions?: SerializationOptions }) {
     super({ name: 'ObservabilityBus' });
     this.deepCleanOptions = mergeSerializationOptions(opts?.serializationOptions);
   }
