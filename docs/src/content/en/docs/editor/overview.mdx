@@ -7,11 +7,14 @@ packages:
   - "@mastra/client-js"
 ---
 
+import { VideoPlayer } from "@site/src/components/video-player";
+
 # Editor overview
 
 The editor is a CMS-style system that separates agent configuration from code. Subject-matter experts, prompt engineers, and product teams can iterate on agents directly while developers keep the codebase stable.
 
-- [**Agents**](/docs/editor/agents): Override instructions, tools, and variables on code-defined agents without touching source files.
+The editor manages two types of resources alongside agents:
+
 - [**Prompts**](/docs/editor/prompts): Reusable, versioned instruction templates with template variables and display conditions.
 - [**Tools**](/docs/editor/tools): Add tools from integration providers, MCP servers, and override tool descriptions at runtime.
 
@@ -58,9 +61,30 @@ See the [MastraEditor reference](/reference/editor/mastra-editor) for all config
 
 :::
 
+## Studio
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1775596827/editor-overview_obqupx.mp4" />
+
+Go to the **Agents** tab in Studio and select an agent to edit. Select the **Editor** tab. You'll be taken to the editor interface, where you can modify the agent's instructions, tools, and variables.
+
+Modify the system prompt and save a new draft version. Afterwards, publish the draft to make it the active version.
+
+## What can be overridden
+
+When you edit a code-defined agent through the editor, only specific fields can be changed:
+
+| Field | Description |
+| - | - |
+| Instructions | Replace or extend the agent's system prompt using [prompt blocks](/docs/editor/prompts). |
+| Tools | Add tools from the tool registry, integration providers, or MCP clients. Code-defined tools remain available. |
+
+Fields like the agent's `id`, `name`, and `model` come from your code and can't be changed through the editor for code-defined agents. The variables are also read-only.
+
 ## Versioning
 
 Every time you save changes to an agent or prompt block, a new version snapshot is created. Versions give you a full history of your agent's configuration. You can roll back to any previous state, compare what changed between two snapshots, and target specific versions per request for A/B testing or gradual rollouts.
+
+Version management is available through the server Studio, REST API, the Client SDK, and the React SDK. See the [Client SDK agents reference](/reference/client-js/agents#version-management) for endpoints, SDK methods, and code examples.
 
 ### Version lifecycle
 
@@ -76,89 +100,6 @@ The typical flow is: Edit the draft, test it, then activate it to make it the pu
 
 This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
 
-### Studio
-
-1. Open an agent's edit page and make changes.
-1. Select **Save** to create a new draft version.
-1. Select **Publish** to activate the draft as the published version.
-
-### Server endpoints
-
-Version management is available through the stored agents API:
-
-| Method | Endpoint | Description |
-| - | - | - |
-| `GET` | `/stored/agents/:agentId/versions` | List all versions. |
-| `POST` | `/stored/agents/:agentId/versions` | Create a new version. |
-| `GET` | `/stored/agents/:agentId/versions/:versionId` | Get a specific version. |
-| `POST` | `/stored/agents/:agentId/versions/:versionId/activate` | Set the active version. |
-| `POST` | `/stored/agents/:agentId/versions/:versionId/restore` | Restore a version (creates a new copy). |
-| `DELETE` | `/stored/agents/:agentId/versions/:versionId` | Delete a version. |
-| `GET` | `/stored/agents/:agentId/versions/compare?from=<id>&to=<id>` | Compare two versions. |
-
-### Client SDK
-
-The `Agent` and `StoredAgent` classes in `@mastra/client-js` have methods for version management:
-
-```typescript title="Version management with Client SDK"
-import { MastraClient } from '@mastra/client-js'
-
-const client = new MastraClient()
-const agent = client.getAgent('support-agent')
-
-// List all versions
-const versions = await agent.listVersions()
-
-// Create a new version
-const version = await agent.createVersion({
-  changeMessage: 'Updated tone to be more friendly',
-})
-
-// Activate a version
-await agent.activateVersion(version.id)
-
-// Restore a previous version (creates a new version with the same config)
-await agent.restoreVersion(versions.items[2].id)
-
-// Compare two versions
-const diff = await agent.compareVersions(versions.items[0].id, versions.items[1].id)
-```
-
-| Method | Description |
-| - | - |
-| `agent.listVersions(params?)` | List versions with optional pagination and sorting. |
-| `agent.createVersion(params?)` | Create a version snapshot with an optional change message. |
-| `agent.getVersion(versionId)` | Get a specific version by ID. |
-| `agent.activateVersion(versionId)` | Set a version as the active published version. |
-| `agent.restoreVersion(versionId)` | Restore a version by creating a new copy. |
-| `agent.deleteVersion(versionId)` | Delete a version. |
-| `agent.compareVersions(fromId, toId)` | Compare two versions and return their differences. |
-
-:::note
-
-See the [Client SDK agents reference](/reference/client-js/agents) for the full API.
-
-:::
-
-### React SDK
-
-In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
-
-```typescript title="Version targeting with React SDK"
-import { useChat } from '@mastra/react'
-
-function Chat() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
-    agentId: 'support-agent',
-    requestContext: {
-      agentVersionId: 'abc-123',
-    },
-  })
-
-  // ... render chat UI
-}
-```
-
 ### Version targeting and experimentation
 
 Because every version has a unique ID, you can route different requests to different agent configurations. This opens up several patterns:
@@ -168,7 +109,41 @@ Because every version has a unique ID, you can route different requests to diffe
 - **Per-user targeting**: Pin specific users or accounts to a version while others use the default.
 - **Environment separation**: Use the draft version in staging and the published version in production.
 
-Pass a `versionId` or `status` when calling the agent — through the Client SDK, server query parameters, or React SDK `requestContext` — and the correct version is loaded automatically.
+Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`, and the correct version is loaded automatically.
+
+### Version selection
+
+By default, [`mastra.getAgentById()`](/reference/core/getAgentById) loads the published (active) version of the stored override. You can request a specific version, which is useful for testing a draft before publishing, running A/B experiments, or pinning a user to a known-good configuration:
+
+```typescript title="Version selection"
+// Load the published version (default)
+const agent = mastra.getAgentById('support-agent')
+
+// Load the latest draft
+const agent = mastra.getAgentById('support-agent', {
+  status: 'draft',
+})
+
+// Load a specific version
+const agent = mastra.getAgentById('support-agent', {
+  versionId: 'abc-123',
+})
+```
+
+When calling the agent through the Mastra server, pass version parameters as query strings:
+
+```bash title="Version selection via API"
+# Published version (default)
+curl http://localhost:4111/agents/support-agent
+
+# Latest draft
+curl http://localhost:4111/agents/support-agent?status=draft
+
+# Specific version
+curl http://localhost:4111/agents/support-agent?versionId=abc-123
+```
+
+See the [Client SDK agents reference](/reference/client-js/agents#version-management) for API methods.
 
 ## Next steps
 

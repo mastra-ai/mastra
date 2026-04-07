@@ -8,22 +8,13 @@ packages:
 
 # Prompts
 
-Prompt blocks are reusable instruction templates that you compose into an agent's system prompt. Each block can contain plain text, template variables, and display conditions. Non-technical team members can edit prompt content, test different phrasings, and publish changes — all without touching code. Every edit is versioned, so you can compare prompt variations, roll back, and track what changed over time. You can create and manage prompt blocks through the Studio UI or programmatically through the server API, then reference them across multiple agents.
-
-## When to use prompt blocks
-
-Use prompt blocks when you want to:
-
-- Let SMEs and prompt engineers iterate on instructions without code changes.
-- Share instruction fragments across agents without copying text.
-- Add template variables (`{{userName}}`) that resolve at runtime from agent variables or request context.
-- Show or hide instructions based on conditions. For example, include a block only when `language` equals `"es"`.
-- Version prompt content independently from agent configuration for separate experimentation and rollback.
+Prompt blocks are reusable instruction templates that you compose into an agent's system prompt. Each block can contain plain text, template variables, and display conditions. Non-technical team members can edit prompt content, test different phrasings, and publish changes. Every edit is versioned, so you can compare prompt variations, roll back, and track what changed over time. You can create and manage prompt blocks through the Studio UI or programmatically through the server API, then reference them across multiple agents.
 
 ## Quickstart
 
-1. Open the Studio and go to the **Prompts** tab.
-1. Select **Create prompt block** and write your instruction text.
+1. Go to the **Prompts** tab in Studio.
+1. Select **Create prompt** and enter a name and your instruction text.
+1. Save the prompt block and publish it.
 1. Open an agent's **Instructions** section and select **Add block**.
 1. Pick the saved prompt block from the block picker dialog.
 
@@ -35,9 +26,9 @@ An agent's instructions are made up of an ordered list of blocks. Each block is 
 
 | Type | Description |
 | - | - |
-| **Inline text** | Free-form text written directly in the agent's instruction list. Lives only on that agent. |
-| **Prompt block** | A standalone block with its own content, stored in the agent snapshot. You can save an inline block as a prompt block to reuse it. |
-| **Prompt block reference** | A pointer to a saved prompt block. The content is resolved at runtime from the referenced block. |
+| Inline text | Free-form text written directly in the agent's instruction list. Lives only on that agent. |
+| Prompt block | A standalone block with its own content, stored in the agent snapshot. You can save an inline block as a prompt block to reuse it. |
+| Prompt block reference | A pointer to a saved prompt block. The content is resolved at runtime from the referenced block. |
 
 To turn an inline block into a reusable prompt block, open the block's menu and select **Save as prompt block**. To reference an existing prompt block, select **Add block** and pick one from the dialog.
 
@@ -59,7 +50,7 @@ Variables are passed through the agent's `variables` configuration or through [r
 
 ## Display conditions
 
-Each block can have a **display condition** — a rule group that controls whether the block is included in the final prompt. Conditions are evaluated at runtime against the agent's variables and request context.
+Each block can have a **display condition**. A rule group that controls whether the block is included in the final prompt. Conditions are evaluated at runtime against the agent's variables and request context.
 
 A rule group uses **AND** or **OR** logic with one or more conditions. Each condition checks a context field against a value using an operator:
 
@@ -80,7 +71,7 @@ In the Studio, open a block's **Display conditions** panel to set up rules visua
 
 Prompt blocks follow the same [versioning lifecycle](/docs/editor/overview#versioning) as agents. Each prompt block has a draft that you can edit and publish as a versioned snapshot. This means prompt content can be versioned and rolled back independently from the agent that uses it.
 
-When an agent references a prompt block, the resolved content comes from the block's active published version by default. During editing, draft content is used for previews. This separation makes it safe for non-technical team members to experiment with prompt wording — the published version stays stable until they explicitly activate a new one.
+When an agent references a prompt block, the resolved content comes from the block's active published version by default. During editing, draft content is used for previews. This separation makes it safe for non-technical team members to experiment with prompt wording. The published version stays stable until they explicitly activate a new one.
 
 ## Related
 

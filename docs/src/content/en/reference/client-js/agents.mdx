@@ -454,6 +454,20 @@ console.log(result.success) // true
 
 Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See the [Editor overview](/docs/editor/overview#versioning) for an introduction to version management.
 
+### Server endpoints
+
+Version management is also available through the stored agents REST API:
+
+| Method | Endpoint | Description |
+| - | - | - |
+| `GET` | `/stored/agents/:agentId/versions` | List all versions. |
+| `POST` | `/stored/agents/:agentId/versions` | Create a new version. |
+| `GET` | `/stored/agents/:agentId/versions/:versionId` | Get a specific version. |
+| `POST` | `/stored/agents/:agentId/versions/:versionId/activate` | Set the active version. |
+| `POST` | `/stored/agents/:agentId/versions/:versionId/restore` | Restore a version (creates a new copy). |
+| `DELETE` | `/stored/agents/:agentId/versions/:versionId` | Delete a version. |
+| `GET` | `/stored/agents/:agentId/versions/compare?from=<id>&to=<id>` | Compare two versions. |
+
 ### Getting an agent with a specific version
 
 Pass a version identifier when getting an agent:
@@ -551,4 +565,23 @@ Compare two versions and return their differences:
 ```typescript
 const diff = await agent.compareVersions('version-123', 'version-456')
 console.log(diff.changes) // Fields that changed between versions
+```
+
+### React SDK
+
+In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
+
+```typescript title="Version targeting with React SDK"
+import { useChat } from '@mastra/react'
+
+function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    agentId: 'support-agent',
+    requestContext: {
+      agentVersionId: 'abc-123',
+    },
+  })
+
+  // ... render chat UI
+}
 ```

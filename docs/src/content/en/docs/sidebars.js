@@ -82,11 +82,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'editor/agents',
-          label: 'Agents',
-        },
-        {
-          type: 'doc',
           id: 'editor/tools',
           label: 'Tools',
         },
