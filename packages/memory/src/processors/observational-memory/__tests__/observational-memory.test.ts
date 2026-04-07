@@ -1227,19 +1227,35 @@ describe('Observer Agent Helpers', () => {
       const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
 
       const formatted = formatMessagesForObserver(messages);
-      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Date ');
+      expect(formatted).toContain('User');
       expect(formatted).toContain('Hello');
-      expect(formatted).toContain('**Assistant');
+      expect(formatted).toContain('Assistant');
       expect(formatted).toContain('Hi there!');
     });
 
-    it('should include timestamps if present', () => {
-      const msg = createTestMessage('Test', 'user');
-      msg.createdAt = new Date('2024-12-04T10:30:00Z');
+    it('should include a date header and only repeat times when they change', () => {
+      const first = createTestMessage('ignored', 'assistant');
+      first.createdAt = new Date('2024-12-04T10:30:00Z');
+      first.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
+          { type: 'reasoning', reasoning: 'thinking', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'second', createdAt: new Date('2024-12-04T10:31:00Z') } as any,
+        ],
+      } as any;
 
-      const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('2024');
-      expect(formatted).toContain('Dec');
+      const second = createTestMessage('later', 'user');
+      second.createdAt = new Date('2024-12-04T11:00:00Z');
+
+      const formatted = formatMessagesForObserver([first, second]);
+      expect(formatted).toContain('Date 12/4/2024:');
+      expect((formatted.match(/Date 12\/4\/2024:/g) ?? []).length).toBe(1);
+      expect(formatted).toMatch(/Assistant \([^)]*\): first/);
+      expect(formatted).toContain('Reasoning: thinking');
+      expect(formatted).toMatch(/Assistant \([^)]*\): second/);
+      expect(formatted).toMatch(/User \([^)]*\): later/);
     });
 
     it('should include attachment placeholders for image and file parts', () => {
@@ -1272,8 +1288,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Hello', 'user');
 
       const formatted = formatMessagesForObserver([dataMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toContain('Assistant:');
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Hello');
     });
 
@@ -1316,8 +1332,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Real content', 'user');
 
       const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toContain('Assistant:');
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Real content');
     });
 
@@ -1343,7 +1359,7 @@ describe('Observer Agent Helpers', () => {
       } as any;
 
       const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
-      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('Tool Result web_search_20250305');
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
@@ -3966,8 +3982,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     const formatted = formatMessagesForObserver([msg]);
 
     // Should include the date for temporal context
-    expect(formatted).toContain('Dec');
-    expect(formatted).toContain('2024');
+    expect(formatted).toContain('Date 12/4/2024:');
   });
 
   it('observer system prompt should require Current Task section', () => {

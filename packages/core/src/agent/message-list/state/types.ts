@@ -23,14 +23,19 @@ type MastraMessageShared = {
   type?: string;
 };
 
+type MastraPartExtensions = {
+  providerMetadata?: AIV5Type.ProviderMetadata;
+  createdAt?: number;
+};
+
 // Extended part type that includes both AI SDK parts and Mastra custom parts
 // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
 export type MastraMessagePart =
-  | (UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })
-  | AIV5Type.DataUIPart<AIV5.UIDataTypes>;
+  | (UIMessageV4['parts'][number] & MastraPartExtensions)
+  | (AIV5Type.DataUIPart<AIV5.UIDataTypes> & MastraPartExtensions);
 
 // V4-compatible part type (excludes DataUIPart which V4 doesn't support)
-export type UIMessageV4Part = UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata };
+export type UIMessageV4Part = UIMessageV4['parts'][number] & MastraPartExtensions;
 
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4

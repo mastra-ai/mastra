@@ -557,12 +557,19 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverDate(createdAt: MastraDBMessage['createdAt']): string {
   return createdAt
-    ? new Date(createdAt).toLocaleString('en-US', {
+    ? new Date(createdAt).toLocaleDateString('en-US', {
         year: 'numeric',
-        month: 'short',
+        month: 'numeric',
         day: 'numeric',
+      })
+    : '';
+}
+
+function formatObserverTime(createdAt: MastraDBMessage['createdAt']): string {
+  return createdAt
+    ? new Date(createdAt).toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -671,6 +678,11 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
+  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
+  return `${title}${timeLabel}: ${body}`;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -678,18 +690,34 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
-  const timestamp = formatObserverTimestamp(msg.createdAt);
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-  const timestampStr = timestamp ? ` (${timestamp})` : '';
   const attachments: ObserverInputAttachmentPart[] = [];
+  const messageDate = formatObserverDate(msg.createdAt);
+  const messageTime = formatObserverTime(msg.createdAt);
 
-  let content = '';
+  let previousTime: string | undefined;
+  let lines: string[] = [];
+
   if (typeof msg.content === 'string') {
-    content = maybeTruncate(msg.content, maxLen);
+    const body = maybeTruncate(msg.content, maxLen);
+    if (body) {
+      lines = [formatObserverPartLine(role, body, messageTime, undefined)];
+    }
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    content = msg.content.parts
+    lines = msg.content.parts
       .map(part => {
-        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
+        const partCreatedAt = (part as { createdAt?: Date }).createdAt;
+        const partTime = formatObserverTime(partCreatedAt ?? msg.createdAt);
+
+        if (part.type === 'text') {
+          const body = maybeTruncate(part.text, maxLen);
+          if (!body) {
+            return '';
+          }
+          const line = formatObserverPartLine(role, body, partTime, previousTime);
+          previousTime = partTime;
+          return line;
+        }
         if (part.type === 'tool-invocation') {
           const inv = part.toolInvocation;
           if (inv.state === 'result') {
@@ -697,19 +725,27 @@ function formatObserverMessage(
               part as { providerMetadata?: Record<string, any> },
               inv.result,
             );
-            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
-            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
+            const resultStr = maybeTruncate(
+              formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }),
+              maxLen,
+            );
+            const line = formatObserverPartLine(`Tool Result ${inv.toolName}`, resultStr, partTime, previousTime);
+            previousTime = partTime;
+            return line;
           }
-          const argsStr = JSON.stringify(inv.args, null, 2);
-          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+          const argsStr = maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen);
+          const line = formatObserverPartLine(`Tool Call ${inv.toolName}`, argsStr, partTime, previousTime);
+          previousTime = partTime;
+          return line;
         }
 
         const partType = (part as { type?: string }).type;
         if (partType === 'reasoning') {
-          // Include reasoning content only when it's not obscured/encrypted
           const reasoning = (part as { reasoning?: string }).reasoning;
-          if (reasoning) return maybeTruncate(reasoning, maxLen);
-          return '';
+          if (!reasoning) return '';
+          const line = formatObserverPartLine('Reasoning', maybeTruncate(reasoning, maxLen), partTime, previousTime);
+          previousTime = partTime;
+          return line;
         }
         if (partType === 'image' || partType === 'file') {
           const attachment = part as ObserverAttachmentPart;
@@ -717,34 +753,60 @@ function formatObserverMessage(
           if (inputAttachment) {
             attachments.push(inputAttachment);
           }
-          return formatObserverAttachmentPlaceholder(attachment, counter);
+          const line = formatObserverPartLine(
+            partType === 'image' ? 'Image' : 'File',
+            formatObserverAttachmentPlaceholder(attachment, counter),
+            partTime,
+            previousTime,
+          );
+          previousTime = partTime;
+          return line;
         }
         if (partType?.startsWith('data-')) return '';
         return '';
       })
-      .filter(Boolean)
-      .join('\n');
+      .filter(Boolean);
   } else if (msg.content?.content) {
-    content = maybeTruncate(msg.content.content, maxLen);
+    const body = maybeTruncate(msg.content.content, maxLen);
+    if (body) {
+      lines = [formatObserverPartLine(role, body, messageTime, undefined)];
+    }
   }
 
-  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
-  if (!content && attachments.length === 0) {
+  if (lines.length === 0 && attachments.length === 0) {
     return { text: '', attachments };
   }
 
+  const dayHeader = messageDate ? `Date ${messageDate}:` : '';
+  const text = [dayHeader, ...lines].filter(Boolean).join('\n');
+
   return {
-    text: `**${role}${timestampStr}:**\n${content}`,
+    text,
     attachments,
   };
 }
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages
-    .map(msg => formatObserverMessage(msg, counter, options).text)
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  const sections: string[] = [];
+  let previousDate = '';
+
+  for (const message of messages) {
+    const formatted = formatObserverMessage(message, counter, options);
+    if (!formatted.text) {
+      continue;
+    }
+
+    const currentDate = formatObserverDate(message.createdAt);
+    if (currentDate && currentDate === previousDate) {
+      sections.push(formatted.text.replace(`Date ${currentDate}:\n`, ''));
+    } else {
+      sections.push(formatted.text);
+      previousDate = currentDate;
+    }
+  }
+
+  return sections.join('\n');
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
