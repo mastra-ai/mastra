@@ -1019,7 +1019,12 @@ export async function recallMessages({
   }
 
   const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
-  const emptyMessage = partType || toolName ? '(no message parts matched the current filters)' : '(no messages found)';
+  const emptyMessage =
+    allParts.length === 0
+      ? partType || toolName
+        ? '(no message parts matched the current filters)'
+        : '(no visible message parts found for this page)'
+      : '(no messages found)';
 
   return {
     messages: rendered.text || emptyMessage,

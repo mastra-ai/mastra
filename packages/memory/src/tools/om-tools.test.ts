@@ -290,6 +290,36 @@ describe('om-tools', () => {
       expect(result.messages).toContain('[msg-3]');
     });
 
+    it('should return a visible-parts empty message when paged messages have no renderable parts', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-empty-text-part',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: '' }],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        page: 1,
+        limit: 1,
+      });
+
+      expect(result.count).toBe(1);
+      expect(result.messages).toBe('(no visible message parts found for this page)');
+    });
+
     it('should auto-expand low detail when full text fits in token budget', async () => {
       // 200 chars ≈ 50 tokens — well under default 8000 budget
       const longText = 'A'.repeat(200);
