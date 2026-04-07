@@ -15,11 +15,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
-        {
-          type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
-        },
+        { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -105,21 +101,13 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
-        {
-          type: 'doc',
-          id: 'client-js/conversations',
-          label: 'Conversations API',
-        },
+        { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
         { type: 'doc', id: 'client-js/mastra-client', label: 'Mastra Client SDK' },
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
-        {
-          type: 'doc',
-          id: 'client-js/responses',
-          label: 'Responses API',
-        },
+        { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
         { type: 'doc', id: 'client-js/telemetry', label: 'Telemetry API' },
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
@@ -284,7 +272,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
-          items: [{ type: 'doc', id: 'observability/metrics/automatic-metrics', label: 'Automatic Metrics' }],
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/automatic-metrics',
+              label: 'Automatic Metrics',
+            },
+          ],
         },
         {
           type: 'category',
@@ -585,10 +579,10 @@ const sidebars = {
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
-        { type: 'doc', id: 'workspace/runloop-sandbox', label: 'RunloopSandbox' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/runloop-sandbox', label: 'RunloopSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
