@@ -282,6 +282,8 @@ export class AIV5Adapter {
           v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
 
           parts.push(v5UIPart);
+        } else if (part.type === 'source-document') {
+          continue;
         } else if (part.type === 'text') {
           const v5UIPart: AIV5Type.TextUIPart = {
             type: 'text' as const,

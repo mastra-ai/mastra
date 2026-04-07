@@ -10,7 +10,9 @@ import {
   mapAgentResponseToDataSource,
   Spinner,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { AgentDataSource } from '@mastra/playground-ui';
 import { useCallback, useMemo, useState } from 'react';
@@ -75,6 +77,14 @@ function AgentPlayground() {
     },
     [latestVersion?.id],
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

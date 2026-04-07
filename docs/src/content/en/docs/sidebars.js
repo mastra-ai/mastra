@@ -317,6 +317,30 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Browser',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {
@@ -512,6 +536,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/arize',
                   label: 'Arize',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/arthur',
+                  label: 'Arthur',
                 },
                 {
                   type: 'doc',

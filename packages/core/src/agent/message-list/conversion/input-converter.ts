@@ -1,6 +1,6 @@
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type {
   MastraDBMessage,
@@ -77,6 +77,35 @@ export function inputToMastraDBMessage(
   // Use custom ID generator if message doesn't have an ID, otherwise keep the original
   const hasOriginalId = 'id' in message && typeof message.id === 'string';
   const id = hasOriginalId ? message.id : context.newMessageId();
+
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message, messageSource, context);
+    const rawCreatedAt =
+      'metadata' in message &&
+      message.metadata &&
+      typeof message.metadata === 'object' &&
+      'createdAt' in message.metadata
+        ? message.metadata.createdAt
+        : undefined;
+    return {
+      ...dbMsg,
+      id,
+      createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
+      threadId: context.memoryInfo?.threadId,
+      resourceId: context.memoryInfo?.resourceId,
+    };
+  }
+  if (TypeDetector.isAIV6UIMessage(message)) {
+    const dbMsg = AIV6Adapter.fromUIMessage(message);
+    const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
+    return {
+      ...dbMsg,
+      id,
+      createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
+      threadId: context.memoryInfo?.threadId,
+      resourceId: context.memoryInfo?.resourceId,
+    };
+  }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {
     const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
