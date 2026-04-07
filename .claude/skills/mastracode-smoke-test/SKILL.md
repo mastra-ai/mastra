@@ -81,9 +81,9 @@ To test browser functionality, add a browser-enabled agent:
 1. **Install browser packages**:
 
 ```sh
-<pm> add @mastra/stagehand
+<pm> add @mastra/stagehand @mastra/memory
 # or for deterministic browser automation:
-<pm> add @mastra/agent-browser
+<pm> add @mastra/agent-browser @mastra/memory
 ```
 
 2. **Create browser-agent.ts** in `src/mastra/agents/`:
@@ -211,10 +211,15 @@ Perform the following smoke tests:
 - [ ] Navigate to `/settings`
 - [ ] Extract/snapshot to verify settings page loads
 
-**Observability Page** (`/observability/traces`)
+**Observability Page** (`/observability`)
 
-- [ ] Navigate to `/observability/traces`
+- [ ] Navigate to `/observability`
 - [ ] Extract/snapshot to check for traces (may be empty initially)
+
+**Logs Page** (`/logs`)
+
+- [ ] Navigate to `/logs`
+- [ ] Extract/snapshot to check for server logs
 
 **MCP Servers Page** (`/mcps`)
 
@@ -245,8 +250,8 @@ Provide a summary:
 | Tools           | `/tools`                  |
 | Evaluation      | `/evaluation`             |
 | Scorers         | `/evaluation?tab=scorers` |
-| Observability   | `/observability/traces`   |
-| Logs            | `/observability/logs`     |
+| Observability   | `/observability`          |
+| Logs            | `/logs`                   |
 | MCP Servers     | `/mcps`                   |
 | Processors      | `/processors`             |
 | Templates       | `/templates`              |
