@@ -14,6 +14,7 @@ import type {
   ConfigSelector,
   SerializationOptions,
   CardinalityConfig,
+  LogLevel,
   AnyExportedSpan,
 } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
