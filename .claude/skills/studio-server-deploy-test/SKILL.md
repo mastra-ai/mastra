@@ -31,7 +31,7 @@ deploy test --env production --existing-project ~/my-existing-app
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`          | No       | `openai`     |
 | `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`             | No       | `libsql`     |
 | `--skip-browser`     |       | Skip browser-based UI testing, use curl only                   | No       | `false`      |
-| `--test`             |       | Run specific test: `studio`, `server`, `traces`, `tools`, `workflows`, `account`, `invites`, `rbac` | No | (full test) |
+| `--test`             |       | Run specific test: `studio`, `server`, `traces`, `tools`, `workflows`, `memory`, `mcp`, `errors`, `account`, `invites`, `rbac` | No | (full test) |
 | `--byok`             |       | Test bring-your-own-key flow (requires user's API keys)        | No       | `false`      |
 | `--browser-agent`    |       | Add a browser-enabled agent to the project for testing         | No       | `false`      |
 
@@ -117,6 +117,43 @@ After creating the project, verify storage works by:
 1. Deploying the server
 2. Making an agent call
 3. Checking that threads/messages persist in the selected database
+
+### Custom API Routes (Optional)
+
+To test custom server routes with deployed server:
+
+1. **Create `src/mastra/routes/hello.ts`**:
+
+```typescript
+import { registerApiRoute } from '@mastra/core/server';
+
+export const helloRoute = registerApiRoute('/hello', {
+  method: 'GET',
+  handler: async (c) => {
+    return c.json({ message: 'Hello from custom route!' });
+  },
+});
+```
+
+2. **Register in `src/mastra/index.ts`**:
+
+```typescript
+import { helloRoute } from './routes/hello';
+
+export const mastra = new Mastra({
+  // ... other config
+  server: {
+    routes: [helloRoute],
+  },
+});
+```
+
+3. **Test after server deploy**:
+
+```bash
+curl https://<project>.server.<env>.mastra.cloud/hello
+# Expected: {"message":"Hello from custom route!"}
+```
 
 **Option B: Use Existing Project**
 
@@ -290,9 +327,34 @@ Navigate to the deployed Studio URL and test each section.
 - [ ] Navigate to `/logs`
 - [ ] Verify server logs appear
 
-#### 6.7 Other Pages
-- [ ] `/settings` - Verify settings page loads
-- [ ] `/mcps` - Verify MCP servers page loads (empty state OK)
+#### 6.7 MCP Servers (`/mcps`)
+- [ ] Navigate to `/mcps`
+- [ ] Verify page loads (empty state OK)
+- [ ] If MCP servers are configured:
+  - [ ] Verify MCP server appears in list
+  - [ ] Check connection status (green = connected)
+  - [ ] Verify tools from MCP server are discoverable
+
+#### 6.8 Memory/Threads Testing
+Test that conversation history persists in deployed Studio:
+
+- [ ] Chat with Weather Agent
+- [ ] Send a follow-up message: "What about tomorrow?"
+- [ ] Verify agent remembers the city from previous message
+- [ ] Navigate away (e.g., to `/tools`)
+- [ ] Navigate back to the agent chat
+- [ ] Verify conversation history is preserved
+- [ ] Send another message referencing earlier context
+
+#### 6.9 Error Handling Testing
+- [ ] Send agent a request with invalid input (e.g., "Weather in @#$%^&")
+- [ ] Verify error message is user-friendly
+- [ ] In tools page, submit tool with invalid input
+- [ ] Verify clear error message (not raw stack trace)
+
+#### 6.10 Settings (`/settings`)
+- [ ] Navigate to `/settings`
+- [ ] Verify settings page loads
 
 ### Step 7: Test Server API
 
@@ -337,6 +399,10 @@ Verify the response includes weather data (or relevant agent output).
 | **Traces** | Studio traces | Traces visible after chat | ⬜ |
 | **Traces** | Server traces | Traces from API call visible in Studio | ⬜ |
 | **Server** | Server API call | Returns valid agent response | ⬜ |
+| **Memory** | Thread persists | History preserved after navigation | ⬜ |
+| **Memory** | Context recall | Agent remembers previous messages | ⬜ |
+| **MCP** | MCP page loads | No errors | ⬜ |
+| **Errors** | Agent error handling | Friendly error on bad input | ⬜ |
 
 ### Extended Tests (When Applicable)
 
@@ -381,7 +447,48 @@ smoke test --test invites --existing-project ~/my-app
 
 # Test RBAC/permissions
 smoke test --test rbac --existing-project ~/my-app
+
+# Test memory/thread persistence
+smoke test --test memory --existing-project ~/my-app
+
+# Test MCP servers
+smoke test --test mcp --existing-project ~/my-app
+
+# Test error handling
+smoke test --test errors --existing-project ~/my-app
 ```
+
+### Memory Testing (`--test memory`)
+
+Tests conversation persistence in deployed Studio:
+
+1. Navigate to deployed Studio → Agents → Weather Agent
+2. Chat with the agent: "What's the weather in Paris?"
+3. Send follow-up: "What about tomorrow?"
+4. Verify agent remembers Paris from context
+5. Navigate to `/tools` then back to agent chat
+6. Verify conversation history is preserved
+7. Send another message referencing earlier context
+
+### MCP Testing (`--test mcp`)
+
+Tests MCP server integration:
+
+1. Navigate to deployed Studio → MCP Servers (`/mcps`)
+2. Verify page loads
+3. If MCP servers are configured:
+   - Verify MCP server appears in list
+   - Check connection status indicator
+   - Navigate to Tools and verify MCP tools appear
+
+### Error Handling Testing (`--test errors`)
+
+Tests graceful error handling:
+
+1. In agent chat, send: "Weather in @#$%^&*"
+2. Verify error message is user-friendly (not stack trace)
+3. In tools page, submit tool with invalid input
+4. Verify clear error message
 
 ### Account Creation Flow (`--test account`)
 

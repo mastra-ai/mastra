@@ -39,7 +39,7 @@ smoke test --existing-project ~/my-app --test traces
 | `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`                             | No       | `npm`    |
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
 | `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
-| `--test`             |       | Run specific test only: `agents`, `tools`, `workflows`, `traces`, `scorers`  | No       | (full)   |
+| `--test`             |       | Run specific test only: `agents`, `tools`, `workflows`, `traces`, `scorers`, `memory`, `mcp`, `errors` | No | (full) |
 | `--browser-agent`    |       | Add a browser-enabled agent to the project for testing                       | No       | `false`  |
 
 \* Either `--directory` + `--name` OR `--existing-project` is required
@@ -137,6 +137,43 @@ TURSO_AUTH_TOKEN=your-token
 ```
 
 Then update `src/mastra/index.ts` to use the appropriate storage provider.
+
+### Custom API Routes (Optional)
+
+To test custom server routes, add a route to the project:
+
+1. **Create `src/mastra/routes/hello.ts`**:
+
+```typescript
+import { registerApiRoute } from '@mastra/core/server';
+
+export const helloRoute = registerApiRoute('/hello', {
+  method: 'GET',
+  handler: async (c) => {
+    return c.json({ message: 'Hello from custom route!' });
+  },
+});
+```
+
+2. **Register in `src/mastra/index.ts`**:
+
+```typescript
+import { helloRoute } from './routes/hello';
+
+export const mastra = new Mastra({
+  // ... other config
+  server: {
+    routes: [helloRoute],
+  },
+});
+```
+
+3. **Test the route** after starting the dev server:
+
+```bash
+curl http://localhost:4111/hello
+# Expected: {"message":"Hello from custom route!"}
+```
 
 ### Step 2: Verify Project Structure
 
@@ -293,6 +330,37 @@ Perform the following smoke tests:
 - [ ] Click on a trace to view details
 - [ ] Verify trace shows: agent name, input/output, duration, status
 
+**Local Observability Setup Verification:**
+
+Before testing traces, verify observability is configured:
+
+1. **Check `src/mastra/index.ts`** for observability config:
+```typescript
+import { createLogger } from '@mastra/core/logger';
+import { OtelConfig } from '@mastra/core/telemetry';
+
+export const mastra = new Mastra({
+  // ... agents, tools, etc.
+  logger: createLogger({ name: 'my-app', level: 'info' }),
+  telemetry: new OtelConfig({
+    serviceName: 'my-app',
+    enabled: true,
+  }),
+});
+```
+
+2. **Check dependencies** in `package.json`:
+   - `@mastra/observability` should be installed
+
+3. **Check dev server output** for OTel initialization:
+   - Should see "OpenTelemetry initialized" or similar
+   - Should NOT see "MASTRA_CLOUD_ACCESS_TOKEN not set" (that's only for cloud deploys)
+
+If traces are missing locally:
+- Verify `telemetry` is configured in Mastra instance
+- Restart dev server after config changes
+- Check browser console for OTel export errors
+
 **Traces Verification Checklist:**
 
 | Action | Expected Trace |
@@ -317,6 +385,32 @@ If traces are missing:
 
 - [ ] Navigate to `/mcps`
 - [ ] Extract/snapshot to verify page loads (empty state OK)
+- [ ] If MCP servers are configured in the project:
+  - [ ] Verify MCP server appears in list
+  - [ ] Check connection status (green = connected)
+  - [ ] Verify tools from MCP server are discoverable
+
+**Memory/Threads Testing**
+
+Test that conversation history persists:
+
+- [ ] Chat with an agent (e.g., Weather Agent)
+- [ ] Send a follow-up message referencing the previous response
+- [ ] Verify agent remembers context from previous message
+- [ ] Navigate away from chat (e.g., to `/tools`)
+- [ ] Navigate back to the agent chat
+- [ ] Verify conversation history is preserved
+- [ ] Send another message referencing earlier context
+- [ ] Verify agent still has access to full thread history
+
+**Error Handling Testing**
+
+Test graceful error handling:
+
+- [ ] In agent chat, send a request that will fail (e.g., ask about a city with special characters: "Weather in @#$%")
+- [ ] Verify error message is user-friendly (not raw stack trace)
+- [ ] In tools page, submit a tool with invalid input
+- [ ] Verify tool returns a clear error message
 
 #### 5.3 Cleanup
 
@@ -363,8 +457,12 @@ smoke test --existing-project ~/my-app --test scorers
 | `workflows` | Navigate to `/workflows`, list workflows, run a workflow |
 | `traces` | Navigate to `/observability`, verify traces appear from previous actions |
 | `scorers` | Navigate to `/evaluation?tab=scorers`, verify scorers list |
+| `memory` | Test conversation persistence, thread history, context recall |
+| `mcp` | Navigate to `/mcps`, verify MCP servers and tool discovery |
+| `errors` | Test error handling with invalid inputs |
 
 **Note**: The `traces` test should be run after `agents`, `tools`, or `workflows` to have traces to verify.
+**Note**: The `memory` test should be run after `agents` to have conversation history to verify.
 
 ## Test Verification Checklist
 
@@ -384,6 +482,12 @@ smoke test --existing-project ~/my-app --test scorers
 | **Traces** | Agent traces visible | Traces from chat appear | ⬜ |
 | **Traces** | Tool traces visible | Traces from tool calls appear | ⬜ |
 | **Logs** | Logs page loads | Server logs visible | ⬜ |
+| **Memory** | Thread persists | History preserved after navigation | ⬜ |
+| **Memory** | Context recall | Agent remembers previous messages | ⬜ |
+| **MCP** | MCP page loads | No errors | ⬜ |
+| **MCP** | Server connection | MCP servers show connected status | ⬜ |
+| **Errors** | Agent error handling | Friendly error on bad input | ⬜ |
+| **Errors** | Tool error handling | Clear error message | ⬜ |
 
 ## Studio Routes Reference
 
