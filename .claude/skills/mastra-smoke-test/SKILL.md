@@ -222,9 +222,12 @@ pnpx mastra@latest server deploy -y
 | **Success** | Capture URLs and continue |
 
 Common warnings to watch for:
-- `mastra-cloud-observability-exporter disabled` — traces won't be sent (may need env var fix)
+- `mastra-cloud-observability-exporter disabled` — traces won't be sent (env var missing)
+- `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_LOGS` / 404 errors from CloudExporter — traces endpoint misconfigured
 - `Session expired` — may need to re-authenticate
 - Build warnings — usually OK to continue
+
+These warnings mean the deploy succeeded but **traces won't appear in Studio**. Note them for debugging.
 
 If deploy fails, check `references/common-errors.md` for solutions.
 
@@ -347,6 +350,12 @@ Provide summary:
 | **Memory** | Context recall | Agent remembers previous messages | ⬜ |
 | **MCP** | MCP page loads | No errors | ⬜ |
 | **Errors** | Error handling | Friendly error on bad input | ⬜ |
+
+## Platform Dashboards
+
+View all projects and deployments:
+- **Production**: `https://studio.mastra.ai`
+- **Staging**: `https://studio.staging.mastra.ai`
 
 ## Studio Routes Reference
 
