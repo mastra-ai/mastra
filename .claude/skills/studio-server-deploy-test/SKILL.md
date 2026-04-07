@@ -26,14 +26,18 @@ deploy test --env production --existing-project ~/my-existing-app
 | `--existing-project` |       | Path to existing Mastra project                                | No       | -            |
 | `--directory`        | `-d`  | Parent directory for new project (required with --new-project) | No       | -            |
 | `--name`             | `-n`  | Project name for new project (required with --new-project)     | No       | -            |
+| `--tag`              | `-t`  | Version tag for create-mastra (e.g., `latest`, `alpha`)        | No       | `latest`     |
+| `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`               | No       | `pnpm`       |
+| `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`          | No       | `openai`     |
 | `--skip-browser`     |       | Skip browser-based UI testing, use curl only                   | No       | `false`      |
+| `--test`             |       | Run specific test only: `studio`, `server`, `traces`, `tools`, `workflows` | No | (full test) |
 
 ## Prerequisites
 
 1. **CLI Tools**: `pnpx` (or `npx`), `curl`, `jq`
 2. **Platform Account**: Mastra account with access to deploy
-3. **API Key**: `OPENAI_API_KEY` (or appropriate LLM provider key)
-4. **Browser** (optional): For UI testing, browser tools should be enabled
+3. **API Key**: `OPENAI_API_KEY` (or appropriate LLM provider key based on `--llm`)
+4. **Browser**: For UI testing, browser tools should be enabled (`/browser on`)
 
 For debugging trace issues:
 - **GCP Console Access**: To view `mobs-collector`, `gateway-platform-api` logs
@@ -59,11 +63,26 @@ export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
 
 ```bash
 cd <directory>
-pnpx create-mastra@latest <project-name> --default
+
+# Using pnpm (default)
+pnpm create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
+
+# Using npm
+npx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
+
+# Using yarn
+yarn create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
+
+# Using bun
+bunx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
+
 cd <project-name>
 ```
 
-The `--default` flag creates a project with the weather agent example.
+**Flags explained:**
+- `-c agents,tools,workflows,scorers` - Include all components for full testing
+- `-l <provider>` - Set the LLM provider (`openai`, `anthropic`, etc.)
+- `-e` - Include example code (weather agent, tools, workflows)
 
 **Option B: Use Existing Project**
 
@@ -78,12 +97,19 @@ Verify it has:
 
 ### Step 2: Configure Environment
 
-Ensure `.env` file exists with required API keys:
+Based on the selected LLM provider, ensure `.env` has the required API key:
 
-```bash
-# Check if .env exists
-cat .env 2>/dev/null || echo "OPENAI_API_KEY=<your-key>" > .env
-```
+| Provider   | Required Environment Variable    |
+|------------|----------------------------------|
+| openai     | `OPENAI_API_KEY`                 |
+| anthropic  | `ANTHROPIC_API_KEY`              |
+| groq       | `GROQ_API_KEY`                   |
+| google     | `GOOGLE_GENERATIVE_AI_API_KEY`   |
+
+**Check in this order:**
+1. Check global environment: `echo $<ENV_VAR_NAME>`
+2. Check project `.env` file
+3. Ask user only if not found
 
 ### Step 3: Authenticate with Platform
 
@@ -128,21 +154,51 @@ curl https://<project>.server.<staging.>mastra.cloud/health
 # Expected: {"success":true}
 ```
 
-### Step 6: Test Studio Agent Chat (Browser)
+### Step 6: Studio UI Testing (Browser)
 
-1. Navigate to the deployed Studio URL
-2. Go to the Agents page
-3. Open the Weather Agent (or available agent)
-4. Send a test message: "What is the weather in Tokyo?"
-5. Verify the agent responds
+Navigate to the deployed Studio URL and test each section.
 
-### Step 7: Verify Studio Traces
+#### 6.1 Agents (`/agents`)
+- [ ] Navigate to `/agents`
+- [ ] Verify agents list loads (should see Weather Agent)
+- [ ] Click on Weather Agent
+- [ ] Send test message: "What is the weather in Tokyo?"
+- [ ] Verify agent responds with weather data
 
-1. Navigate to Observability → Traces in Studio UI
-2. Verify traces appear from Step 6 (agent run, scorer runs if configured)
-3. Note the trace IDs for reference
+#### 6.2 Tools (`/tools`)
+- [ ] Navigate to `/tools`
+- [ ] Verify tools list loads
+- [ ] Click on `get-weather` tool
+- [ ] Enter "London" in city input
+- [ ] Click Submit
+- [ ] Verify JSON output with weather data
 
-### Step 8: Test Server API
+#### 6.3 Workflows (`/workflows`)
+- [ ] Navigate to `/workflows`
+- [ ] Verify workflows list loads
+- [ ] Click on `weather-workflow`
+- [ ] Enter "Berlin" in city input
+- [ ] Click Run
+- [ ] Verify workflow execution succeeds
+
+#### 6.4 Evaluation/Scorers (`/evaluation?tab=scorers`)
+- [ ] Navigate to `/evaluation?tab=scorers`
+- [ ] Verify scorers list loads (3 example scorers if created with `-e`)
+
+#### 6.5 Observability - Traces (`/observability`)
+- [ ] Navigate to `/observability`
+- [ ] Verify traces from agent chat appear
+- [ ] Note trace IDs for reference
+
+#### 6.6 Observability - Logs (`/logs`)
+- [ ] Navigate to `/logs`
+- [ ] Verify server logs appear
+
+#### 6.7 Other Pages
+- [ ] `/settings` - Verify settings page loads
+- [ ] `/mcps` - Verify MCP servers page loads (empty state OK)
+
+### Step 7: Test Server API
 
 Use the helper script from this skill:
 
@@ -163,23 +219,47 @@ The script will:
 
 Verify the response includes weather data (or relevant agent output).
 
-### Step 9: Verify Server Traces in Studio
+### Step 8: Verify Server Traces in Studio
 
 1. Return to Studio UI → Observability → Traces
 2. Refresh the page
-3. **Critical**: Verify traces from the Server API call (Step 8) appear
+3. **Critical**: Verify traces from the Server API call (Step 7) appear
 4. If traces don't appear, see [Troubleshooting](#troubleshooting)
 
 ## Test Verification Checklist
 
-| Test | Expected Result | Status |
-|------|-----------------|--------|
-| Studio deploy | URL accessible, can sign in | ⬜ |
-| Server deploy | `/health` returns `{"success":true}` | ⬜ |
-| Studio agent chat | Agent responds to messages | ⬜ |
-| Studio traces | Traces visible after chat | ⬜ |
-| Server API call | Returns valid agent response | ⬜ |
-| Server traces in Studio | Traces from API call visible | ⬜ |
+| Category | Test | Expected Result | Status |
+|----------|------|-----------------|--------|
+| **Deploy** | Studio deploy | URL accessible, can sign in | ⬜ |
+| **Deploy** | Server deploy | `/health` returns `{"success":true}` | ⬜ |
+| **Agents** | Agent chat | Agent responds to messages | ⬜ |
+| **Tools** | Tool execution | Returns valid JSON output | ⬜ |
+| **Workflows** | Workflow run | Executes successfully | ⬜ |
+| **Scorers** | Scorers list | Shows configured scorers | ⬜ |
+| **Traces** | Studio traces | Traces visible after chat | ⬜ |
+| **Traces** | Server traces | Traces from API call visible in Studio | ⬜ |
+| **Server** | Server API call | Returns valid agent response | ⬜ |
+
+## Partial Testing (--test flag)
+
+To test a specific flow only:
+
+```bash
+# Test just studio deploy + UI
+smoke test --test studio --existing-project ~/my-app
+
+# Test just server deploy + API
+smoke test --test server --existing-project ~/my-app
+
+# Test just traces (requires both deployed)
+smoke test --test traces --existing-project ~/my-app
+
+# Test tools page only
+smoke test --test tools --existing-project ~/my-app
+
+# Test workflows page only
+smoke test --test workflows --existing-project ~/my-app
+```
 
 ## Troubleshooting
 
@@ -211,6 +291,21 @@ See `references/` directory:
 - `common-errors.md` - Error symptoms and fixes
 - `environment-variables.md` - All env vars explained
 - `gcp-debugging.md` - GCP Console navigation
+
+## Studio Routes Reference
+
+| Feature         | Route                     |
+|-----------------|---------------------------|
+| Agents          | `/agents`                 |
+| Agent Chat      | `/agents/<id>/chat`       |
+| Workflows       | `/workflows`              |
+| Tools           | `/tools`                  |
+| Evaluation      | `/evaluation`             |
+| Scorers         | `/evaluation?tab=scorers` |
+| Observability   | `/observability`          |
+| Logs            | `/logs`                   |
+| MCP Servers     | `/mcps`                   |
+| Settings        | `/settings`               |
 
 ## Quick Commands Reference
 
