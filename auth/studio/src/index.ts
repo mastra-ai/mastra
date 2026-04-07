@@ -19,6 +19,8 @@ export interface StudioUser extends EEUser {
   organizationId?: string;
   role?: string;
   permissions?: string[];
+  /** All organization IDs the user is a member of (for cross-org access checks) */
+  memberOrgIds?: string[];
 }
 
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
@@ -121,8 +123,9 @@ export class MastraAuthStudio
 
     if (!user) return null;
 
-    // Org-scoping: if this instance belongs to a specific org, reject users not in that org
-    if (this.organizationId && user.organizationId !== this.organizationId) {
+    // Org-scoping: if this instance belongs to a specific org, reject users not a member of that org
+    // Check memberOrgIds (all orgs user belongs to) rather than organizationId (current org)
+    if (this.organizationId && !user.memberOrgIds?.includes(this.organizationId)) {
       return null;
     }
 
@@ -267,7 +270,44 @@ export class MastraAuthStudio
   }
 
   async refreshSession(sessionId: string): Promise<Session | null> {
-    return this.validateSession(sessionId);
+    try {
+      // Call the shared API's /auth/refresh endpoint to get a fresh access token
+      const res = await fetch(`${this.sharedApiUrl}/auth/refresh`, {
+        method: 'GET',
+        headers: {
+          Cookie: `${COOKIE_NAME}=${sessionId}`,
+        },
+      });
+
+      if (!res.ok) {
+        // Refresh failed, fall back to validation (will likely also fail)
+        return this.validateSession(sessionId);
+      }
+
+      // Parse the new sealed session from Set-Cookie header
+      const setCookie = res.headers.get('Set-Cookie');
+      const newSessionId = setCookie ? parseCookieFromHeader(setCookie, COOKIE_NAME) : null;
+
+      if (!newSessionId) {
+        // No new cookie returned, fall back to validation with original
+        return this.validateSession(sessionId);
+      }
+
+      // Verify the new session works and return it
+      const user = await this.verifySessionCookie(newSessionId);
+      if (!user) return null;
+
+      const now = new Date();
+      return {
+        id: newSessionId,
+        userId: user.id,
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        createdAt: now,
+      };
+    } catch {
+      // On error, fall back to validation
+      return this.validateSession(sessionId);
+    }
   }
 
   getSessionIdFromRequest(request: Request): string | null {
@@ -348,6 +388,7 @@ export class MastraAuthStudio
         organizationId: string;
         role?: string;
         permissions?: string[];
+        memberOrgIds?: string[];
       };
 
       return {
@@ -358,6 +399,7 @@ export class MastraAuthStudio
         organizationId: data.organizationId,
         role: data.role,
         permissions: data.permissions,
+        memberOrgIds: data.memberOrgIds,
       };
     } catch {
       return null;
@@ -386,6 +428,8 @@ export class MastraAuthStudio
           lastName: string;
         };
         organizationId: string;
+        role?: string;
+        memberOrgIds?: string[];
       };
 
       return {
@@ -393,6 +437,8 @@ export class MastraAuthStudio
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
         organizationId: data.organizationId,
+        role: data.role,
+        memberOrgIds: data.memberOrgIds,
       };
     } catch {
       return null;
@@ -408,6 +454,22 @@ function parseCookie(cookieHeader: string | null | undefined, name: string): str
   if (!cookieHeader) return null;
   const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
   return match?.[1] ?? null;
+}
+
+/**
+ * Parse a cookie value from a Set-Cookie header.
+ * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400"
+ */
+function parseCookieFromHeader(setCookieHeader: string, name: string): string | null {
+  // Set-Cookie header starts with "name=value" followed by optional attributes
+  const parts = setCookieHeader.split(';');
+  if (parts.length === 0) return null;
+
+  const [cookieName, ...valueParts] = parts[0]!.split('=');
+  if (cookieName?.trim() !== name) return null;
+
+  // Value could contain = characters, so rejoin
+  return valueParts.join('=') || null;
 }
 
 // ---------------------------------------------------------------------------

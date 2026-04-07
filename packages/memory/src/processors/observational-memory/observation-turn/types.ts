@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import type { ObserverExchange } from '../observer-runner';
+
 /** Returned by `turn.start()` — the loaded context for this turn. */
 export interface TurnContext {
   messages: MastraDBMessage[];
@@ -20,6 +22,8 @@ export interface ObservationTurnHooks {
 export interface StepContext {
   /** System messages containing observations (one per cache-stable chunk). */
   systemMessage: string[] | undefined;
+  /** Observer exchange captured during this step for repro recording. */
+  observerExchange?: ObserverExchange;
   /** Whether buffered chunks were activated in this step. */
   activated: boolean;
   /** Whether a sync observation was triggered in this step. */

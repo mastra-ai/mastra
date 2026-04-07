@@ -6,6 +6,7 @@ import { Spacer, Text } from '@mariozechner/pi-tui';
 
 import { getCurrentGitBranch } from '../../utils/project.js';
 import { GradientAnimator } from '../components/obi-loader.js';
+import { pruneChatContainer } from '../prune-chat.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -45,9 +46,9 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
+  pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
-  // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
   ctx.notify('agent_done');
 
@@ -123,7 +124,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  // Keep allToolComponents so Ctrl+E continues to work after interruption
+  pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }
@@ -144,7 +145,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  // Keep allToolComponents so Ctrl+E continues to work after errors
+  pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }

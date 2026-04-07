@@ -367,6 +367,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools?: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -615,7 +617,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
@@ -2069,6 +2073,10 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  from?: Date | string;
+  to?: Date | string;
+  offset?: number;
+  limit?: number;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -2102,6 +2110,7 @@ export interface AwaitBufferStatusResponse {
  */
 export interface GetMemoryStatusResponse {
   result: boolean;
+  memoryType?: 'local' | 'gateway';
   observationalMemory?: {
     enabled: boolean;
     hasRecord?: boolean;
@@ -2118,6 +2127,7 @@ export interface GetMemoryStatusResponse {
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;
@@ -2303,6 +2313,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2407,6 +2418,7 @@ export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2417,6 +2429,7 @@ export interface UpdateDatasetItemParams {
   itemId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2427,6 +2440,7 @@ export interface BatchInsertDatasetItemsParams {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;

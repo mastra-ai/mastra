@@ -266,6 +266,8 @@ export class AIV5Adapter {
           }
 
           parts.push(v5UIPart);
+        } else if (part.type === 'source-document') {
+          continue;
         } else if (part.type === 'text') {
           const v5UIPart: AIV5Type.TextUIPart = {
             type: 'text' as const,
@@ -508,6 +510,8 @@ export class AIV5Adapter {
     } else if ('image' in part) {
       mimeType = part.mediaType || 'image/jpeg';
       data = part.image;
+    } else if ('url' in part && typeof (part as any).url === 'string') {
+      return (part as any).url;
     } else {
       throw new MastraError({
         id: 'MASTRA_AIV5_DATA_PART_INVALID',
@@ -618,6 +622,9 @@ export class AIV5Adapter {
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
           updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            matchingV2Part.providerMetadata = toolResultPart.providerOptions;
+          }
         } else {
           const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
             type: 'tool-invocation' as const,
@@ -629,6 +636,9 @@ export class AIV5Adapter {
             },
           };
           updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            toolInvocationPart.providerMetadata = toolResultPart.providerOptions;
+          }
           mastraDBParts.push(toolInvocationPart);
         }
       } else if (part.type === 'reasoning') {

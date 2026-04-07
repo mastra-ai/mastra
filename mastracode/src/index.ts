@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -7,8 +8,8 @@ import type {
   HarnessMode,
   HarnessSubagent,
 } from '@mastra/core/harness';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -31,6 +32,7 @@ import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.j
 import {
   getCustomProviderId,
   loadSettings,
+  MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
   resolveOmModel,
   saveSettings,
@@ -58,7 +60,7 @@ export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode[];
+  modes?: HarnessMode<Record<string, unknown>>[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
@@ -93,6 +95,8 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
+  browser?: MastraBrowser;
 }
 
 export function createAuthStorage() {
@@ -105,8 +109,21 @@ export function createAuthStorage() {
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
 
+  const gatewayRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
+  const globalSettings = loadSettings(config?.settingsPath);
+  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
+
+  if (storedGatewayKey) {
+    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+  }
+
+  if (storedGatewayUrl) {
+    process.env['MASTRA_GATEWAY_URL'] ??= storedGatewayUrl;
+  }
 
   // Load user-entered API keys from auth.json into process.env
   // (only sets env vars that aren't already present — env vars take precedence)
@@ -117,10 +134,27 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
+    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
-    // Non-fatal — provider registry may not be available
+    // Registry unavailable — load well-known provider keys so non-gateway flows still work
+    authStorage.loadStoredApiKeysIntoEnv({
+      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      anthropic: 'ANTHROPIC_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+      cerebras: 'CEREBRAS_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY',
+    });
   }
+
+  try {
+    await gatewayRegistry.syncGateways(true);
+  } catch (error) {
+    console.warn('Failed to sync gateways at startup', error);
+  }
+
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
   // Project detection
   const project = detectProject(cwd);
@@ -130,9 +164,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
-
-  // Load global settings to resolve storage preferences (needed before storage creation)
-  const globalSettings = loadSettings(config?.settingsPath);
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
@@ -167,7 +198,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
-          const harnessContext = requestContext.get('harness') as
+          const harnessContext = requestContext?.get('harness') as
             | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
             | undefined;
           const projectPath =
@@ -180,7 +211,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
-  const defaultModes: HarnessMode[] = [
+  const defaultModes: HarnessMode<Record<string, unknown>>[] = [
     {
       id: 'build',
       name: 'Build',
@@ -235,11 +266,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
+  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  if (mgApiKey) {
+    if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
+    if (!startupAccess.openai) startupAccess.openai = 'apikey';
+  }
   // Check all providers in the registry for API keys
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
     for (const [provider, config] of Object.entries(registry)) {
-      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      if (startupAccess[provider] === 'oauth' || startupAccess[provider] === 'apikey') continue; // Already enabled above
       if (provider === 'anthropic' || provider === 'openai') continue;
       const envVars = config?.apiKeyEnvVar;
       const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
@@ -309,7 +345,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
-    if (key === '_default') {
+    if (key === 'default' || key === '_default') {
       globalInitialState.subagentModelId = modelId;
     } else {
       globalInitialState[`subagentModelId_${key}`] = modelId;
@@ -322,7 +358,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     memory,
     stateSchema,
     subagents,
-    resolveModel,
+    resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
@@ -333,9 +369,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...config?.initialState,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
+    browser: config?.browser,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
+      // Gateway key only authorizes providers that the Mastra gateway actually serves
+      const gatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (gatewayKey) {
+        const providerConfig = gatewayRegistry.getProviders()[provider];
+        if (providerConfig?.gateway === 'mastra') return true;
+      }
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;

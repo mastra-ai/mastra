@@ -11,6 +11,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
+import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -313,6 +314,14 @@ export interface ToolExecutionContext<
    * This allows tools to work with the agent's configured workspace.
    */
   workspace?: Workspace;
+
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   *
+   * The browser is lazily initialized - it will be launched on first use.
+   */
+  browser?: MastraBrowser;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream

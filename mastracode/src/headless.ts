@@ -146,8 +146,8 @@ function resolveExitCode(reason?: string): number {
   return reason === 'error' || reason === 'aborted' ? 1 : 0;
 }
 
-function autoResolve(
-  harness: Harness,
+function autoResolve<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
@@ -234,7 +234,6 @@ export async function runHeadless(
   // Harness is imported without its generic state param, so setState doesn't know about
   // thinkingLevel, yolo, observationThreshold, etc. Cast once here instead of at every call site.
   const setHarnessState = (state: Record<string, unknown>) => harness.setState(state as any);
-
   const emit =
     args.format === 'json'
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
