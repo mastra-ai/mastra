@@ -28,6 +28,7 @@ import type {
   MetricsContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -564,6 +565,10 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
+    // Register AsyncLocalStorage-backed context resolvers so that DualLogger
+    // can correlate logs to the active span. Must happen before any agent runs.
+    initContextStorage();
+
     // This is only used internally for server handlers that require temporary persistence
     this.#serverCache = new InMemoryServerCache();
 

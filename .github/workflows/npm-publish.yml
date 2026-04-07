@@ -82,6 +82,23 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
 
+      - name: Get CLI version
+        id: cli-version
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload studio assets to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -363,3 +380,20 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Get CLI version
+        id: cli-version
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload studio assets to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
+          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete

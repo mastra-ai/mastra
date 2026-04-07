@@ -81,7 +81,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     this.cardinalityFilter = new CardinalityFilter(config.cardinality);
 
     // Initialize the unified ObservabilityBus
-    this.observabilityBus = new ObservabilityBus();
+    this.observabilityBus = new ObservabilityBus({
+      serializationOptions: this.config.serializationOptions,
+    });
 
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);

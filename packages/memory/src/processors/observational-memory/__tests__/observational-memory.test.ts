@@ -1227,19 +1227,37 @@ describe('Observer Agent Helpers', () => {
       const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
 
       const formatted = formatMessagesForObserver(messages);
-      expect(formatted).toContain('**User');
+      expect(formatted).toMatch(/^[A-Z][a-z]{2} \d{1,2} \d{4}:/);
+      expect(formatted).toContain('User');
       expect(formatted).toContain('Hello');
-      expect(formatted).toContain('**Assistant');
+      expect(formatted).toContain('Assistant');
       expect(formatted).toContain('Hi there!');
     });
 
-    it('should include timestamps if present', () => {
-      const msg = createTestMessage('Test', 'user');
-      msg.createdAt = new Date('2024-12-04T10:30:00Z');
+    it('should include date headers on part day changes and only repeat times when they change', () => {
+      const first = createTestMessage('ignored', 'assistant');
+      first.createdAt = new Date('2024-12-04T10:30:00Z');
+      first.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'reasoning', reasoning: 'thinking', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'second', createdAt: Date.parse('2024-12-04T10:31:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
+        ],
+      } as any;
 
-      const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('2024');
-      expect(formatted).toContain('Dec');
+      const second = createTestMessage('later', 'user');
+      second.createdAt = new Date('2024-12-05T12:01:00Z');
+
+      const formatted = formatMessagesForObserver([first, second]);
+      expect((formatted.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((formatted.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
+      expect(formatted).toMatch(/Assistant \([^)]*\): first/);
+      expect(formatted).toContain('Reasoning: thinking');
+      expect(formatted).toMatch(/Assistant \([^)]*\): second/);
+      expect(formatted).toMatch(/Assistant \([^)]*\): next day/);
+      expect(formatted).toContain('\nUser: later');
     });
 
     it('should include attachment placeholders for image and file parts', () => {
@@ -1272,8 +1290,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Hello', 'user');
 
       const formatted = formatMessagesForObserver([dataMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toMatch(/Assistant(?: \([^)]*\))?:/);
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Hello');
     });
 
@@ -1316,8 +1334,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Real content', 'user');
 
       const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toContain('Assistant:');
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Real content');
     });
 
@@ -1343,7 +1361,7 @@ describe('Observer Agent Helpers', () => {
       } as any;
 
       const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
-      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('Tool Result web_search_20250305');
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
@@ -1386,6 +1404,92 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should reuse part-level date grouping without message separators', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date('2024-12-04T10:30:00Z');
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
+        ],
+      } as any;
+
+      const user = createTestMessage('later', 'user');
+      user.createdAt = new Date('2024-12-05T12:01:00Z');
+
+      const historyMessage = buildObserverHistoryMessage([assistant, user]) as any;
+      const joinedText = historyMessage.content
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('\n');
+
+      expect((joinedText.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((joinedText.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
+      expect(joinedText).not.toContain('---');
+      expect(joinedText).toContain('\nUser: later');
+    });
+
+    it('should render mixed content parts into the exact observer history text the model sees', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date(2024, 11, 4, 10, 30);
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'I found two candidate vendors.', createdAt: new Date(2024, 11, 4, 10, 30) },
+          {
+            type: 'reasoning',
+            reasoning: 'Comparing price and delivery windows.',
+            createdAt: new Date(2024, 11, 4, 10, 30),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+              result: { topVendor: 'Acme Print', etaDays: 3 },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'file',
+            data: 'https://example.com/quote.pdf',
+            mimeType: 'application/pdf',
+            filename: 'quote.pdf',
+            createdAt: new Date(2024, 11, 5, 9, 0),
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([assistant]) as any;
+      const textParts = historyMessage.content.filter((part: any) => part.type === 'text');
+
+      expect(textParts[0].text).toContain('## New Message History to Observe');
+      expect(textParts[1].text).toBe(
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+      );
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/quote.pdf',
+          mimeType: 'application/pdf',
+          filename: 'quote.pdf',
+        }),
+      );
     });
 
     it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
@@ -3966,8 +4070,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     const formatted = formatMessagesForObserver([msg]);
 
     // Should include the date for temporal context
-    expect(formatted).toContain('Dec');
-    expect(formatted).toContain('2024');
+    expect(formatted).toContain('Dec 4 2024:');
   });
 
   it('observer system prompt should require Current Task section', () => {

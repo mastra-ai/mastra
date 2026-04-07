@@ -2,11 +2,11 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
-import type { AIV5Type } from '../types';
+import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
@@ -401,10 +401,15 @@ export function aiV4CoreMessagesToAIV5ModelMessages(
  * Supports string, MastraDBMessage, or AI SDK message types.
  */
 export function systemMessageToAIV4Core(
-  message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string,
+  message: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
 ): CoreMessageV4 {
   if (typeof message === `string`) {
     return { role: 'system', content: message };
+  }
+
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system');
+    return AIV4Adapter.systemToV4Core(dbMsg);
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {

@@ -191,17 +191,26 @@ async function resolveOrg(
 /*  Resolve project                                                   */
 /* ------------------------------------------------------------------ */
 
+type ProjectResolution =
+  | { existing: true; projectId: string; projectName: string; projectSlug: string }
+  | { existing: false; projectName: string };
+
+/**
+ * Attempts to resolve an existing project without creating one.
+ * Returns { existing: true, ... } if found, or { existing: false, projectName } if a new project should be created.
+ * This allows the caller to show a confirmation prompt before actually creating the project.
+ */
 async function resolveProject(
   token: string,
   orgId: string,
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
-): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
+): Promise<ProjectResolution> {
   // 0. MASTRA_PROJECT_ID env var (CI/CD headless path)
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    return { projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
+    return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
   // 1. CLI flag — match by slug first, then id
@@ -209,28 +218,28 @@ async function resolveProject(
     const projects = await fetchProjects(token, orgId);
     const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
     if (match) {
-      return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+      return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
-    return { projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
+    return { existing: false, projectName: flagProject };
   }
 
   // 2. project.json (only if same org)
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
     return {
+      existing: true,
       projectId: projectConfig.projectId,
       projectName: projectConfig.projectName ?? projectConfig.projectId,
       projectSlug: projectConfig.projectSlug ?? projectConfig.projectName ?? projectConfig.projectId,
     };
   }
 
-  // 3. Auto-create from package name
+  // 3. No existing project — return the name so caller can create after confirmation
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
   }
 
-  const project = await createProject(token, orgId, name);
-  return { projectId: project.id, projectName: project.name, projectSlug: project.slug ?? project.name };
+  return { existing: false, projectName: name };
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,19 +273,21 @@ export async function deployAction(
   // Step 3: Resolve org
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
-  // Step 4: Resolve project (pass packageName as default for new project creation)
-  const { projectId, projectName, projectSlug } = await resolveProject(
-    token,
-    orgId,
-    projectConfig,
-    opts.project,
-    packageName,
-  );
+  // Step 4: Resolve project (does NOT create yet — waits for confirmation)
+  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName);
 
-  // Step 5: Confirmation — show settings and let user verify (skipped with -y or if already linked)
-  const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
+  let projectId: string;
+  let projectName: string;
+  let projectSlug: string;
 
-  if (!isAlreadyLinked) {
+  if (resolution.existing) {
+    // Existing project found
+    projectId = resolution.projectId;
+    projectName = resolution.projectName;
+    projectSlug = resolution.projectSlug;
+
+    const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
+
     p.note(
       [
         `Organization:  ${orgName}`,
@@ -299,24 +310,45 @@ export async function deployAction(
       }
     }
 
-    // Save the project link
-    await saveProjectConfig(
-      targetDir,
-      {
-        projectId,
-        projectName,
-        projectSlug,
-        organizationId: orgId,
-      },
-      opts.config,
-    );
-    p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
+    if (!isAlreadyLinked) {
+      await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+      p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
+    }
   } else {
-    // Already linked — just show a summary line
-    p.log.info(`Organization: ${orgName} (${orgId})`);
-    p.log.info(`Project: ${projectName} (${projectId})`);
-    if (gitBranch) p.log.info(`Git branch: ${gitBranch}`);
-    if (mastraVersion) p.log.info(`Mastra: ${mastraVersion}`);
+    // New project — show confirmation BEFORE creating
+    projectName = resolution.projectName;
+
+    p.note(
+      [
+        `Organization:  ${orgName}`,
+        `Project:       ${projectName} (new)`,
+        `Directory:     ${targetDir}`,
+        ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
+        ...(mastraVersion ? [`Mastra:        ${mastraVersion}`] : []),
+      ].join('\n'),
+      'Deploy settings',
+    );
+
+    if (!autoAccept) {
+      const confirmed = await p.confirm({
+        message: 'Create project and deploy?',
+      });
+
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.cancel('Deploy cancelled.');
+        process.exit(0);
+      }
+    }
+
+    // NOW create the project (after user confirmed)
+    const project = await createProject(token, orgId, projectName);
+    projectId = project.id;
+    projectSlug = project.slug ?? project.name;
+    p.log.success(`Created project "${projectName}"`);
+
+    // Save the project link
+    await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+    p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
   }
 
   // Step 6: Build + Zip + Upload + Poll

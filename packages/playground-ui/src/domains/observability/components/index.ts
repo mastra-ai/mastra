@@ -9,3 +9,5 @@ export * from './span-score-list';
 export * from './span-scoring';
 export * from './span-tabs';
 export * from './trace-as-item-dialog';
+export * from '@/domains/traces/components/observability-traces-list';
+export * from '@/domains/traces/components/traces-toolbar';
