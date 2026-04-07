@@ -2,8 +2,9 @@
 '@mastra/datadog': patch
 ---
 
-Fix Datadog LLM Observability span kind mapping for model spans.
+Fix Datadog LLM Observability span kinds for model spans so traces match Datadog's expected shape.
 
-`MODEL_STEP` (the actual single LLM API call) is now mapped to Datadog's `llm` kind, and `MODEL_GENERATION` (the wrapper around 1..N steps + tool/reasoning events) is mapped to `workflow`. This restores the expected "Model Calls" count in Datadog (one per API call instead of one per generation) and produces a structured `{role, content}` message array on each step span instead of stringifying the wrapper.
-
-Token usage metrics are now reported only on `MODEL_STEP` spans to avoid double-counting cost across the parent `MODEL_GENERATION` and its child steps. `MODEL_STEP` LLM spans inherit `modelName` / `modelProvider` from their parent `MODEL_GENERATION` so the model is still attached in Datadog.
+- Each call to a model now shows up as an `llm` span in Datadog (previously the per-call spans were reported as `task`, so Datadog's "Model Calls" count was wrong and per-call inputs/outputs were not rendered as messages).
+- The wrapper around a generation is now reported as a `workflow` span instead of `llm`, so it no longer looks like an extra LLM call.
+- Token usage and cost are reported only on the per-call `llm` spans, so Datadog no longer double-counts tokens against the wrapper.
+- Per-call `llm` spans inherit `modelName` and `modelProvider` from their parent generation, so the model is still attached in the Datadog UI.
