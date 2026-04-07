@@ -12,8 +12,72 @@
 
 import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent } from '@mastra/core/observability';
 
+import { deepClean } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
+
+/**
+ * Apply deepClean() to free-form payload fields on non-tracing observability
+ * events. Tracing events are already deep-cleaned at span construction time
+ * (see spans/base.ts and spans/default.ts), so they pass through unchanged.
+ *
+ * This guarantees every signal leaving the bus has been sanitized for
+ * circular references, oversized strings, functions, and other non-
+ * serializable values before being handed to exporters/bridges.
+ */
+function cleanEvent(event: ObservabilityEvent): ObservabilityEvent {
+  switch (event.type) {
+    case 'log': {
+      const log = event.log;
+      return {
+        type: 'log',
+        log: {
+          ...log,
+          data: log.data ? deepClean(log.data) : log.data,
+          metadata: log.metadata ? deepClean(log.metadata) : log.metadata,
+        },
+      };
+    }
+    case 'metric': {
+      const metric = event.metric;
+      const costContext = metric.costContext;
+      return {
+        type: 'metric',
+        metric: {
+          ...metric,
+          metadata: metric.metadata ? deepClean(metric.metadata) : metric.metadata,
+          costContext:
+            costContext && costContext.costMetadata
+              ? { ...costContext, costMetadata: deepClean(costContext.costMetadata) }
+              : costContext,
+        },
+      };
+    }
+    case 'score': {
+      const score = event.score;
+      return {
+        type: 'score',
+        score: {
+          ...score,
+          metadata: score.metadata ? deepClean(score.metadata) : score.metadata,
+        },
+      };
+    }
+    case 'feedback': {
+      const feedback = event.feedback;
+      return {
+        type: 'feedback',
+        feedback: {
+          ...feedback,
+          metadata: feedback.metadata ? deepClean(feedback.metadata) : feedback.metadata,
+        },
+      };
+    }
+    default:
+      // Tracing events are already cleaned at span construction.
+      return event;
+  }
+}
 
 /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
 const MAX_FLUSH_ITERATIONS = 3;
@@ -110,18 +174,23 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * and can be drained via flush().
    */
   emit(event: ObservabilityEvent): void {
+    // Sanitize free-form payload fields on non-tracing signals before
+    // fanning out. Tracing events are already deep-cleaned at span
+    // construction, so cleanEvent() returns them unchanged.
+    const cleaned = cleanEvent(event);
+
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      this.trackPromise(routeToHandler(exporter, event, this.logger));
+      this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
     }
 
     // Route to bridge (same routing logic as exporters)
     if (this.bridge) {
-      this.trackPromise(routeToHandler(this.bridge, event, this.logger));
+      this.trackPromise(routeToHandler(this.bridge, cleaned, this.logger));
     }
 
     // Deliver to subscribers (base class tracks its own pending promises)
-    super.emit(event);
+    super.emit(cleaned);
   }
 
   /**
