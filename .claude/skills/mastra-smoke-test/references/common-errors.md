@@ -17,7 +17,7 @@ For detailed error documentation with infrastructure context, see the Notion pag
 
 | Symptom                         | Likely Cause              | Quick Fix                                              |
 | ------------------------------- | ------------------------- | ------------------------------------------------------ |
-| Deploy hangs/times out          | Network or platform issue | Check if deploy succeeded at `studio.mastra.ai`, retry |
+| Deploy hangs/times out          | Network or platform issue | Check if deploy succeeded at `projects.mastra.ai`, retry |
 | "Cannot determine project name" | Missing package.json      | Run from project root with valid package.json          |
 
 ### When to Escalate

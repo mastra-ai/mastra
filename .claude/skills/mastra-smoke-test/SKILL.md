@@ -445,7 +445,7 @@ View all projects and deployments:
 | `references/cloud-advanced.md` | BYOK and storage backend testing         |
 | `references/gcp-debugging.md`  | Debugging cloud trace issues             |
 
-> **Note**: For Gateway API testing (memory, threads, BYOK, account creation, team invites, RBAC via `gateway.mastra.ai`), use the `gateway-smoke-test` skill instead.
+> **Note**: For Gateway API testing (memory, threads, BYOK, account creation, team invites, RBAC via `gateway.mastra.ai`), use the `platform-smoke-test` skill instead.
 
 ## Troubleshooting
 

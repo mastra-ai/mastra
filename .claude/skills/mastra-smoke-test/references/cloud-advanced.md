@@ -2,8 +2,8 @@
 
 Advanced test flows for `--env staging` and `--env production`.
 
-> **Note**: For account creation, team invites, and RBAC testing, use the `gateway-smoke-test` skill.
-> Those features are part of the Gateway dashboard (`gateway.mastra.ai`), not deployed Studio/Server projects.
+> **Note**: For account creation, team invites, and RBAC testing, use the `platform-smoke-test` skill.
+> Those features are part of the platform dashboard (`projects.mastra.ai` / `gateway.mastra.ai`), not deployed Studio/Server projects.
 
 ## BYOK Testing (`--byok`)
 

@@ -1,8 +1,8 @@
-# Gateway Smoke Test
+# Platform Smoke Test
 
 ## Description
 
-Smoke test the Mastra Gateway - a hosted OpenAI-compatible API with built-in memory, observability, and multi-provider support. Tests API endpoints, dashboard UI, memory/threads, BYOK, and usage tracking.
+Smoke test the Mastra Platform - including the Memory Gateway API, dashboard UI, account management, team invites, RBAC, and usage tracking. Tests both the Gateway (`gateway.mastra.ai`) and platform features accessible via `projects.mastra.ai`.
 
 ## Usage
 
