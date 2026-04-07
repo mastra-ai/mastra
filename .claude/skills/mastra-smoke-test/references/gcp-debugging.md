@@ -1,5 +1,7 @@
 # GCP Debugging Guide
 
+> **Internal**: This guide requires GCP Console access. Contact a team member with infrastructure access if you need help.
+
 ## GCP Projects
 
 | Environment | Description |

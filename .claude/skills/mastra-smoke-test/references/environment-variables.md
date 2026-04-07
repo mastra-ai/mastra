@@ -1,5 +1,7 @@
 # Environment Variables Reference
 
+> **Note**: The "Platform Services" sections below describe internal infrastructure configuration. For basic smoke testing, you only need the CLI/Local Environment variables.
+
 ## CLI / Local Environment
 
 | Variable | Purpose | Values |

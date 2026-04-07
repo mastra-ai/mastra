@@ -1,5 +1,7 @@
 # Common Errors and Fixes
 
+> **Note**: Some fixes below require GCP Console access or infrastructure changes. Contact a team member with infrastructure access if needed.
+
 ## 1. `401 invalid signature` in mobs-collector logs
 
 ### Symptoms

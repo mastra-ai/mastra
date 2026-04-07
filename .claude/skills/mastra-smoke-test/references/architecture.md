@@ -1,5 +1,7 @@
 # Architecture Overview
 
+> **Internal**: This document describes Mastra's internal cloud infrastructure. Useful for debugging but not required for basic smoke testing.
+
 ## Trace Flow
 
 ```
