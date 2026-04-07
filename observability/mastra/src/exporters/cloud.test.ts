@@ -969,9 +969,10 @@ describe('CloudExporter', () => {
       await derivedExporter.shutdown();
     });
 
-    it('should allow an explicit traces endpoint override', async () => {
+    it('should derive sibling signal endpoints from an explicit traces endpoint override', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,
+        endpoint: 'https://fallback.example.com',
         tracesEndpoint: 'https://collector.example.com/custom/spans/publish',
       });
 
@@ -979,6 +980,7 @@ describe('CloudExporter', () => {
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
       await derivedExporter.flush();
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
@@ -989,8 +991,63 @@ describe('CloudExporter', () => {
         }),
         3,
       );
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/custom/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
 
       await derivedExporter.shutdown();
+    });
+
+    it('should prefer explicit per-signal endpoint overrides over derived traces siblings', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+        tracesEndpoint: 'https://collector.example.com/custom/spans/publish',
+        logsEndpoint: 'https://logs.example.com/custom/logs/publish',
+      });
+
+      await derivedExporter.onLogEvent(getMockLogEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://logs.example.com/custom/logs/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
+    it('should derive sibling signal endpoints from MASTRA_CLOUD_TRACES_ENDPOINT', async () => {
+      vi.stubEnv('MASTRA_CLOUD_TRACES_ENDPOINT', 'https://collector.example.com/env/spans/publish');
+
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+      });
+
+      try {
+        await derivedExporter.onScoreEvent(getMockScoreEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://collector.example.com/env/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should reject legacy publish-path endpoints', () => {
@@ -1014,6 +1071,18 @@ describe('CloudExporter', () => {
           }),
       ).toThrowError(
         'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
+      );
+    });
+
+    it('should reject explicit traces endpoints that are not publish URLs', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: testJWT,
+            tracesEndpoint: 'https://collector.example.com/custom-ingest',
+          }),
+      ).toThrowError(
+        'CloudExporter tracesEndpoint must be a base origin like "https://collector.example.com" or a full traces publish URL ending in "/spans/publish".',
       );
     });
   });

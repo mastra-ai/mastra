@@ -22,9 +22,21 @@ export interface CloudExporterConfig extends BaseExporterConfig {
   accessToken?: string; // Cloud access token (from env or config)
   endpoint?: string; // Base cloud endpoint
   tracesEndpoint?: string; // Explicit cloud traces endpoint override
+  logsEndpoint?: string; // Explicit cloud logs endpoint override
+  metricsEndpoint?: string; // Explicit cloud metrics endpoint override
+  scoresEndpoint?: string; // Explicit cloud scores endpoint override
+  feedbackEndpoint?: string; // Explicit cloud feedback endpoint override
 }
 
 type CloudSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
+
+const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
+  traces: '/spans/publish',
+  logs: '/logs/publish',
+  metrics: '/metrics/publish',
+  scores: '/scores/publish',
+  feedback: '/feedback/publish',
+};
 
 const SIGNAL_PUBLISH_PATHS: Record<CloudSignal, string> = {
   traces: '/ai/spans/publish',
@@ -52,20 +64,30 @@ function trimTrailingSlashes(value: string): string {
   return end === value.length ? value : value.slice(0, end);
 }
 
+function createInvalidEndpointError(endpoint: string, text: string, cause?: unknown): MastraError {
+  return new MastraError(
+    {
+      id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
+      text,
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      details: {
+        endpoint,
+      },
+    },
+    cause,
+  );
+}
+
 function resolveBaseEndpoint(baseEndpoint: string): string {
   const normalizedEndpoint = trimTrailingSlashes(baseEndpoint);
+  const invalidText =
+    'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.';
+
   try {
     const parsedEndpoint = new URL(normalizedEndpoint);
     if (parsedEndpoint.pathname !== '/' || parsedEndpoint.search || parsedEndpoint.hash) {
-      throw new MastraError({
-        id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
-        text: 'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
-        domain: ErrorDomain.MASTRA_OBSERVABILITY,
-        category: ErrorCategory.USER,
-        details: {
-          endpoint: baseEndpoint,
-        },
-      });
+      throw createInvalidEndpointError(baseEndpoint, invalidText);
     }
     return trimTrailingSlashes(parsedEndpoint.origin);
   } catch (error) {
@@ -73,18 +95,7 @@ function resolveBaseEndpoint(baseEndpoint: string): string {
       throw error;
     }
 
-    throw new MastraError(
-      {
-        id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
-        text: 'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
-        domain: ErrorDomain.MASTRA_OBSERVABILITY,
-        category: ErrorCategory.USER,
-        details: {
-          endpoint: baseEndpoint,
-        },
-      },
-      error,
-    );
+    throw createInvalidEndpointError(baseEndpoint, invalidText, error);
   }
 }
 
@@ -92,12 +103,64 @@ function buildSignalEndpoint(baseEndpoint: string, signal: CloudSignal): string 
   return `${baseEndpoint}${SIGNAL_PUBLISH_PATHS[signal]}`;
 }
 
-function resolveSignalEndpoint(signal: CloudSignal, baseEndpoint: string, explicitEndpoint?: string): string {
-  if (explicitEndpoint) {
-    return explicitEndpoint;
+function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string): string {
+  const normalizedEndpoint = trimTrailingSlashes(endpoint);
+  const invalidText = `CloudExporter ${signal}Endpoint must be a base origin like "https://collector.example.com" or a full ${signal} publish URL ending in "${SIGNAL_PUBLISH_SUFFIXES[signal]}".`;
+
+  try {
+    const parsedEndpoint = new URL(normalizedEndpoint);
+    if (parsedEndpoint.search || parsedEndpoint.hash) {
+      throw createInvalidEndpointError(endpoint, invalidText);
+    }
+
+    const normalizedOrigin = trimTrailingSlashes(parsedEndpoint.origin);
+    const normalizedPathname = trimTrailingSlashes(parsedEndpoint.pathname);
+
+    if (!normalizedPathname || normalizedPathname === '/') {
+      return buildSignalEndpoint(normalizedOrigin, signal);
+    }
+
+    if (normalizedPathname.endsWith(SIGNAL_PUBLISH_SUFFIXES[signal])) {
+      return `${normalizedOrigin}${normalizedPathname}`;
+    }
+
+    throw createInvalidEndpointError(endpoint, invalidText);
+  } catch (error) {
+    if (error instanceof MastraError) {
+      throw error;
+    }
+
+    throw createInvalidEndpointError(endpoint, invalidText, error);
+  }
+}
+
+function deriveSignalEndpointFromTracesEndpoint(signal: CloudSignal, tracesEndpoint: string): string {
+  if (signal === 'traces') {
+    return tracesEndpoint;
   }
 
-  return buildSignalEndpoint(baseEndpoint, signal);
+  const normalizedTracesEndpoint = trimTrailingSlashes(tracesEndpoint);
+  const invalidText =
+    'CloudExporter tracesEndpoint must be a base origin like "https://collector.example.com" or a full traces publish URL ending in "/spans/publish".';
+
+  try {
+    const parsedEndpoint = new URL(normalizedTracesEndpoint);
+    const normalizedOrigin = trimTrailingSlashes(parsedEndpoint.origin);
+    const normalizedPathname = trimTrailingSlashes(parsedEndpoint.pathname);
+
+    if (!normalizedPathname.endsWith(SIGNAL_PUBLISH_SUFFIXES.traces)) {
+      throw createInvalidEndpointError(tracesEndpoint, invalidText);
+    }
+
+    const basePath = normalizedPathname.slice(0, -SIGNAL_PUBLISH_SUFFIXES.traces.length);
+    return `${normalizedOrigin}${basePath}${SIGNAL_PUBLISH_SUFFIXES[signal]}`;
+  } catch (error) {
+    if (error instanceof MastraError) {
+      throw error;
+    }
+
+    throw createInvalidEndpointError(tracesEndpoint, invalidText, error);
+  }
 }
 
 interface MastraCloudBuffer {
@@ -155,9 +218,31 @@ export class CloudExporter extends BaseExporter {
       this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
     }
 
-    const baseEndpoint = resolveBaseEndpoint(
-      config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? DEFAULT_CLOUD_ENDPOINT,
-    );
+    const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
+    let baseEndpoint: string | undefined;
+    let tracesEndpoint: string;
+
+    if (tracesEndpointOverride) {
+      tracesEndpoint = resolveExplicitSignalEndpoint('traces', tracesEndpointOverride);
+    } else {
+      baseEndpoint = resolveBaseEndpoint(config.endpoint ?? DEFAULT_CLOUD_ENDPOINT);
+      tracesEndpoint = buildSignalEndpoint(baseEndpoint, 'traces');
+    }
+
+    const resolveConfiguredSignalEndpoint = (
+      signal: Exclude<CloudSignal, 'traces'>,
+      explicitEndpoint?: string,
+    ): string => {
+      if (explicitEndpoint) {
+        return resolveExplicitSignalEndpoint(signal, explicitEndpoint);
+      }
+
+      if (tracesEndpointOverride) {
+        return deriveSignalEndpointFromTracesEndpoint(signal, tracesEndpoint);
+      }
+
+      return buildSignalEndpoint(baseEndpoint!, signal);
+    };
 
     this.cloudConfig = {
       logger: this.logger,
@@ -166,11 +251,11 @@ export class CloudExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
-      tracesEndpoint: resolveSignalEndpoint('traces', baseEndpoint, config.tracesEndpoint),
-      logsEndpoint: resolveSignalEndpoint('logs', baseEndpoint),
-      metricsEndpoint: resolveSignalEndpoint('metrics', baseEndpoint),
-      scoresEndpoint: resolveSignalEndpoint('scores', baseEndpoint),
-      feedbackEndpoint: resolveSignalEndpoint('feedback', baseEndpoint),
+      tracesEndpoint,
+      logsEndpoint: resolveConfiguredSignalEndpoint('logs', config.logsEndpoint),
+      metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
+      scoresEndpoint: resolveConfiguredSignalEndpoint('scores', config.scoresEndpoint),
+      feedbackEndpoint: resolveConfiguredSignalEndpoint('feedback', config.feedbackEndpoint),
     };
 
     this.buffer = {
