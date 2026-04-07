@@ -6,7 +6,9 @@ import {
   useAgentCmsForm,
   Spinner,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
   mapAgentResponseToDataSource,
   useLinkComponent,
 } from '@mastra/playground-ui';
@@ -54,6 +56,14 @@ function AgentEvaluate() {
       return null;
     },
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

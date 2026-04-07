@@ -367,6 +367,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools?: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -615,7 +617,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
@@ -2069,6 +2073,10 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  from?: Date | string;
+  to?: Date | string;
+  offset?: number;
+  limit?: number;
   requestContext?: RequestContext | Record<string, any>;
 }
 

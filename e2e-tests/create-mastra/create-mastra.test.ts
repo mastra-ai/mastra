@@ -122,6 +122,7 @@ describe('create mastra', () => {
           {
             "weather-agent": {
               "agents": {},
+              "browserTools": [],
               "defaultGenerateOptionsLegacy": {},
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},

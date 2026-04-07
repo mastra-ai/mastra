@@ -114,6 +114,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     capabilities,
     options,
     resourceId,
+    threadId: threadFromArgs?.id,
     runId,
     requestContext,
     memory,

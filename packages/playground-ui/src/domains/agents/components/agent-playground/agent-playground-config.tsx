@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil, PlusIcon, XIcon } from 'lucide-react';
+import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -12,7 +12,7 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
-import type { JsonSchema } from '@/lib/json-schema';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,7 @@ interface CollapsibleSectionProps {
   badge?: React.ReactNode;
   headerAction?: React.ReactNode;
   defaultOpen?: boolean;
+  compact?: boolean;
   children: React.ReactNode;
 }
 
@@ -34,6 +35,7 @@ function CollapsibleSection({
   badge,
   headerAction,
   defaultOpen = false,
+  compact = false,
   children,
 }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -42,7 +44,8 @@ function CollapsibleSection({
     <div className="border-b border-border1">
       <div
         className={cn(
-          'group flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors',
+          'group flex items-center gap-2 px-4 hover:bg-surface3 transition-colors',
+          compact ? 'py-2' : 'py-3',
           isOpen && 'bg-surface3',
         )}
       >
@@ -75,6 +78,32 @@ function CollapsibleSection({
         </span>
       </div>
       {isOpen && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Read-only variable property renderer (recursive for nested objects)
+// ---------------------------------------------------------------------------
+
+function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchemaProperty; depth: number }) {
+  const typeLabel = Array.isArray(prop.type) ? prop.type.filter((t: string) => t !== 'null').join(' | ') : prop.type;
+  const hasChildren = prop.type === 'object' && prop.properties && Object.keys(prop.properties).length > 0;
+
+  return (
+    <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
+      <div className="flex items-center gap-2 py-1">
+        <code className="text-xs text-accent1">{name}</code>
+        <span className="text-[11px] text-neutral3">{typeLabel}</span>
+        {prop.description && <span className="text-[11px] text-neutral3 italic truncate">— {prop.description}</span>}
+      </div>
+      {hasChildren && (
+        <div className="border-l border-border1 ml-1">
+          {Object.entries(prop.properties!).map(([childName, childProp]) => (
+            <VariableProperty key={childName} name={childName} prop={childProp} depth={depth + 1} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -522,57 +551,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const toolCount = tools ? Object.keys(tools).length : 0;
   const [showPreview, setShowPreview] = useState(false);
 
-  const variableEntries = useMemo(() => {
-    const props = variables?.properties ?? {};
-    return Object.entries(props);
-  }, [variables]);
-
-  const handleAddVariable = () => {
-    const props = { ...(variables?.properties ?? {}) };
-    let name = 'newVariable';
-    let i = 1;
-    while (props[name]) {
-      name = `newVariable${i++}`;
-    }
-    props[name] = { type: 'string' };
-    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
-  };
-
-  const handleRemoveVariable = (name: string) => {
-    const props = { ...(variables?.properties ?? {}) };
-    const required = Array.isArray(variables?.required)
-      ? variables.required.filter((r: string) => r !== name)
-      : undefined;
-    delete props[name];
-    form.setValue(
-      'variables',
-      { ...variables, type: 'object', properties: props, ...(required?.length ? { required } : {}) },
-      { shouldDirty: true },
-    );
-  };
-
-  const handleRenameVariable = (oldName: string, newName: string) => {
-    if (!newName || newName === oldName) return;
-    const props = { ...(variables?.properties ?? {}) };
-    if (props[newName]) return; // don't overwrite existing
-    const required = Array.isArray(variables?.required)
-      ? variables.required.map((r: string) => (r === oldName ? newName : r))
-      : undefined;
-    const value = props[oldName];
-    delete props[oldName];
-    props[newName] = value;
-    form.setValue(
-      'variables',
-      { ...variables, type: 'object', properties: props, ...(required?.length ? { required } : {}) },
-      { shouldDirty: true },
-    );
-  };
-
-  const handleVariableValueChange = (name: string, value: string) => {
-    const props = { ...(variables?.properties ?? {}) };
-    props[name] = { ...props[name], default: value };
-    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
-  };
+  const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
 
@@ -589,6 +568,23 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
           />
         ) : (
           <>
+            <CollapsibleSection title="Variables" icon={<Braces />} compact>
+              <div className="flex flex-col gap-1 px-4 pt-2 pb-3">
+                {variableEntries.length > 0 ? (
+                  <div className="flex flex-col">
+                    {variableEntries.map(([name, prop]) => (
+                      <VariableProperty key={name} name={name} prop={prop} depth={0} />
+                    ))}
+                  </div>
+                ) : null}
+                <Txt variant="ui-xs" className="text-neutral3 mt-1">
+                  {variableEntries.length > 0
+                    ? 'Defined via requestContextSchema in code.'
+                    : 'No variables defined. Add a requestContextSchema to your agent to define variables.'}
+                </Txt>
+              </div>
+            </CollapsibleSection>
+
             <CollapsibleSection title="System Prompt" icon={<Cpu />} defaultOpen>
               <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
@@ -612,8 +608,8 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                   </HoverPopover>
                 </Txt>
 
-                <div className="flex items-center justify-between">
-                  {!readOnly && (
+                {!readOnly && (
+                  <div className="flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => setShowPreview(prev => !prev)}
@@ -622,72 +618,6 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                       <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
                       {showPreview ? 'Edit' : 'Preview'}
                     </button>
-                  )}
-
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={handleAddVariable}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
-                    >
-                      <Icon size="sm">
-                        <PlusIcon />
-                      </Icon>
-                      Add Variable
-                    </button>
-                  )}
-                </div>
-
-                {variableEntries.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    {variableEntries.map(([name, schema]) => (
-                      <div
-                        key={name}
-                        className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-1.5"
-                      >
-                        {readOnly ? (
-                          <Txt variant="ui-sm" className="text-neutral5 font-mono shrink-0">
-                            {`{{${name}}}`}
-                          </Txt>
-                        ) : (
-                          <input
-                            type="text"
-                            defaultValue={name}
-                            onBlur={e => handleRenameVariable(name, e.target.value.trim())}
-                            placeholder="key"
-                            className="w-24 shrink-0 text-ui-sm font-mono text-neutral5 bg-transparent border-none outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
-                            aria-label={`Variable name: ${name}`}
-                          />
-                        )}
-                        <span className="text-neutral3 text-ui-sm shrink-0">=</span>
-                        {readOnly ? (
-                          <Txt variant="ui-sm" className="text-neutral3 flex-1 truncate">
-                            {schema.default != null ? String(schema.default) : ''}
-                          </Txt>
-                        ) : (
-                          <input
-                            type="text"
-                            defaultValue={schema.default != null ? String(schema.default) : ''}
-                            onBlur={e => handleVariableValueChange(name, e.target.value)}
-                            placeholder="value"
-                            className="flex-1 min-w-0 text-ui-sm text-neutral3 bg-transparent border-none outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
-                            aria-label={`Variable value: ${name}`}
-                          />
-                        )}
-                        {!readOnly && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariable(name)}
-                            className="text-neutral3 hover:text-neutral5 transition-colors focus-visible:outline-hidden focus-visible:ring-0 shrink-0"
-                            aria-label={`Remove variable ${name}`}
-                          >
-                            <Icon size="sm">
-                              <XIcon />
-                            </Icon>
-                          </button>
-                        )}
-                      </div>
-                    ))}
                   </div>
                 )}
               </div>

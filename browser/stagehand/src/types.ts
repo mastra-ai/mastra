@@ -2,7 +2,7 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig } from '@mastra/core/browser';
+import type { BrowserConfigBase, BrowserScope, CdpUrlProvider } from '@mastra/core/browser';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -16,9 +16,9 @@ export type ModelConfiguration =
     };
 
 /**
- * Configuration for StagehandBrowser
+ * Stagehand-specific configuration fields.
  */
-export interface StagehandBrowserConfig extends BrowserConfig {
+interface StagehandConfigExtensions {
   /**
    * Environment to run the browser in
    * - 'LOCAL': Run browser locally
@@ -70,6 +70,17 @@ export interface StagehandBrowserConfig extends BrowserConfig {
    */
   systemPrompt?: string;
 }
+
+/**
+ * Configuration for StagehandBrowser with compile-time enforcement of cdpUrl/scope compatibility.
+ *
+ * This type enforces that `cdpUrl` and `scope: 'thread'` cannot be used together:
+ * - When `cdpUrl` is provided, `scope` must be `'shared'` or omitted
+ * - When `scope: 'thread'` is used, `cdpUrl` must not be provided
+ */
+export type StagehandBrowserConfig =
+  | (BrowserConfigBase & StagehandConfigExtensions & { cdpUrl?: undefined; scope?: BrowserScope })
+  | (BrowserConfigBase & StagehandConfigExtensions & { cdpUrl: CdpUrlProvider; scope?: 'shared' });
 
 /**
  * Action returned from observe()

@@ -29,6 +29,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      omObservationThreshold: null,
+      omReflectionThreshold: null,
       subagentModels: {},
     },
     preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
@@ -47,6 +49,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     ],
     modelUseCounts: {},
     updateDismissedVersion: null,
+    memoryGateway: {},
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
     ...overrides,
   };
 }
