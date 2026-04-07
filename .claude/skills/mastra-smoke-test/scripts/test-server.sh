@@ -36,7 +36,7 @@ echo ""
 
 # Test health endpoint
 echo "--- Health Check ---"
-HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/health")
+HEALTH_RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w "\n%{http_code}" "$SERVER_URL/health")
 HEALTH_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n 1)
 HEALTH_BODY=$(echo "$HEALTH_RESPONSE" | sed '$d')
 
@@ -55,7 +55,7 @@ echo ""
 
 # Use jq for safe JSON construction (handles special characters in MESSAGE)
 JSON_BODY=$(jq -n --arg msg "$MESSAGE" '{"messages":[{"role":"user","content":$msg}]}')
-RESPONSE=$(curl -s -w "\n---HTTP_STATUS:%{http_code}---" \
+RESPONSE=$(curl -sS --connect-timeout 10 --max-time 60 -w "\n---HTTP_STATUS:%{http_code}---" \
     -X POST "$SERVER_URL/api/agents/$AGENT_ID/generate" \
     -H "Content-Type: application/json" \
     -d "$JSON_BODY")
