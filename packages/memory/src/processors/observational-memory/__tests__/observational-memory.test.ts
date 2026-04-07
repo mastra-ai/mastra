@@ -1240,10 +1240,10 @@ describe('Observer Agent Helpers', () => {
       first.content = {
         format: 2,
         parts: [
-          { type: 'text', text: 'first', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
-          { type: 'reasoning', reasoning: 'thinking', createdAt: new Date('2024-12-04T10:30:00Z') } as any,
-          { type: 'text', text: 'second', createdAt: new Date('2024-12-04T10:31:00Z') } as any,
-          { type: 'text', text: 'next day', createdAt: new Date('2024-12-05T12:01:00Z') } as any,
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'reasoning', reasoning: 'thinking', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'second', createdAt: Date.parse('2024-12-04T10:31:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
         ],
       } as any;
 
@@ -1290,7 +1290,7 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Hello', 'user');
 
       const formatted = formatMessagesForObserver([dataMsg, textMsg]);
-      expect(formatted).not.toContain('Assistant:');
+      expect(formatted).not.toMatch(/Assistant(?: \([^)]*\))?:/);
       expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Hello');
     });

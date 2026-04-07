@@ -6,7 +6,7 @@
  * calls with mock models, OM primitives wired into onStepFinish/prepareStep hooks.
  */
 
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -497,6 +497,8 @@ describe('AI SDK: buffer in one turn, activate + generateText in next', () => {
       } else {
         process.env.OM_REPRO_CAPTURE_DIR = previousCaptureDir;
       }
+
+      rmSync(reproDir, { recursive: true, force: true });
     }
   });
 });
