@@ -292,6 +292,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
+            { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
               type: 'category',
