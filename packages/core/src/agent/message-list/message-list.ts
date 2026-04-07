@@ -361,8 +361,14 @@ export class MessageList {
           this.createAdapterContext(),
           this.messages,
         );
+        const rememberedMessageIds = new Set(this.remembered.db().map(message => message.id));
         // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          true,
+          message => rememberedMessageIds.has(message.id),
+        );
 
         const messages = [...systemMessages, ...modelMessages];
 
@@ -380,8 +386,14 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
+        const rememberedMessageIds = new Set(this.remembered.db().map(message => message.id));
         // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          true,
+          message => rememberedMessageIds.has(message.id),
+        );
 
         const storedModelOutputs = new Map<string, unknown>();
         for (const dbMsg of this.messages) {

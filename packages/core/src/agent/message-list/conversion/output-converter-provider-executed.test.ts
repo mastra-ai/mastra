@@ -209,6 +209,65 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
   });
 });
 
+describe('sanitizeV5UIMessages — OpenAI reasoning scope', () => {
+  const makeMessage = (id: string): AIV5Type.UIMessage => ({
+    id,
+    role: 'assistant',
+    parts: [
+      {
+        type: 'reasoning',
+        text: `reasoning-${id}`,
+        state: 'done',
+        providerMetadata: {
+          openai: {
+            itemId: `rs_${id}`,
+            reasoningEncryptedContent: null,
+          },
+        },
+      },
+      {
+        type: 'text',
+        text: `text-${id}`,
+        providerMetadata: {
+          openai: {
+            itemId: `msg_${id}`,
+          },
+        },
+      },
+    ],
+  });
+
+  it('should keep current-run OpenAI reasoning when the caller opts out of stripping', () => {
+    const msg = makeMessage('current');
+
+    const result = sanitizeV5UIMessages([msg], true, () => false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts.find(part => part.type === 'reasoning')).toBeDefined();
+
+    const textPart = result[0]!.parts.find(part => part.type === 'text') as Extract<
+      AIV5Type.UIMessage['parts'][number],
+      { type: 'text' }
+    >;
+    expect(textPart.providerMetadata?.openai?.itemId).toBe('msg_current');
+  });
+
+  it('should still strip remembered OpenAI reasoning when the caller marks the message for stripping', () => {
+    const msg = makeMessage('memory');
+
+    const result = sanitizeV5UIMessages([msg], true, () => true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts.find(part => part.type === 'reasoning')).toBeUndefined();
+
+    const textPart = result[0]!.parts.find(part => part.type === 'text') as Extract<
+      AIV5Type.UIMessage['parts'][number],
+      { type: 'text' }
+    >;
+    expect(textPart.providerMetadata?.openai).toBeUndefined();
+  });
+});
+
 describe('addStartStepPartsForAIV5 — client/provider tool splitting', () => {
   const makeToolPart = (
     overrides: Partial<AIV5Type.ToolUIPart> & { type: string; toolCallId: string },
