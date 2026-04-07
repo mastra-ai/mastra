@@ -11,15 +11,14 @@ The `MastraBrowser` class is the abstract base class for browser automation prov
 
 You don't instantiate `MastraBrowser` directly. Instead, use a provider implementation:
 
-- [`AgentBrowser`](/reference/browser/agent-browser) - Deterministic browser automation using refs
-- [`StagehandBrowser`](/reference/browser/stagehand-browser) - AI-powered browser automation using natural language
+- [`AgentBrowser`](/reference/browser/agent-browser): Deterministic browser automation using refs
+- [`StagehandBrowser`](/reference/browser/stagehand-browser): AI-powered browser automation using natural language
 
 ## Usage example
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
 import { AgentBrowser } from '@mastra/agent-browser'
-import { openai } from '@ai-sdk/openai'
 
 const browser = new AgentBrowser({
   headless: true,
@@ -30,7 +29,7 @@ const browser = new AgentBrowser({
 export const browserAgent = new Agent({
   name: 'browser-agent',
   instructions: 'You can browse the web to find information.',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   browser,
 })
 ```
@@ -382,6 +381,6 @@ const browser = new AgentBrowser({
 
 ## Related
 
-- [AgentBrowser](/reference/browser/agent-browser) - Deterministic browser automation
-- [StagehandBrowser](/reference/browser/stagehand-browser) - AI-powered browser automation
-- [Browser overview](/docs/browser/overview) - Conceptual guide to browser automation
+- [AgentBrowser](/reference/browser/agent-browser): Deterministic browser automation
+- [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered browser automation
+- [Browser overview](/docs/browser/overview): Conceptual guide to browser automation

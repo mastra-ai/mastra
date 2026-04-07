@@ -30,26 +30,17 @@ Use browser when your agent needs to:
 
 When you assign a browser to an agent, Mastra includes the provider's tools in the agent's toolset. The agent uses these tools to control the browser: navigating to URLs, selecting elements, typing text, and reading page content.
 
-Each provider offers a different set of tools optimized for its approach:
+Each provider offers a different set of tools optimized for its approach.
 
-| Provider | Approach | Tools |
-| - | - | - |
-| AgentBrowser | Accessibility tree refs | `browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_select`, `browser_press`, `browser_hover`, `browser_back`, `browser_wait`, `browser_tabs`, `browser_drag`, `browser_dialog`, `browser_evaluate`, `browser_close` |
-| Stagehand | AI-powered selectors | `stagehand_navigate`, `stagehand_act`, `stagehand_extract`, `stagehand_observe`, `stagehand_tabs`, `stagehand_close` |
+## Quickstart
 
-## Usage
+Install your provider of choice, for this example you'll use the AgentBrowser provider.
 
-### Install a provider
-
-```bash
-# For AgentBrowser (Playwright-based)
+```bash npm2yarn
 npm install @mastra/agent-browser
-
-# For Stagehand (Browserbase)
-npm install @mastra/stagehand
 ```
 
-### Create a browser instance
+Create a new browser instance:
 
 ```typescript title="src/mastra/browsers.ts"
 import { AgentBrowser } from '@mastra/agent-browser'
@@ -59,7 +50,7 @@ export const browser = new AgentBrowser({
 })
 ```
 
-### Assign browser to an agent
+Assign the browser to an agent:
 
 ```typescript title="src/mastra/agents/web-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -67,7 +58,7 @@ import { browser } from '../browsers'
 
 export const webAgent = new Agent({
   id: 'web-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   browser,
   instructions:
     'You are a web automation assistant. Use browser tools to navigate websites and complete tasks.',
@@ -108,29 +99,6 @@ const browser = new AgentBrowser({
 ```
 
 This works with any [CDP-compatible](https://chromedevtools.github.io/devtools-protocol/) browser service.
-
-## Configuration
-
-### Common options
-
-Both providers share these base configuration options:
-
-| Option | Type | Default | Description |
-| - | - | - | - |
-| `headless` | `boolean` | `true` | Run browser without visible window |
-| `timeout` | `number` | `30000` | Default timeout for operations (ms) |
-| `cdpUrl` | `string \| (() => string \| Promise<string>)` | — | CDP endpoint URL for remote browsers |
-| `viewport` | `{ width: number; height: number }` | — | Browser viewport dimensions |
-| `scope` | `'shared' \| 'thread'` | `'thread'` | Browser instance scope |
-
-### Scope
-
-The `scope` option controls how browser instances are shared across conversation threads:
-
-- **`thread`** (default): Each thread gets its own browser instance. Provides isolation between conversations.
-- **`shared`**: All threads share a single browser instance. Use when connecting to a remote browser via `cdpUrl`.
-
-When `cdpUrl` is provided, scope is automatically set to `'shared'` since the external browser is managed externally.
 
 ## Screencast
 

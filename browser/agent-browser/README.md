@@ -13,7 +13,6 @@ npm install @mastra/agent-browser
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { openai } from '@ai-sdk/openai';
 
 // Create an AgentBrowser instance
 const browser = new AgentBrowser({
@@ -26,7 +25,7 @@ const agent = new Agent({
   instructions: `You are a web automation assistant.
 Use browser_snapshot to see the page structure,
 then interact with elements using their refs (e.g., @e5).`,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   browser,
 });
 

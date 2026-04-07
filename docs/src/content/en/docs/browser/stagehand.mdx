@@ -22,7 +22,7 @@ Use Stagehand when you need:
 
 Install the package:
 
-```bash
+```bash npm2yarn
 npm install @mastra/stagehand
 ```
 
@@ -34,12 +34,12 @@ import { StagehandBrowser } from '@mastra/stagehand'
 
 const browser = new StagehandBrowser({
   headless: false,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 
 export const stagehandAgent = new Agent({
   id: 'stagehand-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   browser,
   instructions: `You are a web automation assistant.
 
@@ -50,19 +50,6 @@ Use stagehand tools to interact with pages:
 - stagehand_observe to find available actions on the page`,
 })
 ```
-
-## Tools
-
-Stagehand provides 6 tools for browser control:
-
-| Tool | Description |
-| - | - |
-| `stagehand_navigate` | Navigate to a URL |
-| `stagehand_act` | Perform an action described in natural language |
-| `stagehand_extract` | Extract structured data from the page |
-| `stagehand_observe` | Get a list of possible actions on the page |
-| `stagehand_tabs` | List, switch, or close browser tabs |
-| `stagehand_close` | Close the browser |
 
 ## Natural language actions
 
@@ -115,7 +102,7 @@ const browser = new StagehandBrowser({
   env: 'BROWSERBASE',
   apiKey: process.env.BROWSERBASE_API_KEY,
   projectId: process.env.BROWSERBASE_PROJECT_ID,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 

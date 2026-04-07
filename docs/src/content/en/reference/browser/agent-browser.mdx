@@ -16,7 +16,6 @@ Use `AgentBrowser` when you need reliable, deterministic browser automation. For
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
 import { AgentBrowser } from '@mastra/agent-browser'
-import { openai } from '@ai-sdk/openai'
 
 const browser = new AgentBrowser({
   headless: true,
@@ -28,7 +27,7 @@ export const browserAgent = new Agent({
   name: 'browser-agent',
   instructions: `You can browse the web. Use browser_snapshot to see the page structure,
 then interact with elements using their refs (e.g., @e5).`,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   browser,
 })
 ```
@@ -131,9 +130,9 @@ Navigate to a URL.
 ```text
 // Tool input
 {
-  url: "https://example.com",
-  waitUntil: "domcontentloaded",
-  timeout: 30000
+  "url": "https://example.com",
+  "waitUntil": "domcontentloaded",
+  "timeout": 30000
 }
 ```
 
@@ -150,8 +149,8 @@ Get an accessibility tree snapshot of the page. Returns element refs like `@e5` 
 ```text
 // Tool input
 {
-  interactiveOnly: true,
-  maxDepth: 10
+  "interactiveOnly": true,
+  "maxDepth": 10
 }
 ```
 
@@ -162,7 +161,7 @@ Get an accessibility tree snapshot of the page. Returns element refs like `@e5` 
 
 **Example output:**
 
-```
+```text
 [document] Example Page
   [banner]
     [link @e1] Home
@@ -178,12 +177,11 @@ Get an accessibility tree snapshot of the page. Returns element refs like `@e5` 
 Click an element using its ref from the snapshot.
 
 ```text
-// Tool input
 {
-  ref: "@e5",
-  button: "left",
-  clickCount: 1,
-  modifiers: ["Control", "Shift"]
+  "ref": "@e5",
+  "button": "left",
+  "clickCount": 1,
+  "modifiers": ["Control", "Shift"]
 }
 ```
 
@@ -201,10 +199,10 @@ Type text into an input element.
 ```text
 // Tool input
 {
-  ref: "@e4",
-  text: "search query",
-  clear: true,
-  delay: 50
+  "ref": "@e4",
+  "text": "search query",
+  "clear": true,
+  "delay": 50
 }
 ```
 
@@ -222,13 +220,13 @@ Press keyboard keys.
 ```text
 // Tool input
 {
-  key: "Enter",
-  modifiers: ["Control"]
+  "key": "Enter",
+  "modifiers": ["Control"]
 }
 
 // Key combinations
-{ key: "Control+a" }
-{ key: "Control+c" }
+{ "key": "Control+a" }
+{ "key": "Control+c" }
 ```
 
 | Parameter | Type | Description |
@@ -243,20 +241,20 @@ Select an option from a dropdown. Provide one of `value`, `label`, or `index`.
 ```text
 // Tool input - by value
 {
-  ref: "@e10",
-  value: "option-value"
+  "ref": "@e10",
+  "value": "option-value"
 }
 
 // Tool input - by label
 {
-  ref: "@e10",
-  label: "Option Text"
+  "ref": "@e10",
+  "label": "Option Text"
 }
 
 // Tool input - by index
 {
-  ref: "@e10",
-  index: 0
+  "ref": "@e10",
+  "index": 0
 }
 ```
 
@@ -267,9 +265,9 @@ Scroll the page or a specific element.
 ```text
 // Tool input
 {
-  direction: "down",
-  amount: 300,
-  ref: "@e15"
+  "direction": "down",
+  "amount": 300,
+  "ref": "@e15"
 }
 ```
 
@@ -286,7 +284,7 @@ Hover over an element to trigger hover effects.
 ```text
 // Tool input
 {
-  ref: "@e7"
+  "ref": "@e7"
 }
 ```
 
@@ -306,9 +304,9 @@ Handle browser dialogs (alert, confirm, prompt). Click an element that triggers 
 ```text
 // Tool input
 {
-  triggerRef: "@e5",
-  action: "accept",
-  text: "response"
+  "triggerRef": "@e5",
+  "action": "accept",
+  "text": "response"
 }
 ```
 
@@ -325,9 +323,9 @@ Wait for an element to reach a specific state.
 ```text
 // Tool input
 {
-  ref: "@e20",
-  state: "visible",
-  timeout: 30000
+  "ref": "@e20",
+  "state": "visible",
+  "timeout": 30000
 }
 ```
 
@@ -343,16 +341,16 @@ Manage browser tabs.
 
 ```text
 // List all tabs
-{ action: "list" }
+{ "action": "list" }
 
 // Open new tab
-{ action: "new", url: "https://example.com" }
+{ "action": "new", "url": "https://example.com" }
 
 // Switch to tab by index
-{ action: "switch", index: 0 }
+{ "action": "switch", "index": 0 }
 
 // Close tab by index
-{ action: "close", index: 1 }
+{ "action": "close", "index": 1 }
 ```
 
 ### `browser_drag`
@@ -362,8 +360,8 @@ Drag an element to a target location.
 ```text
 // Tool input
 {
-  sourceRef: "@e10",
-  targetRef: "@e20"
+  "sourceRef": "@e10",
+  "targetRef": "@e20"
 }
 ```
 
@@ -379,8 +377,8 @@ Execute JavaScript in the page context. Use as an escape hatch when other tools 
 ```text
 // Tool input
 {
-  script: "document.title",
-  returnValue: true
+  "script": "document.title",
+  "returnValue": true
 }
 ```
 
@@ -411,15 +409,15 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 // Returns: [textbox @e4] Search... [link @e5] Home
 
 // 2. Type in the search box
-{ tool: "browser_type", input: { ref: "@e4", text: "mastra" } }
+{ "tool": "browser_type", "input": { "ref": "@e4", "text": "mastra" } }
 
 // 3. Navigate to home
-{ tool: "browser_goto", input: { url: "https://example.com" } }
+{ "tool": "browser_goto", "input": { "url": "https://example.com" } }
 ```
 
 ## Related
 
-- [MastraBrowser](/reference/browser/mastra-browser) - Base class reference
-- [StagehandBrowser](/reference/browser/stagehand-browser) - AI-powered alternative
-- [Browser overview](/docs/browser/overview) - Conceptual guide
-- [agent-browser guide](/docs/browser/agent-browser) - Usage guide
+- [MastraBrowser](/reference/browser/mastra-browser): Base class reference
+- [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered alternative
+- [Browser overview](/docs/browser/overview): Conceptual guide
+- [agent-browser guide](/docs/browser/agent-browser): Usage guide

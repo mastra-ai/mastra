@@ -13,11 +13,10 @@ npm install @mastra/stagehand
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { StagehandBrowser } from '@mastra/stagehand';
-import { openai } from '@ai-sdk/openai';
 
 // Create a Stagehand browser
 const browser = new StagehandBrowser({
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   headless: true,
 });
 
@@ -25,7 +24,7 @@ const browser = new StagehandBrowser({
 const agent = new Agent({
   name: 'web-agent',
   instructions: 'You are a helpful web assistant.',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   browser,
 });
 
@@ -40,11 +39,11 @@ const browser = new StagehandBrowser({
   // Environment: 'LOCAL' or 'BROWSERBASE'
   env: 'LOCAL',
 
-  // Model for AI operations (default: 'openai/gpt-4o')
-  model: 'openai/gpt-4o',
+  // Model for AI operations (default: 'openai/gpt-5.4')
+  model: 'openai/gpt-5.4',
   // Or with custom config:
   model: {
-    modelName: 'gpt-4o',
+    modelName: 'gpt-5.4',
     apiKey: process.env.OPENAI_API_KEY,
   },
 
