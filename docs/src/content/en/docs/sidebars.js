@@ -121,6 +121,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {
@@ -304,6 +312,30 @@ const sidebars = {
           type: 'doc',
           id: 'workspace/search',
           label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Browser',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
         },
       ],
     },
@@ -504,6 +536,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/arize',
                   label: 'Arize',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/arthur',
+                  label: 'Arthur',
                 },
                 {
                   type: 'doc',

@@ -16,7 +16,7 @@ import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
-import { executeWithContext } from '../../observability/context-storage';
+import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
@@ -370,6 +370,8 @@ export class CoreToolBuilder extends MastraBase {
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
+            // Browser for web automation (lazily initialized on first use)
+            browser: options.browser,
             writer: new ToolStream(
               {
                 prefix: 'tool',

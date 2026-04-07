@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -308,15 +308,23 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: {
+      agentId?: string;
+      networkId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+      includeSystemReminders?: boolean;
+    } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
+    const includeSystemRemindersQuery =
+      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
     } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
+      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
     }
     return this.request(url);
   }
@@ -380,6 +388,14 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({ agentId: params.agentId });
     if (params.resourceId) queryParams.set('resourceId', params.resourceId);
     if (params.threadId) queryParams.set('threadId', params.threadId);
+    if (params.from) {
+      queryParams.set('from', params.from instanceof Date ? params.from.toISOString() : params.from);
+    }
+    if (params.to) {
+      queryParams.set('to', params.to instanceof Date ? params.to.toISOString() : params.to);
+    }
+    if (params.offset != null) queryParams.set('offset', String(params.offset));
+    if (params.limit != null) queryParams.set('limit', String(params.limit));
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
@@ -882,6 +898,11 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
   }
 
   /**

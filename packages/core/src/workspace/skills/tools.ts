@@ -14,6 +14,7 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../line-utils';
+import { startWorkspaceSpan } from '../tools/tracing';
 import type { Skill, WorkspaceSkills } from './types';
 
 // =============================================================================
@@ -66,25 +67,40 @@ function createSkillTool(skills: WorkspaceSkills) {
         .string()
         .describe('The name or path of the skill to activate. Use the path when multiple skills share the same name.'),
     }),
-    execute: async ({ name }) => {
-      const result = await resolveSkill(skills, name);
+    execute: async ({ name }, context) => {
+      const span = startWorkspaceSpan(context, context?.workspace, {
+        category: 'skill',
+        operation: 'activate',
+        input: { name },
+      });
 
-      if ('notFound' in result) return result.notFound;
+      try {
+        const result = await resolveSkill(skills, name);
 
-      const { skill } = result;
-      const parts = [skill.instructions];
+        if ('notFound' in result) {
+          span.end({ success: false });
+          return result.notFound;
+        }
 
-      if (skill.references?.length) {
-        parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
+        const { skill } = result;
+        const parts = [skill.instructions];
+
+        if (skill.references?.length) {
+          parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
+        }
+        if (skill.scripts?.length) {
+          parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
+        }
+        if (skill.assets?.length) {
+          parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
+        }
+
+        span.end({ success: true });
+        return parts.join('');
+      } catch (err) {
+        span.error(err);
+        throw err;
       }
-      if (skill.scripts?.length) {
-        parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
-      }
-      if (skill.assets?.length) {
-        parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
-      }
-
-      return parts.join('');
     },
   });
 
@@ -101,20 +117,34 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       skillNames: z.array(z.string()).optional().describe('Optional list of skill names to search within'),
       topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
     }),
-    execute: async ({ query, skillNames, topK }) => {
-      const results = await skills.search(query, { topK, skillNames });
+    execute: async ({ query, skillNames, topK }, context) => {
+      const span = startWorkspaceSpan(context, context?.workspace, {
+        category: 'skill',
+        operation: 'search',
+        input: { query, skillNames, topK },
+        attributes: {},
+      });
 
-      if (results.length === 0) {
-        return 'No results found.';
+      try {
+        const results = await skills.search(query, { topK, skillNames });
+
+        if (results.length === 0) {
+          span.end({ success: true }, { resultCount: 0 });
+          return 'No results found.';
+        }
+
+        span.end({ success: true }, { resultCount: results.length });
+        return results
+          .map(r => {
+            const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
+            const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
+            return `[${r.skillName}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
+          })
+          .join('\n\n');
+      } catch (err) {
+        span.error(err);
+        throw err;
       }
-
-      return results
-        .map(r => {
-          const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
-          const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
-          return `[${r.skillName}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
-        })
-        .join('\n\n');
     },
   });
 
@@ -142,39 +172,56 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         .optional()
         .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
-    execute: async ({ skillName, path, startLine, endLine }) => {
-      // Resolve skill by name or path (get() handles both with tie-breaking)
-      const resolved = await resolveSkill(skills, skillName);
-      if ('notFound' in resolved) return resolved.notFound;
+    execute: async ({ skillName, path, startLine, endLine }, context) => {
+      const span = startWorkspaceSpan(context, context?.workspace, {
+        category: 'skill',
+        operation: 'read',
+        input: { skillName, path, startLine, endLine },
+        attributes: {},
+      });
 
-      const resolvedPath = resolved.skill.path;
+      try {
+        // Resolve skill by name or path (get() handles both with tie-breaking)
+        const resolved = await resolveSkill(skills, skillName);
+        if ('notFound' in resolved) {
+          span.end({ success: false });
+          return resolved.notFound;
+        }
+        const resolvedPath = resolved.skill.path;
 
-      // Try each reader using the resolved path to target the exact skill candidate
-      let content: string | Buffer | null = null;
-      content = await skills.getReference(resolvedPath, path);
-      if (content === null) content = await skills.getScript(resolvedPath, path);
-      if (content === null) content = await skills.getAsset(resolvedPath, path);
+        // Try each reader using the resolved path to target the exact skill candidate
+        let content: string | Buffer | null = null;
+        content = await skills.getReference(resolvedPath, path);
+        if (content === null) content = await skills.getScript(resolvedPath, path);
+        if (content === null) content = await skills.getAsset(resolvedPath, path);
 
-      if (content === null) {
-        const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
-        const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
-        const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
-        const allFiles = [...refs, ...scriptsList, ...assets];
-        const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
-        return `File "${path}" not found in skill "${skillName}".${fileList}`;
+        if (content === null) {
+          const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
+          const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
+          const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
+          const allFiles = [...refs, ...scriptsList, ...assets];
+          const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
+          span.end({ success: false });
+          return `File "${path}" not found in skill "${skillName}".${fileList}`;
+        }
+
+        // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
+        const textContent = typeof content === 'string' ? content : content.toString('utf-8');
+        if (textContent.slice(0, 1000).includes('\0')) {
+          const fullPath = `${resolved.skill.path}/${path}`;
+          const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
+          span.end({ success: true }, { bytesTransferred: size });
+          return `Binary file: ${fullPath} (${size} bytes)`;
+        }
+        content = textContent;
+
+        const result = extractLines(content, startLine, endLine);
+        span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
+        return result.content;
+      } catch (err) {
+        span.error(err);
+        throw err;
       }
-
-      // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
-      const textContent = typeof content === 'string' ? content : content.toString('utf-8');
-      if (textContent.slice(0, 1000).includes('\0')) {
-        const fullPath = `${resolved.skill.path}/${path}`;
-        const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-        return `Binary file: ${fullPath} (${size} bytes)`;
-      }
-      content = textContent;
-
-      const result = extractLines(content, startLine, endLine);
-      return result.content;
     },
   });
 

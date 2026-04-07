@@ -2,11 +2,11 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
-import type { AIV5Type } from '../types';
+import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
@@ -291,6 +291,55 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
+ *
+ * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
+ * assistant file parts (fixed in v6 but not backported). This causes providers
+ * like Google Gemini to reject round-tripped responses that require metadata
+ * (e.g. `thoughtSignature` on generated images).
+ *
+ * We collect all `providerMetadata` values from assistant `file` UI parts in
+ * order, then walk the model messages and assign them to assistant `file` parts
+ * in the same order. The ordering is guaranteed to be preserved.
+ */
+function restoreAssistantFileProviderMetadata(
+  modelMessages: AIV5Type.ModelMessage[],
+  uiMessages: AIV5Type.UIMessage[],
+): AIV5Type.ModelMessage[] {
+  // Collect providerMetadata from ALL assistant file UI parts in order,
+  // using undefined as a placeholder for parts without metadata so that
+  // the indices stay aligned with the model-side file parts.
+  const fileMetadata: (AIV5Type.ProviderMetadata | undefined)[] = [];
+  for (const msg of uiMessages) {
+    if (msg.role !== 'assistant') continue;
+    for (const part of msg.parts) {
+      if (part.type === 'file') {
+        fileMetadata.push(part.providerMetadata ?? undefined);
+      }
+    }
+  }
+
+  if (fileMetadata.length === 0 || fileMetadata.every(m => m == null)) return modelMessages;
+
+  // Walk model messages and restore providerOptions on assistant file parts
+  let metadataIndex = 0;
+  return modelMessages.map(msg => {
+    if (msg.role !== 'assistant' || typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'file' || metadataIndex >= fileMetadata.length) return part;
+      const metadata = fileMetadata[metadataIndex++];
+      if (part.providerOptions || !metadata) return part;
+      modified = true;
+      return { ...part, providerOptions: metadata };
+    });
+
+    return modified ? { ...msg, content } : msg;
+  });
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -305,7 +354,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 ): AIV5Type.ModelMessage[] {
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
-  const result = AIV5.convertToModelMessages(preprocessed);
+
+  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion
@@ -351,10 +401,15 @@ export function aiV4CoreMessagesToAIV5ModelMessages(
  * Supports string, MastraDBMessage, or AI SDK message types.
  */
 export function systemMessageToAIV4Core(
-  message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string,
+  message: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
 ): CoreMessageV4 {
   if (typeof message === `string`) {
     return { role: 'system', content: message };
+  }
+
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system');
+    return AIV4Adapter.systemToV4Core(dbMsg);
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {

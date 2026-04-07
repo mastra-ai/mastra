@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
@@ -29,6 +30,8 @@ import {
 import {
   deleteResponseTurnRecord,
   findResponseTurnRecord,
+  findResponseTurnRecordAcrossAgents,
+  getAgentMemoryStore,
   persistResponseTurnRecord,
   resolveResponseTurnMessagesForStorage,
 } from './responses.storage';
@@ -42,6 +45,7 @@ import type {
 import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
+type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
 
 type ResponseExecutionResult = {
   text?: string;
@@ -90,12 +94,15 @@ type FinalizedResponse = {
 
 type PreparedCreateResponseRequest = {
   agent: Agent<any, any, any, any>;
+  agentMemoryStore: MemoryStorage | null;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
   didStore: boolean;
   executionInput: AgentExecutionInput;
   previousResponseTurnRecord: ResponseTurnRecord | null;
+  resolvedModel: ResolvedAgentModel;
   responseId: string;
+  responseModel: string;
   responseMetadata: Omit<
     ResponseTurnRecordMetadata,
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
@@ -277,17 +284,13 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
 async function resolveResponseAgent({
   mastra,
   agentId,
-  previousResponseTurnRecord,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
-  previousResponseTurnRecord: ResponseTurnRecord | null;
 }): Promise<Agent<any, any, any, any>> {
-  const resolvedAgentId = agentId ?? previousResponseTurnRecord?.metadata.agentId;
-
-  if (!resolvedAgentId) {
+  if (!agentId) {
     throw new HTTPException(400, {
-      message: 'Responses requests require an agent_id, or a previous_response_id from a stored agent-backed response',
+      message: 'Responses requests require an agent_id',
     });
   }
 
@@ -295,7 +298,24 @@ async function resolveResponseAgent({
     throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
   }
 
-  return getAgentFromSystem({ mastra, agentId: resolvedAgentId });
+  return getAgentFromSystem({ mastra, agentId });
+}
+
+async function resolveAgentMemoryStore({
+  agent,
+  requestContext,
+  errorMessage,
+}: {
+  agent: Agent<any, any, any, any>;
+  requestContext: RequestContext;
+  errorMessage: string;
+}): Promise<MemoryStorage> {
+  const agentMemoryStore = await getAgentMemoryStore({ agent, requestContext });
+  if (!agentMemoryStore) {
+    throw new HTTPException(400, { message: errorMessage });
+  }
+
+  return agentMemoryStore;
 }
 
 /**
@@ -303,7 +323,8 @@ async function resolveResponseAgent({
  */
 async function executeGenerate({
   agent,
-  model,
+  resolvedModel,
+  modelOverride,
   instructions,
   text,
   providerOptions,
@@ -313,7 +334,8 @@ async function executeGenerate({
   threadContext,
 }: {
   agent: Agent;
-  model: string;
+  resolvedModel: ResolvedAgentModel;
+  modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
@@ -324,16 +346,16 @@ async function executeGenerate({
 }) {
   const executionMemory = createExecutionMemory(threadContext);
   const structuredOutput = createStructuredOutput(text);
+  const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
-    model,
+    ...modelOption,
     structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
-  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
 
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
@@ -341,7 +363,7 @@ async function executeGenerate({
         instructions,
         requestContext,
         abortSignal,
-        model,
+        ...modelOption,
         output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
@@ -353,7 +375,7 @@ async function executeGenerate({
       instructions,
       requestContext,
       abortSignal,
-      model,
+      ...modelOption,
       output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseExecutionResult;
@@ -367,7 +389,8 @@ async function executeGenerate({
  */
 async function executeStream({
   agent,
-  model,
+  resolvedModel,
+  modelOverride,
   instructions,
   text,
   providerOptions,
@@ -377,7 +400,8 @@ async function executeStream({
   threadContext,
 }: {
   agent: Agent;
-  model: string;
+  resolvedModel: ResolvedAgentModel;
+  modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
@@ -388,16 +412,16 @@ async function executeStream({
 }) {
   const executionMemory = createExecutionMemory(threadContext);
   const structuredOutput = createStructuredOutput(text);
+  const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
-    model,
+    ...modelOption,
     structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
-  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
 
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
@@ -405,7 +429,7 @@ async function executeStream({
         instructions,
         requestContext,
         abortSignal,
-        model,
+        ...modelOption,
         output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
@@ -417,7 +441,7 @@ async function executeStream({
       instructions,
       requestContext,
       abortSignal,
-      model,
+      ...modelOption,
       output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseStreamResult;
@@ -469,7 +493,7 @@ async function resolveCompletedResponseState(
  * Stores the completed response when the request opted into memory-backed persistence.
  */
 async function storeCompletedResponse({
-  mastra,
+  agentMemoryStore,
   didStore,
   threadContext,
   responseId,
@@ -477,7 +501,7 @@ async function storeCompletedResponse({
   completedState,
   messages,
 }: {
-  mastra: Mastra | undefined;
+  agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
   responseId: string;
@@ -490,7 +514,7 @@ async function storeCompletedResponse({
   }
 
   await persistResponseTurnRecord({
-    mastra,
+    memoryStore: agentMemoryStore,
     responseId,
     metadata: {
       ...metadata,
@@ -509,7 +533,7 @@ async function storeCompletedResponse({
  * Resolves the final response object and persists the stored response turn when needed.
  */
 async function finalizeResponse({
-  mastra,
+  agentMemoryStore,
   didStore,
   threadContext,
   result,
@@ -523,7 +547,7 @@ async function finalizeResponse({
   responseMetadata,
   fallbackText,
 }: {
-  mastra: Mastra | undefined;
+  agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
   result: ResponseExecutionResult | ResponseStreamResult;
@@ -567,7 +591,7 @@ async function finalizeResponse({
   });
 
   await storeCompletedResponse({
-    mastra,
+    agentMemoryStore,
     didStore,
     threadContext,
     responseId,
@@ -593,27 +617,60 @@ async function prepareCreateResponseRequest({
   mastra: Mastra | undefined;
   requestContext: RequestContext;
 }): Promise<PreparedCreateResponseRequest> {
+  const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
+  const agent = await resolveResponseAgent({
+    mastra,
+    agentId: body.agent_id,
+  });
+  const resolvedModel = await agent.getModel({
+    requestContext,
+    modelConfig: body.model,
+  });
+  const responseModel =
+    body.model ??
+    (() => {
+      if (resolvedModel.provider && resolvedModel.modelId) {
+        const publicProviderId = resolvedModel.provider.includes('.')
+          ? resolvedModel.provider.split('.')[0]!
+          : resolvedModel.provider;
+        return `${publicProviderId}/${resolvedModel.modelId}`;
+      }
+
+      if (resolvedModel.modelId) {
+        return resolvedModel.modelId;
+      }
+
+      throw new HTTPException(500, {
+        message: 'Responses route could not determine the effective model for this request',
+      });
+    })();
+  const shouldStore = body.store ?? false;
+  const needsMemoryStore = shouldStore || Boolean(body.conversation_id) || Boolean(body.previous_response_id);
+  const agentMemoryStore = needsMemoryStore
+    ? await resolveAgentMemoryStore({
+        agent,
+        requestContext,
+        errorMessage: body.previous_response_id
+          ? 'previous_response_id requires the target agent to have memory storage configured'
+          : shouldStore
+            ? 'Stored responses require the target agent to have memory storage configured'
+            : 'conversation_id requires the target agent to have memory storage configured',
+      })
+    : null;
   const previousResponseTurnRecord = body.previous_response_id
-    ? await findResponseTurnRecord({ mastra, responseId: body.previous_response_id, requestContext })
+    ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
     : null;
 
   if (body.previous_response_id && !previousResponseTurnRecord) {
     throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
   }
 
-  const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-  const agent = await resolveResponseAgent({
-    mastra,
-    agentId: body.agent_id,
-    previousResponseTurnRecord,
-  });
   const configuredTools = mapMastraToolsToResponseTools(
     (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
   );
 
   const responseId = createMessageId();
   const createdAt = Math.floor(Date.now() / 1000);
-  const shouldStore = body.store ?? false;
   const threadContext = await resolveThreadExecutionContext({
     agent,
     store: shouldStore,
@@ -632,15 +689,18 @@ async function prepareCreateResponseRequest({
 
   return {
     agent,
+    agentMemoryStore,
     configuredTools,
     createdAt,
     didStore,
     executionInput,
     previousResponseTurnRecord,
+    resolvedModel,
     responseId,
+    responseModel,
     responseMetadata: {
       agentId: agent.id,
-      model: body.model,
+      model: responseModel,
       createdAt,
       instructions: body.instructions,
       text: body.text,
@@ -657,24 +717,26 @@ async function prepareCreateResponseRequest({
  * the stored response-turn record when the stream finishes.
  */
 function createResponseEventStream({
+  agentMemoryStore,
   body,
   configuredTools,
   createdAt,
   didStore,
-  mastra,
   previousResponseTurnRecord,
   responseId,
+  responseModel,
   responseMetadata,
   streamResult,
   threadContext,
 }: {
+  agentMemoryStore: MemoryStorage | null;
   body: CreateResponseBody;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
   didStore: boolean;
-  mastra: Mastra | undefined;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   responseId: string;
+  responseModel: string;
   responseMetadata: Omit<
     ResponseTurnRecordMetadata,
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
@@ -684,7 +746,7 @@ function createResponseEventStream({
 }) {
   const createdResponse = buildInProgressResponse({
     responseId,
-    model: body.model,
+    model: responseModel,
     createdAt,
     instructions: body.instructions,
     textConfig: body.text,
@@ -758,13 +820,13 @@ function createResponseEventStream({
         }
 
         const { completedState, response } = await finalizeResponse({
-          mastra,
+          agentMemoryStore,
           didStore,
           threadContext,
           result: streamResult,
           responseId,
           createdAt,
-          model: body.model,
+          model: responseModel,
           instructions: body.instructions,
           previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
@@ -829,12 +891,15 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
     try {
       const {
         agent,
+        agentMemoryStore,
         configuredTools,
         createdAt,
         didStore,
         executionInput,
         previousResponseTurnRecord,
+        resolvedModel,
         responseId,
+        responseModel,
         responseMetadata,
         threadContext,
       } = await prepareCreateResponseRequest({ body, mastra, requestContext });
@@ -842,7 +907,8 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       if (!body.stream) {
         const result = await executeGenerate({
           agent,
-          model: body.model,
+          resolvedModel,
+          modelOverride: body.model,
           instructions: body.instructions,
           text: body.text,
           providerOptions: body.providerOptions,
@@ -853,13 +919,13 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         });
 
         const { response } = await finalizeResponse({
-          mastra,
+          agentMemoryStore,
           didStore,
           threadContext,
           result,
           responseId,
           createdAt,
-          model: body.model,
+          model: responseModel,
           instructions: body.instructions,
           previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
@@ -873,7 +939,8 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const streamResult = await executeStream({
         agent,
-        model: body.model,
+        resolvedModel,
+        modelOverride: body.model,
         instructions: body.instructions,
         text: body.text,
         providerOptions: body.providerOptions,
@@ -884,13 +951,14 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       });
 
       const stream = createResponseEventStream({
+        agentMemoryStore,
         body,
         configuredTools,
         createdAt,
         didStore,
-        mastra,
         previousResponseTurnRecord,
         responseId,
+        responseModel,
         responseMetadata,
         streamResult,
         threadContext,
@@ -923,7 +991,7 @@ export const GET_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const responseTurnRecord = await findResponseTurnRecord({ mastra, responseId, requestContext });
+      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
@@ -948,10 +1016,12 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   requiresPermission: 'agents:delete',
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const deleted = await deleteResponseTurnRecord({ mastra, responseId, requestContext });
-      if (!deleted) {
+      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
+      if (!responseTurnRecord) {
         throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
       }
+
+      await deleteResponseTurnRecord({ responseTurnRecord });
 
       const response: DeleteResponse = {
         id: responseId,

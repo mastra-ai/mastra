@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -166,6 +167,14 @@ export interface HarnessConfig<TState = {}> {
    * receives the request context and returns a Workspace per-request.
    */
   workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
+
+  /**
+   * Browser automation configuration.
+   * Accepts a pre-constructed MastraBrowser instance or a dynamic factory
+   * function that receives the request context and returns a browser per-request.
+   * Propagated to mode agents that don't have their own browser configured.
+   */
+  browser?: DynamicArgument<MastraBrowser | undefined>;
 
   /**
    * Periodic heartbeat handlers started during `init()`.
@@ -365,10 +374,7 @@ export type ModelUseCountTracker = (modelId: string) => void;
  * When set, `loadOMProgress()` calls this instead of reading from local storage.
  * Return null to fall back to local storage behavior.
  */
-export type OMProgressProvider = (
-  threadId: string,
-  resourceId: string,
-) => Promise<HarnessEvent | null>;
+export type OMProgressProvider = (threadId: string, resourceId: string) => Promise<HarnessEvent | null>;
 
 // =============================================================================
 // Harness State

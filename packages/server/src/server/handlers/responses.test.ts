@@ -6,6 +6,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
+import { createResponseBodySchema } from '../schemas/responses';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
 
@@ -180,7 +181,99 @@ async function readSseEvents(response: Response): Promise<SseEventPayload[]> {
 }
 
 function mockAgentSpecVersion(agent: Agent, specificationVersion: 'v1' | 'v2' = 'v2') {
-  vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion } as never);
+  vi.spyOn(agent, 'getModel').mockResolvedValue({
+    specificationVersion,
+    provider: 'openai',
+    modelId: specificationVersion === 'v1' ? 'legacy-model' : 'test-model',
+  } as never);
+}
+
+class RootInjectedMockMemory extends MockMemory {
+  constructor() {
+    super();
+    this._storage = undefined;
+    this._hasOwnStorage = false;
+  }
+}
+
+function createMastraWithDedicatedAgentMemory() {
+  const rootStorage = new InMemoryStore();
+  const agentStorage = new InMemoryStore();
+  const memory = new MockMemory({ storage: agentStorage });
+  const agent = new Agent({
+    id: 'dedicated-agent',
+    name: 'dedicated-agent',
+    instructions: 'dedicated instructions',
+    model: {} as never,
+    memory,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    storage: rootStorage,
+    agents: {
+      'dedicated-agent': agent,
+    },
+  });
+
+  mockAgentSpecVersion(agent);
+
+  return {
+    agent,
+    mastra,
+    memory,
+    rootStorage,
+  };
+}
+
+function createMastraWithAgentMemoryUsingRootStorage() {
+  const rootStorage = new InMemoryStore();
+  const memory = new RootInjectedMockMemory();
+  const agent = new Agent({
+    id: 'root-backed-agent',
+    name: 'root-backed-agent',
+    instructions: 'root-backed instructions',
+    model: {} as never,
+    memory,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    storage: rootStorage,
+    agents: {
+      'root-backed-agent': agent,
+    },
+  });
+
+  mockAgentSpecVersion(agent);
+
+  return {
+    agent,
+    mastra,
+    rootStorage,
+  };
+}
+
+function createMastraWithAgentMemoryWithoutStorage() {
+  const memory = new RootInjectedMockMemory();
+  const agent = new Agent({
+    id: 'agent-without-storage',
+    name: 'agent-without-storage',
+    instructions: 'agent-without-storage instructions',
+    model: {} as never,
+    memory,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    agents: {
+      'agent-without-storage': agent,
+    },
+  });
+
+  mockAgentSpecVersion(agent);
+
+  return {
+    agent,
+    mastra,
+  };
 }
 
 describe('Responses Handlers', () => {
@@ -289,6 +382,44 @@ describe('Responses Handlers', () => {
     });
 
     expect(retrieved).toEqual(created);
+  });
+
+  it('accepts omitted model in the create response request schema', () => {
+    const result = createResponseBodySchema.safeParse({
+      agent_id: 'test-agent',
+      input: 'Hello',
+      stream: false,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('uses the agent default model when create requests omit model', async () => {
+    vi.spyOn(agent, 'getModel').mockResolvedValue({
+      specificationVersion: 'v2',
+      provider: 'openai.responses',
+      modelId: 'gpt-4o-mini',
+    } as never);
+    const generateSpy = vi
+      .spyOn(agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Hello from Mastra' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agent_id: 'test-agent',
+      input: 'Hello',
+      store: false,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect((generateSpy.mock.calls[0]?.[1] as Record<string, unknown>)?.model).toBeUndefined();
+    expect(created).toMatchObject({
+      object: 'response',
+      model: 'openai/gpt-4o-mini',
+      status: 'completed',
+    });
   });
 
   it('maps text.format json_object to structuredOutput for v2 generate requests', async () => {
@@ -766,6 +897,19 @@ describe('Responses Handlers', () => {
         ...createTestServerContext({ mastra }),
         model: 'openai/gpt-5',
         input: 'Hello',
+        stream: false,
+      }),
+    ).rejects.toThrow(HTTPException);
+  });
+
+  it('requires agent_id when previous_response_id is provided', async () => {
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        input: 'Second turn',
+        previous_response_id: 'resp_missing_agent',
+        store: true,
         stream: false,
       }),
     ).rejects.toThrow(HTTPException);
@@ -1373,5 +1517,144 @@ describe('Responses Handlers', () => {
         responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);
+  });
+
+  it('stores and continues responses in the agent memory store when Mastra root storage is different', async () => {
+    const dedicated = createMastraWithDedicatedAgentMemory();
+    const generateSpy = vi.spyOn(dedicated.agent, 'generate');
+    generateSpy.mockResolvedValueOnce(createGenerateResult({ text: 'First dedicated response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'dedicated-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    const rootMemoryStore = await dedicated.rootStorage.getStore('memory');
+    const rootMessages = await rootMemoryStore!.listMessagesById({ messageIds: [firstCreated.id] });
+    expect(rootMessages.messages).toEqual([]);
+
+    generateSpy.mockResolvedValueOnce(createGenerateResult({ text: 'Second dedicated response' }));
+
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra: dedicated.mastra }),
+        model: 'openai/gpt-5',
+        agent_id: 'dedicated-agent',
+        input: 'Second turn',
+        previous_response_id: firstCreated.id,
+        store: true,
+        stream: false,
+      }),
+    ).resolves.toBeInstanceOf(Response);
+
+    const firstCall = generateSpy.mock.calls[0]?.[1] as { memory?: { thread?: string; resource?: string } };
+    const secondCall = generateSpy.mock.calls[1]?.[1] as { memory?: { thread?: string; resource?: string } };
+
+    expect(secondCall.memory).toEqual(firstCall.memory);
+  });
+
+  it('retrieves and deletes stored responses from the agent memory store when Mastra root storage is different', async () => {
+    const dedicated = createMastraWithDedicatedAgentMemory();
+    vi.spyOn(dedicated.agent, 'generate').mockResolvedValue(
+      createGenerateResult({ text: 'Stored in dedicated memory' }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'dedicated-agent',
+      input: 'Hello',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      responseId: created.id,
+    });
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      object: 'response',
+      store: true,
+    });
+
+    const deleted = await DELETE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: dedicated.mastra }),
+      responseId: created.id,
+    });
+    expect(deleted).toEqual({
+      id: created.id,
+      object: 'response',
+      deleted: true,
+    });
+
+    await expect(
+      GET_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra: dedicated.mastra }),
+        responseId: created.id,
+      }),
+    ).rejects.toThrow(HTTPException);
+  });
+
+  it('stores responses through agent memory when that memory inherits Mastra root storage', async () => {
+    const rootBacked = createMastraWithAgentMemoryUsingRootStorage();
+    const generateSpy = vi.spyOn(rootBacked.agent, 'generate');
+    generateSpy.mockResolvedValueOnce(createGenerateResult({ text: 'First inherited response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: rootBacked.mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'root-backed-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    const rootMemoryStore = await rootBacked.rootStorage.getStore('memory');
+    const rootMessages = await rootMemoryStore!.listMessagesById({ messageIds: [firstCreated.id] });
+    expect(rootMessages.messages).toHaveLength(1);
+
+    generateSpy.mockResolvedValueOnce(createGenerateResult({ text: 'Second inherited response' }));
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: rootBacked.mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'root-backed-agent',
+      input: 'Second turn',
+      previous_response_id: firstCreated.id,
+      store: true,
+      stream: false,
+    });
+
+    const firstCall = generateSpy.mock.calls[0]?.[1] as { memory?: { thread?: string; resource?: string } };
+    const secondCall = generateSpy.mock.calls[1]?.[1] as { memory?: { thread?: string; resource?: string } };
+
+    expect(secondCall.memory).toEqual(firstCall.memory);
+  });
+
+  it('returns 400 when storing a response for an agent with memory but no storage', async () => {
+    const noStorage = createMastraWithAgentMemoryWithoutStorage();
+    vi.spyOn(noStorage.agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'No storage response' }));
+
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra: noStorage.mastra }),
+        model: 'openai/gpt-5',
+        agent_id: 'agent-without-storage',
+        input: 'Hello',
+        store: true,
+        stream: false,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+    });
   });
 });
