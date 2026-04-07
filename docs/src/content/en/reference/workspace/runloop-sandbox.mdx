@@ -1,0 +1,134 @@
+---
+title: "Reference: RunloopSandbox | Workspace"
+description: "Documentation for the RunloopSandbox provider using Runloop Devboxes."
+packages:
+  - "@mastra/runloop"
+---
+
+# RunloopSandbox
+
+Runs commands in isolated [Runloop Devboxes](https://docs.runloop.ai/docs/devboxes/overview). Uses the official [`@runloop/api-client`](https://www.npmjs.com/package/@runloop/api-client) object-oriented SDK for create, exec, suspend, resume, and shutdown.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/runloop
+```
+
+## Usage
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { RunloopSandbox } from '@mastra/runloop'
+
+const workspace = new Workspace({
+  sandbox: new RunloopSandbox({
+    id: 'dev-sandbox',
+    timeout: 120_000,
+  }),
+})
+
+const agent = new Agent({
+  name: 'dev-agent',
+  model: 'anthropic/claude-opus-4-6',
+  workspace,
+})
+```
+
+## Workspace mounts
+
+Mastra workspace `mount()` / `unmount()` are **not** implemented for this provider. Configure repositories, files, or storage through [Runloop devbox creation](https://docs.runloop.ai/docs/devboxes/overview) (for example blueprint, code mounts, or storage objects) in your own setup or extended options.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Runloop API key. Falls back to RUNLOOP_API_KEY.',
+    isOptional: true,
+  },
+  {
+    name: 'baseURL',
+    type: 'string | null',
+    description: 'API base URL. Falls back to RUNLOOP_BASE_URL.',
+    isOptional: true,
+  },
+  {
+    name: 'clientTimeout',
+    type: 'number',
+    description: 'HTTP timeout (ms) for the Runloop SDK client.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default long-poll timeout (ms) for async command completion.',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'devboxName',
+    type: 'string',
+    description: 'Devbox display name on Runloop.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables on the devbox (creation time).',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, string>',
+    description: 'Devbox metadata.',
+    isOptional: true,
+  },
+  {
+    name: 'blueprintId',
+    type: 'string',
+    description: 'Blueprint ID for devbox creation.',
+    isOptional: true,
+  },
+  {
+    name: 'blueprintName',
+    type: 'string',
+    description: 'Blueprint name for devbox creation.',
+    isOptional: true,
+  },
+  {
+    name: 'snapshotId',
+    type: 'string',
+    description: 'Snapshot ID for devbox creation.',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Mastra logical sandbox id.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'instructions',
+    type: 'string | function',
+    description: 'Override or extend default agent instructions for this sandbox.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Related
+
+- [Runloop documentation](https://docs.runloop.ai)
+- [WorkspaceSandbox](/reference/workspace/sandbox)
+- [SandboxProcessManager](/reference/workspace/process-manager)

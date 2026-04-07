@@ -11,7 +11,7 @@ packages:
 
 Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them.
 
-[`BlaxelSandbox`](/reference/workspace/blaxel-sandbox), [`DaytonaSandbox`](/reference/workspace/daytona-sandbox), [`E2BSandbox`](/reference/workspace/e2b-sandbox), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
+[`BlaxelSandbox`](/reference/workspace/blaxel-sandbox), [`DaytonaSandbox`](/reference/workspace/daytona-sandbox), [`E2BSandbox`](/reference/workspace/e2b-sandbox), [`RunloopSandbox`](/reference/workspace/runloop-sandbox), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
 
 ## Usage example
 
@@ -440,4 +440,5 @@ When a process manager is provided, `MastraSandbox` automatically creates a defa
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [E2BSandbox reference](/reference/workspace/e2b-sandbox)
+- [RunloopSandbox reference](/reference/workspace/runloop-sandbox)
 - [DaytonaSandbox reference](/reference/workspace/daytona-sandbox)
