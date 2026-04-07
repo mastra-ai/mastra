@@ -15,12 +15,13 @@ describe('workspace skill path definitions', () => {
     path.join(home, '.agents', 'skills'),
   ];
 
-  it('includes all expected skill directories as candidates', async () => {
+  it('includes project-local and global skill directories as candidates', async () => {
     const fs = await import('node:fs');
     const source = fs.readFileSync(path.join(cwd, 'src/agents/workspace.ts'), 'utf-8');
 
     for (const dir of ['.mastracode', '.claude', '.agents']) {
-      expect(source).toContain(`'${dir}', 'skills'`);
+      expect(source).toContain(`process.cwd(), '${dir}', 'skills'`);
+      expect(source).toContain(`os.homedir(), '${dir}', 'skills'`);
     }
   });
 
