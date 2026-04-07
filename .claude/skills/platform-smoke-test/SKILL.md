@@ -1,6 +1,9 @@
-# Platform Smoke Test
+---
+name: platform-smoke-test
+description: Smoke test the Mastra Platform - Gateway API, dashboard UI, account management, team invites, RBAC, and usage tracking. Tests gateway.mastra.ai and projects.mastra.ai.
+---
 
-## Description
+# Platform Smoke Test
 
 Smoke test the Mastra Platform - including the Memory Gateway API, dashboard UI, account management, team invites, RBAC, and usage tracking. Tests both the Gateway (`gateway.mastra.ai`) and platform features accessible via `projects.mastra.ai`.
 
