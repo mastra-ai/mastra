@@ -72,6 +72,16 @@ export enum SpanType {
   MEMORY_OPERATION = 'memory_operation',
   /** Workspace action (filesystem, sandbox, search, skill, mount operations) */
   WORKSPACE_ACTION = 'workspace_action',
+  /** RAG ingestion - root span for an ingestion pipeline run (load → chunk → extract → embed → upsert) */
+  RAG_INGESTION = 'rag_ingestion',
+  /** Embedding call (used by both RAG ingestion and query) */
+  RAG_EMBEDDING = 'rag_embedding',
+  /** Vector store I/O (query / upsert / delete / fetch) */
+  RAG_VECTOR_OPERATION = 'rag_vector_operation',
+  /** RAG-specific actions: chunk, extract_metadata, rerank */
+  RAG_ACTION = 'rag_action',
+  /** Graph operations (build / traverse) - not RAG-specific */
+  GRAPH_ACTION = 'graph_action',
 }
 
 export { EntityType };
@@ -426,6 +436,113 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
 }
 
 /**
+ * RAG Ingestion attributes (root span for an ingestion pipeline run)
+ */
+export interface RagIngestionAttributes extends AIBaseAttributes {
+  /** User-supplied pipeline name */
+  pipelineName?: string;
+  /** Number of source documents being ingested */
+  sourceCount?: number;
+  /** Vector store name */
+  vectorStore?: string;
+  /** Index/collection name being written to */
+  indexName?: string;
+  /** Embedding model id */
+  embeddingModel?: string;
+  /** Embedding model provider */
+  embeddingProvider?: string;
+  /** Total chunks produced across the run */
+  totalChunks?: number;
+  /** Total embedding tokens consumed across the run */
+  totalTokens?: number;
+}
+
+/**
+ * RAG Embedding attributes (single embed call, batch)
+ */
+export interface RagEmbeddingAttributes extends AIBaseAttributes {
+  /** Embedding model id */
+  model?: string;
+  /** Embedding model provider */
+  provider?: string;
+  /** Embedding vector dimensions */
+  dimensions?: number;
+  /** Number of inputs in this batch */
+  inputCount?: number;
+  /** Total tokens consumed by the batch */
+  totalTokens?: number;
+  /** Whether this embed call is part of ingestion or query */
+  mode?: 'ingest' | 'query';
+}
+
+/**
+ * RAG Vector Operation attributes (vector store I/O)
+ */
+export interface RagVectorOperationAttributes extends AIBaseAttributes {
+  /** Vector store operation kind */
+  operation: 'query' | 'upsert' | 'delete' | 'fetch';
+  /** Vector store name */
+  store?: string;
+  /** Index/collection name */
+  indexName?: string;
+  /** Number of vectors written (upsert) */
+  vectorCount?: number;
+  /** Top-K parameter (query) */
+  topK?: number;
+  /** Filter passed to query */
+  filter?: unknown;
+  /** Vector dimensions */
+  dimensions?: number;
+  /** Number of results returned (query/fetch) */
+  returned?: number;
+}
+
+/**
+ * RAG Action attributes - chunk / extract_metadata / rerank
+ */
+export interface RagActionAttributes extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'chunk' | 'extract_metadata' | 'rerank';
+  // chunk
+  /** Chunking strategy / transformer name */
+  strategy?: string;
+  chunkSize?: number;
+  chunkOverlap?: number;
+  chunkCount?: number;
+  // extract_metadata
+  /** Metadata extractor name */
+  extractor?: string;
+  model?: string;
+  provider?: string;
+  // rerank
+  candidateCount?: number;
+  topN?: number;
+  scorer?: string;
+}
+
+/**
+ * Graph Action attributes - non-RAG, used for any graph operation
+ */
+export interface GraphActionAttributes extends AIBaseAttributes {
+  /** Graph action kind */
+  action: 'build' | 'traverse' | 'update' | 'prune';
+  /** Number of nodes in the graph */
+  nodeCount?: number;
+  /** Number of edges in the graph */
+  edgeCount?: number;
+  /** Threshold parameter (build) */
+  threshold?: number;
+  /** Number of starting nodes (traverse) */
+  startNodes?: number;
+  /** Maximum traversal depth */
+  maxDepth?: number;
+  /** Number of nodes visited during traversal */
+  visited?: number;
+  /** Number of nodes returned */
+  returned?: number;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
@@ -449,6 +566,11 @@ export interface SpanTypeMap {
   [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
   [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
+  [SpanType.RAG_INGESTION]: RagIngestionAttributes;
+  [SpanType.RAG_EMBEDDING]: RagEmbeddingAttributes;
+  [SpanType.RAG_VECTOR_OPERATION]: RagVectorOperationAttributes;
+  [SpanType.RAG_ACTION]: RagActionAttributes;
+  [SpanType.GRAPH_ACTION]: GraphActionAttributes;
 }
 
 /**

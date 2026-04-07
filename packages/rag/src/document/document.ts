@@ -1,3 +1,5 @@
+import { SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import {
   TitleExtractor,
   SummaryExtractor,
@@ -340,19 +342,56 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(params?: ChunkParams): Promise<Chunk[]> {
+  async chunk(
+    params?: ChunkParams,
+    options?: { observabilityContext?: ObservabilityContext },
+  ): Promise<Chunk[]> {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
 
     validateChunkParams(strategy, chunkOptions);
 
-    // Apply the appropriate chunking strategy
-    await this.chunkBy(strategy, chunkOptions);
+    const parentSpan = options?.observabilityContext?.tracingContext?.currentSpan;
+    const chunkSpan = parentSpan?.createChildSpan({
+      type: SpanType.RAG_ACTION,
+      name: `rag chunk: ${strategy}`,
+      input: { strategy },
+      attributes: {
+        action: 'chunk',
+        strategy,
+        chunkSize: (chunkOptions as any)?.size,
+        chunkOverlap: (chunkOptions as any)?.overlap,
+      },
+    });
 
-    if (extract) {
-      await this.extractMetadata(extract);
+    try {
+      // Apply the appropriate chunking strategy
+      await this.chunkBy(strategy, chunkOptions);
+
+      if (extract) {
+        const extractSpan = parentSpan?.createChildSpan({
+          type: SpanType.RAG_ACTION,
+          name: 'rag extract metadata',
+          attributes: {
+            action: 'extract_metadata',
+            extractor: Object.keys(extract).join(','),
+          },
+        });
+        try {
+          await this.extractMetadata(extract);
+        } catch (err) {
+          extractSpan?.error({ error: err as Error, endSpan: true });
+          throw err;
+        }
+        extractSpan?.end();
+      }
+    } catch (err) {
+      chunkSpan?.error({ error: err as Error, endSpan: true });
+      throw err;
     }
+
+    chunkSpan?.end({ attributes: { chunkCount: this.chunks.length } });
 
     return this.chunks;
   }

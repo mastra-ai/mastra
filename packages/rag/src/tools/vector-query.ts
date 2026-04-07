@@ -1,3 +1,4 @@
+import { createObservabilityContext } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
@@ -32,7 +33,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     inputSchema,
     outputSchema,
     execute: async (inputData, context) => {
-      const { requestContext, mastra } = context || {};
+      const { requestContext, mastra, tracingContext } = (context as any) || {};
+      const observabilityContext = createObservabilityContext(tracingContext);
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string =
         'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
@@ -83,6 +85,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           includeVectors,
           databaseConfig,
           providerOptions,
+          observabilityContext,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -103,12 +106,14 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               options: {
                 ...reranker.options,
                 topK: reranker.options?.topK || topKValue,
+                observabilityContext,
               },
             });
           } else {
             rerankedResults = await rerank(results, queryText, reranker.model, {
               ...reranker.options,
               topK: reranker.options?.topK || topKValue,
+              observabilityContext,
             });
           }
 
