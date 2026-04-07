@@ -219,8 +219,8 @@ export type ResponsesDeleteResponse = {
 };
 
 export type CreateResponseParams = {
-  /** Target model identifier, such as `openai/gpt-5`. */
-  model: string;
+  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
+  model?: string;
   /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
   agent_id?: string;
   /** Input text or message history for the current turn. */
