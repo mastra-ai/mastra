@@ -59,7 +59,12 @@ export function SearchFieldBlock({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size={size || 'sm'} aria-label={label || 'Search'} disabled={disabled} onClick={() => onMinimizedChange?.(false)}>
+          <Button
+            size={size || 'sm'}
+            aria-label={label || 'Search'}
+            disabled={disabled}
+            onClick={() => onMinimizedChange?.(false)}
+          >
             <SearchIcon />
           </Button>
         </TooltipTrigger>
