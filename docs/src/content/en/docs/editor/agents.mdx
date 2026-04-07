@@ -1,0 +1,112 @@
+---
+title: "Agents | Editor"
+description: Edit code-defined agents without changing source files — through the Studio UI or programmatically.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Agents
+
+The editor lets you change a code-defined agent's instructions, tools, and variables without modifying source files. Your code stays unchanged — the editor stores overrides separately and applies them at runtime when the agent is loaded. You can manage these overrides through the Studio UI or programmatically through the server API and Client SDK.
+
+## When to use editor agents
+
+Use the editor to manage agents when you want to:
+
+- Iterate on an agent's instructions without redeploying.
+- Add or remove tools from a code-defined agent at runtime.
+- Test different prompt strategies before committing changes to code.
+- Let non-developer team members tune agent behavior.
+
+## Quickstart
+
+1. Define an agent in code and register it with Mastra:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You help customers with support requests.',
+  model: 'openai/gpt-5.4',
+})
+```
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { supportAgent } from './agents/support-agent'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  editor: new MastraEditor(),
+})
+```
+
+1. Open the agent's edit page in the Studio, or use the server API to update the stored configuration.
+1. Change the instructions, add tools, or set variables.
+1. The agent now uses the stored configuration. Call it with `mastra.getAgentById()` and the overrides apply automatically.
+
+## What can be overridden
+
+When you edit a code-defined agent through the editor, only specific fields can be changed:
+
+| Field | Description |
+| - | - |
+| **Instructions** | Replace or extend the agent's system prompt using [prompt blocks](/docs/editor/prompts). |
+| **Tools** | Add tools from the tool registry, integration providers, or MCP clients. Code-defined tools remain available. |
+| **Variables** | Set values for template variables used in prompt blocks. |
+
+Fields like the agent's `id`, `name`, and `model` come from your code and can't be changed through the editor for code-defined agents.
+
+## How it works
+
+When you call `mastra.getAgentById()`, Mastra checks if a stored override exists for the agent. If one is found, the stored instructions and tools are merged with the code defaults:
+
+- **Instructions**: The stored instruction blocks replace the code-defined instructions.
+- **Tools**: Stored tools are merged with code-defined tools. The merge order is: code tools, then registry tools, then MCP tools, then integration tools. If a stored tool has the same key as a code tool, the stored version takes priority.
+
+No extra code is needed — `mastra.getAgentById()` handles this automatically when an editor is configured.
+
+## Version selection
+
+By default, `mastra.getAgentById()` loads the published (active) version of the stored override. You can request a specific version:
+
+```typescript
+// Load the published version (default)
+const agent = mastra.getAgentById('support-agent')
+
+// Load the latest draft
+const agent = mastra.getAgentById('support-agent', {
+  status: 'draft',
+})
+
+// Load a specific version
+const agent = mastra.getAgentById('support-agent', {
+  versionId: 'abc-123',
+})
+```
+
+When calling the agent through the Mastra server, pass version parameters as query strings:
+
+```bash
+# Published version (default)
+curl http://localhost:4111/agents/support-agent
+
+# Latest draft
+curl http://localhost:4111/agents/support-agent?status=draft
+
+# Specific version
+curl http://localhost:4111/agents/support-agent?versionId=abc-123
+```
+
+See the [Editor overview](/docs/editor/overview#versioning) for the full versioning system including lifecycle, endpoints, and Client SDK methods.
+
+## Related
+
+- [Editor overview](/docs/editor/overview) — setup and versioning.
+- [Prompts](/docs/editor/prompts) — reusable instruction templates for agent prompts.
+- [Tools](/docs/editor/tools) — add integration tools, MCP clients, and override descriptions.
+- [Agents reference](/reference/agents/agent) — full Agent class reference.

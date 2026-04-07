@@ -70,6 +70,35 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Editor',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'editor/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'editor/agents',
+          label: 'Agents',
+        },
+        {
+          type: 'doc',
+          id: 'editor/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'editor/prompts',
+          label: 'Prompts',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       items: [
         {

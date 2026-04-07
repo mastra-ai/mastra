@@ -1,0 +1,159 @@
+---
+title: "Editor overview"
+description: Manage agents, prompts, tools, and versions without changing code — through the Studio UI or programmatically.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/client-js"
+---
+
+# Editor overview
+
+The editor is a CMS-style system for managing agents without touching your source files. You can change instructions, add tools, create reusable prompt blocks, and version every change. The [Studio](/docs/studio/overview) gives you a visual interface for these features, and you can do everything programmatically through the server API and Client SDK. When your Mastra server starts, stored editor configuration is applied on top of your code-defined agents automatically.
+
+## When to use the editor
+
+Use the editor when you want to:
+
+- **Iterate on prompts** without redeploying — edit instructions, reorder blocks, and preview results.
+- **Manage tools at runtime** — add integration tools from Composio or Arcade, or connect MCP servers, without updating code.
+- **Version and roll back** — create snapshots of agent configuration and activate any previous version.
+- **Override code agents** — change the instructions, tools, or variables of a code-defined agent while keeping the original code as the baseline.
+
+For building agents entirely in code, see the [Agents overview](/docs/agents/overview).
+
+## Get started
+
+Install `@mastra/editor` and pass a `MastraEditor` instance to your Mastra configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your code agents */
+  },
+  editor: new MastraEditor(),
+})
+```
+
+Once registered, you can manage agents through the Studio UI or programmatically through the server API and Client SDK.
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
+
+:::
+
+## Key concepts
+
+- **[Agents](/docs/editor/agents)** — Override instructions, tools, and variables on code-defined agents without changing source files.
+- **[Prompts](/docs/editor/prompts)** — Reusable, versioned instruction templates with template variables and display conditions.
+- **[Tools](/docs/editor/tools)** — Add tools from integration providers, MCP servers, and override tool descriptions.
+
+## Versioning
+
+Every time you save changes to an agent or prompt block in the editor, a new version snapshot is created. Versions let you track changes over time, roll back to a previous configuration, and compare what changed between two snapshots.
+
+### Version lifecycle
+
+Each version has one of three statuses:
+
+| Status | Description |
+| - | - |
+| **Draft** | The latest working copy. Every save creates a new draft version. |
+| **Published** | The active version used in production. Only one version can be published at a time. |
+| **Archived** | A previous version that is no longer active. You can restore archived versions. |
+
+The typical flow is: edit the draft, then activate it to make it the published version. The previously published version becomes archived. You can do this through the Studio UI or programmatically through the API.
+
+### Studio workflow
+
+1. Open an agent's edit page and make changes.
+1. Click **Save** to create a new draft version.
+1. Click **Publish** to activate the draft as the published version.
+
+### Server endpoints
+
+Version management is available through the stored agents API:
+
+| Method | Endpoint | Description |
+| - | - | - |
+| `GET` | `/stored/agents/:agentId/versions` | List all versions. |
+| `POST` | `/stored/agents/:agentId/versions` | Create a new version. |
+| `GET` | `/stored/agents/:agentId/versions/:versionId` | Get a specific version. |
+| `POST` | `/stored/agents/:agentId/versions/:versionId/activate` | Set the active version. |
+| `POST` | `/stored/agents/:agentId/versions/:versionId/restore` | Restore a version (creates a new copy). |
+| `DELETE` | `/stored/agents/:agentId/versions/:versionId` | Delete a version. |
+| `GET` | `/stored/agents/:agentId/versions/compare?from=<id>&to=<id>` | Compare two versions. |
+
+### Client SDK
+
+The `Agent` and `StoredAgent` classes in `@mastra/client-js` have methods for version management:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient()
+const agent = client.getAgent('support-agent')
+
+// List all versions
+const versions = await agent.listVersions()
+
+// Create a new version
+const version = await agent.createVersion({
+  changeMessage: 'Updated tone to be more friendly',
+})
+
+// Activate a version
+await agent.activateVersion(version.id)
+
+// Restore a previous version (creates a new version with the same config)
+await agent.restoreVersion(versions.items[2].id)
+
+// Compare two versions
+const diff = await agent.compareVersions(versions.items[0].id, versions.items[1].id)
+```
+
+| Method | Description |
+| - | - |
+| `agent.listVersions(params?)` | List versions with optional pagination and sorting. |
+| `agent.createVersion(params?)` | Create a version snapshot with an optional change message. |
+| `agent.getVersion(versionId)` | Get a specific version by ID. |
+| `agent.activateVersion(versionId)` | Set a version as the active published version. |
+| `agent.restoreVersion(versionId)` | Restore a version by creating a new copy. |
+| `agent.deleteVersion(versionId)` | Delete a version. |
+| `agent.compareVersions(fromId, toId)` | Compare two versions and return their differences. |
+
+:::note
+
+See the [Client SDK agents reference](/reference/client-js/agents) for the full API.
+
+:::
+
+### React SDK
+
+In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
+
+```typescript
+import { useChat } from '@mastra/react'
+
+function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    agentId: 'support-agent',
+    requestContext: {
+      agentVersionId: 'abc-123',
+    },
+  })
+
+  // ... render chat UI
+}
+```
+
+## Next steps
+
+- Learn how to [edit agents](/docs/editor/agents) through the editor.
+- Set up [prompts](/docs/editor/prompts) to build reusable instruction templates.
+- Add [tools](/docs/editor/tools) from integration providers and MCP servers.
+- Explore the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
