@@ -10,9 +10,15 @@
  * events of that type are silently skipped for that handler.
  */
 
-import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent } from '@mastra/core/observability';
+import type {
+  ObservabilityExporter,
+  ObservabilityBridge,
+  ObservabilityEvent,
+  SerializationOptions,
+} from '@mastra/core/observability';
 
-import { deepClean } from '../spans/serialization';
+import type { DeepCleanOptions } from '../spans/serialization';
+import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
 
@@ -32,16 +38,16 @@ import { routeToHandler } from './route-event';
  * by deepClean unchanged, so the cleaned object is structurally identical to
  * the input for well-formed events.
  */
-function cleanEvent(event: ObservabilityEvent): ObservabilityEvent {
+function cleanEvent(event: ObservabilityEvent, options: DeepCleanOptions): ObservabilityEvent {
   switch (event.type) {
     case 'log':
-      return { type: 'log', log: deepClean(event.log) };
+      return { type: 'log', log: deepClean(event.log, options) };
     case 'metric':
-      return { type: 'metric', metric: deepClean(event.metric) };
+      return { type: 'metric', metric: deepClean(event.metric, options) };
     case 'score':
-      return { type: 'score', score: deepClean(event.score) };
+      return { type: 'score', score: deepClean(event.score, options) };
     case 'feedback':
-      return { type: 'feedback', feedback: deepClean(event.feedback) };
+      return { type: 'feedback', feedback: deepClean(event.feedback, options) };
     default:
       // Tracing events are already cleaned at span construction.
       return event;
@@ -62,8 +68,12 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
 
-  constructor() {
+  /** Resolved deepClean options applied to non-tracing events before fan-out. */
+  private deepCleanOptions: DeepCleanOptions;
+
+  constructor(opts?: { serializationOptions?: SerializationOptions }) {
     super({ name: 'ObservabilityBus' });
+    this.deepCleanOptions = mergeSerializationOptions(opts?.serializationOptions);
   }
 
   /**
@@ -146,7 +156,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // Sanitize free-form payload fields on non-tracing signals before
     // fanning out. Tracing events are already deep-cleaned at span
     // construction, so cleanEvent() returns them unchanged.
-    const cleaned = cleanEvent(event);
+    const cleaned = cleanEvent(event, this.deepCleanOptions);
 
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
