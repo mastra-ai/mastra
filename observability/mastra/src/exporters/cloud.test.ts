@@ -756,7 +756,7 @@ describe('CloudExporter', () => {
       await (exporter as any).flush();
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000',
+        'http://localhost:3000/ai/spans/publish',
         {
           method: 'POST',
           headers: {
@@ -942,10 +942,10 @@ describe('CloudExporter', () => {
       await multiSignalExporter.shutdown();
     });
 
-    it('should derive sibling signal endpoints from the traces endpoint', async () => {
+    it('should derive signal endpoints from a base endpoint', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,
-        endpoint: 'https://collector.example.com/ai/spans/publish',
+        endpoint: 'https://collector.example.com',
       });
 
       await derivedExporter.onMetricEvent(getMockMetricEvent());
@@ -963,114 +963,28 @@ describe('CloudExporter', () => {
       await derivedExporter.shutdown();
     });
 
-    it('should derive project-scoped sibling signal endpoints from the traces endpoint', async () => {
-      const derivedExporter = new CloudExporter({
-        accessToken: testJWT,
-        endpoint: 'https://collector.example.com/ai/projects/project-456/spans/publish',
-      });
-
-      await derivedExporter.onFeedbackEvent(getMockFeedbackEvent());
-      await derivedExporter.flush();
-
-      expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'https://collector.example.com/ai/projects/project-456/feedback/publish',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.any(String),
-        }),
-        3,
+    it('should reject legacy publish-path endpoints', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: testJWT,
+            endpoint: 'https://collector.example.com/ai/spans/publish',
+          }),
+      ).toThrowError(
+        'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
       );
-
-      await derivedExporter.shutdown();
     });
 
-    it('should sanitize circular log payloads before upload', async () => {
-      const circularMetadata: Record<string, unknown> = { label: 'metadata-root' };
-      circularMetadata.self = circularMetadata;
-
-      const circularData: Record<string, unknown> = {
-        metadata: circularMetadata,
-        values: [1, 2],
-      };
-      circularData.parent = circularData;
-
-      const circularExporter = new CloudExporter({
-        accessToken: testJWT,
-        endpoint: 'http://localhost:3000',
-        logsEndpoint: 'http://localhost:3000/logs',
-      });
-
-      await circularExporter.onLogEvent(
-        getMockLogEvent({
-          metadata: circularMetadata,
-          data: circularData,
-        }),
+    it('should reject base endpoints that include any path segment', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: testJWT,
+            endpoint: 'https://collector.example.com/custom-ingest',
+          }),
+      ).toThrowError(
+        'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
       );
-
-      await circularExporter.flush();
-
-      expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000/logs',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.any(String),
-        }),
-        3,
-      );
-
-      const logCall = mockFetchWithRetry.mock.calls.find(([callUrl]) => callUrl === 'http://localhost:3000/logs');
-      expect(logCall).toBeDefined();
-
-      const requestBody = JSON.parse((logCall![1] as RequestInit).body as string);
-      expect(requestBody).toMatchObject({
-        logs: [
-          {
-            metadata: {
-              label: 'metadata-root',
-              self: '[Circular]',
-            },
-            data: {
-              metadata: {
-                label: 'metadata-root',
-                self: '[Circular]',
-              },
-              values: [1, 2],
-              parent: '[Circular]',
-            },
-          },
-        ],
-      });
-
-      await circularExporter.shutdown();
-    });
-
-    it('should reuse the traces endpoint when sibling derivation is not possible', async () => {
-      const derivedExporter = new CloudExporter({
-        accessToken: testJWT,
-        endpoint: 'https://collector.example.com/custom-ingest',
-      });
-
-      await derivedExporter.onLogEvent(getMockLogEvent());
-      await derivedExporter.flush();
-
-      expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'https://collector.example.com/custom-ingest',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.any(String),
-        }),
-        3,
-      );
-
-      const logCall = mockFetchWithRetry.mock.calls.find(
-        ([callUrl]) => callUrl === 'https://collector.example.com/custom-ingest',
-      );
-      expect(logCall).toBeDefined();
-      expect(JSON.parse((logCall![1] as RequestInit).body as string)).toMatchObject({
-        logs: [{ message: 'test log', level: 'info' }],
-      });
-
-      await derivedExporter.shutdown();
     });
   });
 
@@ -1113,7 +1027,7 @@ describe('CloudExporter', () => {
 
       // fetchWithRetry should be called with maxRetries parameter
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000',
+        'http://localhost:3000/ai/spans/publish',
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
       );

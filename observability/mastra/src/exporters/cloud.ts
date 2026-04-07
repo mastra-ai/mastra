@@ -20,22 +20,22 @@ export interface CloudExporterConfig extends BaseExporterConfig {
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
-  endpoint?: string; // Legacy alias for tracesEndpoint
-  tracesEndpoint?: string; // Cloud traces endpoint
-  logsEndpoint?: string; // Cloud logs endpoint
-  metricsEndpoint?: string; // Cloud metrics endpoint
-  scoresEndpoint?: string; // Cloud scores endpoint
-  feedbackEndpoint?: string; // Cloud feedback endpoint
+  endpoint?: string; // Base cloud endpoint
+  tracesEndpoint?: string; // Base cloud endpoint
+  logsEndpoint?: string; // Explicit cloud logs endpoint override
+  metricsEndpoint?: string; // Explicit cloud metrics endpoint override
+  scoresEndpoint?: string; // Explicit cloud scores endpoint override
+  feedbackEndpoint?: string; // Explicit cloud feedback endpoint override
 }
 
 type CloudSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
 
-const SIGNAL_PATH_SEGMENTS: Record<CloudSignal, string> = {
-  traces: 'spans',
-  logs: 'logs',
-  metrics: 'metrics',
-  scores: 'scores',
-  feedback: 'feedback',
+const SIGNAL_PUBLISH_PATHS: Record<CloudSignal, string> = {
+  traces: '/ai/spans/publish',
+  logs: '/ai/logs/publish',
+  metrics: '/ai/metrics/publish',
+  scores: '/ai/scores/publish',
+  feedback: '/ai/feedback/publish',
 };
 
 const SIGNAL_PAYLOAD_KEYS: Record<CloudSignal, string> = {
@@ -46,132 +46,58 @@ const SIGNAL_PAYLOAD_KEYS: Record<CloudSignal, string> = {
   feedback: 'feedback',
 };
 
-const DEFAULT_TRACES_ENDPOINT = 'https://api.mastra.ai/ai/spans/publish';
-const CIRCULAR_REFERENCE_MARKER = '[Circular]';
+const DEFAULT_CLOUD_ENDPOINT = 'https://api.mastra.ai';
 
-function serializeError(error: Error, activeRefs: WeakSet<object>): Record<string, unknown> {
-  return {
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-    ...(error.cause !== undefined ? { cause: sanitizeForJson(error.cause, activeRefs) } : {}),
-  };
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
-function sanitizeForJson(value: unknown, activeRefs = new WeakSet<object>()): unknown {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (value instanceof Date) {
-    return value;
-  }
-
-  if (value instanceof Error) {
-    if (activeRefs.has(value)) {
-      return CIRCULAR_REFERENCE_MARKER;
+function resolveBaseEndpoint(baseEndpoint: string): string {
+  const normalizedEndpoint = trimTrailingSlashes(baseEndpoint);
+  try {
+    const parsedEndpoint = new URL(normalizedEndpoint);
+    if (parsedEndpoint.pathname !== '/' || parsedEndpoint.search || parsedEndpoint.hash) {
+      throw new MastraError({
+        id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
+        text: 'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        details: {
+          endpoint: baseEndpoint,
+        },
+      });
+    }
+    return trimTrailingSlashes(parsedEndpoint.origin);
+  } catch (error) {
+    if (error instanceof MastraError) {
+      throw error;
     }
 
-    activeRefs.add(value);
-    try {
-      return serializeError(value, activeRefs);
-    } finally {
-      activeRefs.delete(value);
-    }
-  }
-
-  if (Array.isArray(value)) {
-    if (activeRefs.has(value)) {
-      return CIRCULAR_REFERENCE_MARKER;
-    }
-
-    activeRefs.add(value);
-    try {
-      return value.map(item => sanitizeForJson(item, activeRefs));
-    } finally {
-      activeRefs.delete(value);
-    }
-  }
-
-  if (value instanceof Map) {
-    if (activeRefs.has(value)) {
-      return CIRCULAR_REFERENCE_MARKER;
-    }
-
-    activeRefs.add(value);
-    try {
-      return Object.fromEntries(
-        Array.from(value.entries(), ([key, entryValue]) => [String(key), sanitizeForJson(entryValue, activeRefs)]),
-      );
-    } finally {
-      activeRefs.delete(value);
-    }
-  }
-
-  if (value instanceof Set) {
-    if (activeRefs.has(value)) {
-      return CIRCULAR_REFERENCE_MARKER;
-    }
-
-    activeRefs.add(value);
-    try {
-      return Array.from(value.values(), item => sanitizeForJson(item, activeRefs));
-    } finally {
-      activeRefs.delete(value);
-    }
-  }
-
-  switch (typeof value) {
-    case 'bigint':
-      return value.toString();
-    case 'function':
-      return `[Function ${value.name || 'anonymous'}]`;
-    case 'symbol':
-      return value.toString();
-    case 'object': {
-      if (activeRefs.has(value)) {
-        return CIRCULAR_REFERENCE_MARKER;
-      }
-
-      activeRefs.add(value);
-      try {
-        return Object.fromEntries(
-          Object.entries(value).map(([key, entryValue]) => [key, sanitizeForJson(entryValue, activeRefs)]),
-        );
-      } finally {
-        activeRefs.delete(value);
-      }
-    }
-    default:
-      return value;
+    throw new MastraError(
+      {
+        id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
+        text: 'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        details: {
+          endpoint: baseEndpoint,
+        },
+      },
+      error,
+    );
   }
 }
 
-function safeJsonStringify(value: unknown): string {
-  return JSON.stringify(sanitizeForJson(value));
+function buildSignalEndpoint(baseEndpoint: string, signal: CloudSignal): string {
+  return `${baseEndpoint}${SIGNAL_PUBLISH_PATHS[signal]}`;
 }
 
-function deriveSiblingEndpoint(tracesEndpoint: string, signal: Exclude<CloudSignal, 'traces'>): string {
-  const tracePath = `/${SIGNAL_PATH_SEGMENTS.traces}/publish`;
-  const signalPath = `/${SIGNAL_PATH_SEGMENTS[signal]}/publish`;
-
-  if (tracesEndpoint.includes(tracePath)) {
-    return tracesEndpoint.replace(tracePath, signalPath);
-  }
-
-  return tracesEndpoint;
-}
-
-function resolveSignalEndpoint(
-  signal: Exclude<CloudSignal, 'traces'>,
-  tracesEndpoint: string,
-  explicitEndpoint?: string,
-): string {
+function resolveSignalEndpoint(signal: CloudSignal, baseEndpoint: string, explicitEndpoint?: string): string {
   if (explicitEndpoint) {
     return explicitEndpoint;
   }
 
-  return deriveSiblingEndpoint(tracesEndpoint, signal);
+  return buildSignalEndpoint(baseEndpoint, signal);
 }
 
 interface MastraCloudBuffer {
@@ -221,8 +147,9 @@ export class CloudExporter extends BaseExporter {
       this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
     }
 
-    const tracesEndpoint =
-      config.tracesEndpoint ?? config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? DEFAULT_TRACES_ENDPOINT;
+    const baseEndpoint = resolveBaseEndpoint(
+      config.tracesEndpoint ?? config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? DEFAULT_CLOUD_ENDPOINT,
+    );
 
     this.cloudConfig = {
       logger: this.logger,
@@ -231,27 +158,11 @@ export class CloudExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
-      tracesEndpoint,
-      logsEndpoint: resolveSignalEndpoint(
-        'logs',
-        tracesEndpoint,
-        config.logsEndpoint ?? process.env.MASTRA_CLOUD_LOGS_ENDPOINT,
-      ),
-      metricsEndpoint: resolveSignalEndpoint(
-        'metrics',
-        tracesEndpoint,
-        config.metricsEndpoint ?? process.env.MASTRA_CLOUD_METRICS_ENDPOINT,
-      ),
-      scoresEndpoint: resolveSignalEndpoint(
-        'scores',
-        tracesEndpoint,
-        config.scoresEndpoint ?? process.env.MASTRA_CLOUD_SCORES_ENDPOINT,
-      ),
-      feedbackEndpoint: resolveSignalEndpoint(
-        'feedback',
-        tracesEndpoint,
-        config.feedbackEndpoint ?? process.env.MASTRA_CLOUD_FEEDBACK_ENDPOINT,
-      ),
+      tracesEndpoint: resolveSignalEndpoint('traces', baseEndpoint),
+      logsEndpoint: resolveSignalEndpoint('logs', baseEndpoint, config.logsEndpoint),
+      metricsEndpoint: resolveSignalEndpoint('metrics', baseEndpoint, config.metricsEndpoint),
+      scoresEndpoint: resolveSignalEndpoint('scores', baseEndpoint, config.scoresEndpoint),
+      feedbackEndpoint: resolveSignalEndpoint('feedback', baseEndpoint, config.feedbackEndpoint),
     };
 
     this.buffer = {
@@ -513,7 +424,7 @@ export class CloudExporter extends BaseExporter {
     const options: RequestInit = {
       method: 'POST',
       headers,
-      body: safeJsonStringify({ [SIGNAL_PAYLOAD_KEYS[signal]]: records }),
+      body: JSON.stringify({ [SIGNAL_PAYLOAD_KEYS[signal]]: records }),
     };
 
     await fetchWithRetry(endpointMap[signal], options, this.cloudConfig.maxRetries);

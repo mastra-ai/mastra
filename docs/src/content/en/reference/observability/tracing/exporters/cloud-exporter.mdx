@@ -44,7 +44,7 @@ interface CloudExporterConfig extends BaseExporterConfig {
   /** Cloud access token (from env or config) */
   accessToken?: string
 
-  /** Cloud observability endpoint */
+  /** Base cloud observability endpoint */
   endpoint?: string
 }
 ```
@@ -59,7 +59,7 @@ Extends `BaseExporterConfig`, which includes:
 The exporter reads these environment variables if not provided in config:
 
 - `MASTRA_CLOUD_ACCESS_TOKEN` - Project-scoped access token for authentication (generate in your Mastra Cloud project under **Project Settings → Access Tokens**)
-- `MASTRA_CLOUD_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Base cloud endpoint (defaults to `https://api.mastra.ai`)
 
 ## Properties
 
