@@ -41,6 +41,15 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function expectOptionalProperty(record: Record<string, any>, key: string, value: unknown) {
+  if (value === undefined) {
+    expect(record).not.toHaveProperty(key);
+    return;
+  }
+
+  expect(record).toHaveProperty(key, value);
+}
+
 function getMockSpan<TType extends SpanType>(
   options: CreateSpanOptions<TType> & { id: string; traceId: string },
 ): AnyExportedSpan {
@@ -331,23 +340,23 @@ describe('CloudExporter', () => {
         name: mockSpan.name,
         type: mockSpan.type,
         spanType: mockSpan.type,
-        entityType: mockSpan.entityType,
-        entityId: mockSpan.entityId,
-        entityName: mockSpan.entityName,
-        tags: mockSpan.tags,
         startTime: mockSpan.startTime,
         startedAt: mockSpan.startTime,
         endTime: mockSpan.endTime,
         endedAt: mockSpan.endTime,
         input: mockSpan.input,
         output: mockSpan.output,
-        errorInfo: mockSpan.errorInfo,
-        error: mockSpan.errorInfo,
+        error: mockSpan.errorInfo ?? null,
         isEvent: mockSpan.isEvent,
         isRootSpan: mockSpan.isRootSpan,
         updatedAt: null,
       });
 
+      expectOptionalProperty(spanRecord, 'entityType', mockSpan.entityType);
+      expectOptionalProperty(spanRecord, 'entityId', mockSpan.entityId);
+      expectOptionalProperty(spanRecord, 'entityName', mockSpan.entityName);
+      expectOptionalProperty(spanRecord, 'tags', mockSpan.tags);
+      expectOptionalProperty(spanRecord, 'errorInfo', mockSpan.errorInfo);
       expect(spanRecord.parentSpanId).toBeUndefined();
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
     });
@@ -790,22 +799,22 @@ describe('CloudExporter', () => {
             name: mockSpan.name,
             type: mockSpan.type,
             spanType: mockSpan.type,
-            entityType: mockSpan.entityType,
-            entityId: mockSpan.entityId,
-            entityName: mockSpan.entityName,
-            tags: mockSpan.tags,
             startTime: mockSpan.startTime.toISOString(),
             endTime: mockSpan.endTime?.toISOString(),
             input: mockSpan.input,
             output: mockSpan.output,
-            errorInfo: mockSpan.errorInfo,
-            error: mockSpan.errorInfo,
+            error: mockSpan.errorInfo ?? null,
             isEvent: mockSpan.isEvent,
             isRootSpan: mockSpan.isRootSpan,
           },
         ],
       });
 
+      expectOptionalProperty(requestBody.spans[0], 'entityType', mockSpan.entityType);
+      expectOptionalProperty(requestBody.spans[0], 'entityId', mockSpan.entityId);
+      expectOptionalProperty(requestBody.spans[0], 'entityName', mockSpan.entityName);
+      expectOptionalProperty(requestBody.spans[0], 'tags', mockSpan.tags);
+      expectOptionalProperty(requestBody.spans[0], 'errorInfo', mockSpan.errorInfo);
       expect(requestBody.spans[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
       expect(requestBody.spans[0].updatedAt).toBeNull();
     });
