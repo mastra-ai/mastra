@@ -1,4 +1,4 @@
-import { createApiClient, throwApiError } from '../auth/client.js';
+import { createApiClient, throwApiError, MASTRA_PLATFORM_API_URL, authHeaders, platformFetch } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
 
@@ -156,6 +156,52 @@ export async function pollServerDeploy(
     throw new Error('Deploy timed out');
   } finally {
     logAbort.abort();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Environment variables                                              */
+/* ------------------------------------------------------------------ */
+
+export async function getServerProjectEnv(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<Record<string, string>> {
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.GET('/v1/server/projects/{id}/env', {
+    params: { path: { id: projectId } },
+  });
+
+  if (error) {
+    throwApiError('Failed to fetch environment variables', response.status);
+  }
+
+  return data.envVars;
+}
+
+export async function updateServerProjectEnv(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envVars: Record<string, string>,
+): Promise<void> {
+  // The OpenAPI type for PUT /env has requestBody?: never, so use platformFetch directly.
+  const resp = await platformFetch(
+    `${MASTRA_PLATFORM_API_URL}/v1/server/projects/${encodeURIComponent(projectId)}/env`,
+    {
+      method: 'PUT',
+      headers: {
+        ...authHeaders(token, orgId),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ envVars }),
+    },
+  );
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throwApiError('Failed to update environment variables', resp.status, text);
   }
 }
 
