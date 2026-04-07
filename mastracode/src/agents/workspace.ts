@@ -19,16 +19,22 @@ import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 // We support multiple skill locations for compatibility:
 // 1. Project-local: .mastracode/skills (project-specific mastracode skills)
 // 2. Project-local: .claude/skills (Claude Code compatible skills)
-// 3. Global: ~/.mastracode/skills (user-wide mastracode skills)
-// 4. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 3. Project-local: .agents/skills (Agent Skills spec compatible)
+// 4. Global: ~/.mastracode/skills (user-wide mastracode skills)
+// 5. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
 
 const mastraCodeLocalSkillsPath = path.join(process.cwd(), '.mastracode', 'skills');
 
 const claudeLocalSkillsPath = path.join(process.cwd(), '.claude', 'skills');
 
+const agentSkillsLocalPath = path.join(process.cwd(), '.agents', 'skills');
+
 const mastraCodeGlobalSkillsPath = path.join(os.homedir(), '.mastracode', 'skills');
 
 const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
+
+const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
 // Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
 // returns false for symlinks. Tools like `npx skills add` install skills as
@@ -78,8 +84,10 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
 export const skillPaths = collectSkillPaths([
   mastraCodeLocalSkillsPath,
   claudeLocalSkillsPath,
+  agentSkillsLocalPath,
   mastraCodeGlobalSkillsPath,
   claudeGlobalSkillsPath,
+  agentSkillsGlobalPath,
 ]);
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
