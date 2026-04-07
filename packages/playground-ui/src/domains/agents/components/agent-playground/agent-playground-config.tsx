@@ -551,10 +551,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const toolCount = tools ? Object.keys(tools).length : 0;
   const [showPreview, setShowPreview] = useState(false);
 
-  const variableEntries = useMemo(
-    () => Object.entries(variables?.properties ?? {}),
-    [variables],
-  );
+  const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
 
