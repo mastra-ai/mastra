@@ -109,7 +109,9 @@ export function DateTimeRangePicker({
               <TimePicker
                 className="mx-4 mb-3 w-auto"
                 defaultValue={draftTimeFrom}
-                onValueChange={setDraftTimeFrom}
+                onValueChange={v => {
+                  if (!disabled) setDraftTimeFrom(v);
+                }}
               />
             </div>
             <div>
@@ -122,14 +124,24 @@ export function DateTimeRangePicker({
                 disabled={disabled}
                 fromDate={draftDateFrom}
               />
-              <TimePicker className="mx-4 mb-3 w-auto" defaultValue={draftTimeTo} onValueChange={setDraftTimeTo} />
+              <TimePicker
+                className="mx-4 mb-3 w-auto"
+                defaultValue={draftTimeTo}
+                onValueChange={v => {
+                  if (!disabled) setDraftTimeTo(v);
+                }}
+              />
             </div>
           </div>
           {customRangeError && <p className={cn('text-ui-sm text-red-500 px-4 pb-1')}>{customRangeError}</p>}
           <div className={cn('flex justify-between items-center px-4 pb-3')}>
             <button
               type="button"
-              className={cn('text-ui-sm text-neutral3 hover:text-neutral4')}
+              disabled={disabled}
+              className={cn(
+                'text-ui-sm text-neutral3 hover:text-neutral4',
+                disabled && 'opacity-50 pointer-events-none',
+              )}
               onClick={() => {
                 setCustomRangeError(undefined);
                 handlePresetSelect('all');
@@ -137,7 +149,7 @@ export function DateTimeRangePicker({
             >
               &larr; Presets
             </button>
-            <Button variant="primary" size="sm" onClick={applyCustomRange}>
+            <Button variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
           </div>
