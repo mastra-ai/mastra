@@ -37,8 +37,8 @@ echo ""
 # Test health endpoint
 echo "--- Health Check ---"
 HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/health")
-HEALTH_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
 HEALTH_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n 1)
+HEALTH_BODY=$(echo "$HEALTH_RESPONSE" | sed '$d')
 
 if [ "$HEALTH_STATUS" = "200" ]; then
     echo "✅ Health check passed: $HEALTH_BODY"
@@ -53,10 +53,12 @@ echo "--- Agent Test ---"
 echo "Calling $AGENT_ID with: \"$MESSAGE\""
 echo ""
 
+# Use jq for safe JSON construction (handles special characters in MESSAGE)
+JSON_BODY=$(jq -n --arg msg "$MESSAGE" '{"messages":[{"role":"user","content":$msg}]}')
 RESPONSE=$(curl -s -w "\n---HTTP_STATUS:%{http_code}---" \
     -X POST "$SERVER_URL/api/agents/$AGENT_ID/generate" \
     -H "Content-Type: application/json" \
-    -d "{\"messages\":[{\"role\":\"user\",\"content\":\"$MESSAGE\"}]}")
+    -d "$JSON_BODY")
 
 # Parse response and status
 BODY=$(echo "$RESPONSE" | sed 's/---HTTP_STATUS:[0-9]*---$//')

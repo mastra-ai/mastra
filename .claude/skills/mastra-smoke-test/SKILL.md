@@ -112,14 +112,23 @@ Verify it has:
 - `src/mastra/index.ts` with a Mastra instance
 - At least one agent configured
 
-**If `--tag` is provided with existing project**, update dependencies:
+**If `--tag` is provided with existing project**, update ALL installed `@mastra/*` dependencies to avoid version drift:
 
 ```bash
-# Update all @mastra/* packages to the specified tag
-<pm> add @mastra/core@<tag> @mastra/memory@<tag> @mastra/libsql@<tag> mastra@<tag>
+# Find all @mastra/* packages in package.json and update them
+# This includes storage adapters like @mastra/pg, @mastra/turso if installed
+<pm> add @mastra/core@<tag> @mastra/memory@<tag> mastra@<tag>
+
+# Also update any storage adapters present in package.json:
+# If @mastra/libsql exists: <pm> add @mastra/libsql@<tag>
+# If @mastra/pg exists:     <pm> add @mastra/pg@<tag>
+# If @mastra/turso exists:  <pm> add @mastra/turso@<tag>
+# If @mastra/duckdb exists: <pm> add @mastra/duckdb@<tag>
+# If @mastra/evals exists:  <pm> add @mastra/evals@<tag>
+# If @mastra/observability exists: <pm> add @mastra/observability@<tag>
 ```
 
-Only update packages that exist in the project's `package.json`.
+Only update packages that exist in the project's `package.json`. Check before updating.
 
 ### Step 2: Storage Backend (--db)
 

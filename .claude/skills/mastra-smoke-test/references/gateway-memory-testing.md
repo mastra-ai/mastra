@@ -41,12 +41,14 @@ Test that memory persists across requests:
 # First message
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
   -H "x-thread-id: memory-test-123" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "My favorite color is blue"}]}'
 
 # Second message - should remember
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
   -H "x-thread-id: memory-test-123" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "What is my favorite color?"}]}'
 ```
@@ -62,6 +64,7 @@ Test each provider's BYOK functionality:
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
   -H "x-openai-api-key: sk-your-key" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
@@ -71,6 +74,7 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
   -H "x-anthropic-api-key: sk-ant-your-key" \
   -d '{"model": "claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
@@ -80,6 +84,7 @@ curl -X POST https://gateway.mastra.ai/v1/chat/completions \
 ```bash
 curl -X POST https://gateway.mastra.ai/v1/chat/completions \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
   -H "x-google-api-key: your-google-key" \
   -d '{"model": "gemini-1.5-pro", "messages": [{"role": "user", "content": "Hello"}]}'
 ```

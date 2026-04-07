@@ -73,7 +73,12 @@ Note the URL:
 **Verify health**:
 
 ```bash
-curl https://<project>.server.<env>.mastra.cloud/health
+# Staging
+curl https://<project>.server.staging.mastra.cloud/health
+
+# Production (no environment subdomain)
+curl https://<project>.server.mastra.cloud/health
+
 # Expected: {"success":true}
 ```
 
@@ -121,7 +126,12 @@ Both should appear in the Studio's Traces page. If only Studio traces appear, th
 After deploying a server with custom routes:
 
 ```bash
-curl https://<project>.server.<env>.mastra.cloud/hello
+# Staging
+curl https://<project>.server.staging.mastra.cloud/hello
+
+# Production
+curl https://<project>.server.mastra.cloud/hello
+
 # Expected: {"message":"Hello from custom route!"}
 ```
 
@@ -147,9 +157,14 @@ pnpx mastra@latest auth logout
 pnpx mastra@latest studio deploy -y
 pnpx mastra@latest server deploy -y
 
-# === Test ===
-curl https://<project>.server.<env>.mastra.cloud/health
-curl -X POST https://<project>.server.<env>.mastra.cloud/api/agents/<agent-id>/generate \
+# === Test (use actual URLs from deploy output) ===
+# Staging:
+curl https://<project>.server.staging.mastra.cloud/health
+# Production:
+curl https://<project>.server.mastra.cloud/health
+
+# Agent call (replace with actual URL)
+curl -X POST <server-url>/api/agents/<agent-id>/generate \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Hello"}]}'
 ```
