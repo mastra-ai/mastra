@@ -12,8 +12,41 @@
 
 import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent } from '@mastra/core/observability';
 
+import { deepClean } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
+
+/**
+ * Apply deepClean() to non-tracing observability events. Tracing events are
+ * already deep-cleaned at span construction time (see spans/base.ts and
+ * spans/default.ts), so they pass through unchanged.
+ *
+ * For log/metric/score/feedback we clean the entire exported payload object
+ * (not just the freeform sub-fields) so every user-supplied field — top-level
+ * strings like `message`/`reason`/`comment`, arrays like `tags`, nested
+ * `metadata`/`data`/`costMetadata`, and any future fields — is bounded,
+ * stripped of circular refs/functions/symbols, and safe for JSON.stringify
+ * before exporters or bridges see it.
+ *
+ * Identity scalars (timestamps, numeric score/value, IDs) are passed through
+ * by deepClean unchanged, so the cleaned object is structurally identical to
+ * the input for well-formed events.
+ */
+function cleanEvent(event: ObservabilityEvent): ObservabilityEvent {
+  switch (event.type) {
+    case 'log':
+      return { type: 'log', log: deepClean(event.log) };
+    case 'metric':
+      return { type: 'metric', metric: deepClean(event.metric) };
+    case 'score':
+      return { type: 'score', score: deepClean(event.score) };
+    case 'feedback':
+      return { type: 'feedback', feedback: deepClean(event.feedback) };
+    default:
+      // Tracing events are already cleaned at span construction.
+      return event;
+  }
+}
 
 /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
 const MAX_FLUSH_ITERATIONS = 3;
@@ -110,18 +143,23 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * and can be drained via flush().
    */
   emit(event: ObservabilityEvent): void {
+    // Sanitize free-form payload fields on non-tracing signals before
+    // fanning out. Tracing events are already deep-cleaned at span
+    // construction, so cleanEvent() returns them unchanged.
+    const cleaned = cleanEvent(event);
+
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      this.trackPromise(routeToHandler(exporter, event, this.logger));
+      this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
     }
 
     // Route to bridge (same routing logic as exporters)
     if (this.bridge) {
-      this.trackPromise(routeToHandler(this.bridge, event, this.logger));
+      this.trackPromise(routeToHandler(this.bridge, cleaned, this.logger));
     }
 
     // Deliver to subscribers (base class tracks its own pending promises)
-    super.emit(event);
+    super.emit(cleaned);
   }
 
   /**
