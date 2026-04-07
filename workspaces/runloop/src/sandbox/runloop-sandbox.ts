@@ -15,6 +15,7 @@ import {
 import type {MastraSandboxOptions, ProviderStatus, SandboxInfo} from '@mastra/core/workspace';
 import type { Devbox, Runloop, SDKDevboxCreateParams } from '@runloop/api-client';
 import { RunloopSDK } from '@runloop/api-client';
+import type { DevboxCreateParams } from '@runloop/api-client/resources';
 
 import { RunloopProcessManager } from './process-manager';
 
@@ -157,7 +158,7 @@ export class RunloopSandbox extends MastraSandbox {
     return `runloop-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  private buildCreateParams(): SDKDevboxCreateParams {
+  private buildCreateParams(): DevboxCreateParams {
     return {
       ...this._createParams,
       name: this._devboxName,
@@ -169,13 +170,13 @@ export class RunloopSandbox extends MastraSandbox {
   private async provisionDevbox(): Promise<Devbox> {
     const params = this.buildCreateParams();
     if (this._snapshotId) {
-      return this._sdk.devbox.createFromSnapshot(this._snapshotId, params as never);
+      return this._sdk.devbox.createFromSnapshot(this._snapshotId, params);
     }
     if (this._blueprintId) {
-      return this._sdk.devbox.createFromBlueprintId(this._blueprintId, params as never);
+      return this._sdk.devbox.createFromBlueprintId(this._blueprintId, params);
     }
     if (this._blueprintName) {
-      return this._sdk.devbox.createFromBlueprintName(this._blueprintName, params as never);
+      return this._sdk.devbox.createFromBlueprintName(this._blueprintName, params);
     }
     return this._sdk.devbox.create(params);
   }
@@ -211,6 +212,7 @@ export class RunloopSandbox extends MastraSandbox {
     if (this._devbox) {
       try {
         await this._devbox.suspend();
+        await this._devbox.awaitSuspended({ longPoll: { timeoutMs: this._timeout } });
         this._suspendedDevboxId = this._devbox.id;
       } catch (e) {
         this.logger.warn(`${LOG_PREFIX} suspend failed`, { error: e });
@@ -280,6 +282,7 @@ export class RunloopSandbox extends MastraSandbox {
         this._suspendedDevboxId = null;
         this._isRetrying = true;
         try {
+          this.processes.clearTracked();
           await this.ensureRunning();
           return await fn();
         } finally {

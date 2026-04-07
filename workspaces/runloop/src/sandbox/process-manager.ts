@@ -126,9 +126,17 @@ export class RunloopProcessManager extends SandboxProcessManager<RunloopSandbox>
       const wrapped = wrapCommand(command, { ...mergedOpts, env: envOnly });
       const start = Date.now();
 
-      const execution = await devbox.cmd.execAsync(wrapped, { attach_stdin: true });
+      // Deferred reference — Runloop delivers streaming data asynchronously after
+      // execAsync resolves, so handle is always assigned by the time callbacks fire.
+      let handle: RunloopProcessHandle;
 
-      const handle = new RunloopProcessHandle(this.sandbox.runloopApi, devbox.id, execution, start, mergedOpts);
+      const execution = await devbox.cmd.execAsync(wrapped, {
+        attach_stdin: true,
+        stdout: (line: string) => handle.emitStdout(line),
+        stderr: (line: string) => handle.emitStderr(line),
+      });
+
+      handle = new RunloopProcessHandle(this.sandbox.runloopApi, devbox.id, execution, start, mergedOpts);
       handle.command = command;
       this._tracked.set(handle.pid, handle);
 
@@ -150,6 +158,11 @@ export class RunloopProcessManager extends SandboxProcessManager<RunloopSandbox>
 
       return handle;
     });
+  }
+
+  /** Clear all tracked process handles (e.g. after devbox re-provisioning). */
+  clearTracked(): void {
+    this._tracked.clear();
   }
 
   async list(): Promise<ProcessInfo[]> {
