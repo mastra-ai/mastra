@@ -259,14 +259,6 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       return val;
     }
 
-    // Handle Errors specially - preserve name and message
-    if (val instanceof Error) {
-      return {
-        name: val.name,
-        message: val.message ? truncateString(val.message, maxStringLength) : undefined,
-      };
-    }
-
     // Handle circular references — only flag when the same object is an
     // ancestor of the current node (true cycle), not merely seen elsewhere.
     if (typeof val === 'object') {
@@ -277,6 +269,68 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
     }
 
     try {
+      // Handle Errors specially - preserve name, message, stack, and cause.
+      // Done inside the try so the ancestor set is cleaned up in finally,
+      // which also means cycles via `cause` are caught.
+      if (val instanceof Error) {
+        const cleanedError: Record<string, any> = {
+          name: val.name,
+          message: val.message ? truncateString(val.message, maxStringLength) : undefined,
+        };
+        if (typeof val.stack === 'string') {
+          cleanedError.stack = truncateString(val.stack, maxStringLength);
+        }
+        if ((val as any).cause !== undefined) {
+          try {
+            cleanedError.cause = helper((val as any).cause, depth + 1);
+          } catch (error) {
+            cleanedError.cause = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+          }
+        }
+        return cleanedError;
+      }
+
+      // Handle Map - convert to a plain object of entries.
+      if (val instanceof Map) {
+        const cleanedMap: Record<string, any> = {};
+        let mapKeyCount = 0;
+        const totalMapSize = val.size;
+        for (const [mapKey, mapVal] of val) {
+          if (mapKeyCount >= maxObjectKeys) {
+            cleanedMap['__truncated'] = `${totalMapSize - mapKeyCount} more keys omitted`;
+            break;
+          }
+          const keyStr = typeof mapKey === 'string' ? mapKey : String(mapKey);
+          try {
+            cleanedMap[keyStr] = helper(mapVal, depth + 1);
+          } catch (error) {
+            cleanedMap[keyStr] = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+          }
+          mapKeyCount++;
+        }
+        return cleanedMap;
+      }
+
+      // Handle Set - convert to an array.
+      if (val instanceof Set) {
+        const cleanedSet: any[] = [];
+        let i = 0;
+        const totalSetSize = val.size;
+        for (const item of val) {
+          if (i >= maxArrayLength) break;
+          try {
+            cleanedSet.push(helper(item, depth + 1));
+          } catch (error) {
+            cleanedSet.push(`[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`);
+          }
+          i++;
+        }
+        if (totalSetSize > maxArrayLength) {
+          cleanedSet.push(`[…${totalSetSize - maxArrayLength} more items]`);
+        }
+        return cleanedSet;
+      }
+
       // Handle arrays - enforce length limit
       if (Array.isArray(val)) {
         const cleaned = [];

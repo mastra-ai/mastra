@@ -851,6 +851,105 @@ describe('Span', () => {
       expect(result.properties.safe.type).toBe('string');
       expect(result.$schema).toBe('[schema getter failed]');
     });
+
+    it('should serialize Maps including nested and primitive/object values', () => {
+      const inner = new Map<string, any>([['k', 'v']]);
+      const map = new Map<any, any>([
+        ['a', 1],
+        ['b', { x: 'y' }],
+        [42, 'num-key'],
+        ['inner', inner],
+      ]);
+
+      const result = deepClean({ map });
+
+      expect(result.map).toEqual({
+        a: 1,
+        b: { x: 'y' },
+        '42': 'num-key',
+        inner: { k: 'v' },
+      });
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it('should detect self-referential Maps', () => {
+      const map = new Map<string, any>();
+      map.set('self', map);
+      map.set('ok', 1);
+
+      const result = deepClean({ map });
+
+      expect(result.map.self).toBe('[Circular]');
+      expect(result.map.ok).toBe(1);
+    });
+
+    it('should truncate Maps that exceed maxObjectKeys', () => {
+      const map = new Map<string, number>();
+      for (let i = 0; i < 5; i++) map.set(`k${i}`, i);
+
+      const result = deepClean({ map }, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(Object.keys(result.map).filter(k => k !== '__truncated').length).toBe(2);
+      expect(result.map.__truncated).toBe('3 more keys omitted');
+    });
+
+    it('should serialize Sets including nested and object items', () => {
+      const inner = new Set([1, 2]);
+      const set = new Set<any>([1, 'two', { a: 1 }, inner]);
+
+      const result = deepClean({ set });
+
+      expect(Array.isArray(result.set)).toBe(true);
+      expect(result.set).toEqual([1, 'two', { a: 1 }, [1, 2]]);
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it('should detect self-referential Sets', () => {
+      const set = new Set<any>();
+      set.add(1);
+      set.add(set);
+
+      const result = deepClean({ set });
+
+      expect(result.set[0]).toBe(1);
+      expect(result.set[1]).toBe('[Circular]');
+    });
+
+    it('should truncate Sets that exceed maxArrayLength', () => {
+      const set = new Set([1, 2, 3, 4, 5]);
+
+      const result = deepClean({ set }, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxArrayLength: 2 });
+
+      expect(result.set.slice(0, 2)).toEqual([1, 2]);
+      expect(result.set[2]).toBe('[…3 more items]');
+    });
+
+    it('should preserve Error stack and cause', () => {
+      const cause = new Error('root cause');
+      const err = new Error('outer', { cause });
+
+      const result = deepClean({ err });
+
+      expect(result.err.name).toBe('Error');
+      expect(result.err.message).toBe('outer');
+      expect(typeof result.err.stack).toBe('string');
+      expect(result.err.cause.name).toBe('Error');
+      expect(result.err.cause.message).toBe('root cause');
+      expect(typeof result.err.cause.stack).toBe('string');
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it('should detect Error cause cycles', () => {
+      const err: any = new Error('cyclic');
+      err.cause = err;
+
+      const result = deepClean({ err });
+
+      expect(result.err.name).toBe('Error');
+      expect(result.err.message).toBe('cyclic');
+      expect(result.err.cause).toBe('[Circular]');
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
   });
 
   describe('serializationOptions', () => {
