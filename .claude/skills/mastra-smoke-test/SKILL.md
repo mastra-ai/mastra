@@ -76,6 +76,9 @@ smoke test --env staging --existing-project ~/my-app --test traces
 
 ## Execution Steps
 
+> **Important**: Complete ALL setup steps (1-4) BEFORE starting the dev server or deploying.
+> This avoids restarts/redeploys which are slow, especially for cloud deployments.
+
 ### Step 1: Project Setup
 
 **Option A: Create New Project**
