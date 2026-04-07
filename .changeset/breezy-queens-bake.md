@@ -25,6 +25,6 @@ const observability = new Observability({
 });
 
 // Traces, logs, metrics, scores, and feedback now all publish through CloudExporter.
+```
 
 After updating the exporter endpoint config, the exporter will continue to work for traces, and the same exporter will now also publish structured logs, auto-extracted metrics, scores, and feedback records.
-```
