@@ -203,7 +203,7 @@ export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai  # skip for pr
 pnpx mastra@latest auth login
 
 # Deploy Studio
-pnpx mastra@latest studio deploy
+pnpx mastra@latest studio deploy -y
 # ⚠️ Capture the Studio URL from deploy output
 
 # Deploy Server  

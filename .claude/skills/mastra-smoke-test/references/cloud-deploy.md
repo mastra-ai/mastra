@@ -47,7 +47,7 @@ This opens a browser for OAuth. Complete the login flow.
 ## Deploy Studio
 
 ```bash
-pnpx mastra@latest studio deploy
+pnpx mastra@latest studio deploy -y
 ```
 
 Wait for deployment. Note the URL:
@@ -140,7 +140,7 @@ pnpx mastra@latest auth login
 pnpx mastra@latest auth logout
 
 # === Deploy ===
-pnpx mastra@latest studio deploy
+pnpx mastra@latest studio deploy -y
 pnpx mastra@latest server deploy -y
 
 # === Test ===
