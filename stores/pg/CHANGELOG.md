@@ -1,5 +1,18 @@
 # @mastra/pg
 
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Implemented `updateObservationalMemoryConfig()` in Postgres, LibSQL, and MongoDB storage adapters. This enables per-record config overrides for observational memory thresholds, supporting the new `memory.updateObservationalMemoryConfig()` API in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+### Patch Changes
+
+- Fixed observational memory date-range queries to use ISO-string timestamp columns (`createdAtZ`) instead of the raw `createdAt` column, ensuring correct filtering when querying observations by date range. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+
 ## 1.8.6
 
 ### Patch Changes

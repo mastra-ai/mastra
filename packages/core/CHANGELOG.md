@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.23.0-alpha.9
+
+### Minor Changes
+
+- Added `UpdateObservationalMemoryConfigInput` type, `updateObservationalMemoryConfig()` method stub, and `deepMergeConfig()` utility to the `MemoryStorage` base class. These additions support per-record observational memory config overrides introduced in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
 ## 1.23.0-alpha.8
 
 ### Minor Changes

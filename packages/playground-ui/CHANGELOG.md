@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 22.0.1-alpha.9
+
+### Patch Changes
+
+- Fixed agent editor crash caused by missing BrowserSessionProvider in the test chat component ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Improved agent editor variables section: replaced editable key-value inputs with a read-only tree view that correctly displays variables from requestContextSchema, including nested object properties. Fixed requestContextSchema not loading for code agents by using superjson parsing to unwrap the serialized schema envelope. ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+  - @mastra/client-js@1.13.1-alpha.9
+  - @mastra/ai-sdk@1.3.2-alpha.0
+  - @mastra/react@0.2.23-alpha.9
+
 ## 22.0.1-alpha.8
 
 ### Patch Changes
