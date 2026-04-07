@@ -17,62 +17,31 @@ import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
 
 /**
- * Apply deepClean() to free-form payload fields on non-tracing observability
- * events. Tracing events are already deep-cleaned at span construction time
- * (see spans/base.ts and spans/default.ts), so they pass through unchanged.
+ * Apply deepClean() to non-tracing observability events. Tracing events are
+ * already deep-cleaned at span construction time (see spans/base.ts and
+ * spans/default.ts), so they pass through unchanged.
  *
- * This guarantees every signal leaving the bus has been sanitized for
- * circular references, oversized strings, functions, and other non-
- * serializable values before being handed to exporters/bridges.
+ * For log/metric/score/feedback we clean the entire exported payload object
+ * (not just the freeform sub-fields) so every user-supplied field — top-level
+ * strings like `message`/`reason`/`comment`, arrays like `tags`, nested
+ * `metadata`/`data`/`costMetadata`, and any future fields — is bounded,
+ * stripped of circular refs/functions/symbols, and safe for JSON.stringify
+ * before exporters or bridges see it.
+ *
+ * Identity scalars (timestamps, numeric score/value, IDs) are passed through
+ * by deepClean unchanged, so the cleaned object is structurally identical to
+ * the input for well-formed events.
  */
 function cleanEvent(event: ObservabilityEvent): ObservabilityEvent {
   switch (event.type) {
-    case 'log': {
-      const log = event.log;
-      return {
-        type: 'log',
-        log: {
-          ...log,
-          data: log.data ? deepClean(log.data) : log.data,
-          metadata: log.metadata ? deepClean(log.metadata) : log.metadata,
-        },
-      };
-    }
-    case 'metric': {
-      const metric = event.metric;
-      const costContext = metric.costContext;
-      return {
-        type: 'metric',
-        metric: {
-          ...metric,
-          metadata: metric.metadata ? deepClean(metric.metadata) : metric.metadata,
-          costContext:
-            costContext && costContext.costMetadata
-              ? { ...costContext, costMetadata: deepClean(costContext.costMetadata) }
-              : costContext,
-        },
-      };
-    }
-    case 'score': {
-      const score = event.score;
-      return {
-        type: 'score',
-        score: {
-          ...score,
-          metadata: score.metadata ? deepClean(score.metadata) : score.metadata,
-        },
-      };
-    }
-    case 'feedback': {
-      const feedback = event.feedback;
-      return {
-        type: 'feedback',
-        feedback: {
-          ...feedback,
-          metadata: feedback.metadata ? deepClean(feedback.metadata) : feedback.metadata,
-        },
-      };
-    }
+    case 'log':
+      return { type: 'log', log: deepClean(event.log) };
+    case 'metric':
+      return { type: 'metric', metric: deepClean(event.metric) };
+    case 'score':
+      return { type: 'score', score: deepClean(event.score) };
+    case 'feedback':
+      return { type: 'feedback', feedback: deepClean(event.feedback) };
     default:
       // Tracing events are already cleaned at span construction.
       return event;
