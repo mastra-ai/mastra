@@ -1,0 +1,110 @@
+# API Testing (`--test api`)
+
+## Purpose
+Test all OpenAI-compatible API endpoints.
+
+## Prerequisites
+- `MASTRA_API_KEY` set
+- `API_URL` set
+
+## Steps
+
+### 1. Chat Completions (Primary)
+```bash
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+- [ ] Returns 200 OK
+- [ ] Response includes completion text
+
+### 2. Provider Prefix Validation
+```bash
+# Should FAIL - missing provider prefix
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+- [ ] Returns error about missing provider
+- [ ] Message is clear (not cryptic)
+
+### 3. With Thread ID
+```bash
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: test-thread-$(date +%s)" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Remember: my name is Alex"}]}'
+```
+- [ ] Returns 200 OK
+- [ ] Thread is created (verify in dashboard later)
+
+### 4. With Thread ID and Resource ID
+```bash
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: test-thread-123" \
+  -H "x-resource-id: user-456" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+- [ ] Returns 200 OK
+- [ ] Both headers accepted
+
+### 5. Legacy Completions Endpoint
+```bash
+curl -X POST "$API_URL/v1/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "prompt": "Say hello"}'
+```
+- [ ] Returns 200 OK (or note if deprecated)
+
+### 6. Responses Endpoint
+```bash
+curl -X POST "$API_URL/v1/responses" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "input": "What is 2+2?"}'
+```
+- [ ] Returns 200 OK
+
+### 7. Multiple API Keys
+1. Navigate to Dashboard → Project → API Keys
+2. Click "Create API Key"
+3. Copy the new key: `export SECOND_API_KEY="msk_..."`
+4. Test both keys:
+
+```bash
+# Test original key
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Key 1"}]}'
+
+# Test new key
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $SECOND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Key 2"}]}'
+```
+- [ ] Both keys return 200 OK
+
+## Expected Results
+
+| Check | Expected |
+|-------|----------|
+| Chat completions | 200 with response |
+| Without prefix | Error with clear message |
+| With thread ID | 200, thread created |
+| Multiple keys | Both work |
+
+## Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| 401 Unauthorized | Invalid API key | Check key is correct |
+| "No provider found" | Missing prefix | Use `openai/gpt-4o` format |
+| Timeout | Cold start | Retry after 30s |
