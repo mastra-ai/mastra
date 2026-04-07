@@ -85,6 +85,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -210,6 +211,7 @@ const routes = [
           ]),
 
       { path: '/logs', element: <Logs /> },
+      { path: '/traces', element: <Traces /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
