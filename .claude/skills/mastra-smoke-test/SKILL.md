@@ -250,6 +250,11 @@ server: { routes: [helloRoute] },
 - [ ] Submit tool with invalid input
 - [ ] Verify clear error message
 
+#### Settings (`/settings`) — staging/production only
+- [ ] Navigate to `/settings`
+- [ ] Verify settings page loads
+- [ ] Check team/project configuration visible
+
 #### Browser Agent (if `--browser-agent`)
 - [ ] Navigate to browser-agent
 - [ ] Send: "Go to example.com and tell me what you see"
@@ -336,6 +341,20 @@ Provide summary:
 **Traces missing (cloud)**
 - See `references/cloud-deploy.md` for trace verification
 - See `references/gcp-debugging.md` for debugging
+
+## Scripts
+
+### `scripts/test-server.sh`
+
+Test deployed server health and agent API:
+
+```bash
+.claude/skills/mastra-smoke-test/scripts/test-server.sh <server-url> [agent-id] [message]
+
+# Examples
+.claude/skills/mastra-smoke-test/scripts/test-server.sh https://my-app.server.staging.mastra.cloud
+.claude/skills/mastra-smoke-test/scripts/test-server.sh https://my-app.server.mastra.cloud weather-agent "Weather in Tokyo?"
+```
 
 ## Notes
 
