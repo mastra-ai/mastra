@@ -19,7 +19,7 @@ Test gateway BYOK flow with my OpenAI key
 | ------------------- | -------- | ------------ | -------------------------------------------------- |
 | `--env`             | Yes      | -            | Target environment: `staging` or `production`      |
 | `--api-key`         | No       | -            | Existing API key (skip account creation if provided) |
-| `--test`            | No       | `all`        | Specific test: `api`, `memory`, `om`, `threads`, `byok`, `usage`, `dashboard`, `onboarding`, `account`, `invites`, `rbac` |
+| `--test`            | No       | `all`        | Specific test: `api`, `memory`, `om`, `threads`, `byok`, `usage`, `dashboard`, `onboarding`, `account`, `invites`, `rbac`, `errors` |
 | `--provider`        | No       | `openai`     | Provider for BYOK testing: `openai`, `anthropic`, `google` |
 
 ## Prerequisites
@@ -63,12 +63,27 @@ export API_URL="https://server.staging.mastra.ai"
 2. Click "Sign up" / "Get started"
 3. Complete registration (Google SSO or email)
 4. Verify org and default project created
-5. Copy the generated API key
-6. **Important**: Note the API key immediately - it may not be shown again
+5. **Test onboarding state persistence**: Switch browser tabs/windows and return - onboarding should still be visible
+6. Verify provider is attached to project (check Project → Settings → Providers)
+7. Copy the generated API key
+8. **Important**: Note the API key immediately - it may not be shown again
 
 ```bash
 export MASTRA_API_KEY="msk_..."
 ```
+
+#### Onboarding State Persistence (`--test onboarding`)
+
+Test that onboarding state survives tab/window switches:
+
+1. Start onboarding flow (new account or "Create Project")
+2. **Before completing**: Switch to another browser tab or window
+3. Switch back to the Gateway tab
+4. [ ] Verify onboarding modal/flow is still visible
+5. [ ] Verify entered data is preserved
+6. [ ] Complete onboarding and verify API key is shown
+
+**Known Issue**: If onboarding disappears after tab switch, this is a bug - report it.
 
 ### 3. API Endpoint Testing (`--test api`)
 
@@ -88,6 +103,49 @@ curl -X POST "$API_URL/v1/chat/completions" \
 ```
 
 **Important**: Model format is `provider/model` (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet-4-20250514`).
+
+#### Provider Prefix Validation
+
+Test that model requests require the `provider/` prefix:
+
+```bash
+# This should FAIL - missing provider prefix
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+# Expected: Error about missing/invalid provider
+
+# This should SUCCEED - has provider prefix
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+# Expected: Successful response
+```
+
+#### Multiple API Keys
+
+Test that multiple API keys work for the same project:
+
+1. Navigate to Dashboard → Project → API Keys
+2. Click "Create API Key"
+3. Copy the new key
+4. Test both keys work:
+
+```bash
+# Test original key
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Test key 1"}]}'
+
+# Test new key
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $SECOND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Test key 2"}]}'
+```
 
 #### With Thread ID (enables memory)
 
@@ -389,9 +447,9 @@ Tests role-based access control:
    - ✅ Can manage team members
    - ✅ Can change project settings
 
-### 13. Error Handling
+### 13. Error Handling (`--test errors`)
 
-Test error scenarios:
+Test error scenarios and verify they appear in dashboard logs:
 
 #### Invalid API Key
 ```bash
@@ -418,11 +476,34 @@ curl -X POST "$API_URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Test"}]}'
 ```
-**Expected**: Should work if provider is auto-attached, otherwise error
+**Expected**: Error about missing provider prefix (e.g., "No provider found")
 
-#### Verify Errors in Dashboard
-- Check Logs page for error entries
-- Verify error details are captured
+> **Note**: If this succeeds, it means provider auto-attachment is working. Verify in response that `provider` field is populated.
+
+#### Rate Limit Testing (Optional)
+Send multiple rapid requests to trigger rate limiting:
+```bash
+for i in {1..20}; do
+  curl -X POST "$API_URL/v1/chat/completions" \
+    -H "Authorization: Bearer $MASTRA_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Test '$i'"}]}' &
+done
+wait
+```
+**Expected**: Some requests may return 429 Too Many Requests
+
+#### Verify Errors in Dashboard Logs
+
+After generating errors above:
+
+1. Navigate to Dashboard → Project → Logs
+2. [ ] Verify 401 errors appear for invalid API key attempts
+3. [ ] Verify model errors are logged
+4. [ ] Verify rate limit errors (429) appear if triggered
+5. [ ] Check error details expand correctly with request/response info
+
+**Known Issue**: If errors don't appear in logs, this may indicate a logging pipeline issue.
 
 ## Test Verification Checklist
 
@@ -430,10 +511,14 @@ curl -X POST "$API_URL/v1/chat/completions" \
 | -------------- | ----------------------------- | -------------------------------------------- | ------ |
 | **Onboarding** | Sign up flow                  | Account + project + API key created          | ⬜     |
 | **Onboarding** | API key visible               | Can copy key immediately after creation      | ⬜     |
+| **Onboarding** | State persistence             | Survives tab/window switch                   | ⬜     |
+| **Onboarding** | Provider attached             | Project has provider in settings             | ⬜     |
 | **API**        | Chat completions              | 200 response with completion                 | ⬜     |
 | **API**        | With x-thread-id              | 200 response, thread created                 | ⬜     |
 | **API**        | With x-resource-id            | 200 response, resource tracked               | ⬜     |
 | **API**        | Model with provider prefix    | Works: `openai/gpt-4o`                       | ⬜     |
+| **API**        | Model without prefix          | Error about missing provider                 | ⬜     |
+| **API**        | Multiple API keys             | Both keys work for same project              | ⬜     |
 | **Memory**     | Persistence                   | Second message recalls first                 | ⬜     |
 | **Threads**    | List threads                  | Returns array of threads                     | ⬜     |
 | **Threads**    | Get thread                    | Returns thread details                       | ⬜     |
