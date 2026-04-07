@@ -8,16 +8,18 @@ packages:
 
 # Agents
 
-The editor lets you change a code-defined agent's instructions, tools, and variables without modifying source files. Your code stays unchanged — the editor stores overrides separately and applies them at runtime when the agent is loaded. You can manage these overrides through the Studio UI or programmatically through the server API and Client SDK.
+The editor lets subject-matter experts, prompt engineers, and product teams change a code-defined agent's behavior without modifying source files. They can update instructions, swap tools, and tune variables — then test the result immediately. Your code stays unchanged as the baseline, and every override is versioned so you can roll back or compare changes at any point. You can manage overrides through the Studio UI or programmatically through the server API and Client SDK.
 
 ## When to use editor agents
 
 Use the editor to manage agents when you want to:
 
-- Iterate on an agent's instructions without redeploying.
+- Let non-developers iterate on agent behavior without waiting for deploys.
+- Test different prompt strategies or tool combinations and compare results across versions.
+- Run A/B tests by targeting different agent versions per request.
+- Roll back to a previous configuration instantly if something goes wrong.
 - Add or remove tools from a code-defined agent at runtime.
-- Test different prompt strategies before committing changes to code.
-- Let non-developer team members tune agent behavior.
+- Keep your codebase stable while experimenting with agent configuration.
 
 ## Quickstart
 
@@ -72,7 +74,7 @@ No extra code is needed — `mastra.getAgentById()` handles this automatically w
 
 ## Version selection
 
-By default, `mastra.getAgentById()` loads the published (active) version of the stored override. You can request a specific version:
+By default, `mastra.getAgentById()` loads the published (active) version of the stored override. You can request a specific version — useful for testing a draft before publishing, running A/B experiments, or pinning a user to a known-good configuration:
 
 ```typescript
 // Load the published version (default)

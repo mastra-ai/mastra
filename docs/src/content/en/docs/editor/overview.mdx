@@ -1,6 +1,6 @@
 ---
 title: "Editor overview"
-description: Manage agents, prompts, tools, and versions without changing code — through the Studio UI or programmatically.
+description: Let non-technical team members iterate on agents, version every change, and run experiments — all without redeploying.
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -9,15 +9,19 @@ packages:
 
 # Editor overview
 
-The editor is a CMS-style system for managing agents without touching your source files. You can change instructions, add tools, create reusable prompt blocks, and version every change. The [Studio](/docs/studio/overview) gives you a visual interface for these features, and you can do everything programmatically through the server API and Client SDK. When your Mastra server starts, stored editor configuration is applied on top of your code-defined agents automatically.
+The editor is a CMS-style system that separates agent configuration from code. Subject-matter experts, prompt engineers, and product teams can iterate on agents directly — changing instructions, swapping tools, and tuning behavior — while developers keep the codebase stable.
+
+Every change is versioned. You can roll back to any previous configuration, target a specific version per request, compare what changed between snapshots, and run A/B tests by routing different users to different versions. The [Studio](/docs/studio/overview) gives you a visual interface for all of this, and you can do everything programmatically through the server API and Client SDK.
 
 ## When to use the editor
 
 Use the editor when you want to:
 
-- **Iterate on prompts** without redeploying — edit instructions, reorder blocks, and preview results.
+- **Let non-developers iterate** — give subject-matter experts and prompt engineers a way to tune agent behavior without touching code or waiting for deploys.
+- **Version everything** — every save creates a snapshot so you can compare changes, roll back instantly, and audit what changed and when.
+- **Run experiments** — route different users or requests to different agent versions for A/B testing, canary rollouts, or prompt experimentation.
+- **Target specific versions** — pin a version per request, per user, or per environment so production stays stable while new versions are tested.
 - **Manage tools at runtime** — add integration tools from Composio or Arcade, or connect MCP servers, without updating code.
-- **Version and roll back** — create snapshots of agent configuration and activate any previous version.
 - **Override code agents** — change the instructions, tools, or variables of a code-defined agent while keeping the original code as the baseline.
 
 For building agents entirely in code, see the [Agents overview](/docs/agents/overview).
@@ -48,13 +52,13 @@ See the [MastraEditor reference](/reference/editor/mastra-editor) for all config
 
 ## Key concepts
 
-- **[Agents](/docs/editor/agents)** — Override instructions, tools, and variables on code-defined agents without changing source files.
-- **[Prompts](/docs/editor/prompts)** — Reusable, versioned instruction templates with template variables and display conditions.
-- **[Tools](/docs/editor/tools)** — Add tools from integration providers, MCP servers, and override tool descriptions.
+- **[Agents](/docs/editor/agents)** — Override instructions, tools, and variables on code-defined agents. Non-technical team members can iterate and test without touching source files.
+- **[Prompts](/docs/editor/prompts)** — Reusable, versioned instruction templates with template variables and display conditions. Share prompt fragments across agents and version them independently.
+- **[Tools](/docs/editor/tools)** — Add tools from integration providers, MCP servers, and override tool descriptions — all without redeploying.
 
 ## Versioning
 
-Every time you save changes to an agent or prompt block in the editor, a new version snapshot is created. Versions let you track changes over time, roll back to a previous configuration, and compare what changed between two snapshots.
+Every time you save changes to an agent or prompt block, a new version snapshot is created. Versions give you a full history of your agent's configuration — you can roll back to any previous state, compare what changed between two snapshots, and target specific versions per request for A/B testing or gradual rollouts.
 
 ### Version lifecycle
 
@@ -64,9 +68,11 @@ Each version has one of three statuses:
 | - | - |
 | **Draft** | The latest working copy. Every save creates a new draft version. |
 | **Published** | The active version used in production. Only one version can be published at a time. |
-| **Archived** | A previous version that is no longer active. You can restore archived versions. |
+| **Archived** | A previous version that is no longer active. You can restore any archived version. |
 
-The typical flow is: edit the draft, then activate it to make it the published version. The previously published version becomes archived. You can do this through the Studio UI or programmatically through the API.
+The typical flow is: edit the draft, test it, then activate it to make it the published version. The previously published version becomes archived so you can restore it if needed. You can do this through the Studio UI or programmatically through the API.
+
+This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
 
 ### Studio workflow
 
@@ -150,6 +156,17 @@ function Chat() {
   // ... render chat UI
 }
 ```
+
+### Version targeting and experimentation
+
+Because every version has a unique ID, you can route different requests to different agent configurations. This opens up several patterns:
+
+- **A/B testing** — split traffic between two published versions and compare performance metrics.
+- **Canary rollouts** — send a small percentage of requests to a new version before promoting it.
+- **Per-user targeting** — pin specific users or accounts to a version while others use the default.
+- **Environment separation** — use the draft version in staging and the published version in production.
+
+Pass a `versionId` or `status` when calling the agent — through the Client SDK, server query parameters, or React SDK `requestContext` — and the correct version is loaded automatically.
 
 ## Next steps
 
