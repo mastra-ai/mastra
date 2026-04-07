@@ -312,7 +312,7 @@ export class AIV4Adapter {
               parts.push({ type: 'step-start' });
             }
 
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'text' as const,
               text: aiV4Part.text,
             };
@@ -324,7 +324,7 @@ export class AIV4Adapter {
           }
 
           case 'tool-call': {
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'tool-invocation' as const,
               toolInvocation: {
                 state: 'call',
@@ -367,7 +367,7 @@ export class AIV4Adapter {
                 args: toolArgs,
               };
 
-              const part: MastraDBMessage['content']['parts'][number] = {
+              const part: UIMessageV4Part = {
                 type: 'tool-invocation',
                 toolInvocation: invocation,
               };
