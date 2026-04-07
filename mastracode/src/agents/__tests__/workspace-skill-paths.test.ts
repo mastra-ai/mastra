@@ -16,10 +16,6 @@ describe('workspace skill path definitions', () => {
   ];
 
   it('includes all expected skill directories as candidates', async () => {
-    // We cannot import the module directly because collectSkillPaths filters
-    // out directories that do not exist on disk. Instead, verify that the
-    // source file declares the expected path variables so the discovery
-    // list stays in sync with the spec.
     const fs = await import('node:fs');
     const source = fs.readFileSync(path.join(cwd, 'src/agents/workspace.ts'), 'utf-8');
 
