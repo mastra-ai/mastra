@@ -12,10 +12,7 @@ export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   });
 };
 
-export const useStoredAgent = (
-  agentId?: string,
-  options?: { status?: 'draft' | 'published'; enabled?: boolean },
-) => {
+export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published'; enabled?: boolean }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
   const { enabled = true, ...queryOptions } = options ?? {};
