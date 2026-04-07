@@ -144,33 +144,6 @@ function createStructuredOutput(text: CreateResponseBody['text']) {
   }
 }
 
-function formatResponseModel({
-  requestedModel,
-  resolvedModel,
-}: {
-  requestedModel?: string;
-  resolvedModel: ResolvedAgentModel;
-}) {
-  if (requestedModel) {
-    return requestedModel;
-  }
-
-  if (resolvedModel.provider && resolvedModel.modelId) {
-    const publicProviderId = resolvedModel.provider.includes('.')
-      ? resolvedModel.provider.split('.')[0]!
-      : resolvedModel.provider;
-    return `${publicProviderId}/${resolvedModel.modelId}`;
-  }
-
-  if (resolvedModel.modelId) {
-    return resolvedModel.modelId;
-  }
-
-  throw new HTTPException(500, {
-    message: 'Responses route could not determine the effective model for this request',
-  });
-}
-
 function getStreamedMessageOutputItem(response: ResponseObject, responseId: string) {
   return (
     response.output.find(
@@ -653,10 +626,24 @@ async function prepareCreateResponseRequest({
     requestContext,
     modelConfig: body.model,
   });
-  const responseModel = formatResponseModel({
-    requestedModel: body.model,
-    resolvedModel,
-  });
+  const responseModel =
+    body.model ??
+    (() => {
+      if (resolvedModel.provider && resolvedModel.modelId) {
+        const publicProviderId = resolvedModel.provider.includes('.')
+          ? resolvedModel.provider.split('.')[0]!
+          : resolvedModel.provider;
+        return `${publicProviderId}/${resolvedModel.modelId}`;
+      }
+
+      if (resolvedModel.modelId) {
+        return resolvedModel.modelId;
+      }
+
+      throw new HTTPException(500, {
+        message: 'Responses route could not determine the effective model for this request',
+      });
+    })();
   const shouldStore = body.store ?? false;
   const needsMemoryStore = shouldStore || Boolean(body.conversation_id) || Boolean(body.previous_response_id);
   const agentMemoryStore = needsMemoryStore
