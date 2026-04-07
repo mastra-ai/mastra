@@ -29,8 +29,10 @@ deploy test --env production --existing-project ~/my-existing-app
 | `--tag`              | `-t`  | Version tag for create-mastra (e.g., `latest`, `alpha`)        | No       | `latest`     |
 | `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`               | No       | `pnpm`       |
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`          | No       | `openai`     |
+| `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`             | No       | `libsql`     |
 | `--skip-browser`     |       | Skip browser-based UI testing, use curl only                   | No       | `false`      |
-| `--test`             |       | Run specific test only: `studio`, `server`, `traces`, `tools`, `workflows` | No | (full test) |
+| `--test`             |       | Run specific test: `studio`, `server`, `traces`, `tools`, `workflows`, `account`, `invites`, `rbac` | No | (full test) |
+| `--byok`             |       | Test bring-your-own-key flow (requires user's API keys)        | No       | `false`      |
 
 ## Prerequisites
 
@@ -83,6 +85,37 @@ cd <project-name>
 - `-c agents,tools,workflows,scorers` - Include all components for full testing
 - `-l <provider>` - Set the LLM provider (`openai`, `anthropic`, etc.)
 - `-e` - Include example code (weather agent, tools, workflows)
+
+### Storage Backend Selection (--db)
+
+When creating a new project, specify the storage backend:
+
+| Backend | Description | Additional Setup |
+|---------|-------------|------------------|
+| `libsql` | Default SQLite-compatible (local) | None |
+| `pg` | PostgreSQL | Requires `DATABASE_URL` in `.env` |
+| `turso` | Turso (cloud SQLite) | Requires `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` |
+
+**Example with PostgreSQL:**
+
+```bash
+pnpm create mastra@latest my-app -c agents,tools -l openai -e
+# Then update package.json to use @mastra/pg instead of @mastra/libsql
+# And add DATABASE_URL to .env
+```
+
+**Example with Turso:**
+
+```bash
+pnpm create mastra@latest my-app -c agents,tools -l openai -e
+# Then update package.json to use @mastra/turso
+# And add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN to .env
+```
+
+After creating the project, verify storage works by:
+1. Deploying the server
+2. Making an agent call
+3. Checking that threads/messages persist in the selected database
 
 **Option B: Use Existing Project**
 
@@ -228,6 +261,8 @@ Verify the response includes weather data (or relevant agent output).
 
 ## Test Verification Checklist
 
+### Core Tests (Always Run)
+
 | Category | Test | Expected Result | Status |
 |----------|------|-----------------|--------|
 | **Deploy** | Studio deploy | URL accessible, can sign in | ⬜ |
@@ -239,6 +274,21 @@ Verify the response includes weather data (or relevant agent output).
 | **Traces** | Studio traces | Traces visible after chat | ⬜ |
 | **Traces** | Server traces | Traces from API call visible in Studio | ⬜ |
 | **Server** | Server API call | Returns valid agent response | ⬜ |
+
+### Extended Tests (When Applicable)
+
+| Category | Test | Expected Result | Status |
+|----------|------|-----------------|--------|
+| **Account** | Studio sign-up | New account created, dashboard accessible | ⬜ |
+| **Account** | Gateway sign-up | New account created, API key accessible | ⬜ |
+| **Invites** | Send invitation | Email sent to invitee | ⬜ |
+| **Invites** | Accept invitation | Invitee can access project | ⬜ |
+| **RBAC** | Viewer role | Read-only access, no modifications | ⬜ |
+| **RBAC** | Editor role | Can modify, cannot manage team | ⬜ |
+| **RBAC** | Admin role | Full access to all features | ⬜ |
+| **BYOK** | Header key | Agent uses key from header | ⬜ |
+| **BYOK** | Settings key | Agent uses key from project settings | ⬜ |
+| **Storage** | DB connector | Project works with selected DB | ⬜ |
 
 ## Partial Testing (--test flag)
 
@@ -259,7 +309,81 @@ smoke test --test tools --existing-project ~/my-app
 
 # Test workflows page only
 smoke test --test workflows --existing-project ~/my-app
+
+# Test new account creation flow
+smoke test --test account --env staging
+
+# Test team invitation flow
+smoke test --test invites --existing-project ~/my-app
+
+# Test RBAC/permissions
+smoke test --test rbac --existing-project ~/my-app
 ```
+
+### Account Creation Flow (`--test account`)
+
+Tests new user registration entry points:
+
+1. **Via Studio** (`studio.mastra.ai`):
+   - Navigate to `https://studio.mastra.ai` (or staging equivalent)
+   - Click "Sign up" / "Get started"
+   - Complete registration flow
+   - Verify redirected to project creation or dashboard
+
+2. **Via Gateway** (`gateway.mastra.ai`):
+   - Navigate to `https://gateway.mastra.ai` (or staging equivalent)
+   - Complete registration flow
+   - Verify account created and API key accessible
+
+### Invitation Flow (`--test invites`)
+
+Tests team invitation functionality:
+
+1. Navigate to deployed Studio → Settings → Team
+2. Click "Invite team member"
+3. Enter email address for test teammate
+4. Send invitation
+5. (If possible) Accept invitation from another account
+6. Verify invited user can access the project
+
+### RBAC Testing (`--test rbac`)
+
+Tests role-based access control:
+
+1. Invite a team member with "Viewer" role
+2. As that user, verify:
+   - Can view agents, tools, workflows
+   - Cannot modify or delete resources
+   - Cannot change project settings
+
+3. Change role to "Editor"
+4. Verify:
+   - Can modify agents, tools, workflows
+   - Cannot change team settings
+
+5. Change role to "Admin"
+6. Verify:
+   - Full access to all features
+
+## BYOK Testing (--byok flag)
+
+Tests bring-your-own-key functionality:
+
+### Via HTTP Header
+
+```bash
+# Test with OpenAI key via header
+curl -X POST https://<project>.server.<env>.mastra.cloud/api/agents/weather-agent/generate \
+  -H "Content-Type: application/json" \
+  -H "x-openai-api-key: sk-your-openai-key" \
+  -d '{"messages": [{"role": "user", "content": "What is the weather in Tokyo?"}]}'
+```
+
+### Via Project Settings
+
+1. Navigate to Studio → Settings → API Keys
+2. Add OpenAI/Anthropic/Google API key
+3. Verify agents use the configured key instead of default
 
 ## Troubleshooting
 

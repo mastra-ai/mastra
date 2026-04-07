@@ -28,6 +28,7 @@ smoke test -d ~/projects -n my-test-app -t alpha --pm pnpm --llm anthropic
 | `--tag`       | `-t`  | Version tag for create-mastra (e.g., `latest`, `alpha`, `0.10.6`)            | **Yes**  | -        |
 | `--pm`        | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`                             | No       | `npm`    |
 | `--llm`       | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
+| `--db`        |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
 
 ## Prerequisites
 
@@ -65,6 +66,37 @@ bunx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <ll
 - `-e` - Include example code
 
 Wait for the installation to complete. This may take 1-2 minutes.
+
+### Storage Backend Selection (--db)
+
+When using a non-default storage backend, additional setup is required after project creation:
+
+| Backend | Package | Environment Variables |
+|---------|---------|----------------------|
+| `libsql` (default) | `@mastra/libsql` | None (local file) |
+| `pg` | `@mastra/pg` | `DATABASE_URL` |
+| `turso` | `@mastra/turso` | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+
+**For PostgreSQL:**
+```bash
+# Add dependency
+<pm> add @mastra/pg
+
+# Update .env
+DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+```
+
+**For Turso:**
+```bash
+# Add dependency
+<pm> add @mastra/turso
+
+# Update .env
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-token
+```
+
+Then update `src/mastra/index.ts` to use the appropriate storage provider.
 
 ### Step 2: Verify Project Structure
 
