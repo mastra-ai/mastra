@@ -28,7 +28,7 @@ smoke test --env staging --existing-project ~/my-app --test traces
 | Parameter            | Short | Description                                                                  | Required | Default  |
 | -------------------- | ----- | ---------------------------------------------------------------------------- | -------- | -------- |
 | `--env`              | `-e`  | Environment: `local`, `staging`, `production`                                | **Yes**  | -        |
-| `--directory`        | `-d`  | Parent directory for new project                                             | *        | -        |
+| `--directory`        | `-d`  | Parent directory for new project                                             | *        | `~/mastra-smoke-tests` |
 | `--name`             | `-n`  | Project name                                                                 | *        | -        |
 | `--existing-project` |       | Path to existing Mastra project                                              | *        | -        |
 | `--tag`              | `-t`  | Version tag for create-mastra or dependency update (e.g., `latest`, `alpha`) | No       | `latest` |
@@ -41,6 +41,8 @@ smoke test --env staging --existing-project ~/my-app --test traces
 | `--byok`             |       | Test bring-your-own-key flow (staging/production)                            | No       | `false`  |
 
 \* Either `--directory` + `--name` OR `--existing-project` is required
+
+> **Note**: If `--directory` is not specified for a new project, default to `~/mastra-smoke-tests`.
 
 ## Test Options (`--test`)
 
