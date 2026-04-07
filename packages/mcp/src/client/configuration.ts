@@ -14,8 +14,8 @@ import type {
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
-import { isReconnectableMCPError } from './error-utils';
 import type { MastraMCPServerDefinition } from './client';
+import { isReconnectableMCPError } from './error-utils';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
