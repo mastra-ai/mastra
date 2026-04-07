@@ -26,7 +26,7 @@ deploy test --env production --existing-project ~/my-existing-app
 | `--existing-project` |       | Path to existing Mastra project                                | No       | -            |
 | `--directory`        | `-d`  | Parent directory for new project (required with --new-project) | No       | -            |
 | `--name`             | `-n`  | Project name for new project (required with --new-project)     | No       | -            |
-| `--tag`              | `-t`  | Version tag for create-mastra (e.g., `latest`, `alpha`)        | No       | `latest`     |
+| `--tag`              | `-t`  | Version tag for create-mastra or dependency update (e.g., `latest`, `alpha`) | No | `latest` |
 | `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`               | No       | `pnpm`       |
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`          | No       | `openai`     |
 | `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`             | No       | `libsql`     |
@@ -128,6 +128,25 @@ Verify it has:
 - `package.json` with `@mastra/core`
 - `src/mastra/index.ts` with a Mastra instance
 - At least one agent configured
+
+**If `--tag` is provided with existing project**, update dependencies to match the tag:
+
+```bash
+# Detect which @mastra/* packages are in package.json and update them
+# Example for alpha tag:
+<pm> add @mastra/core@alpha @mastra/memory@alpha @mastra/libsql@alpha mastra@alpha
+
+# Example for latest tag:
+<pm> add @mastra/core@latest @mastra/memory@latest @mastra/libsql@latest mastra@latest
+```
+
+Only update packages that already exist in the project's `package.json`. Common packages to check:
+- `@mastra/core`
+- `@mastra/memory`
+- `@mastra/libsql` / `@mastra/pg` / `@mastra/turso`
+- `@mastra/observability`
+- `@mastra/evals`
+- `mastra` (CLI)
 
 ### Browser Agent Setup (--browser-agent)
 

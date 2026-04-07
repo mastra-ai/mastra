@@ -22,6 +22,10 @@ smoke test -d ~/projects -n my-test-app -t alpha --pm pnpm --llm anthropic
 # Use existing project
 smoke test --existing-project ~/my-existing-app
 smoke test --existing-project ~/my-app --tag alpha  # Updates deps to alpha
+
+# Run specific test only
+smoke test --existing-project ~/my-app --test agents
+smoke test --existing-project ~/my-app --test traces
 ```
 
 ## Parameters
@@ -35,6 +39,7 @@ smoke test --existing-project ~/my-app --tag alpha  # Updates deps to alpha
 | `--pm`               | `-p`  | Package manager: `npm`, `yarn`, `pnpm`, or `bun`                             | No       | `npm`    |
 | `--llm`              | `-l`  | LLM provider: `openai`, `anthropic`, `groq`, `google`, `cerebras`, `mistral` | No       | `openai` |
 | `--db`               |       | Storage backend: `libsql` (default), `pg`, `turso`                           | No       | `libsql` |
+| `--test`             |       | Run specific test only: `agents`, `tools`, `workflows`, `traces`, `scorers`  | No       | (full)   |
 
 \* Either `--directory` + `--name` OR `--existing-project` is required
 \** Required for new projects, optional for existing (updates deps when provided)
@@ -324,6 +329,39 @@ Provide a summary:
 - Total tests passed/failed
 - Any errors encountered
 - Recommendations for issues found
+
+## Partial Testing (--test flag)
+
+To test a specific flow only:
+
+```bash
+# Test just agents page and chat
+smoke test --existing-project ~/my-app --test agents
+
+# Test just tools page and execution
+smoke test --existing-project ~/my-app --test tools
+
+# Test just workflows
+smoke test --existing-project ~/my-app --test workflows
+
+# Test just traces/observability
+smoke test --existing-project ~/my-app --test traces
+
+# Test just scorers/evaluation
+smoke test --existing-project ~/my-app --test scorers
+```
+
+### What each --test option covers
+
+| Option | Tests Performed |
+|--------|-----------------|
+| `agents` | Navigate to `/agents`, list agents, chat with an agent |
+| `tools` | Navigate to `/tools`, list tools, execute a tool |
+| `workflows` | Navigate to `/workflows`, list workflows, run a workflow |
+| `traces` | Navigate to `/observability`, verify traces appear from previous actions |
+| `scorers` | Navigate to `/evaluation?tab=scorers`, verify scorers list |
+
+**Note**: The `traces` test should be run after `agents`, `tools`, or `workflows` to have traces to verify.
 
 ## Test Verification Checklist
 
