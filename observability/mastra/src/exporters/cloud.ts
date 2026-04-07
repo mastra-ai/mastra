@@ -21,11 +21,7 @@ export interface CloudExporterConfig extends BaseExporterConfig {
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
   endpoint?: string; // Base cloud endpoint
-  tracesEndpoint?: string; // Base cloud endpoint
-  logsEndpoint?: string; // Explicit cloud logs endpoint override
-  metricsEndpoint?: string; // Explicit cloud metrics endpoint override
-  scoresEndpoint?: string; // Explicit cloud scores endpoint override
-  feedbackEndpoint?: string; // Explicit cloud feedback endpoint override
+  tracesEndpoint?: string; // Explicit cloud traces endpoint override
 }
 
 type CloudSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
@@ -49,7 +45,11 @@ const SIGNAL_PAYLOAD_KEYS: Record<CloudSignal, string> = {
 const DEFAULT_CLOUD_ENDPOINT = 'https://api.mastra.ai';
 
 function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, '');
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
 }
 
 function resolveBaseEndpoint(baseEndpoint: string): string {
@@ -125,10 +125,18 @@ type MastraCloudMetricRecord = MetricEvent['metric'];
 type MastraCloudScoreRecord = ScoreEvent['score'];
 type MastraCloudFeedbackRecord = FeedbackEvent['feedback'];
 
-/** Config type with required fields resolved (excludes optional BaseExporterConfig fields) */
-type ResolvedCloudConfig = Required<Omit<CloudExporterConfig, keyof BaseExporterConfig | 'endpoint'>> & {
+type ResolvedCloudConfig = {
   logger: BaseExporterConfig['logger'];
   logLevel: NonNullable<BaseExporterConfig['logLevel']>;
+  maxBatchSize: number;
+  maxBatchWaitMs: number;
+  maxRetries: number;
+  accessToken: string;
+  tracesEndpoint: string;
+  logsEndpoint: string;
+  metricsEndpoint: string;
+  scoresEndpoint: string;
+  feedbackEndpoint: string;
 };
 
 export class CloudExporter extends BaseExporter {
@@ -148,7 +156,7 @@ export class CloudExporter extends BaseExporter {
     }
 
     const baseEndpoint = resolveBaseEndpoint(
-      config.tracesEndpoint ?? config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? DEFAULT_CLOUD_ENDPOINT,
+      config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? DEFAULT_CLOUD_ENDPOINT,
     );
 
     this.cloudConfig = {
@@ -158,11 +166,11 @@ export class CloudExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
-      tracesEndpoint: resolveSignalEndpoint('traces', baseEndpoint),
-      logsEndpoint: resolveSignalEndpoint('logs', baseEndpoint, config.logsEndpoint),
-      metricsEndpoint: resolveSignalEndpoint('metrics', baseEndpoint, config.metricsEndpoint),
-      scoresEndpoint: resolveSignalEndpoint('scores', baseEndpoint, config.scoresEndpoint),
-      feedbackEndpoint: resolveSignalEndpoint('feedback', baseEndpoint, config.feedbackEndpoint),
+      tracesEndpoint: resolveSignalEndpoint('traces', baseEndpoint, config.tracesEndpoint),
+      logsEndpoint: resolveSignalEndpoint('logs', baseEndpoint),
+      metricsEndpoint: resolveSignalEndpoint('metrics', baseEndpoint),
+      scoresEndpoint: resolveSignalEndpoint('scores', baseEndpoint),
+      feedbackEndpoint: resolveSignalEndpoint('feedback', baseEndpoint),
     };
 
     this.buffer = {

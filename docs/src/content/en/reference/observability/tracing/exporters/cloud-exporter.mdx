@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # CloudExporter
 
-Sends traces to Mastra Cloud for online visualization and monitoring.
+Sends tracing spans, logs, metrics, scores, and feedback to Mastra Cloud for online visualization and monitoring.
 
 ## Constructor
 
@@ -46,6 +46,9 @@ interface CloudExporterConfig extends BaseExporterConfig {
 
   /** Base cloud observability endpoint */
   endpoint?: string
+
+  /** Explicit cloud traces endpoint override */
+  tracesEndpoint?: string
 }
 ```
 
@@ -75,7 +78,9 @@ readonly name = 'mastra-cloud-observability-exporter';
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
+Processes tracing events for Cloud export.
+
+Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED` are ignored. Matching spans are buffered and uploaded to the Cloud traces endpoint on the next flush.
 
 <PropertiesTable
   props={[
@@ -87,6 +92,100 @@ Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
   },
 ]}
 />
+
+**Returns:** `Promise<void>` after the tracing event has been accepted for buffering or ignored.
+
+### `onLogEvent`
+
+```typescript prettier:false
+async onLogEvent(event: LogEvent): Promise<void>
+```
+
+Processes log signals for Cloud export.
+
+Every `LogEvent` passed to this handler is buffered and exported to the Cloud logs endpoint derived from the configured base endpoint. Unlike tracing, there is no additional event-status filtering at the `CloudExporter` level. If the exporter is disabled, this method becomes a no-op.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'LogEvent',
+    description: 'The log event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the log event has been accepted for buffering.
+
+### `onMetricEvent`
+
+```typescript prettier:false
+async onMetricEvent(event: MetricEvent): Promise<void>
+```
+
+Processes metric signals for Cloud export.
+
+Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `CloudExporter`; the exporter forwards every metric event it receives unless it is disabled.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'MetricEvent',
+    description: 'The metric event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the metric event has been accepted for buffering.
+
+### `onScoreEvent`
+
+```typescript prettier:false
+async onScoreEvent(event: ScoreEvent): Promise<void>
+```
+
+Processes score signals for Cloud export.
+
+Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'ScoreEvent',
+    description: 'The score event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the score event has been accepted for buffering.
+
+### `onFeedbackEvent`
+
+```typescript prettier:false
+async onFeedbackEvent(event: FeedbackEvent): Promise<void>
+```
+
+Processes feedback signals for Cloud export.
+
+Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `CloudExporter`; all feedback events received here are forwarded unless the exporter is disabled.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'FeedbackEvent',
+    description: 'The feedback event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the feedback event has been accepted for buffering.
 
 ### flush
 
@@ -115,10 +214,10 @@ If no access token is provided via config or environment variable, the exporter:
 
 ### Batching
 
-The exporter batches spans for efficient network usage:
+The exporter batches tracing spans, logs, metrics, scores, and feedback for efficient network usage:
 
-- Flushes when batch size reaches `maxBatchSize`
-- Flushes when `maxBatchWaitMs` elapsed since first span in batch
+- Flushes when total buffered event count reaches `maxBatchSize`
+- Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
 - Flushes on `shutdown()`
 
 ### Error handling
@@ -127,11 +226,11 @@ The exporter batches spans for efficient network usage:
 - Drops batches after all retries fail
 - Logs errors but continues processing new events
 
-### Event Processing
+### Signal Processing
 
-- Only processes `SPAN_ENDED` events
-- Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
-- Formats spans to MastraCloudSpanRecord format
+- `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
+- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
+- All supported signal batches are uploaded to their matching Cloud publish endpoints during `flush()` and `shutdown()`
 
 ## `MastraCloudSpanRecord`
 

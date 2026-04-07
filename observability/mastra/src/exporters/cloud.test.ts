@@ -877,19 +877,25 @@ describe('CloudExporter', () => {
   });
 
   describe('Additional Signal Support', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-123',
+      name: 'test-span',
+      type: SpanType.MODEL_GENERATION,
+      isEvent: false,
+      traceId: 'trace-456',
+      input: { prompt: 'test' },
+      output: { response: 'result' },
+    });
+
     beforeEach(() => {
       vi.clearAllMocks();
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     });
 
-    it('should upload logs, metrics, scores, and feedback to their configured endpoints', async () => {
+    it('should upload logs, metrics, scores, and feedback to their derived endpoints', async () => {
       const multiSignalExporter = new CloudExporter({
         accessToken: testJWT,
         endpoint: 'http://localhost:3000',
-        logsEndpoint: 'http://localhost:3000/logs',
-        metricsEndpoint: 'http://localhost:3000/metrics',
-        scoresEndpoint: 'http://localhost:3000/scores',
-        feedbackEndpoint: 'http://localhost:3000/feedback',
       });
 
       await multiSignalExporter.onLogEvent(getMockLogEvent());
@@ -914,27 +920,27 @@ describe('CloudExporter', () => {
         return call!;
       };
 
-      const logCall = getCallByUrl('http://localhost:3000/logs');
-      const metricCall = getCallByUrl('http://localhost:3000/metrics');
-      const scoreCall = getCallByUrl('http://localhost:3000/scores');
-      const feedbackCall = getCallByUrl('http://localhost:3000/feedback');
+      const logCall = getCallByUrl('http://localhost:3000/ai/logs/publish');
+      const metricCall = getCallByUrl('http://localhost:3000/ai/metrics/publish');
+      const scoreCall = getCallByUrl('http://localhost:3000/ai/scores/publish');
+      const feedbackCall = getCallByUrl('http://localhost:3000/ai/feedback/publish');
 
-      expect(logCall[0]).toBe('http://localhost:3000/logs');
+      expect(logCall[0]).toBe('http://localhost:3000/ai/logs/publish');
       expect(JSON.parse((logCall[1] as RequestInit).body as string)).toMatchObject({
         logs: [{ message: 'test log', level: 'info' }],
       });
 
-      expect(metricCall[0]).toBe('http://localhost:3000/metrics');
+      expect(metricCall[0]).toBe('http://localhost:3000/ai/metrics/publish');
       expect(JSON.parse((metricCall[1] as RequestInit).body as string)).toMatchObject({
         metrics: [{ name: 'mastra.tokens', value: 42 }],
       });
 
-      expect(scoreCall[0]).toBe('http://localhost:3000/scores');
+      expect(scoreCall[0]).toBe('http://localhost:3000/ai/scores/publish');
       expect(JSON.parse((scoreCall[1] as RequestInit).body as string)).toMatchObject({
         scores: [{ scorerId: 'relevance', score: 0.9 }],
       });
 
-      expect(feedbackCall[0]).toBe('http://localhost:3000/feedback');
+      expect(feedbackCall[0]).toBe('http://localhost:3000/ai/feedback/publish');
       expect(JSON.parse((feedbackCall[1] as RequestInit).body as string)).toMatchObject({
         feedback: [{ feedbackType: 'thumbs', value: 'up' }],
       });
@@ -953,6 +959,30 @@ describe('CloudExporter', () => {
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
         'https://collector.example.com/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
+    it('should allow an explicit traces endpoint override', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+        tracesEndpoint: 'https://collector.example.com/custom/spans/publish',
+      });
+
+      await derivedExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/custom/spans/publish',
         expect.objectContaining({
           method: 'POST',
           body: expect.any(String),
