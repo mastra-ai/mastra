@@ -1079,11 +1079,8 @@ export async function recallThreadFromStart({
   const MAX_LIMIT = 20;
   const normalizedPage = Math.max(Math.min(page, MAX_PAGE), 1);
   const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
-
-  const estimatedTotalPages = Math.max(1, Math.ceil(1 / normalizedLimit));
-  const initialEffectivePage = Math.min(normalizedPage, Math.max(estimatedTotalPages, normalizedPage));
-  const initialPageIndex = initialEffectivePage - 1;
-  const fetchCount = initialPageIndex * normalizedLimit + normalizedLimit + 1;
+  const pageIndex = normalizedPage - 1;
+  const fetchCount = pageIndex * normalizedLimit + normalizedLimit + 1;
 
   const result = await memory.recall({
     threadId,
@@ -1093,19 +1090,15 @@ export async function recallThreadFromStart({
     orderBy: { field: 'createdAt', direction: anchor === 'end' ? 'DESC' : 'ASC' },
   });
 
-  const total = typeof result.total === 'number' ? result.total : result.messages.length;
-  const totalPages = Math.max(1, Math.ceil(total / normalizedLimit));
-  const effectivePage = Math.min(normalizedPage, totalPages);
-  const pageIndex = effectivePage - 1;
-  const windowSize = pageIndex * normalizedLimit + normalizedLimit + 1;
   const visibleMessages =
     anchor === 'end'
-      ? result.messages.slice(0, windowSize).filter(hasVisibleParts).reverse()
-      : result.messages.slice(0, windowSize).filter(hasVisibleParts);
+      ? result.messages.slice(0, fetchCount).filter(hasVisibleParts).reverse()
+      : result.messages.slice(0, fetchCount).filter(hasVisibleParts);
   const skip = pageIndex * normalizedLimit;
   const messages = visibleMessages.slice(skip, skip + normalizedLimit);
-  const hasNextPage = anchor === 'end' ? pageIndex > 0 : effectivePage < totalPages;
-  const hasPrevPage = anchor === 'end' ? effectivePage < totalPages : pageIndex > 0;
+  const hasExtraMessage = visibleMessages.length > skip + messages.length;
+  const hasNextPage = messages.length > 0 ? (anchor === 'end' ? pageIndex > 0 : hasExtraMessage) : false;
+  const hasPrevPage = messages.length > 0 ? (anchor === 'end' ? hasExtraMessage : pageIndex > 0) : pageIndex > 0;
 
   let allParts: FormattedPart[] = [];
   const timestamps = new Map<string, Date>();
@@ -1125,7 +1118,9 @@ export async function recallThreadFromStart({
   const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
   const emptyMessage =
     messages.length === 0
-      ? '(no messages in this thread)'
+      ? pageIndex > 0
+        ? `(no messages found on page ${normalizedPage} for this thread)`
+        : '(no messages in this thread)'
       : partType || toolName
         ? '(no message parts matched the current filters)'
         : '(no messages found)';
@@ -1134,7 +1129,7 @@ export async function recallThreadFromStart({
     messages: rendered.text || emptyMessage,
     count: messages.length,
     cursor: messages[0]?.id || '',
-    page: effectivePage,
+    page: normalizedPage,
     limit: normalizedLimit,
     detail,
     hasNextPage,

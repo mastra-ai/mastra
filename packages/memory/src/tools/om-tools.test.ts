@@ -1682,7 +1682,7 @@ describe('om-tools', () => {
       expect(page3.hasPrevPage).toBe(true);
     });
 
-    it('should clamp oversized pages to the last available page', async () => {
+    it('should return an explicit empty-page message for oversized pages', async () => {
       const result = await recallThreadFromStart({
         memory: memory as any,
         threadId,
@@ -1691,9 +1691,9 @@ describe('om-tools', () => {
         limit: 2,
       });
 
-      expect(result.page).toBe(3);
-      expect(result.count).toBe(1);
-      expect(result.messages).toContain('Message 5 content');
+      expect(result.page).toBe(50);
+      expect(result.count).toBe(0);
+      expect(result.messages).toBe('(no messages found on page 50 for this thread)');
       expect(result.hasNextPage).toBe(false);
       expect(result.hasPrevPage).toBe(true);
     });
