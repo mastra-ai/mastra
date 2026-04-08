@@ -314,4 +314,79 @@ describe('convertMessages', () => {
       expect((uploadPart as any).data.percent).toBe(100);
     });
   });
+
+  describe('tool-only assistant messages', () => {
+    // Regression: MastraDBMessages with only tool-invocation parts (no text)
+    // should still produce valid UIMessages and survive round-trip conversion.
+
+    const toolOnlyMessage: MastraDBMessage = {
+      id: 'tool-only-msg',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        content: undefined,
+        toolInvocations: [
+          {
+            toolCallId: 'call-1',
+            toolName: 'get-weather',
+            args: { city: 'SF' },
+            state: 'result',
+            result: { temp: 72, condition: 'sunny' },
+          },
+        ],
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'call-1',
+              toolName: 'get-weather',
+              args: { city: 'SF' },
+              state: 'result',
+              result: { temp: 72, condition: 'sunny' },
+            },
+          },
+        ],
+      },
+    };
+
+    it('should produce valid AIV5.UI parts for tool-only assistant messages', () => {
+      const uiMessages = convertMessages(toolOnlyMessage).to('AIV5.UI');
+      expect(uiMessages).toHaveLength(1);
+
+      const msg = uiMessages[0];
+      expect(msg.parts.length).toBeGreaterThan(0);
+
+      // Tool parts use the `tool-${toolName}` type convention
+      const toolPart = msg.parts.find((p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'));
+      expect(toolPart).toBeDefined();
+    });
+
+    it('should preserve tool invocations in MastraDB → AIV5.UI → MastraDB round-trip', () => {
+      // Step 1: Convert to AIV5.UI
+      const uiMessages = convertMessages(toolOnlyMessage).to('AIV5.UI');
+      expect(uiMessages).toHaveLength(1);
+
+      const toolParts = uiMessages[0].parts.filter(
+        (p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'),
+      );
+      expect(toolParts.length).toBeGreaterThan(0);
+
+      // Step 2: Convert back to MastraDB
+      const roundTripped = convertMessages(uiMessages).to('Mastra.V2');
+      expect(roundTripped).toHaveLength(1);
+
+      const rt = roundTripped[0];
+      expect(rt.content).toBeDefined();
+      expect(rt.content.parts).toBeDefined();
+
+      // Tool invocations should survive the round-trip
+      const rtToolParts = rt.content.parts!.filter((p: any) => p.type === 'tool-invocation');
+      expect(rtToolParts.length).toBeGreaterThan(0);
+
+      expect(rt.content.toolInvocations).toBeDefined();
+      expect(rt.content.toolInvocations!.length).toBeGreaterThan(0);
+      expect(rt.content.toolInvocations![0].toolCallId).toBe('call-1');
+    });
+  });
 });

@@ -1656,6 +1656,24 @@ describe('savePerStep should persist messages during step execution (issue #1398
     expect(toolResultPart).toBeDefined();
     expect(toolResultPart.toolInvocation.result).toEqual(rawResult);
     expect(toolResultPart.providerMetadata?.mastra?.modelOutput).toEqual(modelOutput);
+
+    // Verify uiMessages in the response include parts from ALL steps,
+    // not just the last one (regression: savePerStep drains newResponseMessages).
+    const response = await result.response;
+    const uiMessages = response?.uiMessages ?? [];
+    expect(uiMessages.length).toBeGreaterThan(0);
+
+    const allParts = uiMessages.flatMap((m: any) => m.parts);
+
+    // Must include a tool part from step 1
+    const hasToolPart = allParts.some((p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'));
+    expect(hasToolPart, 'uiMessages should include tool parts from step 1').toBe(true);
+
+    // Must include text from step 2
+    const hasTextPart = allParts.some(
+      (p: any) => p.type === 'text' && typeof p.text === 'string' && p.text.includes('Response after tool'),
+    );
+    expect(hasTextPart, 'uiMessages should include text parts from step 2').toBe(true);
   });
 
   it('should persist messages from completed steps when stream is aborted', async () => {

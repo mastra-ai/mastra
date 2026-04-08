@@ -526,6 +526,115 @@ describe('Stream ID Consistency', () => {
     }
   });
 
+  it('should return complete uiMessages with tool calls when savePerStep is enabled (V2 model)', async () => {
+    let callCount = 0;
+
+    const model = new MockLanguageModelV2({
+      doStream: (async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start' as const, warnings: [] },
+              { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'test-tool',
+                input: '{"input":"test"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: 'text-1' },
+            { type: 'text-delta' as const, id: 'text-1', delta: 'Tool result received.' },
+            { type: 'text-end' as const, id: 'text-1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      }) as any,
+    });
+
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async () => ({ result: 'Tool executed' }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-tool-ids-save-per-step',
+      name: 'Test Agent Tool IDs SavePerStep',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+      tools: { 'test-tool': testTool },
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.stream('Use the test tool', {
+      memory: { thread: threadId, resource: resourceId },
+      savePerStep: true,
+    });
+
+    await streamResult.consumeStream();
+
+    // Verify uiMessages via response promise
+    const response = await streamResult.response;
+    const uiMessages = response?.uiMessages ?? [];
+    expect(uiMessages.length).toBeGreaterThan(0);
+
+    const allParts = uiMessages.flatMap((m: any) => m.parts);
+
+    // Must include tool parts from step 1
+    const hasToolPart = allParts.some((p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'));
+    expect(hasToolPart, 'uiMessages should include tool parts from step 1').toBe(true);
+
+    // Must include text from step 2
+    const hasTextPart = allParts.some((p: any) => p.type === 'text' && typeof p.text === 'string' && p.text.length > 0);
+    expect(hasTextPart, 'uiMessages should include text parts from step 2').toBe(true);
+
+    // Verify uiMessage IDs match what was persisted to memory
+    const uiMessageIds = uiMessages.map((m: any) => m.id);
+    const allRecalled = await memory.recall({ threadId });
+
+    for (const uiMsgId of uiMessageIds) {
+      const matchInMemory = allRecalled.messages.find(m => m.id === uiMsgId);
+      expect(matchInMemory, `uiMessage ID ${uiMsgId} should exist in memory`).toBeDefined();
+    }
+
+    // Verify getFullOutput also has complete uiMessages
+    const fullOutput = await streamResult.getFullOutput();
+    const fullUiMessages = fullOutput.response?.uiMessages ?? [];
+    expect(fullUiMessages.length).toBeGreaterThan(0);
+
+    const fullAllParts = fullUiMessages.flatMap((m: any) => m.parts);
+    const fullHasToolPart = fullAllParts.some((p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'));
+    expect(fullHasToolPart, 'getFullOutput uiMessages should include tool parts from step 1').toBe(true);
+  });
+
   describe('onFinish callback with structured output', () => {
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
