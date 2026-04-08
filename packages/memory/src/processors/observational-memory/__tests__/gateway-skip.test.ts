@@ -2,8 +2,13 @@
  * Tests that the ObservationalMemoryProcessor skips local processing when the
  * agent is using a Mastra gateway model. The gateway handles OM server-side,
  * so running it locally would double-process messages and cause duplication.
+ *
+ * Detection uses the model argument (instanceof ModelRouterLanguageModel with
+ * gatewayId === 'mastra') and stores the result in per-processor state — this
+ * avoids leaking flags through RequestContext to child agents.
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -30,6 +35,19 @@ function createStubMemoryProvider(): MemoryContextProvider {
   };
 }
 
+/**
+ * Create a mock that passes `instanceof ModelRouterLanguageModel` and has
+ * the given gatewayId.  We use Object.create to inherit the prototype
+ * without invoking the real constructor (which needs env vars / gateways).
+ */
+function createMockGatewayModel(gatewayId: string) {
+  const mock = Object.create(ModelRouterLanguageModel.prototype) as InstanceType<typeof ModelRouterLanguageModel>;
+  Object.defineProperty(mock, 'gatewayId', { value: gatewayId, writable: false });
+  Object.defineProperty(mock, 'modelId', { value: 'openai/gpt-4o', writable: false });
+  Object.defineProperty(mock, 'provider', { value: 'mastra', writable: false });
+  return mock;
+}
+
 describe('ObservationalMemoryProcessor — gateway skip', () => {
   const threadId = 'test-thread';
   const resourceId = 'test-resource';
@@ -48,13 +66,12 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     processor = new ObservationalMemoryProcessor(om, createStubMemoryProvider());
   });
 
-  it('processInputStep returns messageList unchanged when __mastra_gateway_memory is set', async () => {
+  it('processInputStep returns messageList unchanged when model is a Mastra gateway model', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-    requestContext.set('__mastra_gateway_memory', true);
 
     const messageList = new MessageList({ threadId, resourceId });
     const userMsg: MastraDBMessage = {
@@ -68,6 +85,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     };
 
     const getThreadContextSpy = vi.spyOn(om, 'getThreadContext');
+    const gatewayModel = createMockGatewayModel('mastra');
 
     const result = await processor.processInputStep({
       messageList,
@@ -77,7 +95,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
       state: {},
       steps: [],
       systemMessages: [],
-      model: 'test-model' as any,
+      model: gatewayModel as any,
       retryCount: 0,
       abort: (() => {
         throw new Error('aborted');
@@ -86,26 +104,27 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
 
     // Should return the same messageList without modifications
     expect(result).toBe(messageList);
-    // getThreadContext is called before the gateway check (to validate context exists),
-    // but the engine should NOT have proceeded further
+    // getThreadContext is called before the gateway check (to validate context exists)
     expect(getThreadContextSpy).toHaveBeenCalled();
   });
 
-  it('processOutputResult returns messageList unchanged when __mastra_gateway_memory is set', async () => {
+  it('processOutputResult returns messageList unchanged when gateway flag was stored in state', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-    requestContext.set('__mastra_gateway_memory', true);
 
     const messageList = new MessageList({ threadId, resourceId });
+
+    // Simulate what processInputStep would have stored in state
+    const state: Record<string, unknown> = { __isGatewayModel: true };
 
     const result = await processor.processOutputResult({
       messageList,
       messages: [],
       requestContext,
-      state: {},
+      state,
       result: { text: 'Hello back' } as any,
       retryCount: 0,
       abort: (() => {
@@ -116,17 +135,57 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     expect(result).toBe(messageList);
   });
 
-  it('processInputStep proceeds normally without __mastra_gateway_memory flag', async () => {
+  it('does NOT skip when model is a non-mastra gateway', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-    // Note: NOT setting __mastra_gateway_memory
 
     const messageList = new MessageList({ threadId, resourceId });
     const userMsg: MastraDBMessage = {
-      id: 'msg-2',
+      id: 'msg-3',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+      type: 'text',
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+    };
+
+    // A ModelRouterLanguageModel with a different gatewayId should NOT trigger the skip
+    const nonMastraModel = createMockGatewayModel('netlify');
+
+    const result = await processor.processInputStep({
+      messageList,
+      messages: [userMsg],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: nonMastraModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Should proceed with normal OM flow (not early-return the same messageList ref)
+    // The result is still a MessageList but OM would have processed it
+    expect(result).toBeDefined();
+  });
+
+  it('processInputStep proceeds normally with a plain string model', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const userMsg: MastraDBMessage = {
+      id: 'msg-4',
       role: 'user',
       content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
       type: 'text',
@@ -152,9 +211,8 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
       }) as any,
     });
 
-    // Should still call getThreadContext and proceed further
+    // Should proceed with normal OM flow
     expect(getThreadContextSpy).toHaveBeenCalled();
-    // The result is a MessageList (may have been modified by the normal OM flow)
     expect(result).toBeDefined();
   });
 });

@@ -4493,11 +4493,6 @@ export class Agent<
 
     const resolvedModel = llm.getModel();
     const isGatewayModel = resolvedModel instanceof ModelRouterLanguageModel && resolvedModel.gatewayId === 'mastra';
-    if (isGatewayModel) {
-      // Signal to processors (e.g. ObservationalMemory) that the gateway
-      // handles memory operations — local processors should skip their work.
-      requestContext.set('__mastra_gateway_memory', true);
-    }
     if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
