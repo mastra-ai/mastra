@@ -99,6 +99,7 @@ export default function Evaluation() {
                   href="https://mastra.ai/en/docs/evals/datasets/overview"
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="Datasets documentation"
                   tooltipContent="Go to Datasets documentation"
                 >
                   <BookIcon />
@@ -114,6 +115,7 @@ export default function Evaluation() {
                 href="https://mastra.ai/en/docs/evals/overview"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Scorers documentation"
                 tooltipContent="Go to Scorers documentation"
               >
                 <BookIcon />
@@ -125,6 +127,7 @@ export default function Evaluation() {
                 href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Experiments documentation"
                 tooltipContent="Go to Experiments documentation"
               >
                 <BookIcon />
