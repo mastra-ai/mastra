@@ -15,16 +15,17 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 
 **ALL of these tests must be run. Do not skip any unless a hard blocker prevents it.**
 
-| Test                              | Required        | Notes                     |
-| --------------------------------- | --------------- | ------------------------- |
-| 1. Extended Conversation          | ✅              | Baseline test             |
-| 2. Token Usage Analysis           | ✅              | Dashboard verification    |
-| 3. OM Token Tracking              | ✅              | Usage page check          |
-| 4. OM Threshold Settings          | ✅              | Settings page check       |
-| 5. Multi-Model OM                 | ✅              | Cross-provider test       |
-| 6. Message Buffering (Flood)      | ✅              | Concurrency test          |
-| 7. Long Conversation (30 prompts) | ✅ Required     | Run ALL 30 prompts        |
-| 8. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (8a-8e) |
+| Test                              | Required        | Notes                        |
+| --------------------------------- | --------------- | ---------------------------- |
+| 1. Extended Conversation          | ✅              | Baseline test                |
+| 2. Token Usage Analysis           | ✅              | Dashboard verification       |
+| 3. OM Token Tracking              | ✅              | Usage page check             |
+| 4. OM Threshold Settings          | ✅              | Settings page check          |
+| 5. Multi-Model OM                 | ✅              | Cross-provider test          |
+| 6. Message Buffering (Flood)      | ✅              | Concurrency test             |
+| 7. Long Conversation (30 prompts) | ✅ Required     | Run ALL 30 prompts           |
+| 8. Full History Replay            | ✅              | Tests stateless client       |
+| 9. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (9a-9e)    |
 
 **Your job is to:**
 
@@ -181,9 +182,35 @@ The script sends 30 detailed prompts and tracks token progression.
 - [ ] Final prompt_tokens count (likely ~25k, below OM threshold)
 - [ ] Any errors
 
-**Note:** This test stays below the 30k OM threshold, so no OM activation is expected. Test 8 is designed to trigger OM.
+**Note:** This test stays below the 30k OM threshold, so no OM activation is expected. Test 9 is designed to trigger OM.
 
-### 8. Local + Gateway OM Test — CRITICAL, DO NOT SKIP
+---
+
+### 8. Full History Replay Test
+
+Test what happens when the client sends full conversation history (simulating stateless replay). This is a pure Gateway test.
+
+**Run the script:**
+
+```bash
+./scripts/test-om-history-replay.sh "$API_URL" "$MASTRA_API_KEY"
+```
+
+The script:
+
+1. Builds a 5-message conversation
+2. Sends ALL history again with one new message
+3. Checks thread state for message deduplication
+
+**What to record:**
+
+- [ ] Token count for the full-history request
+- [ ] Final message count in Gateway vs expected
+- [ ] Whether Gateway handled replay correctly
+
+---
+
+### 9. Local + Gateway OM Test — CRITICAL, DO NOT SKIP
 
 **Goal: Test local agent + Gateway OM interaction at high token counts.**
 
@@ -193,11 +220,11 @@ This tests what happens when:
 2. Requests route through Gateway (which also has OM)
 3. Conversation reaches ~30k+ tokens (OM activation threshold)
 
-Run ALL scenarios (8a-8f). Do not skip any.
+Run ALL scenarios (9a-9e). Do not skip any.
 
 ---
 
-#### 8a. Setup
+#### 9a. Setup
 
 **Read `references/tests/local-setup.md` first.** Follow those instructions to:
 
@@ -213,7 +240,27 @@ Run ALL scenarios (8a-8f). Do not skip any.
 
 ---
 
-#### 8b. Baseline: Memory Only → Gateway
+#### 9b. Verify Gateway Routing
+
+**Before any other test, verify that local requests actually hit Gateway.**
+
+1. Open Gateway Dashboard → Logs page
+2. Note the current number of requests
+3. In local Studio, send ONE test message to `memory-agent`: "Hello, this is a routing test"
+4. Refresh Gateway Dashboard → Logs page
+5. Look for a new request with content containing "routing test"
+
+**Verification:**
+
+- [ ] Note if request appears in Gateway Logs
+- [ ] Note if thread was created in Gateway Dashboard → Threads
+- [ ] If NO request appears: `.env` is misconfigured — fix before proceeding
+
+**Do not proceed to 9c until Gateway routing is confirmed.**
+
+---
+
+#### 9c. Baseline: Memory Only → Gateway
 
 Test the `memory-agent` (no local OM):
 
@@ -232,7 +279,7 @@ Test the `memory-agent` (no local OM):
 
 ---
 
-#### 8c. Local OM + Gateway OM (Intensive, 30k+ tokens)
+#### 9d. Local OM + Gateway OM (Intensive, 30k+ tokens)
 
 Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed the OM threshold.
 
@@ -267,31 +314,7 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 ---
 
-#### 8d. Full History Replay Test
-
-Test what happens when the client sends full conversation history (simulating stateless replay).
-
-**Run the script:**
-
-```bash
-./scripts/test-om-history-replay.sh "$API_URL" "$MASTRA_API_KEY"
-```
-
-The script:
-
-1. Builds a 5-message conversation
-2. Sends ALL history again with one new message
-3. Checks thread state for message deduplication
-
-**What to record:**
-
-- [ ] Token count for the full-history request
-- [ ] Final message count in Gateway vs expected
-- [ ] Whether Gateway handled replay correctly
-
----
-
-#### 8e. MastraCode Integration Test
+#### 9e. MastraCode Integration Test
 
 Test using `createMastraCode` which has built-in Memory + OM + Gateway support.
 
@@ -311,14 +334,22 @@ async function test() {
     cwd: process.cwd(),
   });
 
+  // Initialize the harness
+  await harness.init();
+
+  // Subscribe to events to see responses
+  harness.subscribe((event) => {
+    if (event.type === 'message_update' && event.message.role === 'assistant') {
+      console.log(`Response: ${event.message.content?.toString().substring(0, 100)}...`);
+    }
+  });
+
   // Send multiple messages
   for (let i = 1; i <= 10; i++) {
-    console.log(`Sending message ${i}...`);
-    const result = await harness.generate({
-      messages: [{ role: 'user', content: `Tell me fact ${i} about TypeScript` }],
+    console.log(`\nSending message ${i}...`);
+    await harness.sendMessage({
+      content: `Tell me fact ${i} about TypeScript`,
     });
-    console.log(`Response ${i}: ${result.text?.substring(0, 100)}...`);
-    console.log(`Tokens: ${JSON.stringify(result.usage)}`);
   }
 }
 
@@ -333,18 +364,19 @@ npx tsx test-mastracode.ts
 
 **What to record:**
 
-- [ ] Token progression across 10 messages
-- [ ] Any errors
+- [ ] Whether messages are sent successfully
+- [ ] Any errors during initialization or messaging
 - [ ] Check Gateway Logs for the requests
 
 ---
 
 #### Summary Checklist
 
-- [ ] 8b: Memory-only agent baseline completed
-- [ ] 8c: OM agent intensive test (30k+ tokens) completed
-- [ ] 8d: Full history replay test completed
-- [ ] 8e: MastraCode integration test completed
+- [ ] 9a: Setup complete, agents visible in local Studio
+- [ ] 9b: Gateway routing verified (request appears in Gateway Logs)
+- [ ] 9c: Memory-only agent baseline completed
+- [ ] 9d: OM agent intensive test (30k+ tokens) completed
+- [ ] 9e: MastraCode integration test completed
 
 ## Observations to Report
 
@@ -355,16 +387,17 @@ For each test, note:
 - Dashboard UI behavior (Logs, Usage, Settings pages)
 - Thread integrity (messages in correct order, no duplicates)
 
-| Test                           | What to Record                                      |
-| ------------------------------ | --------------------------------------------------- |
-| Extended conversation          | Token progression across 12 messages                |
-| Token usage analysis           | Breakdown visible in Logs page                      |
-| OM tracking                    | Whether "Memory Tokens" appears in Usage            |
-| Settings                       | OM threshold values displayed                       |
-| Multi-model                    | Whether context persists across providers           |
-| Flood test                     | Success/failure counts, any buffering behavior      |
-| Long conversation (30 prompts) | Token progression (~25k), cache behavior            |
-| 8b: Memory-only baseline       | Token progression, thread state                     |
-| 8c: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes |
-| 8d: Full history replay        | How Gateway handles full history send               |
-| 8e: MastraCode integration     | Token progression, Gateway Logs                     |
+| Test                           | What to Record                                       |
+| ------------------------------ | ---------------------------------------------------- |
+| Extended conversation          | Token progression across 12 messages                 |
+| Token usage analysis           | Breakdown visible in Logs page                       |
+| OM tracking                    | Whether "Memory Tokens" appears in Usage             |
+| Settings                       | OM threshold values displayed                        |
+| Multi-model                    | Whether context persists across providers            |
+| Flood test                     | Success/failure counts, any buffering behavior       |
+| Long conversation (30 prompts) | Token progression (~25k), cache behavior             |
+| Full history replay            | How Gateway handles full history send                |
+| 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
+| 9c: Memory-only baseline       | Token progression, thread state                      |
+| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
+| 9e: MastraCode integration     | Token progression, Gateway Logs                      |
