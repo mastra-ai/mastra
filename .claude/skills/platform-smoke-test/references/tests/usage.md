@@ -53,16 +53,21 @@ Navigate to Dashboard → Project → Usage
 - [ ] Date range selector works
 
 ### 3. Check Date Range
-1. Select different date ranges (Today, Week, Month)
-2. [ ] Data updates accordingly
-3. [ ] Recent requests appear in "Today"
+**⚠️ REQUIRED: Actually click each date range option**
+
+1. [ ] Click "Today" filter - record what data appears
+2. [ ] Click "Week" filter - record if data changes
+3. [ ] Click "Month" filter - record if data changes  
+4. [ ] Note if recent requests appear correctly in each view
 
 ### 4. Verify Cost Tab
-Navigate to Usage → Cost tab
+**⚠️ REQUIRED: Navigate to the Cost tab**
 
-- [ ] Cost breakdown by model
-- [ ] Input vs output costs shown
-- [ ] BYOK requests show $0 (if applicable)
+1. Find and click on "Cost" tab (may be a sub-tab within Usage)
+2. In the Cost view:
+   - [ ] Record cost breakdown by model
+   - [ ] Record if input vs output costs shown separately
+   - [ ] Record if BYOK requests show $0 (if you've made BYOK requests)
 
 ## Observations to Report
 

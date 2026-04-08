@@ -13,9 +13,14 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 
 ## How OM Works
 - OM extracts key facts from conversations to avoid re-sending full history
-- Triggers based on **token thresholds**, not message count (but 5+ messages typically reaches threshold)
-- OM tokens appear as a separate metric in Usage dashboard
-- Without OM, prompt_tokens would grow linearly with conversation length
+- Triggers based on **token thresholds**, not message count
+- OM tokens appear as a separate metric in Usage dashboard (may show as "Memory Tokens")
+
+**Your job is to:**
+1. Run the tests and record token growth patterns
+2. Check Settings → OM Thresholds to see actual threshold values
+3. Record whether token growth is linear or plateaus
+4. Record any `cached_tokens` values and note their source (provider vs Mastra)
 
 ## Steps
 
@@ -177,20 +182,71 @@ done
 - [ ] Check Logs page for full token breakdown
 
 ### 8. Local + Gateway OM Test
-Test behavior when using a local Mastra project with OM configured against the gateway:
+Test behavior when a local Mastra project with memory routes requests through the Gateway.
 
-> **Note:** This test requires a local Mastra project. See `mastra-smoke-test` skill for project setup.
+**Setup (if not already done):**
 
-1. Create a local Mastra project with OM configured in agent
-2. Configure agent to use gateway as model provider (`mastra/openai/gpt-4o`)
-3. Run extended conversation through the agent
-4. Compare behavior to direct gateway API calls
+1. Create a local Mastra project:
+```bash
+cd ~/mastra-smoke-tests
+pnpx create-mastra@latest local-gateway-test --components agents,tools
+cd local-gateway-test
+```
+
+2. Configure agent to use Gateway as the model provider. In `src/mastra/agents/index.ts`:
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+
+export const gatewayAgent = new Agent({
+  name: 'gateway-agent',
+  instructions: 'You are a helpful assistant.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o',
+    toolChoice: 'auto',
+  },
+  memory: new Memory(),
+});
+```
+
+3. Set environment to route through Gateway. In `.env`:
+```bash
+OPENAI_API_KEY=msk_your_gateway_api_key  # Use your Gateway API key
+OPENAI_BASE_URL=https://server.mastra.ai/v1  # Point to Gateway
+```
+
+4. Start the local dev server:
+```bash
+pnpm dev
+```
+
+**Test Steps:**
+
+1. Open local Studio (usually `http://localhost:4111`)
+2. Chat with the gateway-agent:
+   - Send 5+ messages in sequence
+   - Record each response and any delays
+
+3. Check Gateway dashboard (`$GATEWAY_URL`):
+   - Navigate to Threads page
+   - [ ] Note if thread appears from local agent
+   - [ ] Note message count in thread
+
+4. Check Gateway Logs:
+   - [ ] Note token counts for each request
+   - [ ] Note if requests show as coming from local agent
+
+5. Compare to direct API:
+   - [ ] Note any differences in token counts
+   - [ ] Note any message duplication
+   - [ ] Note any "message too long" errors
 
 **Verification:**
-- [ ] Note if token counts differ from direct API calls
-- [ ] Note any message duplication in thread
-- [ ] Note any errors about message length
-- [ ] Check Logs page for actual vs expected message counts
+- [ ] Record whether Gateway received requests from local agent
+- [ ] Record token counts from Gateway Logs
+- [ ] Record thread state in Gateway dashboard
+- [ ] Note any errors or unexpected behavior
 
 ## Observations to Report
 
@@ -205,8 +261,8 @@ For each test, note:
 | Extended conversation | Token progression across 12 messages |
 | Token usage analysis | Breakdown visible in Logs page |
 | OM tracking | Whether "Memory Tokens" appears in Usage |
-| Settings | Whether OM thresholds are displayed |
+| Settings | OM threshold values displayed |
 | Multi-model | Whether context persists across providers |
 | Flood test | Success/failure counts, any buffering behavior |
 | Token explosion | Token progression across 25 messages, any errors |
-| Local + Gateway | Comparison to direct API behavior |
+| Local + Gateway | Gateway Logs token counts, thread state, any duplication or errors |

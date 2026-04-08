@@ -46,11 +46,15 @@ Example: `--test api,memory` → Run steps 1, 2, and 3 only.
 
 ### Multi-User Tests
 
-Tests 11-12 (invites, rbac) require multiple accounts. Try:
-- Email aliases (e.g., `user+test@example.com`)
-- Browser incognito for second account
+Tests 11-12 (invites, rbac) require multiple accounts.
 
-Only skip if you've tried and cannot create/access a second account.
+**⚠️ BEFORE SKIPPING, YOU MUST TRY THESE WORKAROUNDS:**
+
+1. **Email aliases**: Use `yourname+test1@gmail.com` - most email providers support this
+2. **Incognito window**: Open a second browser in incognito/private mode for the second account
+3. **Different browser**: Use Chrome for account 1, Firefox for account 2
+
+**Only skip if you've actually attempted at least one workaround and it failed.** Document which workaround you tried and why it failed.
 
 ---
 

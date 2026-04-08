@@ -3,9 +3,17 @@
 ## Purpose
 Test new user registration and onboarding flow.
 
+## ⚠️ Using an Existing Account?
+
+**If you already have an account, you MUST still test state persistence using "Create Project":**
+
+1. Go to Dashboard → Create New Project
+2. Run all state persistence tests (Tab Switch, Window Switch, Rapid Switch) during project creation
+3. These tests ARE REQUIRED - don't skip them just because you have an account
+
 ## Prerequisites
-- Email that hasn't been used on Gateway
-- Browser with cleared cookies (or incognito)
+- Email that hasn't been used on Gateway (OR existing account for project creation tests)
+- Browser with cleared cookies (or incognito) for fresh signup
 
 ## Steps
 

@@ -29,20 +29,23 @@ Navigate to Dashboard → Logs
 
 - [ ] Request logs displayed in table
 - [ ] Can filter by date/status
-- [ ] Log details expand when clicked
 
-**Token Verification:**
-1. Find a recent request
-2. Expand the log entry
-3. [ ] prompt_tokens displayed (not just cached_tokens)
-4. [ ] completion_tokens displayed
-5. [ ] total_tokens displayed
-6. [ ] Record cache_write_tokens value
+**⚠️ REQUIRED: Expand a Log Entry**
+You MUST click on a log row to expand it. Do not just observe the table.
 
-**Multi-Provider Verification:**
-1. Send requests with different providers
-2. [ ] Logs show correct provider for each
-3. [ ] Token display consistent between providers
+1. Find a recent request in the table
+2. **Click on the row** to expand it
+3. In the expanded view, verify:
+   - [ ] prompt_tokens value displayed (record the number)
+   - [ ] completion_tokens value displayed (record the number)
+   - [ ] total_tokens displayed (record the number)
+   - [ ] cache_write_tokens or cache_read_tokens if present (record values)
+
+**Multi-Provider Verification (if multiple providers used):**
+1. Find a log entry for each provider you've tested
+2. **Click to expand each one**
+3. [ ] Token breakdown appears for each provider
+4. [ ] Record any differences in how tokens are displayed
 
 ### 4. Usage Page
 Navigate to Dashboard → Usage
@@ -61,10 +64,21 @@ Navigate to Dashboard → Settings
 - [ ] Provider keys configurable
 
 ### 6. Navigation Test
-- [ ] Sidebar navigation works
-- [ ] Can switch between sections
-- [ ] Back button works correctly
-- [ ] Page refresh maintains state
+**⚠️ REQUIRED: Systematically test navigation**
+
+1. **Sidebar test:**
+   - [ ] Click each sidebar item in sequence
+   - [ ] Record if all sections load
+
+2. **Back button test:**
+   - [ ] Navigate: Projects → Threads → Logs
+   - [ ] Click browser back button twice
+   - [ ] Record if you return to Projects correctly
+
+3. **Page refresh test:**
+   - [ ] Navigate to Logs page
+   - [ ] Refresh the browser (F5 or Cmd+R)
+   - [ ] Record if you stay on Logs page with state preserved
 
 ## Observations to Report
 
