@@ -132,8 +132,8 @@ function resolveExitCode(reason?: string): number {
   return reason === 'error' || reason === 'aborted' ? 1 : 0;
 }
 
-function autoResolve(
-  harness: Harness,
+function autoResolve<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
@@ -230,7 +230,10 @@ async function resolveThread(
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
-export async function runHeadless(harness: Harness, args: HeadlessArgs & { prompt: string }): Promise<number> {
+export async function runHeadless<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
+  args: HeadlessArgs & { prompt: string },
+): Promise<number> {
   const emit =
     args.format === 'json'
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')

@@ -1,5 +1,35 @@
 # @mastra/mcp
 
+## 1.4.2
+
+### Patch Changes
+
+- Improved MCP tool discovery to retry once after reconnectable connection errors like `Connection closed` during `tools/list`. ([#15141](https://github.com/mastra-ai/mastra/pull/15141))
+
+  `MCPClient.listToolsets()`, `listToolsetsWithErrors()`, and `listTools()` now attempt a reconnect before treating transient discovery failures as missing tools.
+
+- Fixed MCP server to return HTTP 404 (instead of 400) when a client sends a stale or unknown session ID. Per the MCP spec, this tells clients to re-initialize with a new session, which fixes broken tool calls after server redeploys. ([#15160](https://github.com/mastra-ai/mastra/pull/15160))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.4.2-alpha.1
+
+### Patch Changes
+
+- Fixed MCP server to return HTTP 404 (instead of 400) when a client sends a stale or unknown session ID. Per the MCP spec, this tells clients to re-initialize with a new session, which fixes broken tool calls after server redeploys. ([#15160](https://github.com/mastra-ai/mastra/pull/15160))
+
+## 1.4.2-alpha.0
+
+### Patch Changes
+
+- Improved MCP tool discovery to retry once after reconnectable connection errors like `Connection closed` during `tools/list`. ([#15141](https://github.com/mastra-ai/mastra/pull/15141))
+
+  `MCPClient.listToolsets()`, `listToolsetsWithErrors()`, and `listTools()` now attempt a reconnect before treating transient discovery failures as missing tools.
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.4.1
 
 ### Patch Changes

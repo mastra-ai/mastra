@@ -1,5 +1,9 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { ItemList } from '@/ds/components/ItemList';
+import { EntityList } from '@/ds/components/EntityList';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -29,94 +33,97 @@ export function ExperimentResultsList({
   isFetchingNextPage,
   hasNextPage,
 }: ExperimentResultsListProps) {
+  const gridColumns = columns.map(c => c.size).join(' ');
+
   if (isLoading) {
-    return <ExperimentResultsListSkeleton columns={columns} />;
+    return (
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          {columns.map(col => (
+            <EntityList.TopCell key={col.name}>{col.label}</EntityList.TopCell>
+          ))}
+        </EntityList.Top>
+        <div className="flex items-center justify-center py-20 col-span-full">
+          <Spinner />
+        </div>
+      </EntityList>
+    );
   }
 
   if (results.length === 0) {
-    return <div className="text-neutral4 text-sm text-center py-8">No results yet</div>;
+    return (
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          {columns.map(col => (
+            <EntityList.TopCell key={col.name}>{col.label}</EntityList.TopCell>
+          ))}
+        </EntityList.Top>
+        <EntityList.NoMatch message="No results yet" />
+      </EntityList>
+    );
   }
 
   return (
-    <ItemList>
-      <ItemList.Header columns={columns}>
-        {columns?.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-        ))}
-      </ItemList.Header>
-
-      <ItemList.Scroller>
-        <ItemList.Items>
-          {results.map(result => {
-            const hasError = Boolean(result.error);
-            const entry = { id: result.id };
-            const isSelected = result.id === featuredResultId;
-
-            return (
-              <ItemList.Row key={result.id}>
-                <ItemList.RowButton
-                  item={entry}
-                  isFeatured={isSelected}
-                  columns={columns}
-                  onClick={() => onResultClick(result.id)}
-                >
-                  <ItemList.IdCell id={result.itemId} />
-                  <ItemList.StatusCell status={hasError ? 'error' : 'success'} />
-
-                  {columns.some(col => col.name === 'input') && (
-                    <ItemList.TextCell className="font-mono">
-                      {truncate(formatValue(result.input), 200)}
-                    </ItemList.TextCell>
-                  )}
-                  {scorerIds?.map(scorerId => {
-                    const scores = scoresByItemId?.[result.itemId];
-                    const score = scores?.find(s => s.scorerId === scorerId);
-                    return (
-                      <ItemList.TextCell key={scorerId} className="font-mono text-center">
-                        {score != null ? score.score.toFixed(3) : '-'}
-                      </ItemList.TextCell>
-                    );
-                  })}
-                </ItemList.RowButton>
-              </ItemList.Row>
-            );
-          })}
-        </ItemList.Items>
-        <ItemList.NextPageLoading
-          setEndOfListElement={setEndOfListElement}
-          isLoading={isFetchingNextPage}
-          hasMore={hasNextPage}
-          loadingText="Loading more results..."
-          noMoreDataText="All results loaded"
-        />
-      </ItemList.Scroller>
-    </ItemList>
-  );
-}
-
-/** Skeleton loader for results list */
-function ExperimentResultsListSkeleton({ columns }: { columns: { name: string; label: string; size: string }[] }) {
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns}>
+    <EntityList columns={gridColumns}>
+      <EntityList.Top>
         {columns.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+          <EntityList.TopCell key={col.name}>{col.label}</EntityList.TopCell>
         ))}
-      </ItemList.Header>
-      <ItemList.Items>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={columns}>
-              {columns.map((_, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
-    </ItemList>
+      </EntityList.Top>
+
+      <EntityList.Rows>
+        {results.map(result => {
+          const hasError = Boolean(result.error);
+          const isSelected = result.id === featuredResultId;
+
+          return (
+            <EntityList.Row key={result.id} onClick={() => onResultClick(result.id)} selected={isSelected}>
+              <EntityList.TextCell>
+                <span className="truncate block font-mono">{result.itemId}</span>
+              </EntityList.TextCell>
+              <EntityList.Cell>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                      <div className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')} />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
+                </Tooltip>
+              </EntityList.Cell>
+
+              {columns.some(col => col.name === 'input') && (
+                <EntityList.TextCell>
+                  <span className="truncate block font-mono">{truncate(formatValue(result.input), 200)}</span>
+                </EntityList.TextCell>
+              )}
+              {scorerIds?.map(scorerId => {
+                const scores = scoresByItemId?.[result.itemId];
+                const score = scores?.find(s => s.scorerId === scorerId);
+                return (
+                  <EntityList.TextCell key={scorerId}>
+                    <span className="font-mono">{score != null ? score.score.toFixed(3) : '-'}</span>
+                  </EntityList.TextCell>
+                );
+              })}
+            </EntityList.Row>
+          );
+        })}
+
+        <div ref={setEndOfListElement} className="h-1 col-span-full">
+          {isFetchingNextPage && (
+            <div className="flex justify-center py-4">
+              <Spinner />
+            </div>
+          )}
+          {!hasNextPage && results.length > 0 && (
+            <Txt variant="ui-xs" className="text-icon3 text-center py-4 block">
+              All results loaded
+            </Txt>
+          )}
+        </div>
+      </EntityList.Rows>
+    </EntityList>
   );
 }
 

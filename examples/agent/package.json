@@ -15,6 +15,7 @@
     "@mastra/auth-okta": "latest",
     "@mastra/auth-workos": "latest",
     "@mastra/auth-cloud": "latest",
+    "@mastra/auth-studio": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/duckdb": "latest",
@@ -52,6 +53,7 @@
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
       "@mastra/evals": "link:../../packages/evals",
+      "@mastra/auth-studio": "link:../../auth/studio",
       "mastra": "link:../../packages/cli"
     }
   },

@@ -10,7 +10,9 @@ import {
   DatasetExperimentsComparison,
   useDataset,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
@@ -21,6 +23,16 @@ function CompareDatasetExperimentsPage() {
   const { data: dataset, error } = useDataset(datasetId ?? '');
   const experimentIdA = searchParams.get('baseline') ?? '';
   const experimentIdB = searchParams.get('contender') ?? '';
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

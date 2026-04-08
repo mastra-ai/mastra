@@ -24,7 +24,9 @@ import {
   toast,
   Spinner,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
@@ -35,9 +37,10 @@ import { cn } from '@/lib/utils';
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
+  const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
+  const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
   const [scoresPage, setScoresPage] = useState<number>(0);
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
+  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(!!scoreIdFromUrl);
 
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
@@ -156,50 +159,53 @@ export default function Scorer() {
     });
   };
 
+  // Sync URL → state when scoreId in URL changes externally (e.g. browser back/forward)
   useEffect(() => {
-    const scoreIdFromUrl = searchParams.get('scoreId');
+    const urlScoreId = searchParams.get('scoreId') ?? undefined;
 
-    if (!scoreIdFromUrl) {
-      if (selectedScoreId) {
-        setSelectedScoreId(undefined);
-      }
-      if (dialogIsOpen) {
-        setDialogIsOpen(false);
-      }
+    if (urlScoreId === selectedScoreId) return;
+
+    if (!urlScoreId) {
+      setSelectedScoreId(undefined);
+      setDialogIsOpen(false);
       return;
     }
 
-    const matchingScore = scores.find(score => score.id === scoreIdFromUrl);
+    const matchingScore = scores.find(score => score.id === urlScoreId);
     if (!matchingScore) return;
 
-    if (selectedScoreId !== scoreIdFromUrl) {
-      setSelectedScoreId(scoreIdFromUrl);
-    }
+    setSelectedScoreId(urlScoreId);
+    setDialogIsOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, scores]);
 
-    if (!dialogIsOpen) {
-      setDialogIsOpen(true);
-    }
-  }, [dialogIsOpen, scores, searchParams, selectedScoreId]);
+  if (
+    is401UnauthorizedError(scorerError) ||
+    is401UnauthorizedError(agentsError) ||
+    is401UnauthorizedError(workflowsError)
+  ) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
 
-  useEffect(() => {
-    const currentScoreId = searchParams.get('scoreId');
-
-    if (selectedScoreId ? currentScoreId === selectedScoreId : !currentScoreId) {
-      return;
-    }
-
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-
-      if (selectedScoreId) {
-        next.set('scoreId', selectedScoreId);
-      } else {
-        next.delete('scoreId');
-      }
-
-      return next;
-    });
-  }, [searchParams, selectedScoreId, setSearchParams]);
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (scorerError && is403ForbiddenError(scorerError)) {
     return (
@@ -230,10 +236,28 @@ export default function Scorer() {
   const handleScoreClick = (id: string) => {
     setSelectedScoreId(id);
     setDialogIsOpen(true);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('scoreId', id);
+      return next;
+    });
   };
 
-  const toNextScore = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
-  const toPreviousScore = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
+  const updateSelectedScoreId = (id: string | undefined) => {
+    setSelectedScoreId(id);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) {
+        next.set('scoreId', id);
+      } else {
+        next.delete('scoreId');
+      }
+      return next;
+    });
+  };
+
+  const toNextScore = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: updateSelectedScoreId });
+  const toPreviousScore = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: updateSelectedScoreId });
 
   return (
     <>
@@ -320,6 +344,11 @@ export default function Scorer() {
         onClose={() => {
           setDialogIsOpen(false);
           setSelectedScoreId(undefined);
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.delete('scoreId');
+            return next;
+          });
         }}
         onNext={toNextScore}
         onPrevious={toPreviousScore}

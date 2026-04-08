@@ -147,7 +147,7 @@ export function ExperimentPageContent({
     () => [
       { name: 'itemId', label: 'Item ID', size: '5rem' },
       { name: 'status', label: 'Status', size: '3rem' },
-      ...(!featuredResultId ? [{ name: 'input', label: 'Input', size: '1fr' }] : []),
+      { name: 'input', label: 'Input', size: '1fr' },
       ...(!featuredResultId ? scorerIds.map(id => ({ name: id, label: id, size: '1fr' })) : []),
     ],
     [featuredResultId, scorerIds],
@@ -165,7 +165,7 @@ export function ExperimentPageContent({
       </TabContent>
 
       <TabContent value="results" className="grid overflow-hidden mt-5">
-        <Columns className={featuredResult ? 'grid-cols-[auto_1fr]' : undefined}>
+        <Columns className={featuredResult ? 'grid-cols-[1fr_2fr]' : undefined}>
           {/* List column - always visible */}
           <Column>
             <ExperimentResultsList

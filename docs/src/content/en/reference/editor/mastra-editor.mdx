@@ -1,0 +1,159 @@
+---
+title: "Reference: MastraEditor class | Editor"
+description: "Documentation for the MastraEditor class, the entry point for configuring the Mastra agent editor."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# MastraEditor class
+
+The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
+
+See the [Editor overview](/docs/editor/overview) for an introduction to what the editor does.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/providers/composio'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your agents */
+  },
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'logger',
+    type: 'Logger',
+    description: 'Logger instance. Falls back to the Mastra instance logger if not set.',
+    isOptional: true,
+  },
+  {
+    name: 'toolProviders',
+    type: 'Record<string, ToolProvider>',
+    description:
+      'Integration tool providers keyed by ID (for example, Composio or Arcade). Lets agents use third-party tools added through the editor.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'processorProviders',
+    type: 'Record<string, ProcessorProvider>',
+    description:
+      'Processor providers for configurable input/output processing (for example, moderation or token limiting). Built-in providers are always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'filesystems',
+    type: 'Record<string, FilesystemProvider>',
+    description:
+      'Filesystem providers for file access (for example, S3 or GCS). A local filesystem provider is always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'sandboxes',
+    type: 'Record<string, SandboxProvider>',
+    description:
+      'Sandbox providers for code execution (for example, E2B). A local sandbox provider is always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'blobStores',
+    type: 'Record<string, BlobStoreProvider>',
+    description:
+      'Blob storage providers for binary data (for example, S3). Falls back to the Mastra storage blob store if no provider is specified.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+]}
+/>
+
+## Namespaces
+
+The editor exposes namespaces for managing different entity types. These are used by the Mastra server and Studio — you don't call them directly in application code.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'EditorAgentNamespace',
+    description:
+      'CRUD operations and version management for stored agents. Handles applying stored overrides to code-defined agents.',
+  },
+  {
+    name: 'prompt',
+    type: 'EditorPromptNamespace',
+    description:
+      'CRUD operations for prompt blocks. Includes a preview method for resolving instruction blocks with draft content.',
+  },
+  {
+    name: 'mcp',
+    type: 'EditorMCPNamespace',
+    description: 'CRUD operations for stored MCP client configurations.',
+  },
+  {
+    name: 'mcpServer',
+    type: 'EditorMCPServerNamespace',
+    description: 'CRUD operations for MCP server configurations.',
+  },
+  {
+    name: 'scorer',
+    type: 'EditorScorerNamespace',
+    description: 'CRUD operations for scorer configurations.',
+  },
+]}
+/>
+
+## Methods
+
+### Provider access
+
+#### `getToolProvider(id)`
+
+Returns a registered tool provider by its ID.
+
+```typescript
+const composio = mastra.getEditor()?.getToolProvider('composio')
+```
+
+#### `getToolProviders()`
+
+Returns all registered tool providers as a `Record<string, ToolProvider>`.
+
+#### `getProcessorProvider(id)`
+
+Returns a registered processor provider by its ID.
+
+#### `getProcessorProviders()`
+
+Returns all registered processor providers.
+
+#### `getFilesystemProviders()`
+
+Returns all registered filesystem providers.
+
+#### `getSandboxProviders()`
+
+Returns all registered sandbox providers.
+
+#### `getBlobStoreProviders()`
+
+Returns all registered blob store providers.

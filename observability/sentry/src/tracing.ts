@@ -24,7 +24,7 @@ import { BaseExporter } from '@mastra/observability';
 import { getAttributes as getGenAIAttributes, getSpanName as getGenAISpanName } from '@mastra/otel-exporter';
 import * as Sentry from '@sentry/node';
 
-const SPAN_TYPE_CONFIG: Record<SpanType, { opType: string; opName: string }> = {
+const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: string }>> = {
   [SpanType.AGENT_RUN]: { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' },
   [SpanType.MODEL_GENERATION]: { opType: 'gen_ai.chat', opName: 'chat' },
   [SpanType.TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
@@ -43,6 +43,7 @@ const SPAN_TYPE_CONFIG: Record<SpanType, { opType: string; opName: string }> = {
   [SpanType.MODEL_CHUNK]: { opType: 'ai.span', opName: 'step' },
   [SpanType.SCORER_RUN]: { opType: 'workflow.run', opName: 'eval' },
   [SpanType.SCORER_STEP]: { opType: 'workflow.step', opName: 'step' },
+  [SpanType.MEMORY_OPERATION]: { opType: 'ai.memory', opName: 'memory' },
 };
 
 const ATTRIBUTE_KEYS = {

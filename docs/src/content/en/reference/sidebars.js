@@ -15,6 +15,11 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
+        {
+          type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+        },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -52,6 +57,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
         { type: 'doc', id: 'ai-sdk/handle-workflow-stream', label: 'handleWorkflowStream()' },
         { type: 'doc', id: 'ai-sdk/network-route', label: 'networkRoute()' },
+        { type: 'doc', id: 'ai-sdk/to-ai-sdk-messages', label: 'toAISdkMessages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-stream', label: 'toAISdkStream()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
@@ -76,6 +82,16 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Browser',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
+        { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
+        { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -93,7 +109,6 @@ const sidebars = {
           type: 'doc',
           id: 'client-js/conversations',
           label: 'Conversations API',
-          customProps: { tags: ['new'] },
         },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
@@ -104,7 +119,6 @@ const sidebars = {
           type: 'doc',
           id: 'client-js/responses',
           label: 'Responses API',
-          customProps: { tags: ['new'] },
         },
         { type: 'doc', id: 'client-js/telemetry', label: 'Telemetry API' },
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
@@ -158,6 +172,16 @@ const sidebars = {
         { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Editor',
+      collapsed: true,
+      customProps: { tags: ['new'] },
+      items: [
+        { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
+        { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
       ],
     },
     {
@@ -270,7 +294,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
-          items: [{ type: 'doc', id: 'observability/metrics/automatic-metrics', label: 'Automatic Metrics' }],
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/automatic-metrics',
+              label: 'Automatic Metrics',
+            },
+          ],
         },
         {
           type: 'category',
@@ -279,6 +309,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
+            { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
               type: 'category',
@@ -290,6 +321,7 @@ const sidebars = {
               label: 'Exporters',
               items: [
                 { type: 'doc', id: 'observability/tracing/exporters/arize', label: 'Arize' },
+                { type: 'doc', id: 'observability/tracing/exporters/arthur', label: 'Arthur' },
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/braintrust',

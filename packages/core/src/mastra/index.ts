@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import type { AgentChannels } from '../channels/agent-channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -27,6 +28,7 @@ import type {
   MetricsContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -342,6 +344,7 @@ export class Mastra<
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
   #gateways?: Record<string, MastraModelGateway>;
+
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
@@ -562,6 +565,10 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
+    // Register AsyncLocalStorage-backed context resolvers so that DualLogger
+    // can correlate logs to the active span. Must happen before any agent runs.
+    initContextStorage();
+
     // This is only used internally for server handlers that require temporary persistence
     this.#serverCache = new InMemoryServerCache();
 
@@ -749,14 +756,6 @@ export class Mastra<
       });
     }
 
-    if (config?.agents) {
-      Object.entries(config.agents).forEach(([key, agent]) => {
-        if (agent != null) {
-          this.addAgent(agent, key);
-        }
-      });
-    }
-
     if (config?.tts) {
       Object.entries(config.tts).forEach(([key, tts]) => {
         if (tts != null) {
@@ -767,6 +766,16 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+    }
+
+    // Agents must be added after server config so that channel webhook routes
+    // are appended to (not replaced by) the server config.
+    if (config?.agents) {
+      Object.entries(config.agents).forEach(([key, agent]) => {
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
+      });
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -832,6 +841,21 @@ export class Mastra<
     }
 
     return this.resolveVersionedAgent(agent, version);
+  }
+
+  /**
+   * Returns the `AgentChannels` instances for all registered agents.
+   * Keys are agent IDs.
+   */
+  public getChannels(): Record<string, AgentChannels> {
+    const result: Record<string, AgentChannels> = {};
+    for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
+      const agentChannels = agent.getChannels();
+      if (agentChannels) {
+        result[agentKey] = agentChannels;
+      }
+    }
+    return result;
   }
 
   /**
@@ -1059,6 +1083,20 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register webhook routes and initialize channels
+    const agentChannels = mastraAgent.getChannels();
+    if (agentChannels) {
+      agentChannels.__setLogger(this.#logger);
+      const channelRoutes = agentChannels.getWebhookRoutes();
+      if (channelRoutes.length > 0) {
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+        };
+      }
+      void agentChannels.initialize(this);
+    }
   }
 
   /**
