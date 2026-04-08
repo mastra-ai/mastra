@@ -69,6 +69,8 @@ echo ""
 
 TOTAL_PROMPT_TOKENS=0
 TOTAL_COMPLETION_TOKENS=0
+PROMPT_TOKENS=0
+COMPLETION_TOKENS=0
 MESSAGES_SENT=0
 FAILED=0
 
@@ -97,6 +99,14 @@ for i in "${!PROMPTS[@]}"; do
     break
   fi
   
+  # Check for API error payload before parsing usage
+  ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty') || { echo "ERROR at message $MSG_NUM: invalid JSON"; FAILED=1; break; }
+  if [ -n "$ERROR" ]; then
+    echo "ERROR at message $MSG_NUM: $ERROR"
+    FAILED=1
+    break
+  fi
+  
   PROMPT_TOKENS=$(echo "$RESPONSE" | jq -r '.usage.prompt_tokens // 0') || { echo "ERROR at message $MSG_NUM: invalid JSON"; FAILED=1; break; }
   COMPLETION_TOKENS=$(echo "$RESPONSE" | jq -r '.usage.completion_tokens // 0') || { echo "ERROR at message $MSG_NUM: invalid JSON"; FAILED=1; break; }
   CACHE_READ=$(echo "$RESPONSE" | jq '.usage.cache_read_tokens // 0')
@@ -107,14 +117,6 @@ for i in "${!PROMPTS[@]}"; do
   # Track totals
   TOTAL_PROMPT_TOKENS=$((TOTAL_PROMPT_TOKENS + PROMPT_TOKENS))
   TOTAL_COMPLETION_TOKENS=$((TOTAL_COMPLETION_TOKENS + COMPLETION_TOKENS))
-  
-  # Check for errors
-  ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
-  if [ -n "$ERROR" ]; then
-    echo "ERROR at message $MSG_NUM: $ERROR"
-    FAILED=1
-    break
-  fi
   
   MESSAGES_SENT=$((MESSAGES_SENT + 1))
   sleep 1

@@ -316,9 +316,9 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 ---
 
-#### 9e. MastraCode + Gateway (Intensive)
+#### 9e. MastraCode + Gateway (Basic Routing)
 
-Test MastraCode routing through Gateway with enough messages to trigger OM observations.
+Test MastraCode routing through Gateway with 10 simple messages to verify basic functionality.
 
 **How MastraCode routes to Gateway:**
 
@@ -353,38 +353,18 @@ async function test() {
   await harness.init();
   console.log('Harness initialized');
 
-  // Send 30 detailed prompts to accumulate tokens toward OM threshold (~30k)
+  // Send 10 simple prompts to verify routing and token accumulation
   const prompts = [
-    'Explain the history of TypeScript in detail, covering its origins and evolution',
-    'What are all the TypeScript compiler options? Explain each one',
-    'Compare TypeScript to JavaScript with detailed code examples',
-    'Explain TypeScript generics with complex real-world examples',
-    'What are mapped types in TypeScript? Give multiple examples',
-    'Explain conditional types in TypeScript with examples',
-    'What is type inference in TypeScript? How does it work?',
-    'Explain TypeScript decorators in detail with examples',
-    'List and explain all utility types in TypeScript',
-    'Explain the TypeScript module system comprehensively',
-    'What are declaration files in TypeScript? When do you need them?',
-    'Explain all strict mode options in TypeScript',
-    'What is structural typing in TypeScript? Compare to nominal typing',
-    'Explain TypeScript enums with examples of string and numeric enums',
-    'What are type guards in TypeScript? Show different approaches',
-    'Explain discriminated unions in TypeScript with examples',
-    "What is the 'infer' keyword in TypeScript? Give examples",
-    'Explain variance in TypeScript generics (covariance, contravariance)',
-    'What are template literal types in TypeScript?',
-    "Explain the 'satisfies' operator in TypeScript",
-    'What are assertion functions in TypeScript?',
-    'Explain module augmentation in TypeScript',
-    'What is declaration merging in TypeScript?',
-    "Explain the 'const' assertion in TypeScript",
-    'What are branded types in TypeScript? How do you implement them?',
-    'Explain recursive types in TypeScript with examples',
-    "What is the 'never' type in TypeScript? When is it useful?",
-    'Explain index signatures in TypeScript',
-    'What are type predicates in TypeScript?',
-    'Summarize everything we discussed about TypeScript',
+    'Explain the history of TypeScript briefly',
+    'What are TypeScript generics?',
+    'Compare TypeScript to JavaScript',
+    'What are mapped types in TypeScript?',
+    'Explain conditional types briefly',
+    'What is type inference?',
+    'Explain TypeScript decorators',
+    'List utility types in TypeScript',
+    'Explain the module system',
+    'Summarize what we discussed',
   ];
 
   for (let i = 0; i < prompts.length; i++) {
@@ -400,7 +380,6 @@ async function test() {
   console.log('\nDone. Check Gateway Dashboard for:');
   console.log('- Thread ID and message count');
   console.log('- Token progression in Logs');
-  console.log('- Whether OM observations activated');
 }
 
 test().catch(console.error);
@@ -416,13 +395,9 @@ npx tsx test-mastracode-gateway.ts
 
 - [ ] Requests appear in Gateway Dashboard → Logs (confirms Gateway routing)
 - [ ] Thread ID from Gateway Dashboard
-- [ ] Messages sent (30) vs messages visible in Gateway thread
-- [ ] Token progression (note prompt_tokens at message 1, 15, and 30)
-- [ ] Whether "Activated observations" appeared in console output
-- [ ] Any token resets (e.g., tokens dropped from 20k to 9k mid-conversation)
-- [ ] Whether early messages (1-12) are visible in thread UI or only in logs
-- [ ] Thread token indicator (e.g., "12.7k / 30k") - note the values
-- [ ] If message counts don't match, note whether messages are missing, compressed, or replaced by observations
+- [ ] Messages sent (10) vs messages visible in Gateway thread
+- [ ] Token progression (note prompt_tokens at message 1, 5, and 10)
+- [ ] Thread token indicator values
 
 ---
 
@@ -453,14 +428,106 @@ Test thread behavior when messages are sent via local Studio, then accessed agai
 
 ---
 
+#### 9g. MastraCode Duplication Bug Test
+
+Test for the double-write bug when MastraCode (with built-in OM) routes through Gateway (with OM).
+
+**Prerequisites:**
+
+1. Lower Gateway OM thresholds in Dashboard → Settings:
+   - Observation: 30,000 → **3,000 tokens**
+   - Reflection: 40,000 → **4,000 tokens**
+2. Note: Remember to restore thresholds after testing
+
+**Setup:**
+
+Create `test-mastracode-duplication.ts`:
+
+```typescript
+import { createMastraCode } from 'mastracode';
+
+// Set Gateway env vars BEFORE calling createMastraCode
+process.env.MASTRA_GATEWAY_API_KEY = 'msk_your_key_here'; // Replace with actual key
+process.env.MASTRA_GATEWAY_URL = 'https://server.mastra.ai';
+
+async function test() {
+  console.log('Creating MastraCode with Gateway routing...');
+  console.log('NOTE: Ensure Gateway OM thresholds are lowered (3k/4k)');
+
+  const { harness } = await createMastraCode({
+    cwd: process.cwd(),
+    initialState: {
+      currentModelId: 'mastra/openai/gpt-4o-mini', // mastra/ prefix required!
+    },
+  });
+
+  await harness.init();
+  console.log('Harness initialized');
+
+  // 5 tool-heavy prompts to trigger OM quickly
+  const prompts = [
+    'Read package.json and list all dependencies',
+    'Read tsconfig.json completely',
+    'List all files in src/ recursively',
+    'Read src/mastra/index.ts',
+    "Search for 'import' in all .ts files",
+  ];
+
+  for (let i = 0; i < prompts.length; i++) {
+    console.log(`\n[${i + 1}/${prompts.length}] ${prompts[i]}`);
+    try {
+      await harness.sendMessage({ content: prompts[i] });
+      console.log('✓ Response received');
+    } catch (err) {
+      console.error('✗ Error:', err);
+    }
+  }
+
+  console.log('\nDone. Check Gateway Dashboard for:');
+  console.log('- Thread ID');
+  console.log('- Message count (expected: 10 = 5 user + 5 assistant)');
+  console.log('- Check for DUPLICATED assistant responses');
+}
+
+test().catch(console.error);
+```
+
+**Run:**
+
+```bash
+npx tsx test-mastracode-duplication.ts
+```
+
+**What to record:**
+
+- [ ] Thread ID from Gateway Dashboard
+- [ ] **Message count**: Expected 10 (5 user + 5 assistant), actual count
+- [ ] **Duplicate check**: Note any assistant responses that appear twice
+- [ ] **Timestamp check**: Note if duplicated messages have timestamps ~1 second apart
+- [ ] Token values at start and end of conversation
+- [ ] Whether OM threshold indicator shows activation
+
+**Bug indicators:**
+
+- Message count > 10 (e.g., 14 messages instead of 10)
+- Assistant responses appearing twice with ~1 second timestamp gap
+- First duplicate appearing early in conversation (message 2-3)
+
+**After testing:**
+
+Restore Gateway OM thresholds to defaults (30k/40k) in Dashboard → Settings.
+
+---
+
 #### Summary Checklist
 
 - [ ] 9a: Setup complete, agents visible in local Studio
 - [ ] 9b: Gateway routing verified (request appears in Gateway Logs)
 - [ ] 9c: Memory-only agent baseline completed
 - [ ] 9d: OM agent intensive test (30k+ tokens) completed
-- [ ] 9e: MastraCode + Gateway intensive test completed
+- [ ] 9e: MastraCode + Gateway basic routing test completed
 - [ ] 9f: History replay via local agent completed
+- [ ] 9g: MastraCode duplication bug test completed (note if duplicates found)
 
 ## Observations to Report
 
@@ -471,18 +538,19 @@ For each test, note:
 - Dashboard UI behavior (Logs, Usage, Settings pages)
 - Thread integrity (messages in correct order, no duplicates)
 
-| Test                           | What to Record                                      |
-| ------------------------------ | --------------------------------------------------- |
-| Extended conversation          | Token progression across 12 messages                |
-| Token usage analysis           | Breakdown visible in Logs page                      |
-| OM tracking                    | Whether "Memory Tokens" appears in Usage            |
-| Settings                       | OM threshold values displayed                       |
-| Multi-model                    | Whether context persists across providers           |
-| Flood test                     | Success/failure counts, any buffering behavior      |
-| Long conversation (30 prompts) | Token progression (~25k), cache behavior            |
-| Full history replay            | How Gateway handles full history send               |
-| 9b: Gateway routing            | Whether local requests appear in Gateway Logs       |
-| 9c: Memory-only baseline       | Token progression, thread state                     |
-| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes |
-| 9e: MastraCode + Gateway       | Token progression across 30 prompts, OM activation  |
-| 9f: History replay via local   | Message deduplication, comparison with Test 8       |
+| Test                           | What to Record                                       |
+| ------------------------------ | ---------------------------------------------------- |
+| Extended conversation          | Token progression across 12 messages                 |
+| Token usage analysis           | Breakdown visible in Logs page                       |
+| OM tracking                    | Whether "Memory Tokens" appears in Usage             |
+| Settings                       | OM threshold values displayed                        |
+| Multi-model                    | Whether context persists across providers            |
+| Flood test                     | Success/failure counts, any buffering behavior       |
+| Long conversation (30 prompts) | Token progression (~25k), cache behavior             |
+| Full history replay            | How Gateway handles full history send                |
+| 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
+| 9c: Memory-only baseline       | Token progression, thread state                      |
+| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
+| 9e: MastraCode + Gateway       | Token progression across 10 prompts, routing works   |
+| 9f: History replay via local   | Message deduplication, comparison with Test 8        |
+| 9g: MastraCode duplication bug | Message count (expected 10), duplicate detection     |
