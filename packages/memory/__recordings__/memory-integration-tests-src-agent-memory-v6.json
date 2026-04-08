@@ -5,7 +5,7 @@
     "testName": "V6",
     "model": "gpt-4o-mini",
     "createdAt": "2026-04-02T11:21:54.687Z",
-    "updatedAt": "2026-04-07T01:07:27.938Z"
+    "updatedAt": "2026-04-08T08:13:05.351Z"
   },
   "recordings": [
     {
@@ -32,7 +32,7 @@
           ],
           "temperature": 0
         },
-        "timestamp": 1773147360040
+        "timestamp": 1773147360060
       },
       "response": {
         "status": 200,
@@ -40,12 +40,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85211c2a90e238-MRS",
+          "cf-ray": "9e8fce10ec2b2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:31 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:14 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "8198",
+          "openai-processing-ms": "9813",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -53,22 +53,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9933",
+          "x-ratelimit-remaining-requests": "9934",
           "x-ratelimit-remaining-tokens": "199961",
-          "x-ratelimit-reset-requests": "9m34.723s",
+          "x-ratelimit-reset-requests": "9m25.603s",
           "x-ratelimit-reset-tokens": "11ms",
-          "x-request-id": "req_ac61b0bda0bf4f29b055366dd5a76c94"
+          "x-request-id": "req_e90eca3578d741529fbfd93d8ed2b044"
         },
         "body": {
-          "id": "resp_0cb2d66b443d28190069d4588ed468819395dc91b5e68a4d1d",
+          "id": "resp_0dfb67fcef9eae990069d60dd4bbb88194b987665120605c14",
           "object": "response",
-          "created_at": 1775523982,
+          "created_at": 1775635924,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775523990,
+          "completed_at": 1775635934,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -78,7 +78,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0cb2d66b443d28190069d4588f0d0c8193b5b84f5637f6ed44",
+              "id": "msg_0dfb67fcef9eae990069d60dd5223c8194aca6f9ca76c00bf9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -86,7 +86,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Cats are fascinating creatures that have been companions to humans for thousands of years. Here are some key points about them:\n\n### 1. **Domestication**\n- Cats were domesticated around 9,000 years ago in the Near East. They were attracted to human settlements due to the presence of rodents, which they hunted.\n\n### 2. **Breeds**\n- There are over 70 recognized cat breeds, each with unique characteristics. Popular breeds include the Persian, Maine Coon, Siamese, and Bengal.\n\n### 3. **Behavior**\n- Cats are known for their independent nature. They can be affectionate but often enjoy their alone time. They communicate through vocalizations (like meowing), body language, and scent marking.\n\n### 4. **Physical Characteristics**\n- Cats typically have sharp retractable claws, keen senses (especially sight and hearing), and a flexible body. They are known for their agility and ability to jump several times their height.\n\n### 5. **Diet**\n- Cats are obligate carnivores, meaning they require a diet primarily made up of meat. They have specific nutritional needs, including taurine, which is found in animal tissues.\n\n### 6. **Lifespan**\n- The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n\n### 7. **Health**\n- Common health issues in cats include dental disease, obesity, and kidney disease. Regular veterinary check-ups are important for maintaining their health.\n\n### 8. **Cultural Significance**\n- Cats have been revered in various cultures. In ancient Egypt, they were considered sacred and were often depicted in art and mythology.\n\n### 9. **Social Structure**\n- While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They may also establish social hierarchies in multi-cat households.\n\n### 10. **Play and Enrichment**\n- Cats are playful and require mental and physical stimulation. Toys, scratching posts, and interactive play can help keep them engaged.\n\nCats are beloved for their unique personalities and companionship, making them one of the most popular pets worldwide."
+                  "text": "Cats are fascinating creatures known for their independence, agility, and playful behavior. Here are some key points about them:\n\n### 1. **Domestication**\n- Cats were domesticated around 9,000 years ago in the Near East. They were attracted to human settlements due to the presence of rodents, which they hunted.\n\n### 2. **Breeds**\n- There are over 70 recognized cat breeds, each with unique characteristics. Popular breeds include the Persian, Maine Coon, Siamese, and Bengal.\n\n### 3. **Behavior**\n- Cats are known for their curious and playful nature. They often engage in hunting behaviors, even if they are well-fed.\n- They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n\n### 4. **Physical Characteristics**\n- Cats have retractable claws, sharp teeth, and excellent night vision, which make them effective hunters.\n- They typically weigh between 5 to 20 pounds, depending on the breed.\n\n### 5. **Diet**\n- Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients like taurine, which is found in animal tissues.\n\n### 6. **Lifespan**\n- The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n\n### 7. **Health**\n- Common health issues in cats include dental disease, obesity, and kidney disease. Regular veterinary check-ups are important for maintaining their health.\n\n### 8. **Social Structure**\n- While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They may also establish social hierarchies in multi-cat households.\n\n### 9. **Grooming**\n- Cats are known for their grooming habits. They spend a significant amount of time cleaning themselves, which helps to regulate their body temperature and keep their fur clean.\n\n### 10. **Cultural Significance**\n- Cats have been revered in various cultures, from ancient Egypt, where they were considered sacred, to modern times, where they are popular pets and internet sensations.\n\nCats are beloved companions for many people around the world, known for their unique personalities and the joy they bring to their owners."
                 }
               ],
               "role": "assistant"
@@ -121,11 +121,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 445,
+            "output_tokens": 472,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 465
+            "total_tokens": 492
           },
           "user": null,
           "metadata": {}
@@ -134,7 +134,7 @@
       }
     },
     {
-      "hash": "3d90013e4fe5e8d0",
+      "hash": "9dc9c37f81ae52c0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -147,7 +147,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 12:56 PM: User: Tell me about catsMessage from previous conversation at 12:56 PM: Assistant: Cats are fascinating creatures that have been companions to humans for thousands of years. Here are some key points about them:\n\n### 1. **Domestication**\n- Cats were domesticated around 9,000 years ago in the Near East. They were attracted to human settlements due to the presence of rodents, which they hunted.\n\n### 2. **Breeds**\n- There are over 70 recognized cat breeds, each with unique characteristics. Popular breeds include the Persian, Maine Coon, Siamese, and Bengal.\n\n### 3. **Behavior**\n- Cats are known for their independent nature. They can be affectionate but often enjoy their alone time. They communicate through vocalizations (like meowing), body language, and scent marking.\n\n### 4. **Physical Characteristics**\n- Cats typically have sharp retractable claws, keen senses (especially sight and hearing), and a flexible body. They are known for their agility and ability to jump several times their height.\n\n### 5. **Diet**\n- Cats are obligate carnivores, meaning they require a diet primarily made up of meat. They have specific nutritional needs, including taurine, which is found in animal tissues.\n\n### 6. **Lifespan**\n- The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n\n### 7. **Health**\n- Common health issues in cats include dental disease, obesity, and kidney disease. Regular veterinary check-ups are important for maintaining their health.\n\n### 8. **Cultural Significance**\n- Cats have been revered in various cultures. In ancient Egypt, they were considered sacred and were often depicted in art and mythology.\n\n### 9. **Social Structure**\n- While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They may also establish social hierarchies in multi-cat households.\n\n### 10. **Play and Enrichment**\n- Cats are playful and require mental and physical stimulation. Toys, scratching posts, and interactive play can help keep them engaged.\n\nCats are beloved for their unique personalities and companionship, making them one of the most popular pets worldwide.\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 12:56 PM: User: Tell me about catsMessage from previous conversation at 12:56 PM: Assistant: Cats are fascinating creatures known for their independence, agility, and playful behavior. Here are some key points about them:\n\n### 1. **Domestication**\n- Cats were domesticated around 9,000 years ago in the Near East. They were attracted to human settlements due to the presence of rodents, which they hunted.\n\n### 2. **Breeds**\n- There are over 70 recognized cat breeds, each with unique characteristics. Popular breeds include the Persian, Maine Coon, Siamese, and Bengal.\n\n### 3. **Behavior**\n- Cats are known for their curious and playful nature. They often engage in hunting behaviors, even if they are well-fed.\n- They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n\n### 4. **Physical Characteristics**\n- Cats have retractable claws, sharp teeth, and excellent night vision, which make them effective hunters.\n- They typically weigh between 5 to 20 pounds, depending on the breed.\n\n### 5. **Diet**\n- Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients like taurine, which is found in animal tissues.\n\n### 6. **Lifespan**\n- The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n\n### 7. **Health**\n- Common health issues in cats include dental disease, obesity, and kidney disease. Regular veterinary check-ups are important for maintaining their health.\n\n### 8. **Social Structure**\n- While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They may also establish social hierarchies in multi-cat households.\n\n### 9. **Grooming**\n- Cats are known for their grooming habits. They spend a significant amount of time cleaning themselves, which helps to regulate their body temperature and keep their fur clean.\n\n### 10. **Cultural Significance**\n- Cats have been revered in various cultures, from ancient Egypt, where they were considered sacred, to modern times, where they are popular pets and internet sensations.\n\nCats are beloved companions for many people around the world, known for their unique personalities and the joy they bring to their owners.\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -161,7 +161,7 @@
           ],
           "temperature": 0
         },
-        "timestamp": 1773147367820
+        "timestamp": 1773147369700
       },
       "response": {
         "status": 200,
@@ -169,12 +169,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e852151ceffe238-MRS",
+          "cf-ray": "9e8fce50aedd2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:37 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:21 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "5938",
+          "openai-processing-ms": "6884",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -182,22 +182,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9933",
-          "x-ratelimit-remaining-tokens": "199438",
-          "x-ratelimit-reset-requests": "9m34.754s",
-          "x-ratelimit-reset-tokens": "168ms",
-          "x-request-id": "req_dc03fdaca3b740f3ba44ddb63cf512e7"
+          "x-ratelimit-remaining-requests": "9934",
+          "x-ratelimit-remaining-tokens": "199411",
+          "x-ratelimit-reset-requests": "9m24.049s",
+          "x-ratelimit-reset-tokens": "176ms",
+          "x-request-id": "req_4a763b66d9c44222b501351e6bc88462"
         },
         "body": {
-          "id": "resp_0e5f78a8b0ca8e620069d458976eec819680f1071ec89d46e5",
+          "id": "resp_017834cd3b0617790069d60ddeeaa8819688512062c8632b36",
           "object": "response",
-          "created_at": 1775523991,
+          "created_at": 1775635934,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775523997,
+          "completed_at": 1775635941,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -207,7 +207,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0e5f78a8b0ca8e620069d45897cf008196a201705b38738087",
+              "id": "msg_017834cd3b0617790069d60ddf358881969f041b401c5720c9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -215,7 +215,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "We discussed several key points about cats, including:\n\n1. **Domestication**: Cats were domesticated around 9,000 years ago, primarily to control rodent populations near human settlements.\n\n2. **Breeds**: There are over 70 recognized cat breeds, each with unique traits, such as the Persian, Maine Coon, Siamese, and Bengal.\n\n3. **Behavior**: Cats are independent creatures that can be affectionate but also enjoy solitude. They communicate through vocalizations, body language, and scent marking.\n\n4. **Physical Characteristics**: They have sharp retractable claws, keen senses, and a flexible body, known for their agility.\n\n5. **Diet**: Cats are obligate carnivores, requiring a meat-based diet with specific nutrients like taurine.\n\n6. **Lifespan**: The average lifespan is around 12 to 15 years, but many can live into their 20s with proper care.\n\n7. **Health**: Common health issues include dental disease, obesity, and kidney disease, making regular vet check-ups important.\n\n8. **Cultural Significance**: Cats have been revered in various cultures, especially in ancient Egypt.\n\n9. **Social Structure**: They can form strong bonds with humans and other pets, establishing social hierarchies in multi-cat households.\n\n10. **Play and Enrichment**: Cats require mental and physical stimulation through toys and interactive play.\n\nOverall, cats are cherished for their unique personalities and companionship."
+                  "text": "We discussed several key points about cats, including:\n\n1. **Domestication**: Cats were domesticated around 9,000 years ago, primarily to control rodent populations near human settlements.\n\n2. **Breeds**: There are over 70 recognized cat breeds, with popular ones including the Persian, Maine Coon, Siamese, and Bengal.\n\n3. **Behavior**: Cats are curious and playful, often displaying hunting behaviors. They communicate through vocalizations, body language, and scent marking.\n\n4. **Physical Characteristics**: Cats have retractable claws, sharp teeth, and excellent night vision. Their weight typically ranges from 5 to 20 pounds, depending on the breed.\n\n5. **Diet**: As obligate carnivores, cats require a diet primarily composed of meat and specific nutrients like taurine.\n\n6. **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, though many can live into their 20s with proper care.\n\n7. **Health**: Common health issues include dental disease, obesity, and kidney disease, making regular veterinary check-ups important.\n\n8. **Social Structure**: Cats can form strong bonds with humans and other pets, and may establish social hierarchies in multi-cat households.\n\n9. **Grooming**: Cats spend a significant amount of time grooming themselves, which helps regulate their body temperature and keep their fur clean.\n\n10. **Cultural Significance**: Cats have been revered in various cultures, from ancient Egypt to modern times, where they are popular pets and internet sensations.\n\nIf you have any specific questions or want to explore a particular aspect further, feel free to ask!"
                 }
               ],
               "role": "assistant"
@@ -246,15 +246,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 543,
+            "input_tokens": 570,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 304,
+            "output_tokens": 346,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 847
+            "total_tokens": 916
           },
           "user": null,
           "metadata": {}
@@ -332,7 +332,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360040
+        "timestamp": 1773147360060
       },
       "response": {
         "status": 200,
@@ -340,12 +340,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e852179caeee238-MRS",
+          "cf-ray": "9e8fce7ed8142e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:39 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:23 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1663",
+          "openai-processing-ms": "803",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -353,22 +353,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9933",
+          "x-ratelimit-remaining-requests": "9934",
           "x-ratelimit-remaining-tokens": "199662",
-          "x-ratelimit-reset-requests": "9m36.998s",
+          "x-ratelimit-reset-requests": "9m25.327s",
           "x-ratelimit-reset-tokens": "101ms",
-          "x-request-id": "req_8ee0a065e8c249229d1990d48b2e7b2f"
+          "x-request-id": "req_dd02e6d3cd4f4eebbf1f330eac23542b"
         },
         "body": {
-          "id": "resp_0cc36064c56d341a0069d4589dcf548190b87789be8cb1cad9",
+          "id": "resp_0f38d42bff4647900069d60de64ca48193871fcb67a47fcd0a",
           "object": "response",
-          "created_at": 1775523997,
+          "created_at": 1775635942,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775523999,
+          "completed_at": 1775635942,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -378,7 +378,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0cc36064c56d341a0069d4589eb9e88190aaa064321e071e9f",
+              "id": "msg_0f38d42bff4647900069d60de691088193a0cfce097fd6baac",
               "type": "message",
               "status": "completed",
               "content": [
@@ -537,12 +537,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521867876e238-MRS",
+          "cf-ray": "9e8fce852c142e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:40 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:23 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "714",
+          "openai-processing-ms": "627",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -550,22 +550,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9932",
+          "x-ratelimit-remaining-requests": "9933",
           "x-ratelimit-remaining-tokens": "199663",
-          "x-ratelimit-reset-requests": "9m43.608s",
+          "x-ratelimit-reset-requests": "9m32.923s",
           "x-ratelimit-reset-tokens": "101ms",
-          "x-request-id": "req_11cf3bce222a4352b4c63da7e36ee9f5"
+          "x-request-id": "req_6509ebee030b4173897378cb3f5d3ba3"
         },
         "body": {
-          "id": "resp_061d3e17db4f0b980069d4589fd5b48190be06c547bcd6c3aa",
+          "id": "resp_0f15b4f02b45dc4a0069d60de7501c8195867a2409cb3172a9",
           "object": "response",
-          "created_at": 1775523999,
+          "created_at": 1775635943,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524000,
+          "completed_at": 1775635943,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -575,7 +575,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_061d3e17db4f0b980069d458a04c348190a341db613f644bdb",
+              "id": "msg_0f15b4f02b45dc4a0069d60de7b52081958555c1091265b76c",
               "type": "message",
               "status": "completed",
               "content": [
@@ -688,7 +688,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_061d3e17db4f0b980069d458a04c348190a341db613f644bdb"
+              "id": "msg_0f15b4f02b45dc4a0069d60de7b52081958555c1091265b76c"
             },
             {
               "role": "user",
@@ -757,7 +757,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360920
+        "timestamp": 1773147360860
       },
       "response": {
         "status": 200,
@@ -765,12 +765,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85218c2e34e238-MRS",
+          "cf-ray": "9e8fce8a3f5d2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:42 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:24 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1207",
+          "openai-processing-ms": "754",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -778,22 +778,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9931",
+          "x-ratelimit-remaining-requests": "9932",
           "x-ratelimit-remaining-tokens": "199622",
-          "x-ratelimit-reset-requests": "9m51.167s",
+          "x-ratelimit-reset-requests": "9m40.755s",
           "x-ratelimit-reset-tokens": "113ms",
-          "x-request-id": "req_a09399d7cf12490ea489b4845d9e399f"
+          "x-request-id": "req_c004c5e270ce4d79a33b2d0a0d1ae3aa"
         },
         "body": {
-          "id": "resp_061d3e17db4f0b980069d458a0be6c8190aafdf1d0610dd165",
+          "id": "resp_0f15b4f02b45dc4a0069d60de81e988195aadbb962a603a731",
           "object": "response",
-          "created_at": 1775524000,
+          "created_at": 1775635944,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524001,
+          "completed_at": 1775635944,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -803,7 +803,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_061d3e17db4f0b980069d458a19b748190931c9f4da3caa66e",
+              "id": "msg_0f15b4f02b45dc4a0069d60de8896c8195a5a5c9a8fb6c1263",
               "type": "message",
               "status": "completed",
               "content": [
@@ -988,12 +988,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521951fbfe238-MRS",
+          "cf-ray": "9e8fce8ffa9f2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:43 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:25 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1054",
+          "openai-processing-ms": "885",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1001,22 +1001,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9930",
+          "x-ratelimit-remaining-requests": "9931",
           "x-ratelimit-remaining-tokens": "199642",
-          "x-ratelimit-reset-requests": "9m58.547s",
+          "x-ratelimit-reset-requests": "9m48.47s",
           "x-ratelimit-reset-tokens": "107ms",
-          "x-request-id": "req_83b7c2bd78b543ff873b9ae40b9f7eed"
+          "x-request-id": "req_f170f7c539634031ac357b254f71bcb3"
         },
         "body": {
-          "id": "resp_0693b85542b2c7100069d458a22f60819097a3792f97d31af0",
+          "id": "resp_0d4a5c45a3c3f1ae0069d60de90f208195a60f3725484dcfbd",
           "object": "response",
-          "created_at": 1775524002,
+          "created_at": 1775635945,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524003,
+          "completed_at": 1775635945,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1026,7 +1026,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0693b85542b2c7100069d458a2c2548190a98493a97606b735",
+              "id": "msg_0d4a5c45a3c3f1ae0069d60de96b908195a190dd703836a00d",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1194,12 +1194,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85219ce933e238-MRS",
+          "cf-ray": "9e8fce96adf02e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:44 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:27 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "915",
+          "openai-processing-ms": "1206",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1207,22 +1207,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9929",
+          "x-ratelimit-remaining-requests": "9931",
           "x-ratelimit-remaining-tokens": "199658",
-          "x-ratelimit-reset-requests": "10m5.935s",
+          "x-ratelimit-reset-requests": "9m56.058s",
           "x-ratelimit-reset-tokens": "102ms",
-          "x-request-id": "req_5f1bd22d3c194450b772a8b923878ace"
+          "x-request-id": "req_f0bf7c5c21324f62b3755506f4feb25b"
         },
         "body": {
-          "id": "resp_0827313af85fefc20069d458a36f788190b12fb063bcd6ba8b",
+          "id": "resp_08845a75bfcd76dd0069d60dea21408190a7dc58e9466da87a",
           "object": "response",
-          "created_at": 1775524003,
+          "created_at": 1775635946,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524004,
+          "completed_at": 1775635947,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1232,7 +1232,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0827313af85fefc20069d458a3dc548190a51e7a9489d4d02b",
+              "id": "msg_08845a75bfcd76dd0069d60dea8e8081909c1a6a11abeb4576",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1383,7 +1383,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773147360040
       },
       "response": {
         "status": 200,
@@ -1391,12 +1391,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521a50a0de238-MRS",
+          "cf-ray": "9e8fcea01bfe2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:45 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:28 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "641",
+          "openai-processing-ms": "798",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1404,22 +1404,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9929",
+          "x-ratelimit-remaining-requests": "9930",
           "x-ratelimit-remaining-tokens": "199687",
-          "x-ratelimit-reset-requests": "10m13.274s",
+          "x-ratelimit-reset-requests": "10m3.155s",
           "x-ratelimit-reset-tokens": "93ms",
-          "x-request-id": "req_5663efb836b99f07ad0bb0a396c808a4"
+          "x-request-id": "req_531595585af3435dbf16df6ca20e3a74"
         },
         "body": {
-          "id": "resp_005e89d5d2d1b8ce0069d458a4bc888195931ca5b46b093fad",
+          "id": "resp_024ba28546d677760069d60deba16c81978146148585080f82",
           "object": "response",
-          "created_at": 1775524004,
+          "created_at": 1775635947,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524005,
+          "completed_at": 1775635948,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1429,7 +1429,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_005e89d5d2d1b8ce0069d458a520808195b3dcb2438808973d",
+              "id": "msg_024ba28546d677760069d60dec192c8197a8d467671e0afdb9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1520,6 +1520,130 @@
       }
     },
     {
+      "hash": "6b71eea0b332e461",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773147361060
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e8fcea63fa42e3e-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 08 Apr 2026 08:12:29 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "564",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9929",
+          "x-ratelimit-remaining-tokens": "199887",
+          "x-ratelimit-reset-requests": "10m10.821s",
+          "x-ratelimit-reset-tokens": "33ms",
+          "x-request-id": "req_346d981d953b41599c25ddd6e85ef48f"
+        },
+        "body": {
+          "id": "resp_059e772d5dc6d07c0069d60dec9b708193882f68a372e2cac3",
+          "object": "response",
+          "created_at": 1775635948,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775635949,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_059e772d5dc6d07c0069d60decf9448193b90ba8cca26b001f",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Introduction to the World"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 94,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 5,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 99
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
       "hash": "5029cf6cc72e4a2e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
@@ -1542,7 +1666,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_005e89d5d2d1b8ce0069d458a520808195b3dcb2438808973d"
+              "id": "msg_024ba28546d677760069d60dec192c8197a8d467671e0afdb9"
             },
             {
               "role": "user",
@@ -1593,7 +1717,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360940
+        "timestamp": 1773147361060
       },
       "response": {
         "status": 200,
@@ -1601,12 +1725,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521aacac8a9cc-MRS",
+          "cf-ray": "9e8fcea69b1f605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:46 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:29 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "852",
+          "openai-processing-ms": "839",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1614,22 +1738,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9928",
+          "x-ratelimit-remaining-requests": "9929",
           "x-ratelimit-remaining-tokens": "199666",
-          "x-ratelimit-reset-requests": "10m20.958s",
+          "x-ratelimit-reset-requests": "10m10.757s",
           "x-ratelimit-reset-tokens": "100ms",
-          "x-request-id": "req_2bd9413e93b24d8189a36c594a9695d5"
+          "x-request-id": "req_5a0776cb6bbd4278b5a83712fa3e83d4"
         },
         "body": {
-          "id": "resp_005e89d5d2d1b8ce0069d458a5a7ac8195bf48d1d77c70d477",
+          "id": "resp_024ba28546d677760069d60deca9c88197be781184c043fda5",
           "object": "response",
-          "created_at": 1775524005,
+          "created_at": 1775635948,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524006,
+          "completed_at": 1775635949,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1639,7 +1763,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_005e89d5d2d1b8ce0069d458a613d48195886838715fdbc08a",
+              "id": "msg_024ba28546d677760069d60ded19a081978c099d0ca5559566",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1730,131 +1854,7 @@
       }
     },
     {
-      "hash": "6b71eea0b332e461",
-      "request": {
-        "url": "https://api.openai.com/v1/responses",
-        "method": "POST",
-        "body": {
-          "model": "gpt-4o-mini",
-          "input": [
-            {
-              "role": "system",
-              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]"
-                }
-              ]
-            }
-          ]
-        },
-        "timestamp": 1773147360940
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521aa5ffee238-MRS",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:46 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "969",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9928",
-          "x-ratelimit-remaining-tokens": "199887",
-          "x-ratelimit-reset-requests": "10m21.07s",
-          "x-ratelimit-reset-tokens": "33ms",
-          "x-request-id": "req_6b52ad3f6e8046f48ce31968bf5f1ea7"
-        },
-        "body": {
-          "id": "resp_016ea2f6049521330069d458a5935c819699599760498df1bd",
-          "object": "response",
-          "created_at": 1775524005,
-          "status": "completed",
-          "background": false,
-          "billing": {
-            "payer": "developer"
-          },
-          "completed_at": 1775524006,
-          "error": null,
-          "frequency_penalty": 0,
-          "incomplete_details": null,
-          "instructions": null,
-          "max_output_tokens": null,
-          "max_tool_calls": null,
-          "model": "gpt-4o-mini-2024-07-18",
-          "output": [
-            {
-              "id": "msg_016ea2f6049521330069d458a6417c8196b74ade37682054f0",
-              "type": "message",
-              "status": "completed",
-              "content": [
-                {
-                  "type": "output_text",
-                  "annotations": [],
-                  "logprobs": [],
-                  "text": "Greeting the World"
-                }
-              ],
-              "role": "assistant"
-            }
-          ],
-          "parallel_tool_calls": true,
-          "presence_penalty": 0,
-          "previous_response_id": null,
-          "prompt_cache_key": null,
-          "prompt_cache_retention": null,
-          "reasoning": {
-            "effort": null,
-            "summary": null
-          },
-          "safety_identifier": null,
-          "service_tier": "default",
-          "store": true,
-          "temperature": 1,
-          "text": {
-            "format": {
-              "type": "text"
-            },
-            "verbosity": "medium"
-          },
-          "tool_choice": "auto",
-          "tools": [],
-          "top_logprobs": 0,
-          "top_p": 1,
-          "truncation": "disabled",
-          "usage": {
-            "input_tokens": 94,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 4,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 98
-          },
-          "user": null,
-          "metadata": {}
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "7f57bc6997620c97",
+      "hash": "56a6939d2a57e925",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1926,12 +1926,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521b1d8ad1852-MRS",
+          "cf-ray": "9e8fceacfaeb605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:47 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:30 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "597",
+          "openai-processing-ms": "687",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1940,21 +1940,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9926",
-          "x-ratelimit-remaining-tokens": "199558",
-          "x-ratelimit-reset-requests": "10m37.156s",
-          "x-ratelimit-reset-tokens": "132ms",
-          "x-request-id": "req_a08b8d2ade994674908875d795e75722"
+          "x-ratelimit-remaining-tokens": "199539",
+          "x-ratelimit-reset-requests": "10m35.673s",
+          "x-ratelimit-reset-tokens": "138ms",
+          "x-request-id": "req_3d196d40f19c4d5c931b872b50403b59"
         },
         "body": {
-          "id": "resp_02e9dac5d46e8a5e0069d458a6c86481939d8cdcbfd242e3d6",
+          "id": "resp_01146dde798fdfc20069d60dedaf288190a3c44038bfd2818c",
           "object": "response",
-          "created_at": 1775524006,
+          "created_at": 1775635949,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524007,
+          "completed_at": 1775635950,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1964,7 +1964,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02e9dac5d46e8a5e0069d458a715e88193814e3d6b7bb176d0",
+              "id": "msg_01146dde798fdfc20069d60dee195c81909fdf7723c132cb9b",
               "type": "message",
               "status": "completed",
               "content": [
@@ -2123,12 +2123,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521b7ae86a9cc-MRS",
+          "cf-ray": "9e8fceb33963605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:48 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:31 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "553",
+          "openai-processing-ms": "957",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2136,22 +2136,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9924",
+          "x-ratelimit-remaining-requests": "9925",
           "x-ratelimit-remaining-tokens": "199687",
-          "x-ratelimit-reset-requests": "10m53.489s",
+          "x-ratelimit-reset-requests": "10m43.333s",
           "x-ratelimit-reset-tokens": "93ms",
-          "x-request-id": "req_5270f16a36284645b5ac992dbf5d2b5d"
+          "x-request-id": "req_279b2833d76b408b94a0d65847dd7600"
         },
         "body": {
-          "id": "resp_01a571ee2f01182b0069d458a7b7988196982fb013fd864fd9",
+          "id": "resp_038c0b8cad392d290069d60deeacac8194bbc5d359a652f31e",
           "object": "response",
-          "created_at": 1775524007,
+          "created_at": 1775635950,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524008,
+          "completed_at": 1775635951,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2161,7 +2161,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_01a571ee2f01182b0069d458a8109881968e96a04dd49b15d4",
+              "id": "msg_038c0b8cad392d290069d60def31788194baeca0f20f7eb46a",
               "type": "message",
               "status": "completed",
               "content": [
@@ -2274,7 +2274,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_01a571ee2f01182b0069d458a8109881968e96a04dd49b15d4"
+              "id": "msg_038c0b8cad392d290069d60def31788194baeca0f20f7eb46a"
             },
             {
               "role": "user",
@@ -2325,7 +2325,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360840
+        "timestamp": 1773147361220
       },
       "response": {
         "status": 200,
@@ -2333,12 +2333,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521bc6c76e238-MRS",
+          "cf-ray": "9e8fceba4c502e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:52 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:32 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "3664",
+          "openai-processing-ms": "676",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2346,22 +2346,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9922",
+          "x-ratelimit-remaining-requests": "9923",
           "x-ratelimit-remaining-tokens": "199666",
-          "x-ratelimit-reset-requests": "11m8.261s",
+          "x-ratelimit-reset-requests": "10m59.417s",
           "x-ratelimit-reset-tokens": "100ms",
-          "x-request-id": "req_46c7e889d02b4c87a0f7c82c11c7cbf6"
+          "x-request-id": "req_545d0c70d4f245fe958d1c2f8b2bd151"
         },
         "body": {
-          "id": "resp_01a571ee2f01182b0069d458a919008196b8639de9223100a5",
+          "id": "resp_038c0b8cad392d290069d60defd1948194ae24050d1738b9e2",
           "object": "response",
-          "created_at": 1775524009,
+          "created_at": 1775635951,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524011,
+          "completed_at": 1775635952,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2371,7 +2371,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_01a571ee2f01182b0069d458aa9c6c8196bc81699965642c34",
+              "id": "msg_038c0b8cad392d290069d60df037dc819481bd90bcd6300991",
               "type": "message",
               "status": "completed",
               "content": [
@@ -2530,12 +2530,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521d6ea2fe238-MRS",
+          "cf-ray": "9e8fcec0e8812e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:53 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:33 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "761",
+          "openai-processing-ms": "954",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2543,22 +2543,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9921",
-          "x-ratelimit-remaining-tokens": "199673",
-          "x-ratelimit-reset-requests": "11m14.429s",
+          "x-ratelimit-remaining-requests": "9923",
+          "x-ratelimit-remaining-tokens": "199674",
+          "x-ratelimit-reset-requests": "10m58.292s",
           "x-ratelimit-reset-tokens": "97ms",
-          "x-request-id": "req_671a830323354d73a33655027e1c818d"
+          "x-request-id": "req_d9cc7eb08caf40a7b9fde9bd114d3a41"
         },
         "body": {
-          "id": "resp_05bcd4a6f54a1bde0069d458acb6188195ab2dcdd34afb9335",
+          "id": "resp_06b314243799d5a50069d60df0e4908190b4d4ff022667c69c",
           "object": "response",
-          "created_at": 1775524012,
+          "created_at": 1775635952,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524013,
+          "completed_at": 1775635953,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2568,11 +2568,11 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "fc_05bcd4a6f54a1bde0069d458ad43ec8195b82e93b8b9d9ef5e",
+              "id": "fc_06b314243799d5a50069d60df18784819090331e7594f29ee4",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"city\":\"London\"}",
-              "call_id": "call_f4SmkavEczBIg5urifAoXwAi",
+              "call_id": "call_0VS7slycYzuaJC6fvzzxIItl",
               "name": "get_weather_city"
             }
           ],
@@ -2653,7 +2653,7 @@
       }
     },
     {
-      "hash": "72d91adbf4d808fe",
+      "hash": "dcd3d00fe99a5581",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2675,11 +2675,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_05bcd4a6f54a1bde0069d458ad43ec8195b82e93b8b9d9ef5e"
+              "id": "fc_06b314243799d5a50069d60df18784819090331e7594f29ee4"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_f4SmkavEczBIg5urifAoXwAi",
+              "call_id": "call_0VS7slycYzuaJC6fvzzxIItl",
               "output": "The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees."
             }
           ],
@@ -2722,7 +2722,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360980
+        "timestamp": 1773147361120
       },
       "response": {
         "status": 200,
@@ -2730,12 +2730,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521dd594ee238-MRS",
+          "cf-ray": "9e8fcec80d5f2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:55 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:34 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1291",
+          "openai-processing-ms": "694",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2745,20 +2745,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9921",
           "x-ratelimit-remaining-tokens": "199629",
-          "x-ratelimit-reset-requests": "11m22.032s",
+          "x-ratelimit-reset-requests": "11m14.557s",
           "x-ratelimit-reset-tokens": "111ms",
-          "x-request-id": "req_e3f1bdba1fff4296b5487b805117a865"
+          "x-request-id": "req_608c400fac614faea3b6da11141337f4"
         },
         "body": {
-          "id": "resp_05bcd4a6f54a1bde0069d458adbe0c81958593b75cf300e37c",
+          "id": "resp_06b314243799d5a50069d60df203008190847e847895a78609",
           "object": "response",
-          "created_at": 1775524013,
+          "created_at": 1775635954,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524014,
+          "completed_at": 1775635954,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2768,7 +2768,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_05bcd4a6f54a1bde0069d458ae9fa48195a96148514290f527",
+              "id": "msg_06b314243799d5a50069d60df2547c819091421dce4b6da4ed",
               "type": "message",
               "status": "completed",
               "content": [
@@ -2881,7 +2881,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_05bcd4a6f54a1bde0069d458ae9fa48195a96148514290f527"
+              "id": "msg_06b314243799d5a50069d60df2547c819091421dce4b6da4ed"
             },
             {
               "role": "user",
@@ -2932,7 +2932,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147362520
+        "timestamp": 1773147362060
       },
       "response": {
         "status": 200,
@@ -2940,12 +2940,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521e78ad7f31b-MRS",
+          "cf-ray": "9e8fcecd7c10605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:56 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:35 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "778",
+          "openai-processing-ms": "627",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2953,22 +2953,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9920",
+          "x-ratelimit-remaining-requests": "9921",
           "x-ratelimit-remaining-tokens": "199637",
-          "x-ratelimit-reset-requests": "11m29.027s",
+          "x-ratelimit-reset-requests": "11m22.3s",
           "x-ratelimit-reset-tokens": "108ms",
-          "x-request-id": "req_8afa40b3f376431791dda2e2ef688686"
+          "x-request-id": "req_9bd85feccd474245a102fa232a71ca1f"
         },
         "body": {
-          "id": "resp_05bcd4a6f54a1bde0069d458af5e808195be9e47ee624ae7cc",
+          "id": "resp_06b314243799d5a50069d60df2e1dc819080f6fd8c03b65ea3",
           "object": "response",
-          "created_at": 1775524015,
+          "created_at": 1775635954,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524016,
+          "completed_at": 1775635955,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2978,7 +2978,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_05bcd4a6f54a1bde0069d458afd0608195b093e1a41cc45398",
+              "id": "msg_06b314243799d5a50069d60df335b48190b1b2abe8c1f1b33e",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3091,7 +3091,7 @@
             }
           ]
         },
-        "timestamp": 1773147362520
+        "timestamp": 1773147362060
       },
       "response": {
         "status": 200,
@@ -3099,12 +3099,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521e71b7ee238-MRS",
+          "cf-ray": "9e8fcecd690b2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:56 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:35 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "877",
+          "openai-processing-ms": "679",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3112,22 +3112,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9920",
+          "x-ratelimit-remaining-requests": "9921",
           "x-ratelimit-remaining-tokens": "199884",
-          "x-ratelimit-reset-requests": "11m29.112s",
+          "x-ratelimit-reset-requests": "11m22.113s",
           "x-ratelimit-reset-tokens": "34ms",
-          "x-request-id": "req_27794726c1ee4b54a88f16009e77d8e1"
+          "x-request-id": "req_fd21624de61240edb366f9fd4d04b69a"
         },
         "body": {
-          "id": "resp_0f10c9f1b82bcc5a0069d458af4b5c81978af9e6d1e7e5dc1d",
+          "id": "resp_0bfdffed1706a2230069d60df2e00881948de1ea5d701d928c",
           "object": "response",
-          "created_at": 1775524015,
+          "created_at": 1775635954,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524016,
+          "completed_at": 1775635955,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3137,7 +3137,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0f10c9f1b82bcc5a0069d458afffac819783812491890565be",
+              "id": "msg_0bfdffed1706a2230069d60df361d88194a21bb0b703a7003f",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3145,7 +3145,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Weather Inquiry for London"
+                  "text": "Current Weather in London Inquiry"
                 }
               ],
               "role": "assistant"
@@ -3180,135 +3180,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 5,
+            "output_tokens": 6,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 102
-          },
-          "user": null,
-          "metadata": {}
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "c5e330c5743f05db",
-      "request": {
-        "url": "https://api.openai.com/v1/responses",
-        "method": "POST",
-        "body": {
-          "model": "gpt-4o-mini",
-          "input": [
-            {
-              "role": "system",
-              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "[{\"type\":\"text\",\"text\":\"What was the tool you just used?\"}]"
-                }
-              ]
-            }
-          ]
-        },
-        "timestamp": 1773147360000
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521eda999f31b-MRS",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:56 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "423",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9919",
-          "x-ratelimit-remaining-tokens": "199883",
-          "x-ratelimit-reset-requests": "11m36.705s",
-          "x-ratelimit-reset-tokens": "35ms",
-          "x-request-id": "req_92b9bd216e1d4df790eb39f38b6d19a0"
-        },
-        "body": {
-          "id": "resp_0f1465e297f1185b0069d458b059a48194a750dfa4a89be75c",
-          "object": "response",
-          "created_at": 1775524016,
-          "status": "completed",
-          "background": false,
-          "billing": {
-            "payer": "developer"
-          },
-          "completed_at": 1775524016,
-          "error": null,
-          "frequency_penalty": 0,
-          "incomplete_details": null,
-          "instructions": null,
-          "max_output_tokens": null,
-          "max_tool_calls": null,
-          "model": "gpt-4o-mini-2024-07-18",
-          "output": [
-            {
-              "id": "msg_0f1465e297f1185b0069d458b090fc819494dfe8d45e278285",
-              "type": "message",
-              "status": "completed",
-              "content": [
-                {
-                  "type": "output_text",
-                  "annotations": [],
-                  "logprobs": [],
-                  "text": "Inquiry about the recently used tool"
-                }
-              ],
-              "role": "assistant"
-            }
-          ],
-          "parallel_tool_calls": true,
-          "presence_penalty": 0,
-          "previous_response_id": null,
-          "prompt_cache_key": null,
-          "prompt_cache_retention": null,
-          "reasoning": {
-            "effort": null,
-            "summary": null
-          },
-          "safety_identifier": null,
-          "service_tier": "default",
-          "store": true,
-          "temperature": 1,
-          "text": {
-            "format": {
-              "type": "text"
-            },
-            "verbosity": "medium"
-          },
-          "tool_choice": "auto",
-          "tools": [],
-          "top_logprobs": 0,
-          "top_p": 1,
-          "truncation": "disabled",
-          "usage": {
-            "input_tokens": 98,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 7,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 105
+            "total_tokens": 103
           },
           "user": null,
           "metadata": {}
@@ -3372,12 +3248,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521ee3e3649eb-MRS",
+          "cf-ray": "9e8fced2cf2568b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:57 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:36 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "610",
+          "openai-processing-ms": "555",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3387,20 +3263,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9919",
           "x-ratelimit-remaining-tokens": "199232",
-          "x-ratelimit-reset-requests": "11m36.636s",
+          "x-ratelimit-reset-requests": "11m38.734s",
           "x-ratelimit-reset-tokens": "230ms",
-          "x-request-id": "req_db62d55dc96a4c33bf0c321f494d03b6"
+          "x-request-id": "req_7576fcd5575b42a8a1f85d283feafc4b"
         },
         "body": {
-          "id": "resp_0d9c8544c28afd7c0069d458b06f1c8194b78a0b9869b8f526",
+          "id": "resp_054854321e8e17650069d60df3bd148194983235f3fb0c4e83",
           "object": "response",
-          "created_at": 1775524016,
+          "created_at": 1775635955,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524016,
+          "completed_at": 1775635956,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3410,7 +3286,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0d9c8544c28afd7c0069d458b0dca48194bea454e595f41728",
+              "id": "msg_054854321e8e17650069d60df411688194938e29d19ad31d86",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3476,6 +3352,130 @@
               "reasoning_tokens": 0
             },
             "total_tokens": 559
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "c5e330c5743f05db",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"What was the tool you just used?\"}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773147360000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e8fced28800605a-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 08 Apr 2026 08:12:36 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "637",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9920",
+          "x-ratelimit-remaining-tokens": "199883",
+          "x-ratelimit-reset-requests": "11m30.161s",
+          "x-ratelimit-reset-tokens": "35ms",
+          "x-request-id": "req_6659960c2e1545f48af43e5f9aa02fe9"
+        },
+        "body": {
+          "id": "resp_0da3f751cd899cb70069d60df3b0188193a3bbab9704078f66",
+          "object": "response",
+          "created_at": 1775635955,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775635956,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_0da3f751cd899cb70069d60df41018819383b6512ca4dace64",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Inquiring about the recently used tool"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 98,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 8,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 106
           },
           "user": null,
           "metadata": {}
@@ -3552,12 +3552,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521f3395ae238-MRS",
+          "cf-ray": "9e8fced75fa02e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:58 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:37 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "737",
+          "openai-processing-ms": "646",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3565,22 +3565,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9916",
+          "x-ratelimit-remaining-requests": "9917",
           "x-ratelimit-remaining-tokens": "199668",
-          "x-ratelimit-reset-requests": "12m1.726s",
+          "x-ratelimit-reset-requests": "11m55.292s",
           "x-ratelimit-reset-tokens": "99ms",
-          "x-request-id": "req_2373635ad94f4b219a2fb38b48a4e070"
+          "x-request-id": "req_ef144c791f614900863e724bb975e968"
         },
         "body": {
-          "id": "resp_0bc7bfc320a4c3b00069d458b141fc8194a43a933c05798099",
+          "id": "resp_06e379b762c5817d0069d60df478608194950ff4f1855d1a46",
           "object": "response",
-          "created_at": 1775524017,
+          "created_at": 1775635956,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524017,
+          "completed_at": 1775635956,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3590,11 +3590,11 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "fc_0bc7bfc320a4c3b00069d458b1ce548194907d5d5ba1229d2f",
+              "id": "fc_06e379b762c5817d0069d60df4e53481948ddfa6dec0acf177",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"city\":\"Tokyo\"}",
-              "call_id": "call_Hgm4txnwU4mDbO4Q4Et2OvcQ",
+              "call_id": "call_Fp8qT98aAOohGniSlh454dKc",
               "name": "get_weather_city"
             }
           ],
@@ -3675,7 +3675,7 @@
       }
     },
     {
-      "hash": "7e4b79dfd4893a54",
+      "hash": "f47ca4b11cb90fb0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3697,11 +3697,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0bc7bfc320a4c3b00069d458b1ce548194907d5d5ba1229d2f"
+              "id": "fc_06e379b762c5817d0069d60df4e53481948ddfa6dec0acf177"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Hgm4txnwU4mDbO4Q4Et2OvcQ",
+              "call_id": "call_Fp8qT98aAOohGniSlh454dKc",
               "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
             }
           ],
@@ -3744,7 +3744,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360860
+        "timestamp": 1773147360760
       },
       "response": {
         "status": 200,
@@ -3752,12 +3752,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8521f91ff8e238-MRS",
+          "cf-ray": "9e8fcedc6b702e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:06:59 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:38 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1011",
+          "openai-processing-ms": "1269",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3765,22 +3765,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9915",
+          "x-ratelimit-remaining-requests": "9916",
           "x-ratelimit-remaining-tokens": "199623",
-          "x-ratelimit-reset-requests": "12m9.441s",
+          "x-ratelimit-reset-requests": "12m3.066s",
           "x-ratelimit-reset-tokens": "113ms",
-          "x-request-id": "req_a86f1fe657184e00bf1acde4b2e5f571"
+          "x-request-id": "req_337cc2e88af94e9dbf8b904ce7247f33"
         },
         "body": {
-          "id": "resp_0bc7bfc320a4c3b00069d458b22ca08194b46316568742e7ef",
+          "id": "resp_06e379b762c5817d0069d60df545e481948d297bed2860d155",
           "object": "response",
-          "created_at": 1775524018,
+          "created_at": 1775635957,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524018,
+          "completed_at": 1775635958,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3790,7 +3790,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0bc7bfc320a4c3b00069d458b28e908194a56ff0967cbfc621",
+              "id": "msg_06e379b762c5817d0069d60df5af488194916fbc0e86386e19",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3881,7 +3881,7 @@
       }
     },
     {
-      "hash": "cb6dd16d28f8e85c",
+      "hash": "c7a4a6da904af73c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3903,16 +3903,16 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0bc7bfc320a4c3b00069d458b1ce548194907d5d5ba1229d2f"
+              "id": "fc_06e379b762c5817d0069d60df4e53481948ddfa6dec0acf177"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Hgm4txnwU4mDbO4Q4Et2OvcQ",
+              "call_id": "call_Fp8qT98aAOohGniSlh454dKc",
               "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
             },
             {
               "type": "item_reference",
-              "id": "msg_0bc7bfc320a4c3b00069d458b28e908194a56ff0967cbfc621"
+              "id": "msg_06e379b762c5817d0069d60df5af488194916fbc0e86386e19"
             },
             {
               "role": "user",
@@ -3963,7 +3963,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147362980
+        "timestamp": 1773147363140
       },
       "response": {
         "status": 200,
@@ -3971,12 +3971,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522009840e238-MRS",
+          "cf-ray": "9e8fcee568712e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:00 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:39 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1160",
+          "openai-processing-ms": "820",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3984,22 +3984,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9914",
+          "x-ratelimit-remaining-requests": "9915",
           "x-ratelimit-remaining-tokens": "199588",
-          "x-ratelimit-reset-requests": "12m16.398s",
+          "x-ratelimit-reset-requests": "12m10.163s",
           "x-ratelimit-reset-tokens": "123ms",
-          "x-request-id": "req_4c5b4438e20f47d492d277963b18484f"
+          "x-request-id": "req_2e2c867c3a164a24a0186f861e1a72d4"
         },
         "body": {
-          "id": "resp_0bc7bfc320a4c3b00069d458b361008194925da77dd8df916f",
+          "id": "resp_06e379b762c5817d0069d60df6b8f881949089308ccc67389f",
           "object": "response",
-          "created_at": 1775524019,
+          "created_at": 1775635958,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524020,
+          "completed_at": 1775635959,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4009,11 +4009,11 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "fc_0bc7bfc320a4c3b00069d458b4594c81948bb4325c2acfa0d0",
+              "id": "fc_06e379b762c5817d0069d60df74a7c81948c6751d108be825f",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"city\":\"London\"}",
-              "call_id": "call_g62kIwitywoAGoySMrcyejvh",
+              "call_id": "call_lMx8uuJX2b9mozqFpdYN57Eu",
               "name": "get_weather_city"
             }
           ],
@@ -4094,7 +4094,7 @@
       }
     },
     {
-      "hash": "5b1c8bc15eec286a",
+      "hash": "bb51263a3de2de76",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4116,16 +4116,16 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0bc7bfc320a4c3b00069d458b1ce548194907d5d5ba1229d2f"
+              "id": "fc_06e379b762c5817d0069d60df4e53481948ddfa6dec0acf177"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Hgm4txnwU4mDbO4Q4Et2OvcQ",
+              "call_id": "call_Fp8qT98aAOohGniSlh454dKc",
               "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
             },
             {
               "type": "item_reference",
-              "id": "msg_0bc7bfc320a4c3b00069d458b28e908194a56ff0967cbfc621"
+              "id": "msg_06e379b762c5817d0069d60df5af488194916fbc0e86386e19"
             },
             {
               "role": "user",
@@ -4138,11 +4138,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0bc7bfc320a4c3b00069d458b4594c81948bb4325c2acfa0d0"
+              "id": "fc_06e379b762c5817d0069d60df74a7c81948c6751d108be825f"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_g62kIwitywoAGoySMrcyejvh",
+              "call_id": "call_lMx8uuJX2b9mozqFpdYN57Eu",
               "output": "The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees."
             }
           ],
@@ -4185,7 +4185,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147364220
+        "timestamp": 1773147364080
       },
       "response": {
         "status": 200,
@@ -4193,12 +4193,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e852208f9c7e238-MRS",
+          "cf-ray": "9e8fceeb8cec2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:01 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:40 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "961",
+          "openai-processing-ms": "775",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -4206,22 +4206,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9913",
+          "x-ratelimit-remaining-requests": "9914",
           "x-ratelimit-remaining-tokens": "199543",
-          "x-ratelimit-reset-requests": "12m24.125s",
+          "x-ratelimit-reset-requests": "12m17.994s",
           "x-ratelimit-reset-tokens": "137ms",
-          "x-request-id": "req_b27a63cdc39844288abf44a9c8765df6"
+          "x-request-id": "req_9fc2d987b43f45e4bc191b84b1561952"
         },
         "body": {
-          "id": "resp_0bc7bfc320a4c3b00069d458b4b99c819482563b1aa4b312f2",
+          "id": "resp_06e379b762c5817d0069d60df7b2dc81949ff9fe38a3e2598a",
           "object": "response",
-          "created_at": 1775524020,
+          "created_at": 1775635959,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524021,
+          "completed_at": 1775635960,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4231,7 +4231,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0bc7bfc320a4c3b00069d458b530908194a417043ede68c908",
+              "id": "msg_06e379b762c5817d0069d60df8010081948df1e74c49139503",
               "type": "message",
               "status": "completed",
               "content": [
@@ -4353,12 +4353,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522109a66e238-MRS",
+          "cf-ray": "9e8fcef1884b2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:02 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:41 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "647",
+          "openai-processing-ms": "678",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -4368,20 +4368,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9913",
           "x-ratelimit-remaining-tokens": "199961",
-          "x-ratelimit-reset-requests": "12m31.606s",
+          "x-ratelimit-reset-requests": "12m25.696s",
           "x-ratelimit-reset-tokens": "11ms",
-          "x-request-id": "req_49f5155c33a947009ae836b26021a65c"
+          "x-request-id": "req_91b501a8d173487f9f1b4d49800bb11c"
         },
         "body": {
-          "id": "resp_0c82f939cb62742f0069d458b5f08c81948de89796f2cf388e",
+          "id": "resp_074f6141bed28a0c0069d60df8a5648193a639827987e9b389",
           "object": "response",
-          "created_at": 1775524021,
+          "created_at": 1775635960,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524022,
+          "completed_at": 1775635961,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4391,7 +4391,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0c82f939cb62742f0069d458b641a08194bbf7ff60efd74118",
+              "id": "msg_074f6141bed28a0c0069d60df8e2508193a1249635a484c658",
               "type": "message",
               "status": "completed",
               "content": [
@@ -4469,7 +4469,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_0c82f939cb62742f0069d458b641a08194bbf7ff60efd74118"
+              "id": "msg_074f6141bed28a0c0069d60df8e2508193a1249635a484c658"
             },
             {
               "role": "user",
@@ -4483,7 +4483,7 @@
           ],
           "temperature": 0
         },
-        "timestamp": 1773147360860
+        "timestamp": 1773147360900
       },
       "response": {
         "status": 200,
@@ -4491,12 +4491,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e852215cfb4e238-MRS",
+          "cf-ray": "9e8fcef6cb172e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:03 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:42 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "583",
+          "openai-processing-ms": "667",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -4506,20 +4506,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9912",
           "x-ratelimit-remaining-tokens": "199934",
-          "x-ratelimit-reset-requests": "12m39.403s",
+          "x-ratelimit-reset-requests": "12m33.464s",
           "x-ratelimit-reset-tokens": "19ms",
-          "x-request-id": "req_d029602d31854e8abadb9d39980017e5"
+          "x-request-id": "req_23c4d045025542e387480a569e95b7d7"
         },
         "body": {
-          "id": "resp_0c82f939cb62742f0069d458b6c3f4819496db08f0a3ec0249",
+          "id": "resp_074f6141bed28a0c0069d60df97eb88193b6bccf23d3d78c40",
           "object": "response",
-          "created_at": 1775524022,
+          "created_at": 1775635961,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524023,
+          "completed_at": 1775635962,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4529,7 +4529,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0c82f939cb62742f0069d458b7094481949829be15a0d844a2",
+              "id": "msg_074f6141bed28a0c0069d60df9ca1c8193aa92c9d086ffd693",
               "type": "message",
               "status": "completed",
               "content": [
@@ -4616,12 +4616,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85221aed99e238-MRS",
+          "cf-ray": "9e8fcefc0dcd2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:04 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:43 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1261",
+          "openai-processing-ms": "1114",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -4629,22 +4629,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9911",
+          "x-ratelimit-remaining-requests": "9912",
           "x-ratelimit-remaining-tokens": "199959",
-          "x-ratelimit-reset-requests": "12m47.185s",
+          "x-ratelimit-reset-requests": "12m32.54s",
           "x-ratelimit-reset-tokens": "12ms",
-          "x-request-id": "req_9c778e4344614d618d5dfff89376cea0"
+          "x-request-id": "req_e3244b0e618a44eab382ec5e19fa9a5d"
         },
         "body": {
-          "id": "resp_0bc584f175a76a280069d458b79d74819089d6a8c58a427ea2",
+          "id": "resp_0cc7e3d53b6a75f80069d60dfa57b08195882bf0d12daedafd",
           "object": "response",
-          "created_at": 1775524023,
+          "created_at": 1775635962,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524024,
+          "completed_at": 1775635963,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4654,7 +4654,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0bc584f175a76a280069d458b7ebe88190b5be99242f54c6ee",
+              "id": "msg_0cc7e3d53b6a75f80069d60dfaadf081958513d71d47a94cc9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -4662,7 +4662,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I can't save messages, but I can help you with anything you need! If you want to keep this message, you might want to copy it to a note-taking app or document. How can I assist you further?"
+                  "text": "I can't save messages, but I can help you with anything you need! If you want to keep this message, you might want to copy it to a note or document. How can I assist you further?"
                 }
               ],
               "role": "assistant"
@@ -4697,11 +4697,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 45,
+            "output_tokens": 43,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 67
+            "total_tokens": 65
           },
           "user": null,
           "metadata": {}
@@ -4778,12 +4778,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85222e8a69e238-MRS",
+          "cf-ray": "9e8fcf0c4f892e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:07 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:45 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "677",
+          "openai-processing-ms": "807",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -4791,22 +4791,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9909",
+          "x-ratelimit-remaining-requests": "9910",
           "x-ratelimit-remaining-tokens": "199681",
-          "x-ratelimit-reset-requests": "13m1.353s",
+          "x-ratelimit-reset-requests": "12m55.933s",
           "x-ratelimit-reset-tokens": "95ms",
-          "x-request-id": "req_ea67c905976441bab584f27a328405ca"
+          "x-request-id": "req_e416e826a0124a75a2e5ffbce7e8152a"
         },
         "body": {
-          "id": "resp_02b330419dd4b4d50069d458babd3881908a3e9e3b58118a5b",
+          "id": "resp_011b4e2ee93c60cc0069d60dfcf0b88197ac55958e6aa1c7ba",
           "object": "response",
-          "created_at": 1775524026,
+          "created_at": 1775635964,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524027,
+          "completed_at": 1775635965,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -4816,7 +4816,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02b330419dd4b4d50069d458bb2abc8190bad64d4380c36665",
+              "id": "msg_011b4e2ee93c60cc0069d60dfd70348197bc26a8d5f67c9b12",
               "type": "message",
               "status": "completed",
               "content": [
@@ -4929,7 +4929,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_02b330419dd4b4d50069d458bb2abc8190bad64d4380c36665"
+              "id": "msg_011b4e2ee93c60cc0069d60dfd70348197bc26a8d5f67c9b12"
             },
             {
               "role": "user",
@@ -4980,7 +4980,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360940
+        "timestamp": 1773147361080
       },
       "response": {
         "status": 200,
@@ -4988,12 +4988,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85223418a1e238-MRS",
+          "cf-ray": "9e8fcf127ae32e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:08 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:47 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "993",
+          "openai-processing-ms": "1194",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -5001,22 +5001,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9908",
-          "x-ratelimit-remaining-tokens": "199656",
-          "x-ratelimit-reset-requests": "13m9.113s",
+          "x-ratelimit-remaining-requests": "9909",
+          "x-ratelimit-remaining-tokens": "199657",
+          "x-ratelimit-reset-requests": "13m3.571s",
           "x-ratelimit-reset-tokens": "102ms",
-          "x-request-id": "req_0653e0884d884b41a13c4202650241fb"
+          "x-request-id": "req_6bab10b1eb644d13b64c260ba4748309"
         },
         "body": {
-          "id": "resp_02b330419dd4b4d50069d458bb9f408190957814cb96187a8a",
+          "id": "resp_011b4e2ee93c60cc0069d60dfdeca48197b3569a0ea3d95f11",
           "object": "response",
-          "created_at": 1775524027,
+          "created_at": 1775635965,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524028,
+          "completed_at": 1775635966,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -5026,7 +5026,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02b330419dd4b4d50069d458bc1854819097b857acde93852b",
+              "id": "msg_011b4e2ee93c60cc0069d60dfe81e48197a7681f29288d2629",
               "type": "message",
               "status": "completed",
               "content": [
@@ -5185,12 +5185,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85223edc0fe238-MRS",
+          "cf-ray": "9e8fcf1e393b2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:10 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:48 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "718",
+          "openai-processing-ms": "547",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -5198,22 +5198,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9907",
+          "x-ratelimit-remaining-requests": "9908",
           "x-ratelimit-remaining-tokens": "199684",
-          "x-ratelimit-reset-requests": "13m15.967s",
+          "x-ratelimit-reset-requests": "13m10.363s",
           "x-ratelimit-reset-tokens": "94ms",
-          "x-request-id": "req_1013f20f05094617bebbb5cb8b429ea9"
+          "x-request-id": "req_b68375644aeb4fdebf032b415b1d9b62"
         },
         "body": {
-          "id": "resp_023dd80ec43e5ee70069d458bd62e4819694e8cdd2689cac82",
+          "id": "resp_0a7126a342afde710069d60dffcd34819782054e36344ef26c",
           "object": "response",
-          "created_at": 1775524029,
+          "created_at": 1775635967,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524029,
+          "completed_at": 1775635968,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -5223,7 +5223,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_023dd80ec43e5ee70069d458bdd3448196894cc35212ea3475",
+              "id": "msg_0a7126a342afde710069d60e0015f88197a66b20bf8417ddda",
               "type": "message",
               "status": "completed",
               "content": [
@@ -5382,12 +5382,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522460c37e238-MRS",
+          "cf-ray": "9e8fcf23fce52e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:11 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:49 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "761",
+          "openai-processing-ms": "619",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -5397,20 +5397,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9907",
           "x-ratelimit-remaining-tokens": "199684",
-          "x-ratelimit-reset-requests": "13m23.507s",
+          "x-ratelimit-reset-requests": "13m18.092s",
           "x-ratelimit-reset-tokens": "94ms",
-          "x-request-id": "req_2821ef7e5b2a46bababf3a1fbaea6312"
+          "x-request-id": "req_b04b8a5e12a942ce83df0f3e4ab30db2"
         },
         "body": {
-          "id": "resp_02b00e25cc8ef8dd0069d458be7f2c819696916fc66078f582",
+          "id": "resp_07066d02a13408ef0069d60e00ba908190bae2982d09748436",
           "object": "response",
-          "created_at": 1775524030,
+          "created_at": 1775635968,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524031,
+          "completed_at": 1775635969,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -5420,7 +5420,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02b00e25cc8ef8dd0069d458bef1b88196baed06045d248475",
+              "id": "msg_07066d02a13408ef0069d60e01041881908e0688bc7a430453",
               "type": "message",
               "status": "completed",
               "content": [
@@ -5428,7 +5428,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 1 received! How can I assist you today?"
+                  "text": "Message number 1 received! How can I assist you further?"
                 }
               ],
               "role": "assistant"
@@ -5533,7 +5533,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_02b00e25cc8ef8dd0069d458bef1b88196baed06045d248475"
+              "id": "msg_07066d02a13408ef0069d60e01041881908e0688bc7a430453"
             },
             {
               "role": "user",
@@ -5584,7 +5584,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147361860
+        "timestamp": 1773147361780
       },
       "response": {
         "status": 200,
@@ -5592,12 +5592,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85224c2a6ee238-MRS",
+          "cf-ray": "9e8fcf2998862e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:12 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:50 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "872",
+          "openai-processing-ms": "762",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -5607,20 +5607,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9906",
           "x-ratelimit-remaining-tokens": "199659",
-          "x-ratelimit-reset-requests": "13m31.148s",
+          "x-ratelimit-reset-requests": "13m25.721s",
           "x-ratelimit-reset-tokens": "102ms",
-          "x-request-id": "req_263b59749fa24de7be90d5f938fc9092"
+          "x-request-id": "req_cb34f84ed13c4a9a90f4f3199e42d1ae"
         },
         "body": {
-          "id": "resp_02b00e25cc8ef8dd0069d458bf7c0c8196a86d749877d48c10",
+          "id": "resp_07066d02a13408ef0069d60e01a03c8190a43afbd6f3a3bf50",
           "object": "response",
-          "created_at": 1775524031,
+          "created_at": 1775635969,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524032,
+          "completed_at": 1775635970,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -5630,7 +5630,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02b00e25cc8ef8dd0069d458c00364819693ff48f8e91e30f3",
+              "id": "msg_07066d02a13408ef0069d60e02062c81909f4cd1a57dd02485",
               "type": "message",
               "status": "completed",
               "content": [
@@ -5638,7 +5638,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 2 received! What would you like to discuss or do next?"
+                  "text": "Message number 2 received! What would you like to do next?"
                 }
               ],
               "role": "assistant"
@@ -5708,11 +5708,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 18,
+            "output_tokens": 16,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 142
+            "total_tokens": 140
           },
           "user": null,
           "metadata": {}
@@ -5743,7 +5743,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_02b00e25cc8ef8dd0069d458bef1b88196baed06045d248475"
+              "id": "msg_07066d02a13408ef0069d60e01041881908e0688bc7a430453"
             },
             {
               "role": "user",
@@ -5756,7 +5756,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_02b00e25cc8ef8dd0069d458c00364819693ff48f8e91e30f3"
+              "id": "msg_07066d02a13408ef0069d60e02062c81909f4cd1a57dd02485"
             },
             {
               "role": "user",
@@ -5807,7 +5807,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147363880
+        "timestamp": 1773147363620
       },
       "response": {
         "status": 200,
@@ -5815,12 +5815,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522538a59e238-MRS",
+          "cf-ray": "9e8fcf308cff2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:13 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:52 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "745",
+          "openai-processing-ms": "1449",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -5829,21 +5829,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9905",
-          "x-ratelimit-remaining-tokens": "199631",
-          "x-ratelimit-reset-requests": "13m38.63s",
+          "x-ratelimit-remaining-tokens": "199633",
+          "x-ratelimit-reset-requests": "13m33.31s",
           "x-ratelimit-reset-tokens": "110ms",
-          "x-request-id": "req_9226f08e812b4624aa26aa5253623882"
+          "x-request-id": "req_572d114f17f34a098c7e34af4a44be42"
         },
         "body": {
-          "id": "resp_02b00e25cc8ef8dd0069d458c0a7208196bb7cdba6b7368718",
+          "id": "resp_07066d02a13408ef0069d60e02c4dc8190a716da17b4a5482e",
           "object": "response",
-          "created_at": 1775524032,
+          "created_at": 1775635970,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524033,
+          "completed_at": 1775635972,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -5853,7 +5853,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_02b00e25cc8ef8dd0069d458c10ad48196883beee4b2472c47",
+              "id": "msg_07066d02a13408ef0069d60e03b48c819096c6dba8b964960d",
               "type": "message",
               "status": "completed",
               "content": [
@@ -5861,7 +5861,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 3 received! Let me know how I can help you further."
+                  "text": "Message number 3 received! Let me know how I can help you!"
                 }
               ],
               "role": "assistant"
@@ -5927,15 +5927,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 152,
+            "input_tokens": 150,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 18,
+            "output_tokens": 17,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 170
+            "total_tokens": 167
           },
           "user": null,
           "metadata": {}
@@ -6012,12 +6012,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85225ac9b8e238-MRS",
+          "cf-ray": "9e8fcf3cfd082e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:14 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:53 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1087",
+          "openai-processing-ms": "1115",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -6025,22 +6025,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9904",
-          "x-ratelimit-remaining-tokens": "199681",
-          "x-ratelimit-reset-requests": "13m46.151s",
+          "x-ratelimit-remaining-requests": "9905",
+          "x-ratelimit-remaining-tokens": "199682",
+          "x-ratelimit-reset-requests": "13m39.969s",
           "x-ratelimit-reset-tokens": "95ms",
-          "x-request-id": "req_0131c206671a4d99834a17089399cbda"
+          "x-request-id": "req_4e1a081f6b454be48c265d655b733141"
         },
         "body": {
-          "id": "resp_0b11d8a6f1ef942c0069d458c1ce348190bb379e7b9c78ea11",
+          "id": "resp_0571217acdba8f4c0069d60e04bb408196b362e70abdb0bdde",
           "object": "response",
-          "created_at": 1775524033,
+          "created_at": 1775635972,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524034,
+          "completed_at": 1775635973,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -6050,7 +6050,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0b11d8a6f1ef942c0069d458c26dcc819091575aecf22a9075",
+              "id": "msg_0571217acdba8f4c0069d60e053bdc81968498e468b5fc4ad1",
               "type": "message",
               "status": "completed",
               "content": [
@@ -6141,7 +6141,7 @@
       }
     },
     {
-      "hash": "ef4bac77e6728c1a",
+      "hash": "d3025715b6509392",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6167,7 +6167,7 @@
             },
             {
               "type": "item_reference",
-              "id": "msg_0b11d8a6f1ef942c0069d458c26dcc819091575aecf22a9075"
+              "id": "msg_0571217acdba8f4c0069d60e053bdc81968498e468b5fc4ad1"
             },
             {
               "role": "user",
@@ -6218,7 +6218,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147361340
+        "timestamp": 1773147361420
       },
       "response": {
         "status": 200,
@@ -6226,12 +6226,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522643bc9e238-MRS",
+          "cf-ray": "9e8fcf466a242e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:16 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:55 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "909",
+          "openai-processing-ms": "1199",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -6239,22 +6239,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9903",
+          "x-ratelimit-remaining-requests": "9904",
           "x-ratelimit-remaining-tokens": "199535",
-          "x-ratelimit-reset-requests": "13m53.238s",
+          "x-ratelimit-reset-requests": "13m46.81s",
           "x-ratelimit-reset-tokens": "139ms",
-          "x-request-id": "req_fc4b23e016a24ae99041dd08105d583b"
+          "x-request-id": "req_3113da796a5443acaa9b616acbb6b5f9"
         },
         "body": {
-          "id": "resp_0b11d8a6f1ef942c0069d458c356988190a2f25e83d89825ae",
+          "id": "resp_0571217acdba8f4c0069d60e063c488196962f695470411c3d",
           "object": "response",
-          "created_at": 1775524035,
+          "created_at": 1775635974,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524036,
+          "completed_at": 1775635975,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -6264,7 +6264,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0b11d8a6f1ef942c0069d458c3c9cc8190b6bc8dbd90306928",
+              "id": "msg_0571217acdba8f4c0069d60e06ee3c8196b881a4293e1bd42a",
               "type": "message",
               "status": "completed",
               "content": [
@@ -6272,7 +6272,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Red is a vibrant and energetic color! It often symbolizes passion and excitement. What do you like most about the color red?"
+                  "text": "Red is a vibrant and energetic color! It often symbolizes passion and excitement. What do you like most about red?"
                 }
               ],
               "role": "assistant"
@@ -6342,11 +6342,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 27,
+            "output_tokens": 25,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 275
+            "total_tokens": 273
           },
           "user": null,
           "metadata": {}
@@ -6423,12 +6423,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85226b9bfee238-MRS",
+          "cf-ray": "9e8fcf4efef42e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:17 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:56 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "717",
+          "openai-processing-ms": "1047",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -6436,22 +6436,22 @@
           "x-content-type-options": "nosniff",
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9902",
+          "x-ratelimit-remaining-requests": "9903",
           "x-ratelimit-remaining-tokens": "199686",
-          "x-ratelimit-reset-requests": "14m0.703s",
+          "x-ratelimit-reset-requests": "13m54.299s",
           "x-ratelimit-reset-tokens": "94ms",
-          "x-request-id": "req_fa336458c04249afb718c02f4c13dbec"
+          "x-request-id": "req_416bbfd2aebe4a5984bf532ee77adffa"
         },
         "body": {
-          "id": "resp_0548b8a97e59c7730069d458c482508195a2f8805224d13155",
+          "id": "resp_04df43de13f945670069d60e079de48195a3aefd594aafded7",
           "object": "response",
-          "created_at": 1775524036,
+          "created_at": 1775635975,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524037,
+          "completed_at": 1775635976,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -6461,7 +6461,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0548b8a97e59c7730069d458c4f39c8195ac6b34c8b3662016",
+              "id": "msg_04df43de13f945670069d60e0842f0819599ed1f4d16f623c8",
               "type": "message",
               "status": "completed",
               "content": [
@@ -6620,12 +6620,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e85228bbd38e238-MRS",
+          "cf-ray": "9e8fcf631aec2e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:22 GMT",
+          "date": "Wed, 08 Apr 2026 08:12:59 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "799",
+          "openai-processing-ms": "808",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -6635,20 +6635,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9900",
           "x-ratelimit-remaining-tokens": "199686",
-          "x-ratelimit-reset-requests": "14m21.491s",
+          "x-ratelimit-reset-requests": "14m17.116s",
           "x-ratelimit-reset-tokens": "94ms",
-          "x-request-id": "req_706dfaf6f95e470ab0b45e2cdb37dfbc"
+          "x-request-id": "req_70ccc3723aff4bf087548a76d4fc0296"
         },
         "body": {
-          "id": "resp_04e42a1f5c94e53a0069d458c9a534819689772a6ccc261f31",
+          "id": "resp_01bb58d4f54a396d0069d60e0ad0b0819484a7969c4ab12d28",
           "object": "response",
-          "created_at": 1775524041,
+          "created_at": 1775635978,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524042,
+          "completed_at": 1775635979,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -6658,7 +6658,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_04e42a1f5c94e53a0069d458ca07508196a52fbfcb06768547",
+              "id": "msg_01bb58d4f54a396d0069d60e0b38fc819481c5f116204ad0c2",
               "type": "message",
               "status": "completed",
               "content": [
@@ -6666,7 +6666,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "It looks like you want to test thread cloning. How can I assist you with that?"
+                  "text": "It seems like you want to test thread cloning. How can I assist you with that?"
                 }
               ],
               "role": "assistant"
@@ -6817,12 +6817,12 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8522936dcde238-MRS",
+          "cf-ray": "9e8fcf6c0f822e3e-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 07 Apr 2026 01:07:26 GMT",
+          "date": "Wed, 08 Apr 2026 08:13:03 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "3450",
+          "openai-processing-ms": "3460",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -6832,20 +6832,20 @@
           "x-ratelimit-limit-tokens": "200000",
           "x-ratelimit-remaining-requests": "9899",
           "x-ratelimit-remaining-tokens": "199676",
-          "x-ratelimit-reset-requests": "14m28.907s",
+          "x-ratelimit-reset-requests": "14m24.252s",
           "x-ratelimit-reset-tokens": "97ms",
-          "x-request-id": "req_7332ff364cce4b848b5eb4f9ca5b891b"
+          "x-request-id": "req_20e99c1b90a74449ad5981e5b212ad5c"
         },
         "body": {
-          "id": "resp_082a664c90693d8f0069d458caddd481979749054857032bd8",
+          "id": "resp_032e43984b3241c50069d60e0c4690819388da1ee59995add9",
           "object": "response",
-          "created_at": 1775524042,
+          "created_at": 1775635980,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1775524046,
+          "completed_at": 1775635983,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -6855,7 +6855,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_082a664c90693d8f0069d458cb555481978e85c789c8fed29d",
+              "id": "msg_032e43984b3241c50069d60e0cb2bc8193b26467d9c355e7d7",
               "type": "message",
               "status": "completed",
               "content": [
@@ -6863,7 +6863,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The ancient Library of Alexandria, founded in the 3rd century BCE in Egypt, was one of the largest and most significant libraries of the ancient world. It aimed to collect all the knowledge of the time, housing works from various cultures and disciplines, including philosophy, science, mathematics, and literature. Scholars from different regions came to study there, contributing to advancements in various fields.\n\nThe library's collection was said to include works by great thinkers like Homer, Plato, and Euclid, among others. Unfortunately, the library faced several incidents of destruction over the centuries, leading to the loss of countless scrolls and invaluable knowledge. Its legacy continues to inspire the pursuit of knowledge and the importance of preserving cultural heritage. \n\nWould you like to know more about a specific aspect of the library or its history?"
+                  "text": "The ancient Library of Alexandria, founded in the 3rd century BCE in Egypt, was one of the largest and most significant libraries of the ancient world. It aimed to collect all the world's knowledge and was a center for scholarship and learning. Scholars from various cultures gathered there to study, write, and exchange ideas.\n\nThe library housed a vast collection of scrolls covering subjects like philosophy, mathematics, astronomy, medicine, and literature. It is believed that the library contained works by great thinkers such as Homer, Plato, and Euclid.\n\nUnfortunately, the library suffered multiple destructions over the centuries, leading to the loss of countless texts and knowledge. Its exact fate remains a topic of debate among historians, but it symbolizes the pursuit of knowledge and the fragility of cultural heritage. \n\nWould you like to know more about a specific aspect of the library or its history?"
                 }
               ],
               "role": "assistant"
@@ -6933,11 +6933,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 162,
+            "output_tokens": 175,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 269
+            "total_tokens": 282
           },
           "user": null,
           "metadata": {}
