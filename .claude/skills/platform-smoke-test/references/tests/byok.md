@@ -84,30 +84,16 @@ curl -X POST "$API_URL/v1/chat/completions" \
 | Settings BYOK | Uses configured key |
 | Usage | No charge for BYOK |
 
-## How to Verify BYOK is Working
-
-The `is_byok` field in responses is the primary indicator, but if it shows `false`:
-
-1. **Check Usage/Billing**: BYOK requests should show $0.00 cost
-2. **Check Logs**: Look for "BYOK" or "user key" indicator in request details
-3. **Check that request succeeded**: If your key works and returns a response, BYOK is likely working even if `is_byok` isn't in the response
-
-**If `is_byok: false` but request works:**
-- Report as: "BYOK: ⚠️ - Request succeeds with user key but `is_byok: false` in response"
-- This may be a response format issue, not a BYOK failure
-
 ## Common Issues
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| 401 from provider | Invalid API key | Check your key is valid |
-| `is_byok: false` | Response format issue | Check Usage for $0 cost to verify |
+| 401 from provider | Invalid API key | Check your key |
+| `is_byok: false` | Header not recognized | Check header name |
 | Settings not working | Save not clicked | Save and retry |
-| Wrong model error | Provider mismatch | Use matching provider/model |
 
 ## Notes
 
 - BYOK bypasses platform API quota
 - Usage is still tracked but not charged
 - Provider rate limits still apply
-- The `is_byok` field may not be present in all response formats
