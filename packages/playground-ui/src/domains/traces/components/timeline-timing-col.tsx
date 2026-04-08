@@ -34,7 +34,7 @@ export function TimelineTimingCol({
     <HoverCard.Root openDelay={250}>
       <HoverCard.Trigger
         className={cn(
-          'h-8 min-w-[8rem] p-1 grid grid-cols-[1fr_auto] gap-2 items-center cursor-help pr-2 rounded-r-md',
+          'h-8 min-w-32 p-1 grid grid-cols-[1fr_auto] gap-2 items-center cursor-help pr-2 rounded-r-md',
           '[&:hover>div]:bg-surface5',
           {
             'opacity-30 [&:hover]:opacity-60': isFaded,
