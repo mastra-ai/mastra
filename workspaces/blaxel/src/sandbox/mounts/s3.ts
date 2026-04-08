@@ -177,7 +177,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   }
 
   const quotedMountPath = shellQuote(mountPath);
-  const mountCmd = `s3fs ${bucketArg} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });

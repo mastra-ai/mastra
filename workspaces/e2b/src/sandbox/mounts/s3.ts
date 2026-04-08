@@ -1,5 +1,6 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix } from './types';
 import type { MountContext } from './types';
 
@@ -136,7 +137,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   }
 
   // Mount with sudo (required for /dev/fuse access)
-  const mountCmd = `sudo s3fs ${bucketArg} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `sudo s3fs ${shellQuote(bucketArg)} ${shellQuote(mountPath)} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   try {
