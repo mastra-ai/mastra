@@ -67,6 +67,73 @@ Rule groups can be nested, so you can combine AND and OR conditions for complex 
 
 In the Studio, open a block's **Display conditions** panel to set up rules visually. You can also configure conditions programmatically through the API. Blocks without conditions are always included.
 
+## Programmatic control
+
+Prompt blocks can be managed from code through [`mastra.getEditor().prompt`](/reference/editor/mastra-editor#namespaces). This is useful for seeding a set of starter prompts, syncing blocks between environments, or generating prompt variants from a script.
+
+Create a new prompt block with `editor.prompt.create()`:
+
+```typescript title="src/scripts/seed-prompts.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.create({
+  id: 'brand-voice',
+  name: 'Brand voice',
+  description: 'Acme Inc. tone and style guidelines',
+  content:
+    'You write in a friendly, concise tone. Always address the user as {{userName || "there"}}.',
+})
+```
+
+Update an existing block with `editor.prompt.update()`. Each update creates a new draft version:
+
+```typescript title="src/scripts/update-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.update({
+  id: 'brand-voice',
+  content: 'You write in a friendly, concise tone. Always greet the user by name when available.',
+})
+```
+
+Use `editor.prompt.list()` to paginate through stored blocks or `editor.prompt.getById()` to fetch a specific block. To preview an agent's full instructions with a set of prompt blocks applied, call `editor.prompt.preview()` with the draft content.
+
+The same operations are available over HTTP through the Mastra server:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/prompt-blocks` | List all stored prompt blocks. |
+| `POST` | `/stored/prompt-blocks` | Create a stored prompt block. |
+| `GET` | `/stored/prompt-blocks/:storedPromptBlockId` | Get a stored prompt block by ID. |
+| `PATCH` | `/stored/prompt-blocks/:storedPromptBlockId` | Update a stored prompt block. |
+| `DELETE` | `/stored/prompt-blocks/:storedPromptBlockId` | Delete a stored prompt block. |
+
+Once a prompt block is created, reference it from an agent's `instructions` field as a `prompt_block_ref`:
+
+```typescript title="src/scripts/attach-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: [
+    { type: 'prompt_block_ref', id: 'brand-voice' },
+    { type: 'text', content: 'Answer only questions about Acme products.' },
+  ],
+})
+```
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor#namespaces) for the full `editor.prompt` API.
+
+:::
+
 ## Versioning
 
 Prompt blocks follow the same [versioning lifecycle](/docs/editor/overview#versioning) as agents. Each prompt block has a draft that you can edit and publish as a versioned snapshot. This means prompt content can be versioned and rolled back independently from the agent that uses it.
