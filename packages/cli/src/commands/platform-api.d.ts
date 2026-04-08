@@ -329,7 +329,7 @@ export interface paths {
     };
     /**
      * Get usage activity
-     * @description Aggregated usage metrics for a project. Supports multiple granularities (1m, 5m, 15m, 1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
+     * @description Aggregated usage metrics for a project. Supports multiple granularities (1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
      */
     get: operations['getV1GatewayProjectsByIdUsageActivity'];
     put?: never;
