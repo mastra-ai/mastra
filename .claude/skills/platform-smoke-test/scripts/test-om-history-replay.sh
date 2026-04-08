@@ -85,6 +85,12 @@ BODY=$(printf '%s\n' "$RESPONSE" | sed '$d')
 TOKENS=$(echo "$BODY" | jq '.usage.prompt_tokens // 0')
 CONTENT=$(echo "$BODY" | jq -r '.choices[0].message.content // "no content"' | head -c 200)
 
+if [ "$STATUS" -ne 200 ]; then
+  echo "ERROR: Full history replay failed (HTTP $STATUS)"
+  echo "$BODY"
+  exit 1
+fi
+
 echo "Full history replay:"
 echo "  HTTP Status: $STATUS"
 echo "  Prompt tokens: $TOKENS"
@@ -95,11 +101,20 @@ echo ""
 echo "Phase 3: Verify thread state..."
 echo ""
 
-THREAD_RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 \
+THREAD_RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -w "\n%{http_code}" \
   -X GET "$API_URL/v1/memory/threads/$THREAD_ID/messages" \
   -H "Authorization: Bearer $API_KEY")
 
-MESSAGE_COUNT=$(echo "$THREAD_RESPONSE" | jq '.messages | length // 0')
+THREAD_STATUS=$(printf '%s\n' "$THREAD_RESPONSE" | tail -n 1)
+THREAD_BODY=$(printf '%s\n' "$THREAD_RESPONSE" | sed '$d')
+
+if [ "$THREAD_STATUS" -ne 200 ]; then
+  echo "ERROR: Thread lookup failed (HTTP $THREAD_STATUS)"
+  echo "$THREAD_BODY"
+  exit 1
+fi
+
+MESSAGE_COUNT=$(echo "$THREAD_BODY" | jq '.messages | length // 0')
 
 echo "Thread messages in Gateway: $MESSAGE_COUNT"
 echo ""

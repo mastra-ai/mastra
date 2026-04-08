@@ -11,10 +11,10 @@ Test that memory persists across requests using thread IDs.
 
 ## Quick Run
 
-Run all memory tests at once:
+Run all memory tests at once (from skill directory):
 
 ```bash
-./scripts/test-memory.sh "$API_URL" "$MASTRA_API_KEY"
+./.claude/skills/platform-smoke-test/scripts/test-memory.sh "$API_URL" "$MASTRA_API_KEY"
 ```
 
 Or run individual tests manually below.

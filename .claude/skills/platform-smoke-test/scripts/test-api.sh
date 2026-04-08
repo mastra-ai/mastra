@@ -19,6 +19,8 @@ fi
 echo "Testing Gateway API at $API_URL"
 echo "================================"
 
+FAILURES=0
+
 # Test 1: Basic chat completion
 echo -e "\n[1/5] Testing /v1/chat/completions (basic)..."
 RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w "\n%{http_code}" \
@@ -36,6 +38,7 @@ if [ "$STATUS" -eq 200 ]; then
 else
   echo "❌ Chat completions: FAILED (HTTP $STATUS)"
   echo "   Error: $BODY"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 2: Chat completion with thread ID
@@ -56,6 +59,7 @@ if [ "$STATUS" -eq 200 ]; then
 else
   echo "❌ Chat with thread: FAILED (HTTP $STATUS)"
   echo "   Error: $BODY"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 3: Memory recall
@@ -80,6 +84,7 @@ if [ "$STATUS" -eq 200 ]; then
   fi
 else
   echo "❌ Memory recall: FAILED (HTTP $STATUS)"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 4: List threads
@@ -97,6 +102,7 @@ elif [ "$STATUS" -eq 404 ]; then
   echo "⚠️ List threads: Endpoint not found (may not be implemented)"
 else
   echo "❌ List threads: FAILED (HTTP $STATUS)"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 5: Invalid API key
@@ -113,7 +119,13 @@ if [ "$STATUS" -eq 401 ]; then
   echo "✅ Auth rejection: OK (401 returned)"
 else
   echo "❌ Auth rejection: FAILED (expected 401, got $STATUS)"
+  FAILURES=$((FAILURES + 1))
 fi
 
 echo -e "\n================================"
 echo "Gateway API tests complete"
+
+if [ "$FAILURES" -gt 0 ]; then
+  echo "Failed checks: $FAILURES"
+  exit 1
+fi

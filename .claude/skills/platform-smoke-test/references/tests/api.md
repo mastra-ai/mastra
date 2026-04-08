@@ -11,10 +11,10 @@ Test all OpenAI-compatible API endpoints.
 
 ## Quick Run
 
-Run all API tests at once:
+Run all API tests at once (from skill directory):
 
 ```bash
-./scripts/test-api.sh "$API_URL" "$MASTRA_API_KEY"
+./.claude/skills/platform-smoke-test/scripts/test-api.sh "$API_URL" "$MASTRA_API_KEY"
 ```
 
 Or run individual tests manually below.

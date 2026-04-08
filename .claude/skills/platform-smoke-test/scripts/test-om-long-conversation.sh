@@ -65,6 +65,8 @@ echo ""
 
 TOTAL_PROMPT_TOKENS=0
 TOTAL_COMPLETION_TOKENS=0
+MESSAGES_SENT=0
+FAILED=0
 
 for i in "${!PROMPTS[@]}"; do
   MSG_NUM=$((i + 1))
@@ -92,18 +94,25 @@ for i in "${!PROMPTS[@]}"; do
   ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
   if [ -n "$ERROR" ]; then
     echo "ERROR at message $MSG_NUM: $ERROR"
+    FAILED=1
     break
   fi
   
+  MESSAGES_SENT=$((MESSAGES_SENT + 1))
   sleep 1
 done
 
 echo ""
 echo "Summary"
 echo "======="
-echo "Messages sent: ${#PROMPTS[@]}"
+echo "Messages sent: $MESSAGES_SENT/${#PROMPTS[@]}"
+echo "Total prompt_tokens: $TOTAL_PROMPT_TOKENS"
 echo "Final prompt_tokens: $PROMPT_TOKENS"
 echo "Total completion_tokens: $TOTAL_COMPLETION_TOKENS"
 echo "Thread ID for dashboard verification: $THREAD_ID"
 echo ""
 echo "Note: If prompt_tokens < 30k, OM threshold was not reached."
+
+if [ "$FAILED" -eq 1 ]; then
+  exit 1
+fi

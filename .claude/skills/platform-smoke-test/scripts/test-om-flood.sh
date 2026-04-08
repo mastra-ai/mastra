@@ -4,6 +4,12 @@
 
 set -e
 
+# Cleanup on exit
+cleanup() {
+  rm -rf "$TMPDIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # Preflight checks
 command -v curl >/dev/null 2>&1 || { echo "Error: curl is required but not installed"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required but not installed"; exit 1; }
@@ -34,12 +40,20 @@ TMPDIR=$(mktemp -d)
 # Send messages rapidly without waiting
 for i in $(seq 1 $COUNT); do
   (
+    set +e
     RESPONSE=$(curl -s --connect-timeout 10 --max-time 60 -w "\n%{http_code}" \
       -X POST "$API_URL/v1/chat/completions" \
       -H "Authorization: Bearer $API_KEY" \
       -H "Content-Type: application/json" \
       -H "x-thread-id: $THREAD_ID" \
       -d "{\"model\": \"openai/gpt-4o-mini\", \"messages\": [{\"role\": \"user\", \"content\": \"Rapid message $i - respond with just the number $i\"}]}")
+    CURL_EXIT=$?
+    set -e
+    
+    if [ "$CURL_EXIT" -ne 0 ]; then
+      echo "curl_error_$CURL_EXIT" > "$TMPDIR/failed_$i"
+      exit 0
+    fi
     
     STATUS=$(printf '%s\n' "$RESPONSE" | tail -n 1)
     
@@ -71,8 +85,9 @@ if [ "$FAILED" -gt 0 ]; then
   cat "$TMPDIR"/failed_* 2>/dev/null | sort | uniq -c
 fi
 
-# Cleanup
-rm -rf "$TMPDIR"
-
 echo ""
 echo "Thread ID for dashboard verification: $THREAD_ID"
+
+if [ "$FAILED" -gt 0 ]; then
+  exit 1
+fi

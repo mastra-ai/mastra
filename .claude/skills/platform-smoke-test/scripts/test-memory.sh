@@ -22,6 +22,8 @@ echo "===================================="
 THREAD_ID="memory-test-$(date +%s)"
 echo "Using thread ID: $THREAD_ID"
 
+FAILURES=0
+
 # Test 1: Establish facts
 echo -e "\n[1/4] Establishing facts in memory..."
 RESPONSE=$(curl -sS --connect-timeout 10 --max-time 60 -w "\n%{http_code}" \
@@ -65,6 +67,7 @@ if [ "$STATUS" -eq 200 ] && echo "$CONTENT" | grep -qi "testuser"; then
   echo "✅ Name recalled correctly"
 else
   echo "⚠️ Name recall: $CONTENT"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 3: Recall color
@@ -87,6 +90,7 @@ if [ "$STATUS" -eq 200 ] && echo "$CONTENT" | grep -qi "purple"; then
   echo "✅ Color recalled correctly"
 else
   echo "⚠️ Color recall: $CONTENT"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # Test 4: Recall number
@@ -109,7 +113,14 @@ if [ "$STATUS" -eq 200 ] && echo "$CONTENT" | grep -q "7"; then
   echo "✅ Number recalled correctly"
 else
   echo "⚠️ Number recall: $CONTENT"
+  FAILURES=$((FAILURES + 1))
 fi
 
 echo -e "\n===================================="
 echo "Memory tests complete (thread: $THREAD_ID)"
+
+if [ "$FAILURES" -gt 0 ]; then
+  echo "❌ $FAILURES memory assertion(s) failed"
+  exit 1
+fi
+echo "✅ All memory assertions passed"
