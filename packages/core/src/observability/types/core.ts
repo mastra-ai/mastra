@@ -15,6 +15,7 @@ import type { MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent, ScoreInput } from './scores';
 import type {
   AnySpan,
+  AnyExportedSpan,
   RecordedTrace,
   CreateSpanOptions,
   EntityType,
@@ -112,6 +113,22 @@ export interface ObservabilityContext {
    */
   tracingContext: TracingContext;
 }
+
+// ============================================================================
+// Shared Scorer Types
+// ============================================================================
+
+/** Where a registered definition came from. */
+export type DefinitionSource = 'code' | 'stored';
+
+/** What kind of scoring flow produced the score. */
+export type ScorerScoreSource = 'live' | 'trace' | 'experiment';
+
+/** How the scorer interpreted the target data. */
+export type ScorerTargetScope = 'span' | 'trajectory';
+
+/** Execution style for a scorer step. */
+export type ScorerStepType = 'function' | 'prompt';
 
 // ============================================================================
 // ObservabilityEventBus
@@ -262,14 +279,34 @@ export interface ObservabilityEntrypoint {
   /**
    * Add a score to a persisted trace or span without hydrating a RecordedTrace.
    * Useful for durable executions that persist only identifiers across serialization boundaries.
+   *
+   * `traceId` anchors the scored target when available.
+   * Include `spanId` when the score is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addScore?(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void>;
+  addScore?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void>;
 
   /**
    * Add feedback to a persisted trace or span without hydrating a RecordedTrace.
    * Useful for durable executions that persist only identifiers across serialization boundaries.
+   *
+   * `traceId` anchors the feedback target when available.
+   * Include `spanId` when the feedback is about a specific span.
+   * Include `correlationContext` to emit immediately from live span/trace state
+   * without rehydrating the target from storage first.
    */
-  addFeedback?(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void>;
+  addFeedback?(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void>;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;
@@ -366,6 +403,36 @@ export interface ObservabilityInstanceConfig {
   bridge?: ObservabilityBridge;
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
+  /**
+   * Span types to exclude from export. Spans of these types are silently dropped
+   * before reaching exporters. This is useful for reducing noise and costs in
+   * observability platforms that charge per-span (e.g., Langfuse).
+   *
+   * @example
+   * ```typescript
+   * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
+   * ```
+   */
+  excludeSpanTypes?: SpanType[];
+  /**
+   * Filter function to control which spans are exported. Return `true` to keep
+   * the span, `false` to drop it. This runs after `excludeSpanTypes` and
+   * `spanOutputProcessors`, giving you access to the final exported span data
+   * for fine-grained filtering by type, attributes, entity, metadata, or any
+   * combination.
+   *
+   * @example
+   * ```typescript
+   * spanFilter: (span) => {
+   *   // Drop all model chunks
+   *   if (span.type === SpanType.MODEL_CHUNK) return false;
+   *   // Only keep tool calls that failed
+   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   return true;
+   * }
+   * ```
+   */
+  spanFilter?: (span: AnyExportedSpan) => boolean;
   /**
    * RequestContext keys to automatically extract as metadata for all spans
    * created with this observability configuration.

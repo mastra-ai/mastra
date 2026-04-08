@@ -5,6 +5,9 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
+  BrowserToolCallsProvider,
+  BrowserSessionProvider,
+  BrowserViewPanel,
   useAgent,
   useMemory,
   useThreads,
@@ -12,8 +15,11 @@ import {
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
+  SchemaRequestContextProvider,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -83,6 +89,15 @@ function Agent() {
     };
   }, [agent]);
 
+  // 401 check - session expired, needs re-authentication
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
+
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
     return (
@@ -117,41 +132,52 @@ function Agent() {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-          <ThreadInputProvider>
-            <ObservationalMemoryProvider>
-              <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                <AgentLayout
-                  agentId={agentId!}
-                  leftSlot={
-                    hasMemory && (
-                      <AgentSidebar
+        <SchemaRequestContextProvider>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+              <BrowserSessionProvider
+                key={`session-${agentId}-${actualThreadId}`}
+                agentId={agentId!}
+                threadId={actualThreadId!}
+              >
+                <ThreadInputProvider>
+                  <ObservationalMemoryProvider>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <AgentLayout
                         agentId={agentId!}
-                        threadId={actualThreadId!}
-                        threads={threads || []}
-                        isLoading={isThreadsLoading}
-                      />
-                    )
-                  }
-                  rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                >
-                  <AgentChat
-                    key={actualThreadId!}
-                    agentId={agentId!}
-                    agentName={agent?.name}
-                    modelVersion={agent?.modelVersion}
-                    threadId={actualThreadId!}
-                    memory={hasMemory}
-                    refreshThreadList={handleRefreshThreadList}
-                    modelList={agent?.modelList}
-                    messageId={messageId}
-                    isNewThread={isNewThread}
-                  />
-                </AgentLayout>
-              </ActivatedSkillsProvider>
-            </ObservationalMemoryProvider>
-          </ThreadInputProvider>
-        </WorkingMemoryProvider>
+                        leftSlot={
+                          hasMemory && (
+                            <AgentSidebar
+                              agentId={agentId!}
+                              threadId={actualThreadId!}
+                              threads={threads || []}
+                              isLoading={isThreadsLoading}
+                            />
+                          )
+                        }
+                        browserOverlay={<BrowserViewPanel />}
+                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                      >
+                        <AgentChat
+                          key={actualThreadId!}
+                          agentId={agentId!}
+                          agentName={agent?.name}
+                          modelVersion={agent?.modelVersion}
+                          threadId={actualThreadId!}
+                          memory={hasMemory}
+                          refreshThreadList={handleRefreshThreadList}
+                          modelList={agent?.modelList}
+                          messageId={messageId}
+                          isNewThread={isNewThread}
+                        />
+                      </AgentLayout>
+                    </ActivatedSkillsProvider>
+                  </ObservationalMemoryProvider>
+                </ThreadInputProvider>
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
+          </WorkingMemoryProvider>
+        </SchemaRequestContextProvider>
       </AgentSettingsProvider>
     </TracingSettingsProvider>
   );

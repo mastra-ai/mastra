@@ -1,0 +1,378 @@
+---
+title: "Reference: StagehandBrowser class | Browser"
+description: "API reference for StagehandBrowser, an AI-powered browser automation provider using natural language instructions."
+packages:
+  - "@mastra/stagehand"
+---
+
+# StagehandBrowser class
+
+The `StagehandBrowser` class provides AI-powered browser automation using [Stagehand](https://github.com/browserbase/stagehand). It uses natural language instructions for interactions instead of element refs.
+
+Use `StagehandBrowser` when you want AI to interpret and execute browser actions from natural language. For deterministic automation using element refs, see [`AgentBrowser`](/reference/browser/agent-browser).
+
+## Usage example
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { StagehandBrowser } from '@mastra/stagehand'
+
+const browser = new StagehandBrowser({
+  headless: true,
+  model: 'openai/gpt-5.4',
+  selfHeal: true,
+})
+
+export const browserAgent = new Agent({
+  name: 'browser-agent',
+  instructions: `You can browse the web using natural language.
+Use stagehand_act to perform actions like "click the login button".
+Use stagehand_extract to get data from pages.`,
+  model: 'openai/gpt-5.4',
+  browser,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'headless',
+    type: 'boolean',
+    description: 'Whether to run the browser in headless mode.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'viewport',
+    type: '{ width: number; height: number }',
+    description: 'Browser viewport dimensions.',
+    isOptional: true,
+    defaultValue: '{ width: 1280, height: 720 }',
+  },
+  {
+    name: 'env',
+    type: "'LOCAL' | 'BROWSERBASE'",
+    description: "Environment to run the browser in. Use 'BROWSERBASE' for cloud execution.",
+    isOptional: true,
+    defaultValue: "'LOCAL'",
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: "Browserbase API key. Required when env is 'BROWSERBASE'.",
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: "Browserbase project ID. Required when env is 'BROWSERBASE'.",
+    isOptional: true,
+  },
+  {
+    name: 'model',
+    type: 'string | ModelConfiguration',
+    description:
+      "Model configuration for AI operations. Can be a string like 'openai/gpt-5.4' or an object with modelName, apiKey, and baseURL.",
+    isOptional: true,
+    defaultValue: "'openai/gpt-5.4'",
+  },
+  {
+    name: 'selfHeal',
+    type: 'boolean',
+    description:
+      'Enable self-healing selectors. When enabled, Stagehand uses AI to find elements even when initial selectors fail.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'domSettleTimeout',
+    type: 'number',
+    description: 'Timeout in milliseconds for DOM to settle after actions.',
+    isOptional: true,
+    defaultValue: '5000',
+  },
+  {
+    name: 'verbose',
+    type: '0 | 1 | 2',
+    description: 'Logging verbosity level. 0 = silent, 1 = errors only, 2 = verbose.',
+    isOptional: true,
+    defaultValue: '1',
+  },
+  {
+    name: 'systemPrompt',
+    type: 'string',
+    description: 'Custom system prompt for AI operations.',
+    isOptional: true,
+  },
+  {
+    name: 'cdpUrl',
+    type: 'string | (() => string | Promise<string>)',
+    description:
+      'CDP WebSocket URL or HTTP endpoint for connecting to an existing browser. HTTP endpoints are resolved to WebSocket internally.',
+    isOptional: true,
+  },
+  {
+    name: 'scope',
+    type: "'shared' | 'thread'",
+    description: 'Browser instance scope across threads.',
+    isOptional: true,
+    defaultValue: "'thread' (or 'shared' when cdpUrl is provided)",
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default timeout in milliseconds for browser operations.',
+    isOptional: true,
+    defaultValue: '10000',
+  },
+  {
+    name: 'onLaunch',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: 'Callback invoked after the browser is ready.',
+    isOptional: true,
+  },
+  {
+    name: 'onClose',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: 'Callback invoked before the browser closes.',
+    isOptional: true,
+  },
+  {
+    name: 'screencast',
+    type: 'ScreencastOptions',
+    description: 'Configuration for streaming browser frames to Studio.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Tools
+
+`StagehandBrowser` provides 6 AI-powered tools for browser automation:
+
+| Tool | Description |
+| - | - |
+| `stagehand_act` | Perform actions using natural language instructions |
+| `stagehand_extract` | Extract structured data from pages |
+| `stagehand_observe` | Discover actionable elements on a page |
+| `stagehand_navigate` | Navigate to a URL |
+| `stagehand_tabs` | Manage browser tabs |
+| `stagehand_close` | Close the browser |
+
+## Tool reference
+
+### `stagehand_act`
+
+Perform an action using natural language instructions. The AI interprets your instruction and executes the appropriate browser action.
+
+```text
+// Tool input
+{
+  "instruction": "click the login button",
+  "variables": { "username": "john" },
+  "useVision": true,
+  "timeout": 30000
+}
+
+// With variable substitution
+{
+  "instruction": "type %email% into the email field",
+  "variables": { "email": "user@example.com" }
+}
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `instruction` | `string` | Natural language instruction (required) |
+| `variables` | `Record<string, string>` | Variables for %variableName% substitution (optional) |
+| `useVision` | `boolean` | Enable vision capabilities (optional) |
+| `timeout` | `number` | Timeout in ms (optional) |
+
+**Returns:**
+
+```typescript
+interface ActResult {
+  success: boolean
+  message?: string
+  action?: string
+  url?: string
+}
+```
+
+### `stagehand_extract`
+
+Extract structured data from a page using natural language instructions.
+
+```text
+// Basic extraction
+{
+  "instruction": "extract all product names and prices"
+}
+
+// With schema for structured output
+{
+  "instruction": "extract the product information",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string" },
+      "price": { "type": "number" },
+      "inStock": { "type": "boolean" }
+    }
+  }
+}
+```
+
+**Returns:**
+
+```typescript
+interface ExtractResult<T = unknown> {
+  success: boolean
+  data?: T
+  hint?: string
+  error?: string
+  url?: string
+}
+```
+
+### `stagehand_observe`
+
+Discover actionable elements on a page. Returns a list of elements with their selectors and descriptions.
+
+```text
+// Find specific elements
+{
+  "instruction": "find all buttons related to checkout"
+}
+
+// Find all interactive elements
+{
+  "onlyVisible": true
+}
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `instruction` | `string` | Natural language instruction (optional, omit to find all) |
+| `onlyVisible` | `boolean` | Only include visible elements (optional) |
+| `timeout` | `number` | Timeout in ms (optional) |
+
+**Returns:**
+
+```typescript
+interface ObserveResult {
+  success: boolean
+  actions: StagehandAction[]
+  url?: string
+}
+
+interface StagehandAction {
+  selector: string
+  description: string
+  method?: string
+  arguments?: string[]
+}
+```
+
+### `stagehand_navigate`
+
+Navigate to a URL.
+
+```text
+// Tool input
+{
+  "url": "https://example.com",
+  "waitUntil": "domcontentloaded"
+}
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `url` | `string` | URL to navigate to (required) |
+| `waitUntil` | `"load" \| "domcontentloaded" \| "networkidle"` | When to consider navigation complete (optional) |
+
+### `stagehand_tabs`
+
+Manage browser tabs.
+
+```text
+// List all tabs
+{ "action": "list" }
+
+// Open new tab
+{ "action": "new", "url": "https://example.com" }
+
+// Switch to tab by index
+{ "action": "switch", "index": 0 }
+
+// Close tab by index (or current if omitted)
+{ "action": "close", "index": 1 }
+```
+
+### `stagehand_close`
+
+Close the browser and clean up resources.
+
+```text
+// Tool input (no parameters required)
+{}
+```
+
+## Using Browserbase
+
+Run Stagehand in the cloud using Browserbase:
+
+```typescript
+const browser = new StagehandBrowser({
+  env: 'BROWSERBASE',
+  apiKey: process.env.BROWSERBASE_API_KEY,
+  projectId: process.env.BROWSERBASE_PROJECT_ID,
+  model: 'openai/gpt-5.4',
+})
+```
+
+## Model configuration
+
+Configure the AI model for Stagehand operations:
+
+```typescript
+// String format: "provider/model"
+const browser = new StagehandBrowser({
+  model: 'openai/gpt-5.4',
+})
+
+// Object format for custom configuration
+const browser = new StagehandBrowser({
+  model: {
+    modelName: 'gpt-5.4',
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: 'https://api.openai.com/v1',
+  },
+})
+```
+
+Supported providers:
+
+- OpenAI: `"openai/gpt-5.4"`, `"openai/gpt-5.4-mini"`
+- Anthropic: `"anthropic/claude-3-5-sonnet-20241022"`
+
+## AgentBrowser vs StagehandBrowser
+
+| Aspect | AgentBrowser | StagehandBrowser |
+| - | - | - |
+| **Approach** | Deterministic refs (`@e5`) | Natural language |
+| **Precision** | Exact element targeting | AI interpretation |
+| **Flexibility** | Requires a snapshot first | Direct instructions |
+| **Use case** | Reproducible automation | Adaptive automation |
+| **Speed** | Faster (no AI inference) | Slower (AI inference) |
+
+Choose `AgentBrowser` for precise, reproducible automation. Choose `StagehandBrowser` for flexible, natural language interactions.
+
+## Related
+
+- [MastraBrowser](/reference/browser/mastra-browser): Base class reference
+- [AgentBrowser](/reference/browser/agent-browser): Deterministic alternative
+- [Browser overview](/docs/browser/overview): Conceptual guide
+- [Stagehand guide](/docs/browser/stagehand): Usage guide

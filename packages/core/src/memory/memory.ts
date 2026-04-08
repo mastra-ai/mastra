@@ -5,6 +5,7 @@ import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
 import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
+import type { ObservabilityContext } from '../observability';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -96,6 +97,48 @@ export const memoryDefaultOptions = {
 `,
   },
 } satisfies MemoryConfigInternal;
+
+const SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasSystemReminderText(message: MastraDBMessage): boolean {
+  const parts = isRecord(message.content) ? message.content.parts : undefined;
+  if (!Array.isArray(parts)) {
+    return false;
+  }
+
+  return parts.some(
+    part =>
+      isRecord(part) && part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),
+  );
+}
+
+export function isSystemReminderMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' || !isRecord(message.content)) {
+    return false;
+  }
+
+  const metadata = message.content.metadata;
+  if (isRecord(metadata) && SYSTEM_REMINDER_METADATA_KEY in metadata) {
+    return true;
+  }
+
+  return hasSystemReminderText(message);
+}
+
+export function filterSystemReminderMessages(
+  messages: MastraDBMessage[],
+  includeSystemReminders?: boolean,
+): MastraDBMessage[] {
+  if (includeSystemReminders) {
+    return messages;
+  }
+
+  return messages.filter(message => !isSystemReminderMessage(message));
+}
 
 /**
  * Abstract base class for implementing conversation memory systems.
@@ -453,6 +496,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -467,6 +511,8 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      includeSystemReminders?: boolean;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -591,11 +637,13 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId,
     workingMemory,
     memoryConfig,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
 
   /**
@@ -867,7 +915,10 @@ https://mastra.ai/en/docs/memory/overview`,
     return processors;
   }
 
-  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+  abstract deleteMessages(
+    messageIds: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void>;
 
   /**
    * Clones a thread with all its messages to a new thread

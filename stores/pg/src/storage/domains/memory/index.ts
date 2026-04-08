@@ -47,6 +47,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -56,6 +57,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -1793,6 +1795,7 @@ export class MemoryPG extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -1800,10 +1803,32 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT $2`,
-        [lookupKey, limit],
-      );
+
+      const conditions = [`"lookupKey" = $1`];
+      const params: unknown[] = [lookupKey];
+      let paramIndex = 2;
+
+      if (options?.from) {
+        conditions.push(`"createdAtZ" >= $${paramIndex}`);
+        params.push(options.from.toISOString());
+        paramIndex++;
+      }
+      if (options?.to) {
+        conditions.push(`"createdAtZ" <= $${paramIndex}`);
+        params.push(options.to.toISOString());
+        paramIndex++;
+      }
+
+      params.push(limit);
+      let sql = `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT $${paramIndex}`;
+      paramIndex++;
+
+      if (options?.offset != null) {
+        params.push(options.offset);
+        sql += ` OFFSET $${paramIndex}`;
+      }
+
+      const result = await this.#db.client.manyOrNone(sql, params);
       if (!result) return [];
       return result.map(row => this.parseOMRow(row));
     } catch (error) {
@@ -2355,6 +2380,55 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const tableName = getTableName({
+        indexName: OM_TABLE,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      // Read current config
+      const selectResult = await this.#db.client.query(`SELECT config FROM ${tableName} WHERE id = $1`, [input.id]);
+
+      if (selectResult.rowCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = selectResult.rows[0];
+      const existing: Record<string, unknown> = row.config
+        ? typeof row.config === 'string'
+          ? JSON.parse(row.config)
+          : row.config
+        : {};
+      const merged = this.deepMergeConfig(existing, input.config);
+      const nowStr = new Date().toISOString();
+
+      await this.#db.client.query(
+        `UPDATE ${tableName} SET config = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
+        [JSON.stringify(merged), nowStr, nowStr, input.id],
+      );
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Async Buffering Methods
   // ============================================
@@ -2379,6 +2453,7 @@ export class MemoryPG extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Append chunk to existing array using JSONB concatenation

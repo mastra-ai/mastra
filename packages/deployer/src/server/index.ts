@@ -7,7 +7,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import { Tool } from '@mastra/core/tools';
-import { MastraServer } from '@mastra/hono';
+import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context } from 'hono';
@@ -24,7 +24,7 @@ import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
-import { html } from './welcome';
+import { welcomeHtml } from './welcome';
 
 // Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
@@ -162,6 +162,18 @@ export async function createHonoServer(
       app.use(m.path, m.handler);
     }
   }
+
+  // Browser stream WebSocket setup - MUST be before CORS middleware
+  // to avoid "can't modify immutable headers" error on WebSocket upgrade
+  // This is async because it dynamically imports @hono/node-ws to avoid
+  // bundling ws into user code. Returns null if ws is not available.
+  const browserStreamSetup = await setupBrowserStream(app, {
+    getToolset: (agentId: string) => {
+      // Look up agent and return its browser toolset if configured
+      const agent = mastra.getAgentById(agentId);
+      return agent?.browser;
+    },
+  });
 
   //Global cors config
   if (server?.cors === false) {
@@ -450,7 +462,7 @@ export async function createHonoServer(
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
-    return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
+    return c.newResponse(welcomeHtml(apiPrefix), 200, { 'Content-Type': 'text/html' });
   });
 
   if (options?.studio) {
@@ -472,11 +484,16 @@ export async function createHonoServer(
     );
   }
 
+  // Attach injectWebSocket to app for backwards compatibility
+  // Consumers can use app directly, and optionally call app.injectWebSocket(server) for browser streaming
+  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket;
+
   return app;
 }
 
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
+  const injectWebSocket = (app as any).injectWebSocket;
   const serverOptions = mastra.getServer();
   const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
@@ -529,6 +546,10 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
     },
   );
+
+  // Enable WebSocket support for browser streaming (if available)
+  // MUST be called after serve() returns per @hono/node-ws requirements
+  injectWebSocket?.(server);
 
   await mastra.startEventEngine();
 

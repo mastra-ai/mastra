@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "1.0.21",
+  "version": "1.0.25",
   "description": "",
   "type": "module",
   "files": [

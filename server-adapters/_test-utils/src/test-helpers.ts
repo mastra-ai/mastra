@@ -657,10 +657,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    // Add test thread and messages to Mastra's storage for memory routes without agentId
-    // This is needed because when agentId is not provided, the handler falls back to storage directly
-    const memoryStore = await storage.getStore('memory');
-    if (memoryStore) {
+    const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
+      if (!memoryStore) {
+        return;
+      }
+
       await memoryStore.saveThread({
         thread: {
           id: 'test-thread',
@@ -682,9 +683,43 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
             },
             createdAt: new Date(),
           },
+          {
+            id: 'test-response',
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            role: 'assistant',
+            type: 'text',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test stored response' }],
+              metadata: {
+                mastra: {
+                  response: {
+                    agentId: 'test-agent',
+                    model: 'openai/gpt-4o',
+                    createdAt: Math.floor(Date.now() / 1000),
+                    completedAt: Math.floor(Date.now() / 1000),
+                    status: 'completed',
+                    usage: null,
+                    tools: [],
+                    store: true,
+                    messageIds: ['test-message-1', 'test-response'],
+                  },
+                },
+              },
+            },
+            createdAt: new Date(),
+          },
         ],
       });
-    }
+    };
+
+    // Seed the root memory store for routes that resolve memory directly from Mastra storage.
+    await saveStoredResponseFixtures(await storage.getStore('memory'));
+
+    // Seed the agent memory store for Responses routes that now resolve stored responses
+    // through agent memory first and only inherit root storage via the agent-memory path.
+    await saveStoredResponseFixtures(await memory.storage.getStore('memory'));
   }
 
   return {

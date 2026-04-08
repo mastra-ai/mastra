@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createScorer } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import { getDummyResponseModel } from './mock-model';
 
@@ -263,6 +264,51 @@ function scorersTests(version: 'v1' | 'v2') {
           threadId: undefined,
           resourceId: undefined,
           tracingContext: expect.any(Object),
+        }),
+      );
+    });
+
+    it(`${version} - should forward threadId and resourceId to runScorer when memory options are provided`, async () => {
+      const mockMemory = new MockMemory();
+      const agentWithMemory = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent.',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const mastraWithMemory = new Mastra({
+        agents: { agentWithMemory },
+        logger: false,
+        scorers: { scorer1 },
+      });
+
+      if (version === 'v1') {
+        await agentWithMemory.generateLegacy('Hello world', {
+          threadId: 'thread-123',
+          resourceId: 'resource-456',
+          scorers: {
+            scorer1: { scorer: mastraWithMemory.getScorer('scorer1') },
+          },
+        });
+      } else {
+        await agentWithMemory.generate('Hello world', {
+          memory: {
+            thread: 'thread-123',
+            resource: 'resource-456',
+          },
+          scorers: {
+            scorer1: { scorer: mastraWithMemory.getScorer('scorer1') },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer-1',
+          threadId: 'thread-123',
+          resourceId: 'resource-456',
         }),
       );
     });

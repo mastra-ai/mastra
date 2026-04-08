@@ -31,8 +31,10 @@ import {
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
+  handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
+  handleMemoryGatewayCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -156,11 +158,17 @@ export async function dispatchSlashCommand(
     case 'setup':
       await handleSetupCommand(buildCtx());
       return true;
+    case 'browser':
+      await handleBrowserCommand(buildCtx(), args);
+      return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);
       return true;
     case 'update':
       await handleUpdateCommand(buildCtx());
+      return true;
+    case 'memory-gateway':
+      await handleMemoryGatewayCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

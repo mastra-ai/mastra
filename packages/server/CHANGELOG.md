@@ -1,5 +1,444 @@
 # @mastra/server
 
+## 1.24.0
+
+### Patch Changes
+
+- **Fixed publishing older agent versions** ([#15154](https://github.com/mastra-ai/mastra/pull/15154))
+
+  Fixed agent editor to allow publishing older read-only versions. Previously, the Publish button was disabled when viewing a previous version. Now a "Publish This Version" button appears, enabling users to set any older version as the published version.
+
+  **Fixed Publish button being clickable without a saved draft**
+
+  The Publish button is now disabled until a draft version is saved. Previously, making edits would enable the Publish button even without a saved draft, which caused an error when clicked.
+
+  **Eliminated spurious 404 error logs for code-only agents**
+
+  The agent versions endpoint now checks both code-registered and stored agents before returning 404, and the frontend conditionally fetches stored agent details only when versions exist. This prevents noisy error logs when navigating to the editor for agents that haven't been published yet.
+
+  **Changed editor sections to be collapsed by default**
+
+  The System Prompt, Tools, and Variables sections in the agent editor are now collapsed by default when navigating to the editor page.
+
+- Fixed the Responses API to use the agent default model when create requests omit model. ([#15140](https://github.com/mastra-ai/mastra/pull/15140))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.24.0-alpha.1
+
+### Patch Changes
+
+- **Fixed publishing older agent versions** ([#15154](https://github.com/mastra-ai/mastra/pull/15154))
+
+  Fixed agent editor to allow publishing older read-only versions. Previously, the Publish button was disabled when viewing a previous version. Now a "Publish This Version" button appears, enabling users to set any older version as the published version.
+
+  **Fixed Publish button being clickable without a saved draft**
+
+  The Publish button is now disabled until a draft version is saved. Previously, making edits would enable the Publish button even without a saved draft, which caused an error when clicked.
+
+  **Eliminated spurious 404 error logs for code-only agents**
+
+  The agent versions endpoint now checks both code-registered and stored agents before returning 404, and the frontend conditionally fetches stored agent details only when versions exist. This prevents noisy error logs when navigating to the editor for agents that haven't been published yet.
+
+  **Changed editor sections to be collapsed by default**
+
+  The System Prompt, Tools, and Variables sections in the agent editor are now collapsed by default when navigating to the editor page.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Fixed the Responses API to use the agent default model when create requests omit model. ([#15140](https://github.com/mastra-ai/mastra/pull/15140))
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
+## 1.23.0
+
+### Patch Changes
+
+- Fixed duplicate provider entries when fetching providers from gateways by applying consistent ID prefixing ([#15098](https://github.com/mastra-ai/mastra/pull/15098))
+
+- Aligned workspace tool config types with core's dynamic function support. Dynamic config functions (enabled, requireApproval, requireReadBeforeWrite) are now resolved by calling them with workspace and requestContext, matching core's behavior. ([#14528](https://github.com/mastra-ai/mastra/pull/14528))
+
+- Add session refresh endpoint. Expired sessions can now be refreshed automatically, keeping users signed in longer. ([#15024](https://github.com/mastra-ai/mastra/pull/15024))
+
+- Fixed gateway memory client failing with 404 when MASTRA_GATEWAY_URL includes a /v1 suffix (e.g. https://gateway-api.mastra.ai/v1). The URL is now normalized before appending the memory base path, matching how the model router handles the same variable. ([#15054](https://github.com/mastra-ai/mastra/pull/15054))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.23.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+
+## 1.23.0-alpha.8
+
+### Patch Changes
+
+- Fixed duplicate provider entries when fetching providers from gateways by applying consistent ID prefixing ([#15098](https://github.com/mastra-ai/mastra/pull/15098))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
+## 1.23.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd)]:
+  - @mastra/core@1.23.0-alpha.7
+
+## 1.23.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab)]:
+  - @mastra/core@1.23.0-alpha.6
+
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3)]:
+  - @mastra/core@1.23.0-alpha.5
+
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80)]:
+  - @mastra/core@1.23.0-alpha.3
+
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Fixed gateway memory client failing with 404 when MASTRA_GATEWAY_URL includes a /v1 suffix (e.g. https://gateway-api.mastra.ai/v1). The URL is now normalized before appending the memory base path, matching how the model router handles the same variable. ([#15054](https://github.com/mastra-ai/mastra/pull/15054))
+
+- Updated dependencies:
+  - @mastra/core@1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7)]:
+  - @mastra/core@1.23.0-alpha.1
+
+## 1.23.0-alpha.0
+
+### Patch Changes
+
+- Aligned workspace tool config types with core's dynamic function support. Dynamic config functions (enabled, requireApproval, requireReadBeforeWrite) are now resolved by calling them with workspace and requestContext, matching core's behavior. ([#14528](https://github.com/mastra-ai/mastra/pull/14528))
+
+- Add session refresh endpoint. Expired sessions can now be refreshed automatically, keeping users signed in longer. ([#15024](https://github.com/mastra-ai/mastra/pull/15024))
+
+- Updated dependencies [[`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a)]:
+  - @mastra/core@1.23.0-alpha.0
+
+## 1.22.0
+
+### Minor Changes
+
+- Add browser streaming endpoints and WebSocket handlers ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `/api/agents/:agentId/browser/stream` WebSocket endpoint for screencast streaming
+  - New `/api/agents/:agentId/browser/close` endpoint for closing browser sessions
+  - Input handler for mouse and keyboard event injection
+  - Viewer registry for managing screencast connections per agent/thread
+
+- Added Memory Gateway proxying for agents using Mastra Gateway models. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+  When an agent uses a `mastra/` model string, memory operations (threads, messages, observational memory) are automatically proxied to the remote Mastra Gateway instead of local storage.
+
+  **New endpoints:**
+  - **GET /memory/observational-memory** — retrieves the current observational memory record and optional generation history for an agent
+  - **POST /memory/observational-memory/buffer-status** — waits for in-flight buffering operations to complete (30s timeout) and returns the updated record
+
+  **New internal module:**
+  - `GatewayMemoryClient` — HTTP client that proxies memory operations to the Mastra Gateway REST API, with automatic format conversion between gateway and local response types
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Added browser tools to the Agent details UI in Playground. Agents configured with browser support now show a "Browser Tools" section in metadata. ([#14998](https://github.com/mastra-ai/mastra/pull/14998))
+
+- Fixed Responses and Conversations to resolve stored data through the selected agent's memory store instead of assuming Mastra root memory storage. ([#14977](https://github.com/mastra-ai/mastra/pull/14977))
+
+  Responses and conversation retrieval, deletion, and continuation now follow the agent's configured memory storage, while still using Mastra root storage when that agent memory inherits it.
+
+- Fixed memory endpoints (list threads, get thread, list messages, delete messages, memory status) returning 404 when agentId refers to a stored agent not resolvable via getAgentById(). Endpoints now fall back to storage-based access, matching the behavior when agentId is omitted. Fixes #14765. ([#14784](https://github.com/mastra-ai/mastra/pull/14784))
+
+- Fixed dataset schema to accept null values for trajectory expectations, matching what the database stores and what the UI sends ([#15028](https://github.com/mastra-ai/mastra/pull/15028))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0
+
+## 1.22.0-alpha.3
+
+### Patch Changes
+
+- Added browser tools to the Agent details UI in Playground. Agents configured with browser support now show a "Browser Tools" section in metadata. ([#14998](https://github.com/mastra-ai/mastra/pull/14998))
+
+- Updated dependencies:
+  - @mastra/core@1.22.0-alpha.3
+
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Add browser streaming endpoints and WebSocket handlers ([#14938](https://github.com/mastra-ai/mastra/pull/14938))
+  - New `/api/agents/:agentId/browser/stream` WebSocket endpoint for screencast streaming
+  - New `/api/agents/:agentId/browser/close` endpoint for closing browser sessions
+  - Input handler for mouse and keyboard event injection
+  - Viewer registry for managing screencast connections per agent/thread
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+### Patch Changes
+
+- Fixed Responses and Conversations to resolve stored data through the selected agent's memory store instead of assuming Mastra root memory storage. ([#14977](https://github.com/mastra-ai/mastra/pull/14977))
+
+  Responses and conversation retrieval, deletion, and continuation now follow the agent's configured memory storage, while still using Mastra root storage when that agent memory inherits it.
+
+- Fixed memory endpoints (list threads, get thread, list messages, delete messages, memory status) returning 404 when agentId refers to a stored agent not resolvable via getAgentById(). Endpoints now fall back to storage-based access, matching the behavior when agentId is omitted. Fixes #14765. ([#14784](https://github.com/mastra-ai/mastra/pull/14784))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+
+## 1.22.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6)]:
+  - @mastra/core@1.22.0-alpha.1
+
+## 1.22.0-alpha.0
+
+### Minor Changes
+
+- Added Memory Gateway proxying for agents using Mastra Gateway models. ([#14952](https://github.com/mastra-ai/mastra/pull/14952))
+
+  When an agent uses a `mastra/` model string, memory operations (threads, messages, observational memory) are automatically proxied to the remote Mastra Gateway instead of local storage.
+
+  **New endpoints:**
+  - **GET /memory/observational-memory** — retrieves the current observational memory record and optional generation history for an agent
+  - **POST /memory/observational-memory/buffer-status** — waits for in-flight buffering operations to complete (30s timeout) and returns the updated record
+
+  **New internal module:**
+  - `GatewayMemoryClient` — HTTP client that proxies memory operations to the Mastra Gateway REST API, with automatic format conversion between gateway and local response types
+
+### Patch Changes
+
+- Updated dependencies [[`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0-alpha.0
+
+## 1.21.0
+
+### Minor Changes
+
+- **Added Responses API support for local Mastra apps** ([#14339](https://github.com/mastra-ai/mastra/pull/14339))
+
+  You can now call Mastra through a Responses API flow and continue stored turns with
+  `previous_response_id`, while keeping `model` as a Mastra model string and using
+  `agent_id` to target the registered Mastra agent that handles the request. This API acts as an agent-backed
+  adapter layer on top of Mastra memory and storage. Advanced provider-native settings can
+  also be passed through with `providerOptions`, and provider-returned continuation state
+  is surfaced back on the response under the same `providerOptions` field. Stored
+  response IDs now map directly to the persisted assistant turn ID in Mastra memory.
+  Configured tool definitions are returned under `tools`, while executed tool activity
+  is surfaced through `output` items such as `function_call`, `function_call_output`,
+  and the final assistant message. Stored responses also return `conversation_id`, which
+  maps directly to the underlying Mastra memory thread ID. You can create a conversation
+  explicitly with `client.conversations.create()` or let the first stored response create
+  it implicitly, inspect the stored item history with `client.conversations.items.list()`,
+  retrieve the conversation with `client.conversations.retrieve()`, or remove it with
+  `client.conversations.delete()`. Responses requests also support
+  `text.format`, including `json_object` for JSON mode and `json_schema` for
+  schema-constrained structured output, through the same agent-backed route.
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({
+    baseUrl: 'http://localhost:4111',
+  });
+
+  const first = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Write a short bedtime story.',
+    store: true,
+  });
+
+  const second = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Make it funnier.',
+    store: true,
+    previous_response_id: first.id,
+  });
+
+  const items = await client.conversations.items.list(first.conversation_id!);
+
+  const jsonResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a JSON object with a title and summary.',
+    text: {
+      format: {
+        type: 'json_object',
+      },
+    },
+  });
+
+  const structuredResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a structured support ticket summary.',
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'ticket_summary',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            summary: { type: 'string' },
+            priority: { type: 'string' },
+          },
+          required: ['summary', 'priority'],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed OpenAI Responses API json_object mode so agent-backed responses return JSON output correctly. ([#14935](https://github.com/mastra-ai/mastra/pull/14935))
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a), [`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0
+
+## 1.21.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ec5c319`](https://github.com/mastra-ai/mastra/commit/ec5c3197a50d034cb8e9cc494eebfddc684b5d81), [`6517789`](https://github.com/mastra-ai/mastra/commit/65177895b74b5471fe2245c7292f0176d9b3385d), [`9ad6aa6`](https://github.com/mastra-ai/mastra/commit/9ad6aa6dfe858afc6955d1df5f3f78c40bb96b9c), [`2862127`](https://github.com/mastra-ai/mastra/commit/2862127d0a7cbd28523120ad64fea067a95838e6), [`3d16814`](https://github.com/mastra-ai/mastra/commit/3d16814c395931373543728994ff45ac98093074), [`7f498d0`](https://github.com/mastra-ai/mastra/commit/7f498d099eacef64fd43ee412e3bd6f87965a8a6), [`8cf8a67`](https://github.com/mastra-ai/mastra/commit/8cf8a67b061b737cb06d501fb8c1967a98bbf3cb), [`d7827e3`](https://github.com/mastra-ai/mastra/commit/d7827e393937c6cb0c7a744dde4d31538cb542b7)]:
+  - @mastra/core@1.21.0-alpha.2
+
+## 1.21.0-alpha.1
+
+### Patch Changes
+
+- Fixed OpenAI Responses API json_object mode so agent-backed responses return JSON output correctly. ([#14935](https://github.com/mastra-ai/mastra/pull/14935))
+
+- Updated dependencies [[`13f4327`](https://github.com/mastra-ai/mastra/commit/13f4327f052faebe199cefbe906d33bf90238767)]:
+  - @mastra/core@1.21.0-alpha.1
+
+## 1.21.0-alpha.0
+
+### Minor Changes
+
+- **Added Responses API support for local Mastra apps** ([#14339](https://github.com/mastra-ai/mastra/pull/14339))
+
+  You can now call Mastra through a Responses API flow and continue stored turns with
+  `previous_response_id`, while keeping `model` as a Mastra model string and using
+  `agent_id` to target the registered Mastra agent that handles the request. This API acts as an agent-backed
+  adapter layer on top of Mastra memory and storage. Advanced provider-native settings can
+  also be passed through with `providerOptions`, and provider-returned continuation state
+  is surfaced back on the response under the same `providerOptions` field. Stored
+  response IDs now map directly to the persisted assistant turn ID in Mastra memory.
+  Configured tool definitions are returned under `tools`, while executed tool activity
+  is surfaced through `output` items such as `function_call`, `function_call_output`,
+  and the final assistant message. Stored responses also return `conversation_id`, which
+  maps directly to the underlying Mastra memory thread ID. You can create a conversation
+  explicitly with `client.conversations.create()` or let the first stored response create
+  it implicitly, inspect the stored item history with `client.conversations.items.list()`,
+  retrieve the conversation with `client.conversations.retrieve()`, or remove it with
+  `client.conversations.delete()`. Responses requests also support
+  `text.format`, including `json_object` for JSON mode and `json_schema` for
+  schema-constrained structured output, through the same agent-backed route.
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({
+    baseUrl: 'http://localhost:4111',
+  });
+
+  const first = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Write a short bedtime story.',
+    store: true,
+  });
+
+  const second = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Make it funnier.',
+    store: true,
+    previous_response_id: first.id,
+  });
+
+  const items = await client.conversations.items.list(first.conversation_id!);
+
+  const jsonResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a JSON object with a title and summary.',
+    text: {
+      format: {
+        type: 'json_object',
+      },
+    },
+  });
+
+  const structuredResponse = await client.responses.create({
+    model: 'openai/gpt-5',
+    agent_id: 'support-agent',
+    input: 'Return a structured support ticket summary.',
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'ticket_summary',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            summary: { type: 'string' },
+            priority: { type: 'string' },
+          },
+          required: ['summary', 'priority'],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9a43b47`](https://github.com/mastra-ai/mastra/commit/9a43b476465e86c9aca381c2831066b5c33c999a)]:
+  - @mastra/core@1.21.0-alpha.0
+
 ## 1.20.0
 
 ### Patch Changes

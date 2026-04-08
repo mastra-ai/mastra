@@ -76,7 +76,8 @@
             },
             "metadata": {
               "runId": "<runId-1>",
-              "resourceId": "test-resource-id"
+              "resourceId": "test-resource-id",
+              "threadId": "test-thread-id"
             },
             "input": {
               "messages": [
@@ -138,6 +139,7 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -179,7 +181,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -211,7 +214,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "input": {
                       "operation": "add",
@@ -242,6 +246,7 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     },
@@ -284,6 +289,7 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -317,7 +323,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "output": {
                       "text": {

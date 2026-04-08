@@ -23,7 +23,9 @@ import {
   Column,
   Notice,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
@@ -204,6 +206,16 @@ function DatasetItemPage() {
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

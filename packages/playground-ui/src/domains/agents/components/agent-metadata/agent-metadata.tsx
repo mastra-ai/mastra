@@ -2,7 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
-import { GaugeIcon, Folder } from 'lucide-react';
+import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
@@ -11,6 +11,7 @@ import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from
 import { AgentMetadataModelList } from './agent-metadata-model-list';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useMemory } from '@/domains/memory/hooks';
 import { useScorers } from '@/domains/scores';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
@@ -64,6 +65,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const codemirrorTheme = useCodemirrorTheme();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -85,6 +87,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const skills = agent.skills ?? [];
   const workspaceTools = agent.workspaceTools ?? [];
+  const browserTools = agent.browserTools ?? [];
   const workspaceId = agent.workspaceId;
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
@@ -191,6 +194,18 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </AgentMetadataSection>
       )}
 
+      {browserTools.length > 0 && (
+        <AgentMetadataSection
+          title="Browser Tools"
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+            title: 'Browser tools documentation',
+          }}
+        >
+          <AgentMetadataBrowserToolsList tools={browserTools} />
+        </AgentMetadataSection>
+      )}
+
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
@@ -214,6 +229,24 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
           theme={codemirrorTheme}
         />
+        {!isCmsLoading && !isCmsAvailable && (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Read-only</AlertTitle>
+            <AlertDescription as="p">
+              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+              project. See the{' '}
+              <a
+                href="https://mastra.ai/docs/editor/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
@@ -396,6 +429,26 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
           <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataBrowserToolsListProps {
+  tools: string[];
+}
+
+export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToolsListProps) => {
+  if (tools.length === 0) {
+    return <AgentMetadataListEmpty>No browser tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {tools.map(tool => (
+        <AgentMetadataListItem key={tool}>
+          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
