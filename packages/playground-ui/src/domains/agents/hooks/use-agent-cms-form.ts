@@ -279,103 +279,112 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     ],
   );
 
-  const handlePublish = useCallback(async () => {
-    const isValid = await form.trigger();
-    if (!isValid) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
+  const handlePublish = useCallback(
+    async (publishVersionId?: string) => {
+      // When publishing a specific older version, skip form validation since the form is read-only
+      if (!publishVersionId) {
+        const isValid = await form.trigger();
+        if (!isValid) {
+          toast.error('Please fill in all required fields');
+          return;
+        }
+      }
 
-    const values = form.getValues();
-    setIsSubmitting(true);
+      const values = form.getValues();
+      setIsSubmitting(true);
 
-    try {
-      if (isEdit) {
-        if (needsCreate) {
-          // First publish for a code agent — create and immediately publish
-          const sharedParams = await buildSharedParams(values);
-          const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
-          const createParams: CreateStoredAgentParams = {
-            id: options.agentId,
-            ...sharedParams,
-            memory: editMemory,
-          };
-          await createStoredAgent.mutateAsync(createParams);
-          setOverrideCreated(true);
+      try {
+        if (isEdit) {
+          if (publishVersionId) {
+            // Publishing a specific version (e.g. an older read-only version)
+            await client.getStoredAgent(options.agentId).activateVersion(publishVersionId);
+          } else if (needsCreate) {
+            // First publish for a code agent — create and immediately publish
+            const sharedParams = await buildSharedParams(values);
+            const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+            const createParams: CreateStoredAgentParams = {
+              id: options.agentId,
+              ...sharedParams,
+              memory: editMemory,
+            };
+            await createStoredAgent.mutateAsync(createParams);
+            setOverrideCreated(true);
 
-          // Now activate the first version
-          const versionsResponse = await client
-            .getStoredAgent(options.agentId)
-            .listVersions({ sortDirection: 'DESC', perPage: 1 });
-          const latestVersion = versionsResponse.versions[0];
-          if (latestVersion) {
+            // Now activate the first version
+            const versionsResponse = await client
+              .getStoredAgent(options.agentId)
+              .listVersions({ sortDirection: 'DESC', perPage: 1 });
+            const latestVersion = versionsResponse.versions[0];
+            if (latestVersion) {
+              await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+            }
+          } else {
+            // Check if there's an unpublished draft version to activate
+            const [agentDetails, versionsResponse] = await Promise.all([
+              client.getStoredAgent(options.agentId).details(),
+              client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
+            ]);
+
+            const latestVersion = versionsResponse.versions[0];
+            if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
+              toast.error('No draft changes to publish. Save a draft first.');
+              return;
+            }
+
             await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
           }
-        } else {
-          // Check if there's an unpublished draft version to activate
-          const [agentDetails, versionsResponse] = await Promise.all([
-            client.getStoredAgent(options.agentId).details(),
-            client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
+
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
+            queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
+            queryClient.invalidateQueries({ queryKey: ['agent', agentId] }),
+            queryClient.invalidateQueries({ queryKey: ['agents'] }),
+            queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
           ]);
+          toast.success('Agent published');
+          options.onSuccess(options.agentId);
+        } else {
+          const sharedParams = await buildSharedParams(values);
+          const memoryBase = values.memory?.enabled
+            ? {
+                options: {
+                  lastMessages: values.memory.lastMessages,
+                  semanticRecall: values.memory.semanticRecall,
+                  readOnly: values.memory.readOnly,
+                },
+                observationalMemory: buildObservationalMemoryForApi(values.memory.observationalMemory),
+              }
+            : undefined;
 
-          const latestVersion = versionsResponse.versions[0];
-          if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
-            toast.error('No draft changes to publish. Save a draft first.');
-            return;
-          }
+          const createParams: CreateStoredAgentParams = {
+            ...sharedParams,
+            memory: memoryBase,
+          };
 
-          await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+          const created = await createStoredAgent.mutateAsync(createParams);
+          toast.success('Agent created successfully');
+          options.onSuccess(created.id);
         }
-
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
-          queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
-          queryClient.invalidateQueries({ queryKey: ['agent', agentId] }),
-          queryClient.invalidateQueries({ queryKey: ['agents'] }),
-          queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
-        ]);
-        toast.success('Agent published');
-        options.onSuccess(options.agentId);
-      } else {
-        const sharedParams = await buildSharedParams(values);
-        const memoryBase = values.memory?.enabled
-          ? {
-              options: {
-                lastMessages: values.memory.lastMessages,
-                semanticRecall: values.memory.semanticRecall,
-                readOnly: values.memory.readOnly,
-              },
-              observationalMemory: buildObservationalMemoryForApi(values.memory.observationalMemory),
-            }
-          : undefined;
-
-        const createParams: CreateStoredAgentParams = {
-          ...sharedParams,
-          memory: memoryBase,
-        };
-
-        const created = await createStoredAgent.mutateAsync(createParams);
-        toast.success('Agent created successfully');
-        options.onSuccess(created.id);
+      } catch (error) {
+        const action = isEdit ? 'publish' : 'create';
+        toast.error(`Failed to ${action} agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
       }
-    } catch (error) {
-      const action = isEdit ? 'publish' : 'create';
-      toast.error(`Failed to ${action} agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [
-    form,
-    isEdit,
-    needsCreate,
-    client,
-    createStoredAgent,
-    options,
-    agentId,
-    buildSharedParams,
-    buildMemoryParams,
-    queryClient,
-  ]);
+    },
+    [
+      form,
+      isEdit,
+      needsCreate,
+      client,
+      createStoredAgent,
+      options,
+      agentId,
+      buildSharedParams,
+      buildMemoryParams,
+      queryClient,
+    ],
+  );
 
   const watched = useWatch({ control: form.control });
 

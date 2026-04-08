@@ -1,5 +1,28 @@
 # @mastra/memory
 
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Fixed reflection threshold not respecting per-record overrides set via the PATCH API. Previously, lowering the reflection threshold for a specific record had no effect on the actual reflection trigger — only the default 40k threshold was used. Now per-record overrides are correctly applied in both sync and async reflection paths. ([#15170](https://github.com/mastra-ai/mastra/pull/15170))
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed message history doubling when using Observational Memory with the Mastra gateway. The local ObservationalMemoryProcessor now detects when the agent's model is routed through the Mastra gateway and skips its input/output processing, since the gateway handles OM server-side. ([#15161](https://github.com/mastra-ai/mastra/pull/15161))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Improved observational memory formatting to use part timestamps when rendering dates and times. ([#15121](https://github.com/mastra-ai/mastra/pull/15121))
+
+  Observer history now follows part-level timing more closely, so the rendered memory context is more accurate when messages contain parts created at different times.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes

@@ -1,5 +1,34 @@
 # @mastra/observability
 
+## 1.8.0-alpha.1
+
+### Minor Changes
+
+- Added `excludeSpanTypes` and `spanFilter` options to `ObservabilityInstanceConfig` for selectively filtering spans before export. Use `excludeSpanTypes` to drop entire categories of spans by type (e.g., `MODEL_CHUNK`, `MODEL_STEP`) or `spanFilter` for fine-grained predicate-based filtering by attributes, metadata, entity, or any combination. Both options help reduce noise and costs in observability platforms that charge per-span. ([#15131](https://github.com/mastra-ai/mastra/pull/15131))
+
+  **`excludeSpanTypes` example:**
+
+  ```ts
+  excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP];
+  ```
+
+  **`spanFilter` example:**
+
+  ```ts
+  spanFilter: span => {
+    if (span.type === SpanType.MODEL_CHUNK) return false;
+    if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+    return true;
+  };
+  ```
+
+  Resolves https://github.com/mastra-ai/mastra/issues/12710
+
+### Patch Changes
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+
 ## 1.8.0-alpha.0
 
 ### Minor Changes

@@ -176,6 +176,16 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Editor',
+      collapsed: true,
+      customProps: { tags: ['new'] },
+      items: [
+        { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
+        { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Evals',
       collapsed: true,
       items: [
@@ -284,7 +294,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
-          items: [{ type: 'doc', id: 'observability/metrics/automatic-metrics', label: 'Automatic Metrics' }],
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/automatic-metrics',
+              label: 'Automatic Metrics',
+            },
+          ],
         },
         {
           type: 'category',
@@ -293,6 +309,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
+            { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
               type: 'category',

@@ -1,5 +1,35 @@
 # @mastra/playground-ui
 
+## 22.1.0-alpha.1
+
+### Minor Changes
+
+- New inline Traces page replacing the old dialog-based Observability page. Trace, span, and score details now open in stacked side panels instead of full-screen dialogs. URL deep-linking supports traceId, spanId, tab, and scoreId params. Includes new TracesDataList, DataList.Pagination, DataList.Subheader components, and Evaluate Trace / Save as Dataset Item actions. ([#15139](https://github.com/mastra-ai/mastra/pull/15139))
+
+### Patch Changes
+
+- **Fixed publishing older agent versions** ([#15154](https://github.com/mastra-ai/mastra/pull/15154))
+
+  Fixed agent editor to allow publishing older read-only versions. Previously, the Publish button was disabled when viewing a previous version. Now a "Publish This Version" button appears, enabling users to set any older version as the published version.
+
+  **Fixed Publish button being clickable without a saved draft**
+
+  The Publish button is now disabled until a draft version is saved. Previously, making edits would enable the Publish button even without a saved draft, which caused an error when clicked.
+
+  **Eliminated spurious 404 error logs for code-only agents**
+
+  The agent versions endpoint now checks both code-registered and stored agents before returning 404, and the frontend conditionally fetches stored agent details only when versions exist. This prevents noisy error logs when navigating to the editor for agents that haven't been published yet.
+
+  **Changed editor sections to be collapsed by default**
+
+  The System Prompt, Tools, and Variables sections in the agent editor are now collapsed by default when navigating to the editor page.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+  - @mastra/client-js@1.13.2-alpha.1
+  - @mastra/ai-sdk@1.3.3-alpha.0
+  - @mastra/react@0.2.24-alpha.1
+
 ## 22.1.0-alpha.0
 
 ### Minor Changes
