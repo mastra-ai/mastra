@@ -366,6 +366,7 @@ describe('headless mode — thread control', () => {
 
     await harness.init();
     const thread = await harness.createThread({ title: 'target-thread' });
+    const updatedAtBefore = thread.updatedAt.getTime();
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -376,6 +377,12 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Verify the targeted thread was actually used (updatedAt advanced)
+    const threads = await harness.listThreads();
+    const targeted = threads.find(t => t.id === thread.id);
+    expect(targeted).toBeDefined();
+    expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
   });
 
   it('resumes a thread by title with --thread', async () => {
@@ -384,7 +391,8 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    await harness.createThread({ title: 'my-feature' });
+    const thread = await harness.createThread({ title: 'my-feature' });
+    const updatedAtBefore = thread.updatedAt.getTime();
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -395,6 +403,12 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Verify the titled thread was actually used
+    const threads = await harness.listThreads();
+    const targeted = threads.find(t => t.id === thread.id);
+    expect(targeted).toBeDefined();
+    expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
   });
 
   it('returns exit code 1 for unknown thread', async () => {
