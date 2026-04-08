@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -24,6 +25,7 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -776,9 +778,21 @@ export class InMemoryMemory extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
-    const records = this.db.observationalMemory.get(key) ?? [];
+    let records = this.db.observationalMemory.get(key) ?? [];
+
+    if (options?.from) {
+      records = records.filter(r => r.createdAt >= options.from!);
+    }
+    if (options?.to) {
+      records = records.filter(r => r.createdAt <= options.to!);
+    }
+    if (options?.offset != null) {
+      records = records.slice(options.offset);
+    }
+
     return limit != null ? records.slice(0, limit) : records;
   }
 
@@ -890,6 +904,7 @@ export class InMemoryMemory extends MemoryStorage {
       createdAt: new Date(),
       suggestedContinuation: chunk.suggestedContinuation,
       currentTask: chunk.currentTask,
+      threadTitle: chunk.threadTitle,
     };
 
     // Add chunk to the array
@@ -1206,6 +1221,16 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.pendingMessageTokens = tokenCount;
+    record.updatedAt = new Date();
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    record.config = this.deepMergeConfig(record.config as Record<string, unknown>, input.config);
     record.updatedAt = new Date();
   }
 

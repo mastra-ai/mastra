@@ -22,7 +22,9 @@ import {
   Column,
   ButtonsGroup,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -51,6 +53,16 @@ function DatasetItemsComparePage() {
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
   const { data: itemB } = useDatasetItem(datasetId ?? '', itemIds[1] ?? '');
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

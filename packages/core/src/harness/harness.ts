@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -92,6 +93,10 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<Workspace | undefined> | Workspace | undefined)
     | undefined = undefined;
   private workspaceInitialized = false;
+  private browser: MastraBrowser | undefined = undefined;
+  private browserFn:
+    | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
+    | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   private tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
     promptTokens: 0,
@@ -130,6 +135,13 @@ export class Harness<TState = {}> {
       this.workspace = config.workspace;
     } else if (typeof config.workspace === 'function') {
       this.workspaceFn = config.workspace;
+    }
+
+    // Store browser: pre-built instance or dynamic factory
+    if (config.browser && typeof config.browser !== 'function') {
+      this.browser = config.browser;
+    } else if (typeof config.browser === 'function') {
+      this.browserFn = config.browser;
     }
 
     // Seed model from mode default if not set
@@ -184,8 +196,9 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, and workspace to mode agents (after workspace init)
+    // Propagate harness-level Mastra, memory, workspace, and browser to mode agents (after workspace init)
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    const browserForAgents = this.browserFn ?? this.browser;
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
@@ -197,6 +210,9 @@ export class Harness<TState = {}> {
       }
       if (workspaceForAgents && !agent.hasOwnWorkspace()) {
         agent.__setWorkspace(workspaceForAgents);
+      }
+      if (browserForAgents && !agent.hasOwnBrowser()) {
+        agent.setBrowser(browserForAgents as MastraBrowser);
       }
 
       if (this.#internalMastra && !alreadyHasMastra) {

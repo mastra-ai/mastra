@@ -202,3 +202,17 @@ const uiMessageStream = createUIMessageStream({
   },
 });
 ```
+
+## Loading stored messages
+
+Use `toAISdkMessages` from `@mastra/ai-sdk/ui` to convert stored Mastra messages for `useChat()` and other AI SDK UI hooks.
+
+The helper keeps the existing v5/default behavior. If your app is typed against `ai@6`, pass `version: 'v6'`.
+That uses the MessageList AI SDK v6 UI output path. MessageList input detection and ingestion remain unchanged.
+
+```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk/ui';
+
+const v5Messages = toAISdkMessages(storedMessages);
+const v6Messages = toAISdkMessages(storedMessages, { version: 'v6' });
+```

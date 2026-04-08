@@ -17,7 +17,9 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -87,6 +89,15 @@ function Agent() {
     };
   }, [agent]);
 
+  // 401 check - session expired, needs re-authentication
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
+
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
     return (
@@ -123,8 +134,12 @@ function Agent() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <BrowserToolCallsProvider key={`browser-${actualThreadId}`}>
-              <BrowserSessionProvider key={`session-${actualThreadId}`} agentId={agentId!} threadId={actualThreadId!}>
+            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+              <BrowserSessionProvider
+                key={`session-${agentId}-${actualThreadId}`}
+                agentId={agentId!}
+                threadId={actualThreadId!}
+              >
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>

@@ -367,6 +367,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
 
     it('should not call hooks when below threshold', async () => {
@@ -408,6 +411,9 @@ describe('observe()', () => {
 
       expect(hooks.onObservationStart).toHaveBeenCalledOnce();
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      // Observer failed before producing usage, so usage should be undefined and error should be present
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined, error: expect.any(Error) });
+      expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {
@@ -429,6 +435,9 @@ describe('observe()', () => {
       if (result.reflected) {
         expect(hooks.onReflectionStart).toHaveBeenCalled();
         expect(hooks.onReflectionEnd).toHaveBeenCalled();
+        expect(hooks.onReflectionEnd).toHaveBeenCalledWith({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+        });
       }
     });
   });
@@ -665,6 +674,7 @@ describe('reflect()', () => {
   it('should return reflected=false when no observations exist', async () => {
     const result = await om.reflect(threadId);
     expect(result.reflected).toBe(false);
+    expect(result.usage).toBeUndefined();
   });
 
   it('should reflect when observations exist', async () => {
@@ -676,6 +686,9 @@ describe('reflect()', () => {
     expect(result.reflected).toBe(true);
     expect(result.record.generationCount).toBeGreaterThan(0);
     expect(result.record.activeObservations).toBeTruthy();
+    expect(result.usage).toEqual(
+      expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+    );
   });
 
   it('should create a new generation on reflect', async () => {
@@ -2104,5 +2117,194 @@ describe('setPendingMessageTokens (via storage)', () => {
 
     const updated = (await om.getRecord(threadId))!;
     expect(updated.pendingMessageTokens).toBe(7000);
+  });
+});
+
+// =============================================================================
+// Per-record config overrides (_overrides)
+// =============================================================================
+
+describe('per-record config overrides', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'override-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  it('uses instance-level messageTokens when record has no _overrides', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const status = await om.getStatus({ threadId });
+    // threshold should reflect the instance-level 500
+    expect(status.threshold).toBe(500);
+  });
+
+  it('ignores the initial config snapshot (not under _overrides)', async () => {
+    // Instance-level: 500 tokens
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    // getOrCreateRecord writes observation.messageTokens=500 into record.config
+    const record = await om.getOrCreateRecord(threadId);
+    expect(record.config).toBeTruthy();
+    // The snapshot config should NOT be treated as an override
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(500);
+  });
+
+  it('applies _overrides.observation.messageTokens when set', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    // Create the record first
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Manually set _overrides on the record config (simulating what updateObservationalMemoryConfig would do)
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        observation: { messageTokens: 2000 },
+      },
+    };
+
+    // The record object is shared in InMemory storage, so the mutation above
+    // is visible to getStatus() which re-reads from the same reference.
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(2000);
+  });
+
+  it('applies _overrides.reflection.observationTokens when set', async () => {
+    const om = createOM(storage, { messageTokens: 100, observationTokens: 10_000 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set override to a lower reflection threshold
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        reflection: { observationTokens: 5_000 },
+      },
+    };
+
+    const status = await om.getStatus({ threadId });
+    // Reflection threshold should now be 5000 instead of 10000
+    // shouldReflect checks: currentObservationTokens >= reflectThreshold
+    // With 0 observation tokens, shouldReflect should be false regardless
+    expect(status.shouldReflect).toBe(false);
+  });
+
+  it('clamps observation override below bufferTokens to instance default', async () => {
+    // bufferTokens=200 means messageTokens override must be > 200
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 200 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set override below bufferTokens — should be clamped
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {
+        observation: { messageTokens: 100 }, // Below bufferTokens of 200
+      },
+    };
+
+    const status = await om.getStatus({ threadId });
+    // Should fall back to instance-level 500, not the 100 override
+    expect(status.threshold).toBe(500);
+  });
+
+  it('falls back to instance-level config when _overrides is empty', async () => {
+    const om = createOM(storage, { messageTokens: 500 });
+    await storage.saveMessages({ messages: createBulkMessages(20, threadId) });
+
+    const record = await om.getOrCreateRecord(threadId);
+
+    // Set empty _overrides
+    const existingConfig = record.config as Record<string, unknown>;
+    record.config = {
+      ...existingConfig,
+      _overrides: {},
+    };
+
+    const status = await om.getStatus({ threadId });
+    expect(status.threshold).toBe(500);
+  });
+});
+
+// =============================================================================
+// updateRecordConfig()
+// =============================================================================
+
+describe('updateRecordConfig()', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+  const threadId = 'config-update-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    om = createOM(storage, { messageTokens: 100 });
+  });
+
+  it('should store observation config override under _overrides', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 2000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any)._overrides.observation.messageTokens).toBe(2000);
+  });
+
+  it('should store reflection config override under _overrides', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      reflection: { observationTokens: 8000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any)._overrides.reflection.observationTokens).toBe(8000);
+  });
+
+  it('should merge both observation and reflection overrides at once', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 3000 },
+      reflection: { observationTokens: 9000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    expect((record.config as any)._overrides.observation.messageTokens).toBe(3000);
+    expect((record.config as any)._overrides.reflection.observationTokens).toBe(9000);
+  });
+
+  it('should apply successive updates incrementally', async () => {
+    await om.getOrCreateRecord(threadId);
+
+    await om.updateRecordConfig(threadId, undefined, {
+      observation: { messageTokens: 1000 },
+    });
+    await om.updateRecordConfig(threadId, undefined, {
+      reflection: { observationTokens: 5000 },
+    });
+
+    const record = (await om.getRecord(threadId))!;
+    // Both updates should be present under _overrides
+    expect((record.config as any)._overrides.observation.messageTokens).toBe(1000);
+    expect((record.config as any)._overrides.reflection.observationTokens).toBe(5000);
+  });
+
+  it('should throw when no record exists for the thread', async () => {
+    await expect(
+      om.updateRecordConfig('nonexistent-thread', undefined, { observation: { messageTokens: 100 } }),
+    ).rejects.toThrow(/No observational memory record found/);
   });
 });

@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -8,7 +9,7 @@ import type {
   HarnessSubagent,
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -59,7 +60,7 @@ export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode[];
+  modes?: HarnessMode<Record<string, unknown>>[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
@@ -92,6 +93,8 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
+  browser?: MastraBrowser;
 }
 
 export function createAuthStorage() {
@@ -193,7 +196,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
-          const harnessContext = requestContext.get('harness') as
+          const harnessContext = requestContext?.get('harness') as
             | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
             | undefined;
           const projectPath =
@@ -206,7 +209,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
-  const defaultModes: HarnessMode[] = [
+  const defaultModes: HarnessMode<Record<string, unknown>>[] = [
     {
       id: 'build',
       name: 'Build',
@@ -270,7 +273,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
     for (const [provider, config] of Object.entries(registry)) {
-      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      if (startupAccess[provider] === 'oauth' || startupAccess[provider] === 'apikey') continue; // Already enabled above
       if (provider === 'anthropic' || provider === 'openai') continue;
       const envVars = config?.apiKeyEnvVar;
       const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
@@ -340,7 +343,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
-    if (key === '_default') {
+    if (key === 'default' || key === '_default') {
       globalInitialState.subagentModelId = modelId;
     } else {
       globalInitialState[`subagentModelId_${key}`] = modelId;
@@ -353,7 +356,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     memory,
     stateSchema,
     subagents,
-    resolveModel,
+    resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
@@ -364,6 +367,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...config?.initialState,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
+    browser: config?.browser,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
