@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.12.1
+
+### Patch Changes
+
+- Added support for Agent Skills spec directories (.agents/skills/) for skill discovery, both project-local and global (~/.agents/skills/) ([#15151](https://github.com/mastra-ai/mastra/pull/15151))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`60b7d4a`](https://github.com/mastra-ai/mastra/commit/60b7d4a428c6caeca94f4740978359bb40c4ab37), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`f308d62`](https://github.com/mastra-ai/mastra/commit/f308d6206a083eeaccbca782be062c57076935d7), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa), [`6f714ec`](https://github.com/mastra-ai/mastra/commit/6f714ec9a5614222761fd6ea3d53af1da9ab6034), [`98209a0`](https://github.com/mastra-ai/mastra/commit/98209a03c35c5479c25cca26ee0c63eff81e6d74), [`2bdb5fd`](https://github.com/mastra-ai/mastra/commit/2bdb5fd887bfd81bdb71c4a5db22a4fda99f2591)]:
+  - @mastra/core@1.24.0
+  - @mastra/memory@1.15.0
+  - @mastra/mcp@1.4.2
+
 ## 0.12.1-alpha.4
 
 ### Patch Changes
