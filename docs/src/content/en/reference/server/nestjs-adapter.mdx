@@ -24,7 +24,7 @@ For general adapter concepts, see [Server Adapters](/docs/server/server-adapters
 Install the NestJS adapter and ensure your app uses the Express platform:
 
 ```bash npm2yarn
-npm install @mastra/nestjs@latest @mastra/core@latest
+npm install @mastra/nestjs@latest
 ```
 
 ## Usage example
@@ -44,7 +44,7 @@ import { mastra } from "./mastra";
 export class AppModule {}
 ```
 
-:::caution
+:::note
 
 `MastraModule` registers a catch-all controller (`@All('*')`). If it is imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
 
@@ -145,7 +145,7 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
       name: "auth",
       type: "{ enabled?: boolean; allowQueryApiKey?: boolean }",
       description:
-        "Enable Mastra's built-in token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.",
+        "Enable Mastra token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.",
       isOptional: true,
       defaultValue: "`{ enabled: false }`",
     },

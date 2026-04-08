@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in Your NestJS Project
 
-In this guide, you'll build a tool-calling AI agent using Mastra and NestJS. Using the [NestJS server adapter](/reference/server/nestjs-adapter), you can expose agents as HTTP endpoints without manually wiring routes or running a separate Mastra server.
+In this guide, you'll build a tool-calling AI agent using Mastra and NestJS. The [NestJS server adapter](/reference/server/nestjs-adapter) registers Mastra's agent and workflow routes as a NestJS module, so they run inside your existing NestJS application.
 
 ## Before you begin
 
@@ -20,20 +20,25 @@ In this guide, you'll build a tool-calling AI agent using Mastra and NestJS. Usi
 
 If you already have a NestJS app, skip to the next step.
 
-Create a new NestJS project:
+Run the following command to create a new NestJS app:
 
-```bash
+```bash npm2yarn
 npx @nestjs/cli new mastra-nest
-cd mastra-nest
 ```
+
+This creates a project called `mastra-nest`, but you can replace it with any name you want.
 
 ## Initialize Mastra
 
-Inside your NestJS project directory, run [`mastra init`](/reference/cli/mastra#mastra-init).
-
-When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Navigate to your NestJS project directory:
 
 ```bash
+cd mastra-nest
+```
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash npm2yarn
 npx mastra@latest init
 ```
 
@@ -50,7 +55,7 @@ You'll pass the `src/mastra/index.ts` file to the NestJS adapter in the next ste
 Install the NestJS server adapter package:
 
 ```bash npm2yarn
-npm install @mastra/nestjs@latest @mastra/core@latest
+npm install @mastra/nestjs@latest
 ```
 
 Open `src/app.module.ts` and register `MastraModule`:
@@ -70,7 +75,7 @@ import { mastra } from "./mastra";
 export class AppModule {}
 ```
 
-:::caution
+:::note
 
 `MastraModule` registers a catch-all controller (`@All('*')`). If it is imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
 
@@ -82,7 +87,7 @@ By default, Mastra's endpoints are added under the `/api` subpath and use your a
 
 Start your NestJS server:
 
-```bash
+```bash npm2yarn
 npm run start
 ```
 
@@ -154,9 +159,7 @@ Both approaches use the same singleton `Mastra` instance registered by `MastraMo
 
 ## Next steps
 
-Congratulations on building your Mastra agent with NestJS!
-
-From here, you can extend the project with your own tools and logic:
+You now have a working Mastra agent running inside NestJS. To extend the project:
 
 - [Agents overview](/docs/agents/overview)
 - [Using tools](/docs/agents/using-tools)
