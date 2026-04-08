@@ -1,0 +1,33 @@
+The Theme Park agent can use tools, hold context, and plan a real park day. Once something like this is in front of real users, safety becomes a practical concern. Users won't always behave the way you expect, and some will actively try to manipulate or jailbreak the agent.
+
+In this lesson, you'll add input guardrails using two processors: `PromptInjectionDetector`, which blocks prompt injection, jailbreak attempts, and system override tries before the model ever sees the message, and `ModerationProcessor`, which screens incoming messages for hate and harassment. You'll test both in Studio by sending a normal request first, then a hostile one, and confirming the bad input gets blocked before the agent reasons over it.
+
+This matters because memory in Mastra already uses processors under the hood to retrieve and persist context. Adding your own processor slots into that same pipeline. If a message gets blocked at the input stage, the LLM never gets called, and nothing from that request gets written to memory.
+
+> "The model never gets pulled off task because the request does not make it through the input processor."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Input and output processors](/docs/agents/input-output-processors)
+- [Memory overview](/docs/memory/overview)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates
