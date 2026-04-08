@@ -51,7 +51,7 @@ export function TraceTimelineSpan({
     if (isExpanded) return;
     const hasFeaturedDescendant = allDescendantIds.some(id => featuredSpanIds.includes(id));
     if (hasFeaturedDescendant && setExpandedSpanIds) {
-      setExpandedSpanIds(prev => (!prev || prev.includes(span.id) ? prev ?? [span.id] : [...prev, span.id]));
+      setExpandedSpanIds(prev => (!prev || prev.includes(span.id) ? (prev ?? [span.id]) : [...prev, span.id]));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredSpanIds, allDescendantIds]);
