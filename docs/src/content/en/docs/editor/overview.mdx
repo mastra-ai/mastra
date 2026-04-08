@@ -71,9 +71,9 @@ Modify the system prompt and save a new draft version. Afterwards, publish the d
 
 ## Programmatic control
 
-Everything you can do in Studio is also available programmatically through `mastra.getEditor()`. This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
+Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
 
-Call `mastra.getEditor()` from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
+Call [`mastra.getEditor()`](/reference/core/getEditor) from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
 
 ```typescript title="src/scripts/seed-agent.ts"
 import { mastra } from '../mastra'
