@@ -472,6 +472,7 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-lite',
     'google/gemini-3.1-pro',
     'google/gemini-deep-research',
+    'google/gemma-4-31b',
     'google/imagen-3',
     'google/imagen-3-fast',
     'google/imagen-4',
@@ -580,6 +581,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3.1-pro',
     'glm-5',
+    'glm-5.1',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -3595,6 +3597,7 @@ export type ProviderModelsMap = {
   ];
   readonly 'opencode-go': readonly [
     'glm-5',
+    'glm-5.1',
     'kimi-k2.5',
     'mimo-v2-omni',
     'mimo-v2-pro',
