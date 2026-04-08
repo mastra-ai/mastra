@@ -311,6 +311,30 @@ describe('S3Filesystem', () => {
 
       expect(config.prefix).toBe('foo/bar/');
     });
+
+    it('treats prefix "/" as no prefix (root-equivalent)', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '/',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
+
+    it('treats empty string prefix as no prefix', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {

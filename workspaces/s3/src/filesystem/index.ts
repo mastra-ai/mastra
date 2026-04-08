@@ -257,7 +257,8 @@ export class S3Filesystem extends MastraFilesystem {
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
     // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
-    this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : '';
+    const trimmedPrefix = options.prefix ? trimSlashes(options.prefix) : '';
+    this.prefix = trimmedPrefix ? trimmedPrefix + '/' : '';
 
     // Display metadata - detect icon first, then derive displayName from it
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
