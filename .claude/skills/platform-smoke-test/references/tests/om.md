@@ -320,6 +320,12 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 Test MastraCode routing through Gateway with 10 simple messages to verify basic functionality.
 
+**Prerequisites:**
+
+Ensure Gateway OM thresholds are at defaults in Dashboard → Settings:
+- Observation: 30,000 tokens
+- Reflection: 40,000 tokens
+
 **How MastraCode routes to Gateway:**
 
 MastraCode only routes through Gateway when:
