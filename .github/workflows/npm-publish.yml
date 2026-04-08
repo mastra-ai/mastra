@@ -89,26 +89,24 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Upload studio assets to R2 (staging)
-        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
-      # TODO: Remove continue-on-error once production CF R2 credentials are configured.
       - name: Upload studio assets to R2 (production)
-        if: ${{ !inputs.dry_run }}
         continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_PROD_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_PROD_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: studio-assets
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_PROD_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
@@ -212,11 +210,12 @@ jobs:
 
       - name: Upload studio assets to R2 (staging)
         if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
@@ -227,10 +226,10 @@ jobs:
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_PROD_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_PROD_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: studio-assets
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_PROD_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
@@ -417,26 +416,24 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Upload studio assets to R2 (staging)
-        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
-      # TODO: Remove continue-on-error once production CF R2 credentials are configured.
       - name: Upload studio assets to R2 (production)
-        if: ${{ !inputs.dry_run }}
         continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_PROD_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_PROD_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: studio-assets
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_PROD_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
