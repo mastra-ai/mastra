@@ -323,6 +323,7 @@ Test MastraCode routing through Gateway with 10 simple messages to verify basic 
 **Prerequisites:**
 
 Ensure Gateway OM thresholds are at defaults in Dashboard → Settings:
+
 - Observation: 30,000 tokens
 - Reflection: 40,000 tokens
 
@@ -538,19 +539,19 @@ For each test, note:
 - Dashboard UI behavior (Logs, Usage, Settings pages)
 - Thread integrity (messages in correct order, no duplicates)
 
-| Test                           | What to Record                                       |
-| ------------------------------ | ---------------------------------------------------- |
-| Extended conversation          | Token progression across 12 messages                 |
-| Token usage analysis           | Breakdown visible in Logs page                       |
-| OM tracking                    | Whether "Memory Tokens" appears in Usage             |
-| Settings                       | OM threshold values displayed                        |
-| Multi-model                    | Whether context persists across providers            |
-| Flood test                     | Success/failure counts, any buffering behavior       |
-| Long conversation (30 prompts) | Token progression (~25k), cache behavior             |
-| Full history replay            | How Gateway handles full history send                |
-| 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
-| 9c: Memory-only baseline       | Token progression, thread state                      |
-| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
-| 9e: MastraCode + Gateway       | Token progression across 10 prompts, routing works   |
-| 9f: History replay via local   | Message deduplication, comparison with Test 8        |
-| 9g: MastraCode duplication bug | Message count (expected 10), duplicate detection     |
+| Test                           | What to Record                                      |
+| ------------------------------ | --------------------------------------------------- |
+| Extended conversation          | Token progression across 12 messages                |
+| Token usage analysis           | Breakdown visible in Logs page                      |
+| OM tracking                    | Whether "Memory Tokens" appears in Usage            |
+| Settings                       | OM threshold values displayed                       |
+| Multi-model                    | Whether context persists across providers           |
+| Flood test                     | Success/failure counts, any buffering behavior      |
+| Long conversation (30 prompts) | Token progression (~25k), cache behavior            |
+| Full history replay            | How Gateway handles full history send               |
+| 9b: Gateway routing            | Whether local requests appear in Gateway Logs       |
+| 9c: Memory-only baseline       | Token progression, thread state                     |
+| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes |
+| 9e: MastraCode + Gateway       | Token progression across 10 prompts, routing works  |
+| 9f: History replay via local   | Message deduplication, comparison with Test 8       |
+| 9g: MastraCode duplication bug | Message count (expected 10), duplicate detection    |
