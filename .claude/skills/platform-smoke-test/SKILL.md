@@ -11,6 +11,8 @@ Smoke test the Mastra Platform - Gateway API, dashboard, accounts, and usage tra
 
 **Use `task_write` to track progress.** Run ALL tests unless `--test` specifies otherwise.
 
+**Do not skip tests unless you hit an actual blocker.** "Seemed complex" or "wasn't sure" are not valid reasons. Attempt everything - only stop a test when you literally cannot proceed (e.g., need a second account you don't have). Report what you tried and what blocked you.
+
 | # | Test | Reference | When Required |
 |---|------|-----------|---------------|
 | 1 | **Setup** | `references/tests/setup.md` | Always |
@@ -44,10 +46,11 @@ Example: `--test api,memory` → Run steps 1, 2, and 3 only.
 
 ### Multi-User Tests
 
-Tests 11-12 (invites, rbac) require multiple accounts. If testing solo:
-- Use email aliases (e.g., `user+test@example.com`)
-- Use browser incognito for second account
-- Or skip with `--test api,memory,dashboard`
+Tests 11-12 (invites, rbac) require multiple accounts. Try:
+- Email aliases (e.g., `user+test@example.com`)
+- Browser incognito for second account
+
+Only skip if you've tried and cannot create/access a second account.
 
 ---
 

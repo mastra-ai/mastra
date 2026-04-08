@@ -11,6 +11,8 @@ Comprehensive smoke testing for Mastra projects.
 
 **Use `task_write` to track progress.** Run ALL tests unless `--test` specifies otherwise.
 
+**Do not skip tests unless you hit an actual blocker.** "Seemed complex" or "wasn't sure" are not valid reasons. Attempt everything - only stop a test when you literally cannot proceed. Report what you tried and what blocked you.
+
 | # | Test | Reference | When Required |
 |---|------|-----------|---------------|
 | 1 | **Setup** | `references/tests/setup.md` | Always |
