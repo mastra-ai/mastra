@@ -183,6 +183,8 @@ export class MastraTUI {
       if (!userInput.trim()) continue;
 
       try {
+        const pendingNewThread = this.state.pendingNewThread;
+
         // Handle slash commands
         if (userInput.startsWith('/')) {
           const handled = await this.handleSlashCommand(userInput);
@@ -214,6 +216,15 @@ export class MastraTUI {
 
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
+
+        this.state.analytics?.capture('mastracode_prompt_submitted', {
+          threadId: this.state.harness.getCurrentThreadId(),
+          resourceId: this.state.harness.getResourceId(),
+          mode: this.state.harness.getCurrentModeId(),
+          hasImages: Boolean(images?.length),
+          isFirstPromptInThread: pendingNewThread,
+          pendingNewThread,
+        });
 
         // Add user message to chat immediately
         addUserMessage(this.state, {
@@ -416,6 +427,7 @@ export class MastraTUI {
 
     try {
       await dispatchEvent(event, this.getEventContext(), this.state);
+      this.captureHarnessAnalytics(event);
 
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
@@ -431,6 +443,45 @@ export class MastraTUI {
       if (event.type === 'agent_end') {
         this.stopCaffeinate();
       }
+    }
+  }
+
+  private captureHarnessAnalytics(event: HarnessEvent): void {
+    const analytics = this.state.analytics;
+    if (!analytics) {
+      return;
+    }
+
+    if (event.type === 'thread_created') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'created',
+        threadId: event.thread.id,
+        resourceId: event.thread.resourceId,
+        mode: this.state.harness.getCurrentModeId(),
+        hasTitle: Boolean(event.thread.title),
+      });
+      return;
+    }
+
+    if (event.type === 'thread_changed') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'switched',
+        threadId: event.threadId,
+        previousThreadId: event.previousThreadId,
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+      });
+      return;
+    }
+
+    if (event.type === 'model_changed') {
+      analytics.capture('mastracode_model_changed', {
+        modelId: event.modelId,
+        scope: event.scope,
+        mode: event.modeId ?? this.state.harness.getCurrentModeId(),
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+      });
     }
   }
 
@@ -643,6 +694,7 @@ export class MastraTUI {
       harness: this.state.harness,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
@@ -664,6 +716,7 @@ export class MastraTUI {
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
       notify: (reason, message) => notify(this.state, reason, message),
+      analytics: this.state.analytics,
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
