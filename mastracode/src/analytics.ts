@@ -1,5 +1,5 @@
-import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 
 import { PostHog } from 'posthog-node';
 
