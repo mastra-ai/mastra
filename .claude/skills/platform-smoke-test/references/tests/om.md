@@ -127,30 +127,19 @@ curl -s -X POST "$API_URL/v1/chat/completions" \
 - [ ] Note if logs show both requests
 
 ### 6. Message Buffering Test (Flood Test)
-Test gateway behavior under rapid message load:
+Test gateway behavior under rapid message load.
 
+**Run the script:**
 ```bash
-THREAD_ID="om-flood-$(date +%s)"
-
-# Send 20 messages rapidly without waiting
-for i in {1..20}; do
-  curl -s -X POST "$API_URL/v1/chat/completions" \
-    -H "Authorization: Bearer $MASTRA_API_KEY" \
-    -H "Content-Type: application/json" \
-    -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Rapid message $i\"}]}" &
-done
-
-# Wait for all background requests
-wait
-echo "All requests sent"
+./scripts/test-om-flood.sh "$API_URL" "$MASTRA_API_KEY"
 ```
 
-**Verification:**
-- [ ] Note how many requests succeed vs fail
-- [ ] Note any error messages returned
-- [ ] Check Logs page for request order and status
-- [ ] Check thread for message integrity
+The script sends 20 concurrent requests and reports success/failure counts.
+
+**What to record:**
+- [ ] How many requests succeed vs fail
+- [ ] Any error messages
+- [ ] Thread state in dashboard (use thread ID from output)
 
 ### 7. Long Conversation Test (30 Prompts)
 
@@ -158,80 +147,15 @@ echo "All requests sent"
 
 This tests Gateway behavior over a long conversation with ~25k tokens. Note: This does NOT trigger OM (threshold is 30k). Test 8 is required to test OM activation.
 
+**Run the script:**
 ```bash
-THREAD_ID="om-explosion-$(date +%s)"
-
-# 30 prompts designed to generate long responses (~500-1000 tokens each)
-PROMPTS=(
-  "Write a comprehensive 500-word essay about the history of computing from Babbage to modern day"
-  "Expand on the contributions of Turing, Lovelace, and von Neumann with specific technical details"
-  "Explain in detail how transistors work and how they led to integrated circuits and modern CPUs"
-  "Describe the evolution from mainframes to personal computers, including key dates and companies"
-  "Write detailed pseudocode for quicksort and mergesort, explaining the time complexity of each step"
-  "Compare and contrast 5 different programming paradigms with code examples for each"
-  "Explain how the internet works from DNS resolution through TCP/IP to HTTP responses"
-  "Describe microservices architecture patterns including saga, CQRS, and event sourcing"
-  "Write a technical explanation of how neural networks learn through backpropagation"
-  "Explain database indexing strategies including B-trees, hash indexes, and bitmap indexes"
-  "Describe containerization internals - namespaces, cgroups, and how Docker uses them"
-  "Explain the CAP theorem and its practical implications for distributed database design"
-  "Write about compiler design phases from lexical analysis through code generation"
-  "Describe garbage collection algorithms including mark-sweep, generational, and concurrent GC"
-  "Explain consensus algorithms like Raft and Paxos with state machine examples"
-  "Write a detailed explanation of how HTTPS and TLS handshakes work"
-  "Describe the internals of a modern JavaScript engine like V8"
-  "Explain how operating system schedulers work with different scheduling algorithms"
-  "Write about memory management in systems programming - stack, heap, and virtual memory"
-  "Describe how load balancers work and different load balancing strategies"
-  "Explain event-driven architecture and message queue systems like Kafka"
-  "Write about API design best practices including REST, GraphQL, and gRPC tradeoffs"
-  "Describe how search engines index and rank web pages"
-  "Explain distributed tracing and observability in microservices"
-  "Write about authentication protocols including OAuth2, OIDC, and SAML"
-  "Describe how CDNs work and edge computing architectures"
-  "Explain functional programming concepts including monads, functors, and applicatives"
-  "Write about real-time systems and the challenges of low-latency computing"
-  "Describe how version control systems like Git work internally"
-  "Explain WebSocket protocol and real-time bidirectional communication"
-)
-
-echo "Starting long conversation test with ${#PROMPTS[@]} detailed prompts"
-echo "Thread ID: $THREAD_ID"
-echo ""
-
-for i in "${!PROMPTS[@]}"; do
-  MSG_NUM=$((i + 1))
-  PROMPT="${PROMPTS[$i]}"
-  
-  RESPONSE=$(curl -s -X POST "$API_URL/v1/chat/completions" \
-    -H "Authorization: Bearer $MASTRA_API_KEY" \
-    -H "Content-Type: application/json" \
-    -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]}")
-  
-  PROMPT_TOKENS=$(echo $RESPONSE | jq '.usage.prompt_tokens // "error"')
-  COMPLETION_TOKENS=$(echo $RESPONSE | jq '.usage.completion_tokens // "error"')
-  CACHE_READ=$(echo $RESPONSE | jq '.usage.cache_read_tokens // 0')
-  CACHE_WRITE=$(echo $RESPONSE | jq '.usage.cache_creation_input_tokens // 0')
-  
-  echo "Msg $MSG_NUM: prompt=$PROMPT_TOKENS completion=$COMPLETION_TOKENS cache_read=$CACHE_READ cache_write=$CACHE_WRITE"
-  
-  # Check for errors
-  ERROR=$(echo $RESPONSE | jq '.error // empty')
-  if [ -n "$ERROR" ] && [ "$ERROR" != "null" ]; then
-    echo "ERROR at message $MSG_NUM: $ERROR"
-    break
-  fi
-  
-  sleep 1
-done
-
-echo ""
-echo "Test complete. Check Logs page for full token breakdown."
+./scripts/test-om-long-conversation.sh "$API_URL" "$MASTRA_API_KEY"
 ```
 
+The script sends 30 detailed prompts and tracks token progression.
+
 **What to record:**
-- [ ] Token progression - linear growth is normal at this level
+- [ ] Token progression (should show linear growth)
 - [ ] Cache behavior (cache_read_tokens)
 - [ ] Final prompt_tokens count (likely ~25k, below OM threshold)
 - [ ] Any errors
@@ -318,48 +242,22 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 #### 8d. Full History Replay Test
 
-Test what happens when the client sends full conversation history (simulating stateless replay):
+Test what happens when the client sends full conversation history (simulating stateless replay).
 
+**Run the script:**
 ```bash
-THREAD_ID="local-replay-$(date +%s)"
-
-# Build up history with 5 messages
-for i in {1..5}; do
-  curl -s -X POST "$API_URL/v1/chat/completions" \
-    -H "Authorization: Bearer $MASTRA_API_KEY" \
-    -H "Content-Type: application/json" \
-    -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Message $i\"}]}"
-  sleep 1
-done
-
-# Now send ALL history again (simulating what a local client might do)
-curl -s -X POST "$API_URL/v1/chat/completions" \
-  -H "Authorization: Bearer $MASTRA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -H "x-thread-id: $THREAD_ID" \
-  -d '{
-    "model": "openai/gpt-4o",
-    "messages": [
-      {"role": "user", "content": "Message 1"},
-      {"role": "assistant", "content": "Response 1"},
-      {"role": "user", "content": "Message 2"},
-      {"role": "assistant", "content": "Response 2"},
-      {"role": "user", "content": "Message 3"},
-      {"role": "assistant", "content": "Response 3"},
-      {"role": "user", "content": "Message 4"},
-      {"role": "assistant", "content": "Response 4"},
-      {"role": "user", "content": "Message 5"},
-      {"role": "assistant", "content": "Response 5"},
-      {"role": "user", "content": "Message 6 - new message after full replay"}
-    ]
-  }'
+./scripts/test-om-history-replay.sh "$API_URL" "$MASTRA_API_KEY"
 ```
+
+The script:
+1. Builds a 5-message conversation
+2. Sends ALL history again with one new message
+3. Checks thread state for message deduplication
 
 **What to record:**
 - [ ] Token count for the full-history request
-- [ ] Whether Gateway handled the replay correctly
-- [ ] Check thread in dashboard for message count
+- [ ] Final message count in Gateway vs expected
+- [ ] Whether Gateway handled replay correctly
 
 ---
 
