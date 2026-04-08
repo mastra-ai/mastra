@@ -91,14 +91,14 @@ curl -X POST "$API_URL/v1/chat/completions" \
 ```
 - [ ] Both keys return 200 OK
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Chat completions | 200 with response |
+| Check | What to Record |
+|-------|----------------|
+| Chat completions | Record status code and response content |
 | Without prefix | Note behavior (error or auto-attach) |
-| With thread ID | 200, thread created |
-| Multiple keys | Both work |
+| With thread ID | Record status code, note if thread appears in dashboard |
+| Multiple keys | Record if both keys return responses |
 
 ## Common Issues
 

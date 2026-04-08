@@ -37,7 +37,7 @@ Navigate to Dashboard → Logs
 3. [ ] prompt_tokens displayed (not just cached_tokens)
 4. [ ] completion_tokens displayed
 5. [ ] total_tokens displayed
-6. [ ] cache_write_tokens shown (should not always be 0)
+6. [ ] Record cache_write_tokens value
 
 **Multi-Provider Verification:**
 1. Send requests with different providers
@@ -66,15 +66,15 @@ Navigate to Dashboard → Settings
 - [ ] Back button works correctly
 - [ ] Page refresh maintains state
 
-## Expected Results
+## Observations to Report
 
-| Page | Expected |
-|------|----------|
-| Projects | List of projects |
-| Threads | List with details |
-| Logs | Request table with expandable rows |
-| Usage | Charts and costs |
-| Settings | Configurable options |
+| Page | What to Record |
+|------|----------------|
+| Projects | Note what appears on the page |
+| Threads | Record if list loads, note details shown |
+| Logs | Record table contents and expandability |
+| Usage | Note if charts render, record data shown |
+| Settings | Record available options |
 
 ## Common Issues
 

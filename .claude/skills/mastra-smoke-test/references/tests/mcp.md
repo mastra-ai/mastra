@@ -7,42 +7,42 @@ Verify MCP (Model Context Protocol) servers page loads and connections work.
 
 ### 1. Navigate to MCP Page
 - [ ] Open `/mcps` in Studio
-- [ ] Verify page loads without errors
-- [ ] Check for MCP servers list
+- [ ] Note if page loads and any errors displayed
+- [ ] Record what MCP servers list shows
 
-### 2. Verify Empty State
+### 2. Observe Empty State
 If no MCP servers configured:
-- [ ] Page shows empty state message
-- [ ] No errors displayed
-- [ ] Instructions for adding servers may be shown
+- [ ] Record the empty state message shown
+- [ ] Note any errors displayed
+- [ ] Record if instructions for adding servers appear
 
-### 3. Verify Configured Servers
+### 3. Observe Configured Servers
 If MCP servers are configured:
-- [ ] Servers appear in list
-- [ ] Connection status shown (connected/disconnected)
-- [ ] Server name and type visible
+- [ ] Record which servers appear in list
+- [ ] Note connection status shown (connected/disconnected)
+- [ ] Record server names and types visible
 
 ### 4. Test Server Connection
 For each configured server:
-- [ ] Verify connection status
-- [ ] Check available tools from server
-- [ ] Confirm tools are discoverable
+- [ ] Record connection status
+- [ ] Note available tools from server
+- [ ] Record which tools are discoverable
 
 ### 5. Test MCP Tool (if available)
 - [ ] Navigate to `/tools`
 - [ ] Find MCP-provided tool
 - [ ] Execute tool
-- [ ] Verify it calls external server
+- [ ] Record the result and whether it calls external server
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| MCP page | Loads without errors |
-| Empty state | Clean message if no servers |
-| Server list | Shows configured servers |
-| Connection | Status indicator works |
-| Tools | MCP tools discoverable |
+| Check | What to Record |
+|-------|----------------|
+| MCP page | Load behavior, any errors |
+| Empty state | Message content if no servers |
+| Server list | Servers shown and their details |
+| Connection | Status indicator behavior |
+| Tools | Which MCP tools are discoverable |
 
 ## MCP Configuration
 

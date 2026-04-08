@@ -84,22 +84,22 @@ After generating errors:
 
 **Known Issue**: If errors don't appear in logs, note as potential logging issue.
 
-## Expected Results
+## Observations to Report
 
-| Error Type | Expected Code | In Logs |
-|------------|---------------|---------|
-| Invalid key | 401 | Yes |
-| Invalid model | 4xx | Yes |
-| Bad JSON | 400 | Maybe |
-| Rate limit | 429 | Yes |
+| Error Type | What to Record |
+|------------|----------------|
+| Invalid key | Record status code returned, note if appears in logs |
+| Invalid model | Record status code and error message |
+| Bad JSON | Record status code and error message |
+| Rate limit | Record status code, note if appears in logs |
 
 ## Error Response Quality
 
-Good error responses should:
-- Have appropriate HTTP status
-- Include clear error message
-- Not expose internal details
-- Be parseable (JSON format)
+Note these aspects of error responses:
+- Record the HTTP status code
+- Record the error message content
+- Note if internal details are exposed
+- Note if response is parseable JSON
 
 ## Common Issues
 

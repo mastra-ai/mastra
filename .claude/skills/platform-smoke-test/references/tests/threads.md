@@ -108,18 +108,18 @@ curl -X DELETE "$API_URL/v1/memory/threads/$THREAD_ID" \
 - [ ] Returns 200 OK or 204 No Content
 - [ ] Thread no longer appears in list
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Create thread | 201 with thread object |
-| List threads | `{threads: [], total: N}` |
-| Get thread | Thread details |
-| Update thread | Updated fields |
-| Get messages | `{messages: []}` |
-| Save messages | 200 OK |
-| Filter by resource | Filtered list |
-| Delete | Thread removed |
+| Check | What to Record |
+|-------|----------------|
+| Create thread | Record status code and response structure |
+| List threads | Record response format and count |
+| Get thread | Record thread details returned |
+| Update thread | Note if fields are updated |
+| Get messages | Record response format |
+| Save messages | Record status code |
+| Filter by resource | Note if filtering works |
+| Delete | Record status code, note if thread disappears |
 
 ## Common Issues
 

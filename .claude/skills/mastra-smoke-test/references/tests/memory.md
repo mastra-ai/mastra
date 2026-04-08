@@ -13,38 +13,38 @@ Verify conversation memory persists and context is maintained.
 - [ ] Navigate to `/agents`
 - [ ] Select an agent (e.g., Weather Agent)
 - [ ] Send: `What's the weather in Tokyo?`
-- [ ] Wait for response
+- [ ] Wait for response and record it
 
 ### 2. Test Context Retention
 - [ ] Send follow-up: `What about comparing it to London?`
-- [ ] Verify agent references Tokyo in response
-- [ ] Agent should understand "it" refers to weather
+- [ ] Note if agent references Tokyo in response
+- [ ] Record whether agent understands "it" refers to weather
 
 ### 3. Test Navigation Persistence
 - [ ] Navigate away (e.g., to `/tools`)
 - [ ] Navigate back to `/agents` → same agent
-- [ ] Verify conversation history is visible
-- [ ] Previous messages should be displayed
+- [ ] Note if conversation history is visible
+- [ ] Record which previous messages are displayed
 
 ### 4. Test Cross-Session (if applicable)
 - [ ] Note the current thread/conversation
 - [ ] Refresh the page (F5)
 - [ ] Navigate back to the same agent
-- [ ] Verify history persists (depends on memory config)
+- [ ] Record whether history persists
 
 ### 5. Test New Thread
 - [ ] Start a new conversation (if UI supports)
-- [ ] Verify new thread has no history
-- [ ] Old thread should still be accessible
+- [ ] Note if new thread has no history
+- [ ] Record whether old thread is still accessible
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Context retention | Agent remembers previous messages |
-| Navigation | History visible after navigating away |
-| Page refresh | History persists (if memory configured) |
-| New thread | Fresh conversation possible |
+| Check | What to Record |
+|-------|----------------|
+| Context retention | Whether agent references previous messages |
+| Navigation | History visibility after navigating away |
+| Page refresh | Whether history persists |
+| New thread | Behavior when starting fresh conversation |
 
 ## Memory Configurations
 

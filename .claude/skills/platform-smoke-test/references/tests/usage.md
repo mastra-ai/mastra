@@ -64,14 +64,14 @@ Navigate to Usage → Cost tab
 - [ ] Input vs output costs shown
 - [ ] BYOK requests show $0 (if applicable)
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Token counts | Match request sizes |
-| Cost breakdown | Per-model costs |
-| Charts | Render correctly |
-| Date range | Filters data |
+| Check | What to Record |
+|-------|----------------|
+| Token counts | Record token values displayed |
+| Cost breakdown | Record costs shown per model |
+| Charts | Note if charts render, describe what appears |
+| Date range | Note if data changes with range selection |
 
 ## Common Issues
 

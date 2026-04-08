@@ -52,14 +52,14 @@ curl -X POST "$API_URL/v1/chat/completions" \
 4. [ ] Click to see message history
 5. [ ] Both messages are displayed
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| First message | Accepted, stored |
-| Recall | Correctly returns "blue" and "Alex" |
-| No thread ID | No memory (doesn't know name) |
-| Dashboard | Thread and messages visible |
+| Check | What to Record |
+|-------|----------------|
+| First message | Record status code and response |
+| Recall | Note if response mentions "blue" and "Alex" |
+| No thread ID | Record what the response says about name |
+| Dashboard | Note if thread and messages appear |
 
 ## Common Issues
 

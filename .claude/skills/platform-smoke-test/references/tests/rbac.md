@@ -61,14 +61,14 @@ Test that API actions respect roles:
 | Manage team | ❌ | ❌ | ✅ |
 | Billing | ❌ | ❌ | ✅ |
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Viewer | Read-only access |
-| Editor | Can modify data, not settings |
-| Admin | Full access |
-| Downgrade | Immediate restriction |
+| Check | What to Record |
+|-------|----------------|
+| Viewer | Record what actions are allowed/blocked |
+| Editor | Record what actions are allowed/blocked |
+| Admin | Record what actions are allowed/blocked |
+| Downgrade | Note when restrictions take effect |
 
 ## Common Issues
 
@@ -82,4 +82,4 @@ Test that API actions respect roles:
 
 - RBAC testing requires multiple accounts
 - Use browser incognito for second account
-- Role changes should take effect immediately
+- Note when role changes take effect

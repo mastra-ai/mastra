@@ -5,24 +5,24 @@ Verify observability traces are being collected and displayed.
 
 ## Prerequisites
 - Must have run agent/tool/workflow tests first (to generate traces)
-- For cloud: Both Studio and Server should be deployed
+- For cloud: Both Studio and Server need to be deployed
 
 ## Steps
 
 ### 1. Navigate to Observability
 - [ ] Open `/observability` in Studio
-- [ ] Verify page loads without errors
-- [ ] Check for existing traces
+- [ ] Note if page loads and any errors displayed
+- [ ] Record existing traces shown
 
-### 2. Verify Studio-Originated Traces
+### 2. Observe Studio-Originated Traces
 - [ ] Look for traces from previous tests (agent chat, tool runs)
-- [ ] Traces should show: name, timestamp, duration, status
+- [ ] Record what information traces show (name, timestamp, duration, status)
 - [ ] Click on a trace to expand details
 
 ### 3. Check Trace Details
-- [ ] Verify trace shows input/output
-- [ ] Check for timing information
-- [ ] Confirm no error states (unless expected)
+- [ ] Record what input/output is shown
+- [ ] Note timing information displayed
+- [ ] Record any error states shown
 
 ### 4. Generate Server Trace (Cloud Only)
 For `--env staging` or `--env production`:
@@ -34,21 +34,21 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 ```
 
 - [ ] Execute the curl command
-- [ ] Note the response
+- [ ] Record the response
 
-### 5. Verify Server Trace Appears
+### 5. Check for Server Trace
 - [ ] Refresh `/observability` page
-- [ ] Look for new trace from Server API call
-- [ ] Should appear within 30 seconds
+- [ ] Note if new trace from Server API call appears
+- [ ] Record how long until trace appears (if at all)
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Traces page | Loads without errors |
-| Studio traces | Visible from previous actions |
-| Trace details | Shows input, output, duration |
-| Server traces | Appear after API call (cloud) |
+| Check | What to Record |
+|-------|----------------|
+| Traces page | Load behavior, any errors |
+| Studio traces | Which traces appear from previous actions |
+| Trace details | Input, output, duration shown |
+| Server traces | Whether traces appear after API call, timing |
 
 ## Trace Sources
 
@@ -76,7 +76,7 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 **Cloud (`--env staging/production`)**:
 - Traces sent to cloud collector
 - Persist across sessions
-- Both Studio and Server traces should appear
+- Note if both Studio and Server traces appear
 
 ## Browser Actions
 

@@ -48,14 +48,14 @@ Open: $GATEWAY_URL
 - [ ] Can access settings
 - [ ] Can view usage
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Registration | Completes successfully |
-| Org created | Automatic |
-| Project created | Default project |
-| API key | Displayed and copyable |
+| Check | What to Record |
+|-------|----------------|
+| Registration | Record if it completes, note any errors |
+| Org created | Note if organization appears automatically |
+| Project created | Note if default project exists |
+| API key | Record if displayed and copyable |
 
 ## Common Issues
 

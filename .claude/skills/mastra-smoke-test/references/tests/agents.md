@@ -7,37 +7,37 @@ Verify agents page loads and agent chat functionality works.
 
 ### 1. Navigate to Agents Page
 - [ ] Open `/agents` in Studio
-- [ ] Verify agents list loads without errors
-- [ ] Confirm at least one agent appears (e.g., "Weather Agent")
+- [ ] Note if agents list loads and any errors displayed
+- [ ] Record which agents appear (e.g., "Weather Agent")
 
 ### 2. Open Agent Chat
 - [ ] Click on an agent (e.g., Weather Agent)
-- [ ] Verify chat interface loads
-- [ ] Confirm input field is visible
+- [ ] Note if chat interface loads
+- [ ] Record whether input field is visible
 
 ### 3. Send Test Message
 - [ ] Enter: `What's the weather in Tokyo?`
 - [ ] Click Send or press Enter
 - [ ] Wait for response (may take 5-30 seconds)
 
-### 4. Verify Response
-- [ ] Agent responds with weather information
-- [ ] Response is coherent and relevant
-- [ ] No error messages displayed
+### 4. Observe Response
+- [ ] Record the agent's response content
+- [ ] Note if response is coherent and relevant
+- [ ] Record any error messages displayed
 
 ### 5. Test Follow-up (Memory Check)
 - [ ] Send: `What about London?`
-- [ ] Verify agent understands context (comparing cities)
-- [ ] Response references the previous question
+- [ ] Note if agent references the previous question
+- [ ] Record whether context appears to be maintained
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Agents list | Shows at least one agent |
-| Chat loads | Input field visible, no errors |
-| First message | Agent responds with weather data |
-| Follow-up | Agent remembers previous context |
+| Check | What to Record |
+|-------|----------------|
+| Agents list | Number of agents shown, any errors |
+| Chat loads | Whether input field appears, any errors |
+| First message | Agent response content and relevance |
+| Follow-up | Whether agent references previous context |
 
 ## Common Issues
 

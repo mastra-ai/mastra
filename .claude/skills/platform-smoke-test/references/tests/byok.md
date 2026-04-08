@@ -74,15 +74,15 @@ curl -X POST "$API_URL/v1/chat/completions" \
 | Anthropic | `x-anthropic-api-key` |
 | Google | `x-google-api-key` |
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| OpenAI BYOK | `is_byok: true` |
-| Anthropic BYOK | `is_byok: true` |
-| Google BYOK | `is_byok: true` |
-| Settings BYOK | Uses configured key |
-| Usage | No charge for BYOK |
+| Check | What to Record |
+|-------|----------------|
+| OpenAI BYOK | Record `is_byok` value in response |
+| Anthropic BYOK | Record `is_byok` value in response |
+| Google BYOK | Record `is_byok` value in response |
+| Settings BYOK | Note if configured key is used |
+| Usage | Record cost shown for BYOK requests |
 
 ## Common Issues
 

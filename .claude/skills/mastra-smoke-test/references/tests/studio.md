@@ -25,19 +25,19 @@ unset MASTRA_PLATFORM_API_URL
 ```bash
 pnpx mastra@latest auth login
 ```
-- [ ] Browser opens for OAuth
-- [ ] Complete login flow
-- [ ] CLI confirms authentication
+- [ ] Note if browser opens for OAuth
+- [ ] Record login flow completion
+- [ ] Record CLI authentication confirmation
 
 ### 3. Deploy Studio
 ```bash
 pnpx mastra@latest studio deploy -y
 ```
 
-**Watch for:**
-- [ ] Build starts
-- [ ] Build completes (note any warnings)
-- [ ] Deploy starts
+**Record:**
+- [ ] Note if build starts
+- [ ] Record build completion and any warnings
+- [ ] Note if deploy starts
 - [ ] **Capture Studio URL from output**
 
 ### 4. Handle Deploy Output
@@ -48,27 +48,27 @@ pnpx mastra@latest studio deploy -y
 | Warning (observability, session) | Note and continue |
 | Success + URL | Continue to verification |
 
-### 5. Verify Studio Access
+### 5. Observe Studio Access
 - [ ] Open Studio URL in browser
-- [ ] Sign in if prompted
-- [ ] Verify Studio UI loads
-- [ ] Check agents list appears
+- [ ] Note if sign in is prompted
+- [ ] Record whether Studio UI loads
+- [ ] Record which agents appear in list
 
 ### 6. Test Basic Functionality
 - [ ] Navigate to `/agents`
 - [ ] Click on an agent
 - [ ] Send a test message
-- [ ] Verify response
+- [ ] Record the response
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Deploy | Completes without errors |
-| URL | Valid Studio URL returned |
-| Access | Can open and sign in |
-| UI | Studio interface loads |
-| Agents | At least one agent visible |
+| Check | What to Record |
+|-------|----------------|
+| Deploy | Completion status, any errors or warnings |
+| URL | Studio URL returned |
+| Access | Sign in behavior, UI load status |
+| UI | What interface elements appear |
+| Agents | Which agents are visible |
 
 ## Deploy URLs
 
@@ -97,7 +97,7 @@ pnpx mastra@latest studio deploy -y
 1. Deploy Studio first (for UI access)
 2. Deploy Server (for API access)
 3. Test via both UI and API
-4. Server traces should appear in Studio
+4. Check if Server traces appear in Studio
 
 **You can deploy one without the other**, but:
 - Studio-only: No API access, can't test server traces

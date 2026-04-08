@@ -47,15 +47,15 @@ As invitee:
 3. Change to "Editor"
 4. Verify expanded access
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Send invite | Success message |
-| Pending list | Shows invitation |
-| Email | Received by invitee |
-| Accept | Invitee gains access |
-| Role | Permissions match role |
+| Check | What to Record |
+|-------|----------------|
+| Send invite | Record message shown after sending |
+| Pending list | Note if invitation appears |
+| Email | Record if email received |
+| Accept | Note if invitee can access project |
+| Role | Record what permissions the invitee has |
 
 ## Common Issues
 

@@ -7,38 +7,38 @@ Verify workflows page loads and workflow execution works.
 
 ### 1. Navigate to Workflows Page
 - [ ] Open `/workflows` in Studio
-- [ ] Verify workflows list loads without errors
-- [ ] Confirm at least one workflow appears
+- [ ] Note if workflows list loads and any errors displayed
+- [ ] Record which workflows appear
 
 ### 2. Select a Workflow
 - [ ] Click on a workflow (e.g., `weather-workflow`)
-- [ ] Verify workflow details/run panel opens
-- [ ] Confirm input fields are visible (if any)
+- [ ] Note if workflow details/run panel opens
+- [ ] Record which input fields are visible (if any)
 
 ### 3. Execute Workflow
 - [ ] Enter required input (e.g., "Berlin" for city)
 - [ ] Click "Run" or "Execute"
 - [ ] Wait for workflow to complete
 
-### 4. Verify Execution
-- [ ] Workflow shows "Running" state
-- [ ] Workflow completes (success or shows steps)
-- [ ] Output/result is visible
+### 4. Observe Execution
+- [ ] Record the workflow state shown (Running, etc.)
+- [ ] Note completion status (success, failure, steps shown)
+- [ ] Record output/result displayed
 
 ### 5. Check Workflow Steps
-- [ ] Verify individual steps executed
-- [ ] Check step-by-step output if available
-- [ ] Confirm final result matches expected
+- [ ] Record which individual steps executed
+- [ ] Note step-by-step output if available
+- [ ] Record the final result
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Workflows list | Shows available workflows |
-| Run panel | Input fields and run button visible |
-| Execution | Shows running state, then completes |
-| Steps | Individual steps visible/executed |
-| Output | Final result displayed |
+| Check | What to Record |
+|-------|----------------|
+| Workflows list | Which workflows appear, any errors |
+| Run panel | Input fields and controls shown |
+| Execution | State transitions, completion status |
+| Steps | Which steps executed, their output |
+| Output | Final result content |
 
 ## Common Issues
 

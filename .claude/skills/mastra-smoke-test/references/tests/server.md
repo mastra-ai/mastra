@@ -9,7 +9,7 @@ Verify Server deployment works and API is accessible.
 - Mastra platform account
 - Project with at least one agent
 - Authenticated via `mastra auth login`
-- Studio should be deployed first (recommended)
+- Studio deployed first (recommended)
 
 ## Steps
 
@@ -42,13 +42,12 @@ pnpx mastra@latest server deploy -y
 - `mastra-cloud-observability-exporter disabled` - traces won't work
 - `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_LOGS` - trace endpoint issue
 
-### 4. Verify Health Endpoint
+### 4. Test Health Endpoint
 ```bash
 curl <server-url>/health
-# Expected: {"success":true}
 ```
-- [ ] Returns 200 OK
-- [ ] Response includes success indicator
+- [ ] Record HTTP status code returned
+- [ ] Record response body content
 
 ### 5. Test Agent API
 ```bash
@@ -56,32 +55,32 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Weather in Tokyo?"}]}'
 ```
-- [ ] Returns 200 OK
-- [ ] Response includes agent output
+- [ ] Record HTTP status code returned
+- [ ] Record response content
 
 ### 6. Use Test Script
 ```bash
 .claude/skills/mastra-smoke-test/scripts/test-server.sh <server-url>
 ```
-- [ ] Health check passes
-- [ ] Agent call succeeds
-- [ ] Script exits with 0
+- [ ] Record health check result
+- [ ] Record agent call result
+- [ ] Note script exit code
 
-### 7. Verify Traces in Studio
+### 7. Check Traces in Studio
 - [ ] Open Studio `/observability`
 - [ ] Refresh page
-- [ ] Look for trace from Server API call
-- [ ] Should appear within 30 seconds
+- [ ] Note if trace from Server API call appears
+- [ ] Record how long until trace appears (if at all)
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Deploy | Completes without errors |
-| URL | Valid Server URL returned |
-| Health | `/health` returns success |
-| Agent API | Returns valid response |
-| Traces | Appear in Studio |
+| Check | What to Record |
+|-------|----------------|
+| Deploy | Completion status, any errors or warnings |
+| URL | Server URL returned |
+| Health | HTTP status and response from `/health` |
+| Agent API | HTTP status and response content |
+| Traces | Whether traces appear, timing |
 
 ## Deploy URLs
 

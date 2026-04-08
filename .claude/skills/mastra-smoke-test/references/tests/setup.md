@@ -27,11 +27,11 @@ cd <directory>
 cd <project-name>
 ```
 
-### 4. Verify Structure
-- [ ] `package.json` exists
-- [ ] `src/mastra/index.ts` exists
-- [ ] `src/mastra/agents/` has at least one agent
-- [ ] `src/mastra/tools/` has at least one tool
+### 4. Record Structure
+- [ ] Note if `package.json` exists
+- [ ] Note if `src/mastra/index.ts` exists
+- [ ] Record agents found in `src/mastra/agents/`
+- [ ] Record tools found in `src/mastra/tools/`
 
 ## Option B: Use Existing Project
 
@@ -40,10 +40,10 @@ cd <project-name>
 cd <existing-project-path>
 ```
 
-### 2. Verify Requirements
-- [ ] `package.json` with `@mastra/core`
-- [ ] `src/mastra/index.ts` with Mastra instance
-- [ ] At least one agent configured
+### 2. Record Requirements
+- [ ] Note if `package.json` contains `@mastra/core`
+- [ ] Note if `src/mastra/index.ts` has Mastra instance
+- [ ] Record which agents are configured
 
 ### 3. Update Dependencies (if `--tag` provided)
 ```bash
@@ -215,7 +215,7 @@ unset MASTRA_PLATFORM_API_URL
 
 ```bash
 <pm> tsc --noEmit
-# Should complete with no errors
+# Record any errors that appear
 ```
 
 If errors appear, fix them before proceeding. Don't rely on `mastra build` or `pnpm dev` to catch these.

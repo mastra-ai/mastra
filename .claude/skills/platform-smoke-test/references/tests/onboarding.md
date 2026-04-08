@@ -76,16 +76,16 @@ After onboarding:
 4. [ ] Check if curl command accessible elsewhere (Settings? Docs?)
 5. [ ] Command includes correct provider prefix in model
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Sign-up methods | Google + email available |
-| Registration | Completes without error |
-| Org/project | Created automatically |
-| API key | Displayed and copyable |
-| State persistence | Survives tab/window switch |
-| Provider | Attached to project |
+| Check | What to Record |
+|-------|----------------|
+| Sign-up methods | Record which methods are available |
+| Registration | Note if it completes, record any errors |
+| Org/project | Note if created automatically |
+| API key | Record if displayed and copyable |
+| State persistence | Note if state survives tab/window switch |
+| Provider | Record if attached to project |
 
 ## Common Issues
 

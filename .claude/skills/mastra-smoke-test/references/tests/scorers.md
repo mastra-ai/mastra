@@ -7,26 +7,26 @@ Verify evaluation scorers page loads and displays available scorers.
 
 ### 1. Navigate to Scorers Page
 - [ ] Open `/evaluation?tab=scorers` in Studio
-- [ ] Verify page loads without errors
-- [ ] Check for scorers list
+- [ ] Note if page loads and any errors displayed
+- [ ] Record what scorers list shows
 
-### 2. Verify Scorers Display
-- [ ] List shows available scorers
-- [ ] Each scorer shows name and description
-- [ ] No error messages
+### 2. Observe Scorers Display
+- [ ] Record which scorers are listed
+- [ ] Note what information is shown for each scorer (name, description)
+- [ ] Record any error messages
 
 ### 3. Check Scorer Details (if available)
 - [ ] Click on a scorer to view details
-- [ ] Verify configuration is visible
-- [ ] Check for any run history
+- [ ] Record what configuration is visible
+- [ ] Note any run history shown
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Scorers page | Loads without errors |
-| Scorers list | Shows configured scorers |
-| Scorer details | Name, description visible |
+| Check | What to Record |
+|-------|----------------|
+| Scorers page | Load behavior, any errors |
+| Scorers list | Which scorers appear |
+| Scorer details | Configuration and history shown |
 
 ## Notes
 

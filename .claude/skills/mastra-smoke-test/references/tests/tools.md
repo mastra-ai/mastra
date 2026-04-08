@@ -7,38 +7,38 @@ Verify tools page loads and tool execution works.
 
 ### 1. Navigate to Tools Page
 - [ ] Open `/tools` in Studio
-- [ ] Verify tools list loads without errors
-- [ ] Confirm at least one tool appears (e.g., "get-weather")
+- [ ] Note if tools list loads and any errors displayed
+- [ ] Record which tools appear (e.g., "get-weather")
 
 ### 2. Select a Tool
 - [ ] Click on a tool (e.g., `get-weather`)
-- [ ] Verify tool details panel opens
-- [ ] Confirm input fields are visible
+- [ ] Note if tool details panel opens
+- [ ] Record which input fields are visible
 
 ### 3. Execute Tool
 - [ ] Enter test input (e.g., "London" for city field)
 - [ ] Click "Submit" or "Run"
 - [ ] Wait for execution
 
-### 4. Verify Output
-- [ ] Tool returns JSON output
-- [ ] Output contains expected data (weather info)
-- [ ] No error messages
+### 4. Observe Output
+- [ ] Record the output format (JSON, text, etc.)
+- [ ] Record the output content
+- [ ] Note any error messages
 
 ### 5. Test Error Handling
 - [ ] Enter invalid input (e.g., empty or special characters)
-- [ ] Verify user-friendly error message
-- [ ] Tool doesn't crash
+- [ ] Record the error message displayed
+- [ ] Note if tool crashes or handles gracefully
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Tools list | Shows available tools |
-| Tool details | Input fields visible |
-| Execution | Returns JSON output |
-| Output data | Contains relevant data |
-| Error handling | Friendly error on bad input |
+| Check | What to Record |
+|-------|----------------|
+| Tools list | Which tools appear, any errors |
+| Tool details | Input fields shown |
+| Execution | Output format and content |
+| Output data | Data returned |
+| Error handling | Error message content and behavior |
 
 ## Common Issues
 

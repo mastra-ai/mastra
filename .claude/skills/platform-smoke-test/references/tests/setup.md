@@ -43,13 +43,13 @@ curl -X POST "$API_URL/v1/chat/completions" \
 - [ ] Returns 200 OK
 - [ ] Response includes completion
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Env vars set | `echo $GATEWAY_URL` returns URL |
-| API key set | `echo $MASTRA_API_KEY` returns key |
-| Auth works | Test request returns 200 |
+| Check | What to Record |
+|-------|----------------|
+| Env vars set | Record output of `echo $GATEWAY_URL` |
+| API key set | Record if `echo $MASTRA_API_KEY` returns key |
+| Auth works | Record status code from test request |
 
 ## Common Issues
 

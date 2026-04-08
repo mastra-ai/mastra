@@ -12,7 +12,7 @@ Verify the application handles errors gracefully with user-friendly messages.
   - Empty message
   - Very long message (10000+ chars)
   - Special characters only: `@#$%^&*()`
-- [ ] Verify error is user-friendly (not stack trace)
+- [ ] Record the error message displayed (note if stack trace or user-friendly)
 
 ### 2. Test Tool Error Handling
 - [ ] Navigate to `/tools`
@@ -21,7 +21,7 @@ Verify the application handles errors gracefully with user-friendly messages.
   - Empty required fields
   - Wrong data type (text for number field)
   - Invalid format
-- [ ] Verify clear error message displayed
+- [ ] Record the error message displayed
 
 ### 3. Test API Error Handling (Cloud)
 For `--env staging` or `--env production`:
@@ -43,35 +43,35 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
   -d '{}'
 ```
 
-- [ ] Verify appropriate HTTP error codes
-- [ ] Response includes error message
-- [ ] No stack traces in response
+- [ ] Record HTTP status codes returned
+- [ ] Record error message content
+- [ ] Note if stack traces appear in response
 
 ### 4. Test Navigation Errors
 - [ ] Navigate to invalid route: `/nonexistent-page`
-- [ ] Verify 404 page or redirect
+- [ ] Record what page/behavior appears
 - [ ] Navigate to invalid agent: `/agents/fake-agent-id`
-- [ ] Verify friendly error
+- [ ] Record the error handling behavior
 
 ### 5. Test Network Error Recovery
 - [ ] Start a long-running operation
 - [ ] Briefly disconnect network (if possible)
-- [ ] Verify graceful error handling
-- [ ] Verify retry or recovery options
+- [ ] Record error handling behavior
+- [ ] Note if retry or recovery options appear
 
-## Expected Results
+## Observations to Report
 
-| Check | Expected |
-|-------|----------|
-| Agent errors | User-friendly message, no stack trace |
-| Tool errors | Clear validation message |
-| API errors | Appropriate HTTP status, error message |
-| 404 pages | Clean error page |
-| Network errors | Graceful handling |
+| Check | What to Record |
+|-------|----------------|
+| Agent errors | Error message text, whether stack trace shown |
+| Tool errors | Validation message content |
+| API errors | HTTP status codes, error message content |
+| 404 pages | Page behavior and content |
+| Network errors | Error handling behavior |
 
 ## Error Message Quality
 
-Good error messages should:
+Note these aspects of error messages:
 - Explain what went wrong
 - Suggest how to fix it
 - Not expose internal details
