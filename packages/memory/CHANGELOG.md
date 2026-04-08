@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Fixed reflection threshold not respecting per-record overrides set via the PATCH API. Previously, lowering the reflection threshold for a specific record had no effect on the actual reflection trigger — only the default 40k threshold was used. Now per-record overrides are correctly applied in both sync and async reflection paths. ([#15170](https://github.com/mastra-ai/mastra/pull/15170))
+
 ## 1.15.0-alpha.2
 
 ### Patch Changes
