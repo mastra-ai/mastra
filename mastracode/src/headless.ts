@@ -226,14 +226,11 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
-export async function runHeadless(
-  harness: Harness,
+export async function runHeadless<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,
 ): Promise<number> {
-  // Harness is imported without its generic state param, so setState doesn't know about
-  // thinkingLevel, yolo, observationThreshold, etc. Cast once here instead of at every call site.
-  const setHarnessState = (state: Record<string, unknown>) => harness.setState(state as any);
   const emit =
     args.format === 'json'
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
@@ -319,7 +316,7 @@ export async function runHeadless(
 
   // --- Resolve thinking level ---
   if (args.thinkingLevel) {
-    await setHarnessState({ thinkingLevel: args.thinkingLevel });
+    await harness.setState({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
     if (!emit) process.stderr.write(`[thinking] ${args.thinkingLevel}\n`);
   }
 
