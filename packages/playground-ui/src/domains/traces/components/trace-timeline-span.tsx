@@ -1,6 +1,6 @@
-import type { UISpan } from '../types';
 import { useEffect } from 'react';
 import { getSpanDescendantIds } from '../hooks/get-all-span-ids';
+import type { UISpan } from '../types';
 import { getSpanTypeUi } from './shared';
 import { TimelineExpandCol } from './timeline-expand-col';
 import { TimelineNameCol } from './timeline-name-col';
@@ -51,7 +51,7 @@ export function TraceTimelineSpan({
     if (isExpanded) return;
     const hasFeaturedDescendant = allDescendantIds.some(id => featuredSpanIds.includes(id));
     if (hasFeaturedDescendant && setExpandedSpanIds) {
-      setExpandedSpanIds(prev => (prev ? [...prev, span.id] : [span.id]));
+      setExpandedSpanIds(prev => (!prev || prev.includes(span.id) ? prev ?? [span.id] : [...prev, span.id]));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredSpanIds, allDescendantIds]);
@@ -96,7 +96,6 @@ export function TraceTimelineSpan({
         isExpanded={isExpanded}
         toggleChildren={toggleChildren}
         expandAllDescendants={expandAllDescendants}
-        expandedSpanIds={expandedSpanIds}
         totalDescendants={totalDescendants}
         allDescendantsExpanded={allDescendantsExpanded}
         numOfChildren={numOfChildren}

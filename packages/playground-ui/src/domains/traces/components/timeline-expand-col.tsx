@@ -7,7 +7,6 @@ type TimelineExpandColProps = {
   isExpanded?: boolean;
   toggleChildren?: () => void;
   expandAllDescendants?: () => void;
-  expandedSpanIds?: string[];
   totalDescendants?: number;
   allDescendantsExpanded?: boolean;
   numOfChildren?: number;
