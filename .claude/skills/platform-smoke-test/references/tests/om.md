@@ -415,10 +415,13 @@ npx tsx test-mastracode-gateway.ts
 
 - [ ] Requests appear in Gateway Dashboard → Logs (confirms Gateway routing)
 - [ ] Thread ID from Gateway Dashboard
-- [ ] Messages sent (30) vs messages in Gateway thread
+- [ ] Messages sent (30) vs messages visible in Gateway thread
 - [ ] Token progression (note prompt_tokens at message 1, 15, and 30)
 - [ ] Whether "Activated observations" appeared in console output
-- [ ] If message counts don't match, note examples of duplication or loss
+- [ ] Any token resets (e.g., tokens dropped from 20k to 9k mid-conversation)
+- [ ] Whether early messages (1-12) are visible in thread UI or only in logs
+- [ ] Thread token indicator (e.g., "12.7k / 30k") - note the values
+- [ ] If message counts don't match, note whether messages are missing, compressed, or replaced by observations
 
 ---
 
