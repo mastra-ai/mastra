@@ -685,21 +685,6 @@ const sidebars = {
           id: 'mastra-platform/overview',
           label: 'Overview',
         },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
-        },
       ],
     },
     {
