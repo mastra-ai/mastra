@@ -1865,6 +1865,8 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-pro-preview',
     'inclusionai/ling-1t',
     'inclusionai/ring-1t',
+    'kuaishou/kat-coder-pro-v1',
+    'kuaishou/kat-coder-pro-v1-free',
     'kuaishou/kat-coder-pro-v2',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',

@@ -1080,8 +1080,8 @@
         "gemma-3-4b-it",
         "gemma-3n-e2b-it",
         "gemma-3n-e4b-it",
-        "gemma-4-26b-it",
-        "gemma-4-31b-it"
+        "gemma-4-26b-a4b-it",
+        "gemma-4-31b"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev",
@@ -2250,6 +2250,8 @@
         "google/gemini-3.1-pro-preview",
         "inclusionai/ling-1t",
         "inclusionai/ring-1t",
+        "kuaishou/kat-coder-pro-v1",
+        "kuaishou/kat-coder-pro-v1-free",
         "kuaishou/kat-coder-pro-v2",
         "minimax/minimax-m2",
         "minimax/minimax-m2.1",
@@ -5293,6 +5295,8 @@
       "gemma-3-4b-it",
       "gemma-3n-e2b-it",
       "gemma-3n-e4b-it",
+      "gemma-4-26b-a4b-it",
+      "gemma-4-31b"
       "gemma-4-26b-it",
       "gemma-4-31b-it"
     ],
@@ -6325,6 +6329,8 @@
       "google/gemini-3.1-pro-preview",
       "inclusionai/ling-1t",
       "inclusionai/ring-1t",
+      "kuaishou/kat-coder-pro-v1",
+      "kuaishou/kat-coder-pro-v1-free",
       "kuaishou/kat-coder-pro-v2",
       "minimax/minimax-m2",
       "minimax/minimax-m2.1",

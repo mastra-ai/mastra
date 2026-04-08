@@ -1,0 +1,26 @@
+{
+  "name": "@mastra/octen",
+  "version": "0.1.0",
+  "description": "Octen tools and capabilities for Mastra",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "clean": "rm -rf dist",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "examples-octen",
+  "type": "module",
+  "private": true,
+  "description": "Octen APIs Demonstration",
+  "main": "index.js",
+  "version": "0.0.1",
+  "dependencies": {
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/octen": "link:../../integrations/octen",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "zod": "^3.23.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/octen": "link:../../integrations/octen"
+    }
+  },
+  "scripts": {
+    "start": "npx tsx src/index.ts"
+  },
+  "license": "Apache-2.0"
+}

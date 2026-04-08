@@ -13,6 +13,7 @@ import { findGatewayForModel } from './gateways/index.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
+import { OctenGateway } from './gateways/octen.js';
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, OpenAIWebSocketOptions, ProviderOptions } from './provider-options.js';
@@ -72,6 +73,7 @@ function getStaticProvidersByGateway(name: string) {
 
 export const defaultGateways = [
   new NetlifyGateway(),
+  new OctenGateway(),
   new MastraGateway(),
   new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
 ];
