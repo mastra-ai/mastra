@@ -109,7 +109,7 @@ Navigate to Dashboard → Settings
 
 ## Browser Actions
 
-```
+```text
 Navigate to: $GATEWAY_URL
 Verify: Projects list loads
 

@@ -72,7 +72,7 @@ Verify conversation memory persists and context is maintained.
 
 ## Browser Actions
 
-```
+```text
 Navigate to: /agents
 Click: Select agent
 Type: "What's the weather in Tokyo?"

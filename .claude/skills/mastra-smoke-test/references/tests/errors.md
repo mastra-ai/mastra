@@ -97,7 +97,7 @@ Note these aspects of error messages:
 
 ## Browser Actions
 
-```
+```text
 # Agent error test
 Navigate to: /agents
 Click: Select agent

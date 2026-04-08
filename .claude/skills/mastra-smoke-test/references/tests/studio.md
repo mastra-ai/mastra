@@ -58,7 +58,7 @@ pnpx mastra@latest studio deploy -y
 ### 5. Observe Studio Access
 
 - [ ] Open Studio URL in browser
-- [ ] Note if sign in is prompted
+- [ ] Note if sign-in is prompted
 - [ ] Record whether Studio UI loads
 - [ ] Record which agents appear in list
 
@@ -75,7 +75,7 @@ pnpx mastra@latest studio deploy -y
 | ------ | ----------------------------------------- |
 | Deploy | Completion status, any errors or warnings |
 | URL    | Studio URL returned                       |
-| Access | Sign in behavior, UI load status          |
+| Access | Sign-in behavior, UI load status          |
 | UI     | What interface elements appear            |
 | Agents | Which agents are visible                  |
 
