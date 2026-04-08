@@ -126,12 +126,31 @@ export class ReflectorRunner {
     });
   }
 
-  private getObservationMarkerConfig(): ObservationMarkerConfig {
+  private getObservationMarkerConfig(record?: ObservationalMemoryRecord): ObservationMarkerConfig {
     return {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
-      observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
+      observationTokens: getMaxThreshold(
+        record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
+      ),
       scope: this.scope,
     };
+  }
+
+  /**
+   * Resolve the effective reflection observationTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot is ignored so instance-level changes
+   * still take effect for existing records.
+   */
+  private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const recordTokens = overrides?.reflection?.observationTokens;
+    if (recordTokens) {
+      return recordTokens;
+    }
+    return this.reflectionConfig.observationTokens;
   }
 
   /**
@@ -394,11 +413,7 @@ export class ReflectorRunner {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    const bufOverrides = (
-      currentRecord.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
-    )?._overrides;
-    const bufEffectiveTokens = bufOverrides?.reflection?.observationTokens ?? this.reflectionConfig.observationTokens;
-    const reflectThreshold = getMaxThreshold(bufEffectiveTokens);
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(currentRecord));
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -435,7 +450,7 @@ export class ReflectorRunner {
         recordId: record.id,
         threadId: record.threadId ?? '',
         threadIds: record.threadId ? [record.threadId] : [],
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(currentRecord),
       });
       void writer.custom(startMarker).catch(() => {});
     }
@@ -567,7 +582,7 @@ export class ReflectorRunner {
         threadId: freshRecord.threadId ?? '',
         generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(freshRecord),
       });
       void writer.custom(activationMarker).catch(() => {});
       await this.persistMarkerToMessage(
@@ -610,12 +625,7 @@ export class ReflectorRunner {
       observabilityContext,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
-    const overrides = (
-      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
-    )?._overrides;
-    const effectiveObservationTokens =
-      overrides?.reflection?.observationTokens ?? this.reflectionConfig.observationTokens;
-    const reflectThreshold = getMaxThreshold(effectiveObservationTokens);
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -712,7 +722,7 @@ export class ReflectorRunner {
         recordId: record.id,
         threadId,
         threadIds: [threadId],
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(record),
       });
       await writer.custom(startMarker).catch(() => {});
     }
