@@ -7,20 +7,27 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 - `MASTRA_API_KEY` set
 - `API_URL` set
 - Dashboard access
+- For Test 8: A local Mastra project (create one if needed)
 
-## Time Estimate
-~45 seconds for Step 1 (12 messages × 2s sleep + API time), ~5 minutes total.
+## Required Tests
 
-## How OM Works
-- OM extracts key facts from conversations to avoid re-sending full history
-- Triggers based on **token thresholds**, not message count
-- OM tokens appear as a separate metric in Usage dashboard (may show as "Memory Tokens")
+**ALL of these tests must be run. Do not skip any unless a hard blocker prevents it.**
+
+| Test | Required | Notes |
+|------|----------|-------|
+| 1. Extended Conversation | ✅ | Baseline test |
+| 2. Token Usage Analysis | ✅ | Dashboard verification |
+| 3. OM Token Tracking | ✅ | Usage page check |
+| 4. OM Threshold Settings | ✅ | Settings page check |
+| 5. Multi-Model OM | ✅ | Cross-provider test |
+| 6. Message Buffering (Flood) | ✅ | Concurrency test |
+| 7. Token Explosion (Intensive) | ✅ **CRITICAL** | Run ALL 30 prompts |
+| 8. Local + Gateway OM | ✅ **CRITICAL** | Set up local project if needed |
 
 **Your job is to:**
-1. Run the tests and record token growth patterns
-2. Check Settings → OM Thresholds to see actual threshold values
-3. Record whether token growth is linear or plateaus
-4. Record any `cached_tokens` values and note their source (provider vs Mastra)
+1. Run each test to completion
+2. Record all token counts and behaviors observed
+3. Note any errors, unexpected values, or unusual patterns
 
 ## Steps
 
@@ -145,46 +152,98 @@ echo "All requests sent"
 - [ ] Check Logs page for request order and status
 - [ ] Check thread for message integrity
 
-### 7. Token Explosion Test
-Test with a long-running conversation to check for unbounded token growth:
+### 7. Token Explosion Test (Intensive) — CRITICAL, DO NOT SKIP
+
+**Run ALL 30 prompts to completion. Do not stop early unless an error occurs.**
+
+This test generates a high-token conversation. Each prompt is designed to produce detailed responses.
 
 ```bash
 THREAD_ID="om-explosion-$(date +%s)"
 
-# Send 25+ messages to trigger potential issues
-for i in {1..25}; do
+# 30 prompts designed to generate long responses (~500-1000 tokens each)
+PROMPTS=(
+  "Write a comprehensive 500-word essay about the history of computing from Babbage to modern day"
+  "Expand on the contributions of Turing, Lovelace, and von Neumann with specific technical details"
+  "Explain in detail how transistors work and how they led to integrated circuits and modern CPUs"
+  "Describe the evolution from mainframes to personal computers, including key dates and companies"
+  "Write detailed pseudocode for quicksort and mergesort, explaining the time complexity of each step"
+  "Compare and contrast 5 different programming paradigms with code examples for each"
+  "Explain how the internet works from DNS resolution through TCP/IP to HTTP responses"
+  "Describe microservices architecture patterns including saga, CQRS, and event sourcing"
+  "Write a technical explanation of how neural networks learn through backpropagation"
+  "Explain database indexing strategies including B-trees, hash indexes, and bitmap indexes"
+  "Describe containerization internals - namespaces, cgroups, and how Docker uses them"
+  "Explain the CAP theorem and its practical implications for distributed database design"
+  "Write about compiler design phases from lexical analysis through code generation"
+  "Describe garbage collection algorithms including mark-sweep, generational, and concurrent GC"
+  "Explain consensus algorithms like Raft and Paxos with state machine examples"
+  "Write a detailed explanation of how HTTPS and TLS handshakes work"
+  "Describe the internals of a modern JavaScript engine like V8"
+  "Explain how operating system schedulers work with different scheduling algorithms"
+  "Write about memory management in systems programming - stack, heap, and virtual memory"
+  "Describe how load balancers work and different load balancing strategies"
+  "Explain event-driven architecture and message queue systems like Kafka"
+  "Write about API design best practices including REST, GraphQL, and gRPC tradeoffs"
+  "Describe how search engines index and rank web pages"
+  "Explain distributed tracing and observability in microservices"
+  "Write about authentication protocols including OAuth2, OIDC, and SAML"
+  "Describe how CDNs work and edge computing architectures"
+  "Explain functional programming concepts including monads, functors, and applicatives"
+  "Write about real-time systems and the challenges of low-latency computing"
+  "Describe how version control systems like Git work internally"
+  "Explain WebSocket protocol and real-time bidirectional communication"
+)
+
+echo "Starting intensive token explosion test with ${#PROMPTS[@]} detailed prompts"
+echo "Thread ID: $THREAD_ID"
+echo ""
+
+for i in "${!PROMPTS[@]}"; do
+  MSG_NUM=$((i + 1))
+  PROMPT="${PROMPTS[$i]}"
+  
   RESPONSE=$(curl -s -X POST "$API_URL/v1/chat/completions" \
     -H "Authorization: Bearer $MASTRA_API_KEY" \
     -H "Content-Type: application/json" \
     -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Message $i: Research topic $i in depth and provide detailed analysis\"}]}")
+    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]}")
   
   PROMPT_TOKENS=$(echo $RESPONSE | jq '.usage.prompt_tokens // "error"')
+  COMPLETION_TOKENS=$(echo $RESPONSE | jq '.usage.completion_tokens // "error"')
   CACHE_READ=$(echo $RESPONSE | jq '.usage.cache_read_tokens // 0')
+  CACHE_WRITE=$(echo $RESPONSE | jq '.usage.cache_creation_input_tokens // 0')
+  
+  echo "Msg $MSG_NUM: prompt=$PROMPT_TOKENS completion=$COMPLETION_TOKENS cache_read=$CACHE_READ cache_write=$CACHE_WRITE"
+  
+  # Check for errors
   ERROR=$(echo $RESPONSE | jq '.error // empty')
-  
-  echo "Msg $i: prompt=$PROMPT_TOKENS cache_read=$CACHE_READ"
-  
-  if [ -n "$ERROR" ]; then
-    echo "Error at message $i: $ERROR"
+  if [ -n "$ERROR" ] && [ "$ERROR" != "null" ]; then
+    echo "ERROR at message $MSG_NUM: $ERROR"
     break
   fi
   
-  sleep 2
+  sleep 1
 done
+
+echo ""
+echo "Test complete. Check Logs page for full token breakdown."
 ```
 
-**Verification:**
-- [ ] Note prompt_tokens progression across all messages
-- [ ] Note any sudden jumps in token counts
-- [ ] Note cache_read_tokens behavior
-- [ ] Note any errors encountered
-- [ ] Check Logs page for full token breakdown
+**What to record:**
+- [ ] Token progression - does prompt_tokens grow linearly or plateau?
+- [ ] Cache behavior - any sudden drops in cache_read_tokens? (may indicate observations activated)
+- [ ] Any "Message too long" errors
+- [ ] Final prompt_tokens count
+- [ ] Check Settings → OM Thresholds to see if you approached/exceeded them
 
-### 8. Local + Gateway OM Test
+### 8. Local + Gateway OM Test — CRITICAL, DO NOT SKIP
+
+**This test requires a local Mastra project. If you don't have one, create it as part of this test.**
+
 Test behavior when a local Mastra project with memory routes requests through the Gateway.
 
-**Setup (if not already done):**
+**Setup (create if needed):**
 
 1. Create a local Mastra project:
 ```bash
@@ -264,5 +323,5 @@ For each test, note:
 | Settings | OM threshold values displayed |
 | Multi-model | Whether context persists across providers |
 | Flood test | Success/failure counts, any buffering behavior |
-| Token explosion | Token progression across 25 messages, any errors |
-| Local + Gateway | Gateway Logs token counts, thread state, any duplication or errors |
+| Token explosion (30 prompts) | Token progression, cache behavior, any errors |
+| Local + Gateway | Gateway Logs token counts, thread state, any unusual behavior |
