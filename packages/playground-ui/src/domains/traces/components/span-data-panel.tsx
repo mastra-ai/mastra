@@ -101,6 +101,12 @@ export function SpanDataPanel({
             {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
             <DataKeysAndValues numOfCol={2}>
+              {span.name && (
+                <>
+                  <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
+                  <DataKeysAndValues.Value className="col-span-3">{span.name}</DataKeysAndValues.Value>
+                </>
+              )}
               {span.spanType && (
                 <>
                   <DataKeysAndValues.Key>Type</DataKeysAndValues.Key>
