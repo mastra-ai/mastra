@@ -1,5 +1,135 @@
 # @mastra/playground-ui
 
+## 22.1.0
+
+### Minor Changes
+
+- Search input can now be collapsed into a compact icon button with tooltip and auto-focuses when expanded ([#15130](https://github.com/mastra-ai/mastra/pull/15130))
+
+- Added DataKeysAndValues component — a compound component for displaying key-value pairs in a grid layout with support for single or two-column modes and section headers ([#15126](https://github.com/mastra-ai/mastra/pull/15126))
+
+- Added DateTimeRangePicker component — a date range selector with preset options (last 24h, 7d, 30d, etc.) and a custom range mode with dual calendar and time pickers ([#15128](https://github.com/mastra-ai/mastra/pull/15128))
+
+- Added DataCodeSection component — a read-only code viewer with JSON syntax highlighting, search, multiline toggle, and an expandable fullscreen dialog ([#15125](https://github.com/mastra-ai/mastra/pull/15125))
+
+- Added DataPanel compound component — a container for detail panels with header, navigation, close button, loading, and empty states ([#15127](https://github.com/mastra-ai/mastra/pull/15127))
+
+- New inline Traces page replacing the old dialog-based Observability page. Trace, span, and score details now open in stacked side panels instead of full-screen dialogs. URL deep-linking supports traceId, spanId, tab, and scoreId params. Includes new TracesDataList, DataList.Pagination, DataList.Subheader components, and Evaluate Trace / Save as Dataset Item actions. ([#15139](https://github.com/mastra-ai/mastra/pull/15139))
+
+### Patch Changes
+
+- **Fixed publishing older agent versions** ([#15154](https://github.com/mastra-ai/mastra/pull/15154))
+
+  Fixed agent editor to allow publishing older read-only versions. Previously, the Publish button was disabled when viewing a previous version. Now a "Publish This Version" button appears, enabling users to set any older version as the published version.
+
+  **Fixed Publish button being clickable without a saved draft**
+
+  The Publish button is now disabled until a draft version is saved. Previously, making edits would enable the Publish button even without a saved draft, which caused an error when clicked.
+
+  **Eliminated spurious 404 error logs for code-only agents**
+
+  The agent versions endpoint now checks both code-registered and stored agents before returning 404, and the frontend conditionally fetches stored agent details only when versions exist. This prevents noisy error logs when navigating to the editor for agents that haven't been published yet.
+
+  **Changed editor sections to be collapsed by default**
+
+  The System Prompt, Tools, and Variables sections in the agent editor are now collapsed by default when navigating to the editor page.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa), [`b0190af`](https://github.com/mastra-ai/mastra/commit/b0190af9179181aa051fa62162dc0dc686999ffe)]:
+  - @mastra/core@1.24.0
+  - @mastra/ai-sdk@1.3.3
+  - @mastra/client-js@1.13.2
+  - @mastra/react@0.2.24
+
+## 22.1.0-alpha.1
+
+### Minor Changes
+
+- New inline Traces page replacing the old dialog-based Observability page. Trace, span, and score details now open in stacked side panels instead of full-screen dialogs. URL deep-linking supports traceId, spanId, tab, and scoreId params. Includes new TracesDataList, DataList.Pagination, DataList.Subheader components, and Evaluate Trace / Save as Dataset Item actions. ([#15139](https://github.com/mastra-ai/mastra/pull/15139))
+
+### Patch Changes
+
+- **Fixed publishing older agent versions** ([#15154](https://github.com/mastra-ai/mastra/pull/15154))
+
+  Fixed agent editor to allow publishing older read-only versions. Previously, the Publish button was disabled when viewing a previous version. Now a "Publish This Version" button appears, enabling users to set any older version as the published version.
+
+  **Fixed Publish button being clickable without a saved draft**
+
+  The Publish button is now disabled until a draft version is saved. Previously, making edits would enable the Publish button even without a saved draft, which caused an error when clicked.
+
+  **Eliminated spurious 404 error logs for code-only agents**
+
+  The agent versions endpoint now checks both code-registered and stored agents before returning 404, and the frontend conditionally fetches stored agent details only when versions exist. This prevents noisy error logs when navigating to the editor for agents that haven't been published yet.
+
+  **Changed editor sections to be collapsed by default**
+
+  The System Prompt, Tools, and Variables sections in the agent editor are now collapsed by default when navigating to the editor page.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+  - @mastra/client-js@1.13.2-alpha.1
+  - @mastra/ai-sdk@1.3.3-alpha.0
+  - @mastra/react@0.2.24-alpha.1
+
+## 22.1.0-alpha.0
+
+### Minor Changes
+
+- Search input can now be collapsed into a compact icon button with tooltip and auto-focuses when expanded ([#15130](https://github.com/mastra-ai/mastra/pull/15130))
+
+- Added DataKeysAndValues component — a compound component for displaying key-value pairs in a grid layout with support for single or two-column modes and section headers ([#15126](https://github.com/mastra-ai/mastra/pull/15126))
+
+- Added DateTimeRangePicker component — a date range selector with preset options (last 24h, 7d, 30d, etc.) and a custom range mode with dual calendar and time pickers ([#15128](https://github.com/mastra-ai/mastra/pull/15128))
+
+- Added DataCodeSection component — a read-only code viewer with JSON syntax highlighting, search, multiline toggle, and an expandable fullscreen dialog ([#15125](https://github.com/mastra-ai/mastra/pull/15125))
+
+- Added DataPanel compound component — a container for detail panels with header, navigation, close button, loading, and empty states ([#15127](https://github.com/mastra-ai/mastra/pull/15127))
+
+### Patch Changes
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`b0190af`](https://github.com/mastra-ai/mastra/commit/b0190af9179181aa051fa62162dc0dc686999ffe)]:
+  - @mastra/core@1.23.1-alpha.0
+  - @mastra/ai-sdk@1.3.3-alpha.0
+  - @mastra/client-js@1.13.2-alpha.0
+  - @mastra/react@0.2.24-alpha.0
+
+## 22.0.1
+
+### Patch Changes
+
+- Added SessionExpired component and is401UnauthorizedError utility to handle 401 Unauthorized errors gracefully. When a user's token expires and refresh fails, they now see a clear 'Session Expired' message with a 'Log In' button instead of a broken/empty UI state. ([#15093](https://github.com/mastra-ai/mastra/pull/15093))
+
+- Added Memory as a recognized span type in the trace timeline. Memory operation spans now display with a dedicated icon, color, and filter toggle alongside Agent, Workflow, Model, MCP, and Tool spans. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+- Expired sessions now refresh automatically. Requests that previously returned 401 are retried after refreshing, so users stay signed in instead of being logged out. ([#15024](https://github.com/mastra-ai/mastra/pull/15024))
+
+- Fixed agent editor crash caused by missing BrowserSessionProvider in the test chat component ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Improved agent editor variables section: replaced editable key-value inputs with a read-only tree view that correctly displays variables from requestContextSchema, including nested object properties. Fixed requestContextSchema not loading for code agents by using superjson parsing to unwrap the serialized schema envelope. ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Improved chat rendering for system reminder messages by showing a collapsible reminder badge instead of raw XML text. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Improved evaluation tab design consistency by migrating detail list views (scorers, datasets, experiments, review) to use the shared EntityList component. Added padding to evaluate and review tab wrappers. Fixed experiment result split-panel layout being too narrow. Fixed sidebar highlighting when viewing experiment details from the Experiments tab. ([#14987](https://github.com/mastra-ai/mastra/pull/14987))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`fd8cf05`](https://github.com/mastra-ai/mastra/commit/fd8cf05151465e479504aa42eb009bcb36b9a801), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+  - @mastra/client-js@1.13.1
+  - @mastra/ai-sdk@1.3.2
+  - @mastra/react@0.2.23
+
+## 22.0.1-alpha.9
+
+### Patch Changes
+
+- Fixed agent editor crash caused by missing BrowserSessionProvider in the test chat component ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Improved agent editor variables section: replaced editable key-value inputs with a read-only tree view that correctly displays variables from requestContextSchema, including nested object properties. Fixed requestContextSchema not loading for code agents by using superjson parsing to unwrap the serialized schema envelope. ([#15113](https://github.com/mastra-ai/mastra/pull/15113))
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+  - @mastra/client-js@1.13.1-alpha.9
+  - @mastra/ai-sdk@1.3.2-alpha.0
+  - @mastra/react@0.2.23-alpha.9
+
 ## 22.0.1-alpha.8
 
 ### Patch Changes

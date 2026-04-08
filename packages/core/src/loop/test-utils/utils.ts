@@ -4,9 +4,65 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
+import { expect } from 'vitest';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+
+export function stripMastraCreatedAt<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => stripMastraCreatedAt(item)) as T;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
+      if (key === 'createdAt') {
+        return null;
+      }
+
+      const normalizedValue = stripMastraCreatedAt(nestedValue);
+
+      if (key === 'providerOptions' && normalizedValue && typeof normalizedValue === 'object') {
+        const providerOptions = normalizedValue as Record<string, unknown>;
+
+        if (providerOptions.mastra && typeof providerOptions.mastra === 'object') {
+          const normalizedMastra = Object.fromEntries(
+            Object.entries(providerOptions.mastra as Record<string, unknown>).filter(
+              ([nestedKey]) => nestedKey !== 'createdAt',
+            ),
+          );
+
+          const providerOptionsWithoutMastra = Object.fromEntries(
+            Object.entries(providerOptions).filter(([nestedKey]) => nestedKey !== 'mastra'),
+          );
+
+          return [
+            key,
+            Object.keys(normalizedMastra).length > 0
+              ? { ...providerOptions, mastra: normalizedMastra }
+              : Object.keys(providerOptionsWithoutMastra).length > 0
+                ? providerOptionsWithoutMastra
+                : undefined,
+          ];
+        }
+      }
+
+      return [key, normalizedValue];
+    });
+
+    return Object.fromEntries(normalizedEntries.filter(entry => entry !== null)) as T;
+  }
+
+  return value;
+}
+
+export function expectPromptWithoutMastraCreatedAt(actual: unknown, expected: unknown) {
+  expect(stripMastraCreatedAt(actual)).toStrictEqual(expected);
+}
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 

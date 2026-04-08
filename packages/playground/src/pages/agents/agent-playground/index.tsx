@@ -23,22 +23,29 @@ function AgentPlayground() {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, { status: 'draft' });
   const { data: memory } = useMemory(agentId!);
 
+  // Fetch versions first — this endpoint returns an empty array for code-only agents
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
+  const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+    status: 'draft',
+    enabled: hasVersions,
+  });
+
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
   // Fetch version data when a specific version is selected
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
-  });
-
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
   });
 
   const activeVersionId = storedAgent?.activeVersionId;
@@ -65,6 +72,14 @@ function AgentPlayground() {
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
     onSuccess: () => {},
   });
+
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      await handlePublish(selectedVersionId);
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
 
   const handleVersionSelect = useCallback(
     (versionId: string) => {
@@ -134,7 +149,8 @@ function AgentPlayground() {
         hasDraft={hasDraft}
         readOnly={isViewingPreviousVersion}
         onSaveDraft={handleSaveDraft}
-        onPublish={handlePublish}
+        onPublish={handlePublishVersion}
+        isViewingPreviousVersion={isViewingPreviousVersion}
       />
     </AgentEditFormProvider>
   );

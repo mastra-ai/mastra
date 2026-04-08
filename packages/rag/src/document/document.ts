@@ -1,3 +1,5 @@
+import { SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import {
   TitleExtractor,
   SummaryExtractor,
@@ -340,21 +342,57 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(params?: ChunkParams): Promise<Chunk[]> {
+  async chunk(params?: ChunkParams, options?: { observabilityContext?: ObservabilityContext }): Promise<Chunk[]> {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
 
-    validateChunkParams(strategy, chunkOptions);
+    const parentSpan = options?.observabilityContext?.tracingContext?.currentSpan;
+    const chunkSpan = parentSpan?.createChildSpan({
+      type: SpanType.RAG_ACTION,
+      name: `rag chunk: ${strategy}`,
+      input: { strategy },
+      attributes: {
+        action: 'chunk',
+        strategy,
+        chunkSize: (chunkOptions as any)?.size,
+        chunkOverlap: (chunkOptions as any)?.overlap,
+      },
+    });
 
-    // Apply the appropriate chunking strategy
-    await this.chunkBy(strategy, chunkOptions);
+    try {
+      validateChunkParams(strategy, chunkOptions);
 
-    if (extract) {
-      await this.extractMetadata(extract);
+      // Apply the appropriate chunking strategy
+      await this.chunkBy(strategy, chunkOptions);
+
+      if (extract) {
+        // Nest under chunkSpan: extract_metadata operates on the chunks
+        // produced by chunkBy() above and is part of the same chunk() call.
+        const extractSpan = chunkSpan?.createChildSpan({
+          type: SpanType.RAG_ACTION,
+          name: 'rag extract metadata',
+          attributes: {
+            action: 'extract_metadata',
+            extractor: Object.keys(extract).join(','),
+          },
+        });
+        try {
+          await this.extractMetadata(extract);
+        } catch (err) {
+          extractSpan?.error({ error: err as Error, endSpan: true });
+          throw err;
+        }
+        extractSpan?.end();
+      }
+
+      chunkSpan?.end({ output: { chunkCount: this.chunks.length } });
+
+      return this.chunks;
+    } catch (err) {
+      chunkSpan?.error({ error: err as Error, endSpan: true });
+      throw err;
     }
-
-    return this.chunks;
   }
 
   getDocs(): Chunk[] {
