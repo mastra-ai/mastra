@@ -318,61 +318,107 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 #### 9e. MastraCode + Gateway (Intensive)
 
-Test MastraCode routing through Gateway with enough messages to accumulate significant tokens.
+Test MastraCode routing through Gateway with enough messages to trigger OM observations.
 
 **How MastraCode routes to Gateway:**
 
 MastraCode only routes through Gateway when:
 1. `MASTRA_GATEWAY_API_KEY` is set, AND
-2. The model ID has a `mastra/` prefix (e.g., `mastra/openai/gpt-4o`)
+2. The model ID has a `mastra/` prefix (e.g., `mastra/openai/gpt-4o-mini`)
 
 Without the `mastra/` prefix, requests go directly to the provider (OpenAI, Anthropic, etc.).
 
 **Setup:**
 
-1. Set Gateway environment:
-```bash
-export MASTRA_GATEWAY_API_KEY="$MASTRA_API_KEY"
-export MASTRA_GATEWAY_URL="$API_URL"
+Create `test-mastracode-gateway.ts`:
+
+```typescript
+import { createMastraCode } from 'mastracode';
+
+// Set Gateway env vars BEFORE calling createMastraCode
+process.env.MASTRA_GATEWAY_API_KEY = 'msk_your_key_here';  // Replace with actual key
+process.env.MASTRA_GATEWAY_URL = 'https://server.mastra.ai';
+
+async function test() {
+  console.log('Creating MastraCode with Gateway routing...');
+  
+  const { harness } = await createMastraCode({
+    cwd: process.cwd(),
+    initialState: {
+      currentModelId: 'mastra/openai/gpt-4o-mini',  // mastra/ prefix required!
+    },
+  });
+
+  await harness.init();
+  console.log('Harness initialized');
+
+  // Send 30 detailed prompts to accumulate tokens toward OM threshold (~30k)
+  const prompts = [
+    "Explain the history of TypeScript in detail, covering its origins and evolution",
+    "What are all the TypeScript compiler options? Explain each one",
+    "Compare TypeScript to JavaScript with detailed code examples",
+    "Explain TypeScript generics with complex real-world examples",
+    "What are mapped types in TypeScript? Give multiple examples",
+    "Explain conditional types in TypeScript with examples",
+    "What is type inference in TypeScript? How does it work?",
+    "Explain TypeScript decorators in detail with examples",
+    "List and explain all utility types in TypeScript",
+    "Explain the TypeScript module system comprehensively",
+    "What are declaration files in TypeScript? When do you need them?",
+    "Explain all strict mode options in TypeScript",
+    "What is structural typing in TypeScript? Compare to nominal typing",
+    "Explain TypeScript enums with examples of string and numeric enums",
+    "What are type guards in TypeScript? Show different approaches",
+    "Explain discriminated unions in TypeScript with examples",
+    "What is the 'infer' keyword in TypeScript? Give examples",
+    "Explain variance in TypeScript generics (covariance, contravariance)",
+    "What are template literal types in TypeScript?",
+    "Explain the 'satisfies' operator in TypeScript",
+    "What are assertion functions in TypeScript?",
+    "Explain module augmentation in TypeScript",
+    "What is declaration merging in TypeScript?",
+    "Explain the 'const' assertion in TypeScript",
+    "What are branded types in TypeScript? How do you implement them?",
+    "Explain recursive types in TypeScript with examples",
+    "What is the 'never' type in TypeScript? When is it useful?",
+    "Explain index signatures in TypeScript",
+    "What are type predicates in TypeScript?",
+    "Summarize everything we discussed about TypeScript",
+  ];
+
+  for (let i = 0; i < prompts.length; i++) {
+    console.log(`\n[${i + 1}/${prompts.length}] ${prompts[i].substring(0, 50)}...`);
+    try {
+      await harness.sendMessage({ content: prompts[i] });
+      console.log('✓ Response received');
+    } catch (err) {
+      console.error('✗ Error:', err);
+    }
+  }
+
+  console.log('\nDone. Check Gateway Dashboard for:');
+  console.log('- Thread ID and message count');
+  console.log('- Token progression in Logs');
+  console.log('- Whether OM observations activated');
+}
+
+test().catch(console.error);
 ```
 
-2. Configure MastraCode to use Gateway (interactive):
-```bash
-npx mastracode memory-gateway
-# Enter your Gateway API key when prompted
-# Enter the Gateway URL (e.g., https://server.mastra.ai)
-```
-
-3. Verify configuration:
-```bash
-# Check that auth is stored
-cat ~/.mastracode/auth.json | grep -A2 "mastra-gateway"
-```
-
-**Alternative: Programmatic test**
-
-If the interactive setup doesn't work, you can test Gateway routing directly:
+**Run:**
 
 ```bash
-# This should route through Gateway (note the mastra/ prefix)
-curl -X POST "$API_URL/v1/chat/completions" \
-  -H "Authorization: Bearer $MASTRA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "mastra/openai/gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'
+npx tsx test-mastracode-gateway.ts
 ```
 
 **What to record:**
 
-- [ ] Whether `mastracode memory-gateway` setup succeeded
-- [ ] Whether requests appear in Gateway Dashboard → Logs
-- [ ] If requests don't appear in Gateway, note where they went (direct to provider?)
-- [ ] Any errors during setup or execution
-
-**If requests appear in Gateway, also check for duplication:**
-
-- [ ] Note the thread ID from Gateway Dashboard
-- [ ] Count messages sent vs messages in Gateway thread
-- [ ] If counts don't match, note examples (e.g., "sent 5 messages but thread shows 7 - duplicates of X and Y")
+- [ ] Requests appear in Gateway Dashboard → Logs (confirms Gateway routing)
+- [ ] Thread ID from Gateway Dashboard
+- [ ] Messages sent (30) vs messages in Gateway thread
+- [ ] Token progression (note prompt_tokens at message 1, 15, and 30)
+- [ ] Whether "Activated observations" appeared in console output
+- [ ] If message counts don't match, note examples of duplication or loss
 
 ---
 
@@ -434,5 +480,5 @@ For each test, note:
 | 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
 | 9c: Memory-only baseline       | Token progression, thread state                      |
 | 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
-| 9e: MastraCode + Gateway       | Token progression across 20 prompts, Gateway Logs    |
+| 9e: MastraCode + Gateway       | Token progression across 30 prompts, OM activation   |
 | 9f: History replay via local   | Message deduplication, comparison with Test 8        |
