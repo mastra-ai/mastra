@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- Added --thread, --title, and --clone-thread CLI options to headless mode for thread control. The most recent thread is now automatically resumed by default, and --continue is deprecated. ([#14962](https://github.com/mastra-ai/mastra/pull/14962))
+
 ## 0.12.2-alpha.0
 
 ### Patch Changes
