@@ -3,12 +3,11 @@
  * agent is using a Mastra gateway model. The gateway handles OM server-side,
  * so running it locally would double-process messages and cause duplication.
  *
- * Detection uses the model argument (instanceof ModelRouterLanguageModel with
- * gatewayId === 'mastra') and stores the result in per-processor state — this
- * avoids leaking flags through RequestContext to child agents.
+ * Detection uses a duck-type check (model has gatewayId === 'mastra') and
+ * stores the result in per-processor state — this avoids leaking flags
+ * through RequestContext to child agents.
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -36,16 +35,16 @@ function createStubMemoryProvider(): MemoryContextProvider {
 }
 
 /**
- * Create a mock that passes `instanceof ModelRouterLanguageModel` and has
- * the given gatewayId.  We use Object.create to inherit the prototype
- * without invoking the real constructor (which needs env vars / gateways).
+ * Create a plain object mock with the given gatewayId.
+ * Detection uses duck typing ('gatewayId' in model), so no real class needed.
  */
 function createMockGatewayModel(gatewayId: string) {
-  const mock = Object.create(ModelRouterLanguageModel.prototype) as InstanceType<typeof ModelRouterLanguageModel>;
-  Object.defineProperty(mock, 'gatewayId', { value: gatewayId, writable: false });
-  Object.defineProperty(mock, 'modelId', { value: 'openai/gpt-4o', writable: false });
-  Object.defineProperty(mock, 'provider', { value: 'mastra', writable: false });
-  return mock;
+  return {
+    gatewayId,
+    modelId: 'openai/gpt-4o',
+    provider: 'mastra',
+    specificationVersion: 'v2' as const,
+  };
 }
 
 describe('ObservationalMemoryProcessor — gateway skip', () => {
