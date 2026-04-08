@@ -83,6 +83,8 @@ OpenAI-compatible chat completions endpoint.
 
 Legacy completions endpoint.
 
+> **Note:** This endpoint may not be implemented. Test and report status.
+
 ### Request
 
 ```json
@@ -108,39 +110,118 @@ Alternative response format.
 }
 ```
 
-## Threads
+## Memory API
+
+All memory/thread operations are under the `/v1/memory` prefix.
 
 ### List Threads
 
-**GET** `/v1/threads`
+**GET** `/v1/memory/threads`
+
+Query params: `resourceId`, `limit`, `offset`
 
 Returns all threads for the authenticated project.
 
+### Create Thread
+
+**POST** `/v1/memory/threads`
+
+```json
+{
+  "id": "optional-thread-id",
+  "resourceId": "required-resource-id",
+  "title": "Optional title",
+  "metadata": {}
+}
+```
+
+> **Note:** `resourceId` is required.
+
 ### Get Thread
 
-**GET** `/v1/threads/{threadId}`
+**GET** `/v1/memory/threads/{threadId}`
 
 Returns a specific thread.
 
+### Update Thread
+
+**PATCH** `/v1/memory/threads/{threadId}`
+
+```json
+{
+  "title": "Updated title",
+  "metadata": {}
+}
+```
+
 ### Delete Thread
 
-**DELETE** `/v1/threads/{threadId}`
+**DELETE** `/v1/memory/threads/{threadId}`
 
 Deletes a thread and its messages.
 
-## Messages
+### Get Messages
 
-### Get Messages by Thread
+**GET** `/v1/memory/threads/{threadId}/messages`
 
-**GET** `/v1/threads/{threadId}/messages`
+Query params: `limit`, `offset`, `order` (asc/desc)
 
-Returns all messages in a thread.
+Returns messages in a thread.
 
-### Get Messages by Resource
+### Save Messages
 
-**GET** `/v1/messages?resourceId={resourceId}`
+**POST** `/v1/memory/threads/{threadId}/messages`
 
-Returns messages filtered by resource ID.
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Hello"},
+    {"role": "assistant", "content": "Hi there!"}
+  ]
+}
+```
+
+### Delete Messages
+
+**DELETE** `/v1/memory/threads/{threadId}/messages`
+
+```json
+{
+  "messageIds": ["msg-1", "msg-2"]
+}
+```
+
+## Observational Memory (OM) API
+
+### Get OM Record
+
+**GET** `/v1/memory/threads/{threadId}/observations/record`
+
+Returns the OM record for a thread.
+
+### Get Observations
+
+**GET** `/v1/memory/threads/{threadId}/observations`
+
+Returns the current observations string.
+
+### Get OM History
+
+**GET** `/v1/memory/threads/{threadId}/observations/history`
+
+Returns observation history.
+
+### Update OM Config
+
+**PATCH** `/v1/memory/threads/{threadId}/observations/config`
+
+```json
+{
+  "messageTokens": 7000
+}
+```
+
+Updates per-thread OM threshold settings.
 
 ## Models
 

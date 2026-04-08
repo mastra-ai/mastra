@@ -1,74 +1,108 @@
 # Threads Testing (`--test threads`)
 
 ## Purpose
-Test thread CRUD operations.
+Test thread CRUD operations via the Memory API.
 
 ## Prerequisites
 - `MASTRA_API_KEY` set
-- `API_URL` set
+- `API_URL` set (e.g., `https://server.mastra.ai`)
 - A thread created (from memory test or new)
+
+## Important: API Path
+Thread operations use the `/v1/memory/` prefix, NOT `/v1/threads`.
 
 ## Steps
 
-### 1. Create a Thread (if needed)
+### 1. Create a Thread via API
 ```bash
 THREAD_ID="thread-test-$(date +%s)"
-export THREAD_ID
+RESOURCE_ID="user-$(date +%s)"
+export THREAD_ID RESOURCE_ID
 
+curl -X POST "$API_URL/v1/memory/threads" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"id\": \"$THREAD_ID\", \"resourceId\": \"$RESOURCE_ID\", \"title\": \"Test thread\"}"
+```
+- [ ] Returns 201 Created
+- [ ] Response contains thread object with matching ID
+
+> **Note:** `resourceId` is required for thread creation.
+
+Alternative: Create thread implicitly via chat:
+```bash
 curl -X POST "$API_URL/v1/chat/completions" \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
   -H "Content-Type: application/json" \
   -H "x-thread-id: $THREAD_ID" \
-  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello, this creates a thread"}]}'
+  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ### 2. List Threads
 ```bash
-curl -X GET "$API_URL/v1/threads" \
+curl -X GET "$API_URL/v1/memory/threads" \
   -H "Authorization: Bearer $MASTRA_API_KEY"
 ```
 - [ ] Returns 200 OK
-- [ ] Response is array of threads
+- [ ] Response has `threads` array and `total` count
 - [ ] Recent thread appears in list
 
 ### 3. Get Thread by ID
 ```bash
-curl -X GET "$API_URL/v1/threads/$THREAD_ID" \
+curl -X GET "$API_URL/v1/memory/threads/$THREAD_ID" \
   -H "Authorization: Bearer $MASTRA_API_KEY"
 ```
 - [ ] Returns 200 OK
 - [ ] Thread details returned
 - [ ] Thread ID matches
 
-### 4. Get Messages by Thread ID
+### 4. Update Thread
 ```bash
-curl -X GET "$API_URL/v1/threads/$THREAD_ID/messages" \
-  -H "Authorization: Bearer $MASTRA_API_KEY"
-```
-- [ ] Returns 200 OK
-- [ ] Messages array returned
-- [ ] Messages match what was sent
-
-### 5. Get Messages by Resource ID
-First, create a message with resource ID:
-```bash
-curl -X POST "$API_URL/v1/chat/completions" \
+curl -X PATCH "$API_URL/v1/memory/threads/$THREAD_ID" \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "x-thread-id: resource-test-thread" \
-  -H "x-resource-id: user-test-123" \
-  -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Test with resource"}]}'
+  -d '{"title": "Updated title"}'
+```
+- [ ] Returns 200 OK
+- [ ] Thread title updated
 
-# Then query by resource ID
-curl -X GET "$API_URL/v1/messages?resourceId=user-test-123" \
+### 5. Get Messages by Thread ID
+```bash
+curl -X GET "$API_URL/v1/memory/threads/$THREAD_ID/messages" \
   -H "Authorization: Bearer $MASTRA_API_KEY"
 ```
 - [ ] Returns 200 OK
-- [ ] Messages for that resource returned
+- [ ] Response has `messages` array
+- [ ] Messages match what was sent
 
-### 6. Delete Thread
+### 6. Save Messages Directly
 ```bash
-curl -X DELETE "$API_URL/v1/threads/$THREAD_ID" \
+curl -X POST "$API_URL/v1/memory/threads/$THREAD_ID/messages" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Direct save test"}]}'
+```
+- [ ] Returns 200 OK
+- [ ] Messages saved to thread
+
+### 7. List Threads by Resource ID
+```bash
+# First create a thread with resource ID
+curl -X POST "$API_URL/v1/memory/threads" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "resource-thread", "resourceId": "user-123"}'
+
+# Then list by resource
+curl -X GET "$API_URL/v1/memory/threads?resourceId=user-123" \
+  -H "Authorization: Bearer $MASTRA_API_KEY"
+```
+- [ ] Returns 200 OK
+- [ ] Only threads with that resourceId returned
+
+### 8. Delete Thread
+```bash
+curl -X DELETE "$API_URL/v1/memory/threads/$THREAD_ID" \
   -H "Authorization: Bearer $MASTRA_API_KEY"
 ```
 - [ ] Returns 200 OK or 204 No Content
@@ -78,16 +112,20 @@ curl -X DELETE "$API_URL/v1/threads/$THREAD_ID" \
 
 | Check | Expected |
 |-------|----------|
-| List threads | Array of threads |
+| Create thread | 201 with thread object |
+| List threads | `{threads: [], total: N}` |
 | Get thread | Thread details |
-| Get messages | Messages array |
-| By resource ID | Filtered messages |
+| Update thread | Updated fields |
+| Get messages | `{messages: []}` |
+| Save messages | 200 OK |
+| Filter by resource | Filtered list |
 | Delete | Thread removed |
 
 ## Common Issues
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
+| 404 on all endpoints | Using `/v1/threads` instead of `/v1/memory/threads` | Use correct path |
 | 404 on get | Thread doesn't exist | Create thread first |
 | Empty list | No threads for project | Create some first |
-| 404 on messages | Thread ID wrong | Check exact ID |
+| 401 Unauthorized | Invalid API key | Check `MASTRA_API_KEY` |

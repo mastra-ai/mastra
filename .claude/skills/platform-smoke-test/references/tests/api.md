@@ -59,7 +59,7 @@ curl -X POST "$API_URL/v1/completions" \
   -H "Content-Type: application/json" \
   -d '{"model": "openai/gpt-4o", "prompt": "Say hello"}'
 ```
-- [ ] Returns 200 OK (or note if deprecated)
+- [ ] Note result
 
 ### 6. Responses Endpoint
 ```bash
