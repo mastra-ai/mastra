@@ -65,7 +65,6 @@ class RunloopProcessHandle extends ProcessHandle {
       const timeoutMs = this._spawnOptions?.timeout ?? 300_000;
       const result = await this._execution.result({
         longPoll: { timeoutMs },
-        signal: this._spawnOptions?.abortSignal ?? undefined,
       });
 
       this._exitCode = result.exitCode ?? (result.success ? 0 : 1);
@@ -132,22 +131,6 @@ export class RunloopProcessManager extends SandboxProcessManager<RunloopSandbox>
       handle = new RunloopProcessHandle(this.sandbox.runloopApi, devbox.id, execution, start, mergedOpts);
       handle.command = command;
       this._tracked.set(handle.pid, handle);
-
-      const abortSignal = mergedOpts.abortSignal;
-      if (abortSignal) {
-        const onAbort = () => {
-          handle.kill().catch(() => {});
-        };
-        if (abortSignal.aborted) {
-          onAbort();
-        } else {
-          abortSignal.addEventListener('abort', onAbort, { once: true });
-          handle.wait().then(
-            () => abortSignal.removeEventListener('abort', onAbort),
-            () => abortSignal.removeEventListener('abort', onAbort),
-          );
-        }
-      }
 
       return handle;
     });

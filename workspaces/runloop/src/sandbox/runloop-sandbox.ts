@@ -84,7 +84,7 @@ export class RunloopSandbox extends MastraSandbox {
       onStart: options.onStart,
       onStop: options.onStop,
       onDestroy: options.onDestroy,
-      processes: new RunloopProcessManager({ env: options.env }),
+      processes: new RunloopProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
@@ -181,12 +181,17 @@ export class RunloopSandbox extends MastraSandbox {
     }
 
     if (this._suspendedDevboxId) {
-      const d = this._sdk.devbox.fromId(this._suspendedDevboxId);
-      await d.resume({ longPoll: { timeoutMs: this._timeout } });
-      this._devbox = d;
-      this._suspendedDevboxId = null;
-      this.logger.debug(`${LOG_PREFIX} Resumed devbox ${this._devbox.id} for ${this.id}`);
-      return;
+      try {
+        const d = this._sdk.devbox.fromId(this._suspendedDevboxId);
+        await d.resume({ longPoll: { timeoutMs: this._timeout } });
+        this._devbox = d;
+        this._suspendedDevboxId = null;
+        this.logger.debug(`${LOG_PREFIX} Resumed devbox ${this._devbox.id} for ${this.id}`);
+        return;
+      } catch (e) {
+        this.logger.warn(`${LOG_PREFIX} Resume failed for suspended devbox ${this._suspendedDevboxId}, provisioning new one`, { error: e });
+        this._suspendedDevboxId = null;
+      }
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating devbox for ${this.id}...`);
