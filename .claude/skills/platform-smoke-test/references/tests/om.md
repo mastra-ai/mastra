@@ -485,8 +485,8 @@ async function test() {
 
   console.log('\nDone. Check Gateway Dashboard for:');
   console.log('- Thread ID');
-  console.log('- Message count (expected: 10 = 5 user + 5 assistant)');
-  console.log('- Check for DUPLICATED assistant responses');
+  console.log('- Message count (sent 5 user prompts)');
+  console.log('- Note any duplicated assistant responses');
 }
 
 test().catch(console.error);
@@ -501,17 +501,11 @@ npx tsx test-mastracode-duplication.ts
 **What to record:**
 
 - [ ] Thread ID from Gateway Dashboard
-- [ ] **Message count**: Expected 10 (5 user + 5 assistant), actual count
-- [ ] **Duplicate check**: Note any assistant responses that appear twice
-- [ ] **Timestamp check**: Note if duplicated messages have timestamps ~1 second apart
+- [ ] **Message count**: How many total messages in thread (sent 5 user prompts)
+- [ ] **Duplicate check**: Note any assistant responses that appear more than once
+- [ ] **Timestamp check**: Note timestamps on any duplicated messages
 - [ ] Token values at start and end of conversation
 - [ ] Whether OM threshold indicator shows activation
-
-**Bug indicators:**
-
-- Message count > 10 (e.g., 14 messages instead of 10)
-- Assistant responses appearing twice with ~1 second timestamp gap
-- First duplicate appearing early in conversation (message 2-3)
 
 **After testing:**
 
