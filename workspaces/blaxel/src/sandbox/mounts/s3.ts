@@ -3,7 +3,14 @@ import crypto from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix, runCommand, detectPackageManager } from './types';
+import {
+  LOG_PREFIX,
+  validateBucketName,
+  validateEndpoint,
+  validatePrefix,
+  runCommand,
+  detectPackageManager,
+} from './types';
 import type { MountContext } from './types';
 
 /**
