@@ -1,5 +1,19 @@
 # mastra
 
+## 1.4.2-alpha.0
+
+### Patch Changes
+
+- Added documentation links to Evaluation page header for datasets, scorers, and experiments tabs. Moved Create Dataset button to header and simplified toolbar layout. ([#15180](https://github.com/mastra-ai/mastra/pull/15180))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
+- Added 401 and 403 error handling to the Logs page for session expired and permission denied states ([#15178](https://github.com/mastra-ai/mastra/pull/15178))
+
 ## 1.4.1
 
 ### Patch Changes

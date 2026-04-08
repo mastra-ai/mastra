@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 22.1.1-alpha.0
+
+### Patch Changes
+
+- Added a read-only warning hint below the system prompt on the agent Overview sidebar when @mastra/editor is not configured, guiding users to install it for editing capabilities ([#15176](https://github.com/mastra-ai/mastra/pull/15176))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
 ## 22.1.0
 
 ### Minor Changes

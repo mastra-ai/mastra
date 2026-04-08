@@ -125,5 +125,11 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "common-results-stick",
+    "evaluation-header-docs",
+    "green-birds-knock",
+    "humble-plums-feel",
+    "logs-error-handling"
+  ]
 }
