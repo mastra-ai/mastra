@@ -44,6 +44,32 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Studio',
+      items: [
+        {
+          type: 'doc',
+          id: 'studio/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'studio/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'studio/auth',
+          label: 'Auth',
+        },
+        {
+          type: 'doc',
+          id: 'studio/observability',
+          label: 'Observability',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       items: [
         {
@@ -228,32 +254,6 @@ const sidebars = {
           type: 'doc',
           id: 'editor/prompts',
           label: 'Prompts',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Studio',
-      items: [
-        {
-          type: 'doc',
-          id: 'studio/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'studio/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'studio/auth',
-          label: 'Auth',
-        },
-        {
-          type: 'doc',
-          id: 'studio/observability',
-          label: 'Observability',
         },
       ],
     },
