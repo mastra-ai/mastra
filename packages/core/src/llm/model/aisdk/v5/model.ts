@@ -21,6 +21,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
    * Provider-specific model ID for logging purposes.
    */
   readonly modelId: string;
+  readonly gatewayId?: string;
   /**
    * Supported URL patterns by media type for the provider.
    *
@@ -38,6 +39,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
     this.#model = config;
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
+    this.gatewayId = (config as { gatewayId?: string }).gatewayId;
     this.supportedUrls = this.#model.supportedUrls;
   }
 
