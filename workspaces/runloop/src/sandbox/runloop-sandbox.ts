@@ -5,16 +5,10 @@
  */
 
 import type { RequestContext } from '@mastra/core/di';
-import {
-  MastraSandbox,
-  SandboxNotReadyError
-  
-  
-  
-} from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import type {MastraSandboxOptions, ProviderStatus, SandboxInfo} from '@mastra/core/workspace';
 import type { Devbox, Runloop, SDKDevboxCreateParams } from '@runloop/api-client';
-import { RunloopSDK } from '@runloop/api-client';
+import { APIError, RunloopSDK } from '@runloop/api-client';
 import type { DevboxCreateParams } from '@runloop/api-client/resources';
 
 import { RunloopProcessManager } from './process-manager';
@@ -294,13 +288,12 @@ export class RunloopSandbox extends MastraSandbox {
   }
 
   private isDevboxGoneError(error: unknown): boolean {
+    if (error instanceof APIError) {
+      // 404 = devbox not found, 410 = devbox gone
+      if (error.status === 404 || error.status === 410) return true;
+    }
+    // Fall back to message matching for non-API errors (e.g. SDK wrapper errors)
     const s = String(error instanceof Error ? error.message : error);
-    return (
-      /shutdown/i.test(s) ||
-      /not found/i.test(s) ||
-      /404/i.test(s) ||
-      /suspended/i.test(s) ||
-      /not running/i.test(s)
-    );
+    return /devbox\b.*\b(shutdown|not found|suspended|not running)/i.test(s);
   }
 }

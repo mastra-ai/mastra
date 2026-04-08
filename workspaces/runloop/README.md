@@ -28,7 +28,7 @@ const workspace = new Workspace({
 
 - Command execution and background processes via the Runloop TypeScript SDK (`cmd.exec` / `execAsync`)
 - Stdin for async executions via `execution_id` and the executions API (`sendStdIn`)
-- Lifecycle: `_start` / `_stop` (suspend) / `_destroy` (shutdown), with resume for reconnection-style flows
+- Lifecycle: start (provision), stop (suspend), and destroy (shutdown), with resume for reconnection-style flows
 - **Not supported:** Mastra workspace `mount()` / `unmount()` — use Runloop devbox creation options for code or data at boot
 
 ## Scripts

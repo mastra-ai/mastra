@@ -112,6 +112,13 @@ Mastra workspace `mount()` / `unmount()` are **not** implemented for this provid
     isOptional: true,
   },
   {
+    name: 'createParams',
+    type: 'object',
+    description:
+      'Extra Runloop devbox create params merged into the SDK call (excludes name, environment_variables, metadata, mounts, secrets, gateways, mcp).',
+    isOptional: true,
+  },
+  {
     name: 'id',
     type: 'string',
     description: 'Mastra logical sandbox id.',

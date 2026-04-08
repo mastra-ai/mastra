@@ -3,13 +3,7 @@
  * Stdin uses api.devboxes.executions.sendStdIn; OO Execution has no sendStdin helper.
  */
 
-import {
-  ProcessHandle,
-  SandboxProcessManager
-  
-  
-  
-} from '@mastra/core/workspace';
+import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type {CommandResult, ProcessInfo, SpawnProcessOptions} from '@mastra/core/workspace';
 import type { Execution, Runloop } from '@runloop/api-client';
 
@@ -110,7 +104,6 @@ class RunloopProcessHandle extends ProcessHandle {
 export class RunloopProcessManager extends SandboxProcessManager<RunloopSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     return this.sandbox.retryOnDead(async () => {
-      await this.sandbox.ensureRunning();
       const devbox = this.sandbox.getRunloopDevbox();
 
       const mergedOpts: SpawnProcessOptions = {
