@@ -213,6 +213,19 @@ curl -s "https://mobs-query-pvyw2kfhjq-uc.a.run.app/api/observability/traces?pag
 | `spanType`         | `agent_run`, `tool_call`, `workflow_run`, etc.                    |
 | `status`           | `success`, `error`, `running`                                     |
 
+### Filter Traces
+
+```bash
+# By time range (URL-encoded JSON)
+curl -s "...?startedAt=%7B%22start%22%3A%222026-04-08T15%3A00%3A00.000Z%22%7D" ...
+
+# By resource ID (project)
+curl -s "...?resourceId=$PROJECT_ID" ...
+
+# By run ID
+curl -s "...?runId=$RUN_ID" ...
+```
+
 ## Browser Actions
 
 ```text
