@@ -25,7 +25,7 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 | 6. Message Buffering (Flood)      | ✅              | Concurrency test             |
 | 7. Long Conversation (30 prompts) | ✅ Required     | Run ALL 30 prompts           |
 | 8. Full History Replay            | ✅              | Tests stateless client       |
-| 9. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (9a-9e)    |
+| 9. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (9a-9f)    |
 
 **Your job is to:**
 
@@ -314,9 +314,16 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 ---
 
-#### 9e. MastraCode Integration Test
+#### 9e. MastraCode + Gateway (Intensive)
 
-Test using `createMastraCode` which has built-in Memory + OM + Gateway support.
+Test MastraCode routing through Gateway with enough messages to accumulate significant tokens.
+
+**Important:** MastraCode uses its own auth, not the project's `.env`. You must set Gateway env vars:
+
+```bash
+export MASTRA_GATEWAY_API_KEY="$MASTRA_API_KEY"
+export MASTRA_GATEWAY_URL="$API_URL"
+```
 
 **Setup:**
 
@@ -324,33 +331,59 @@ Test using `createMastraCode` which has built-in Memory + OM + Gateway support.
 pnpm add mastracode
 ```
 
-Create a test script `test-mastracode.ts`:
+Create `test-mastracode-gateway.ts`:
 
 ```typescript
 import { createMastraCode } from 'mastracode';
 
 async function test() {
+  console.log('Gateway URL:', process.env.MASTRA_GATEWAY_URL);
+  console.log('Gateway Key:', process.env.MASTRA_GATEWAY_API_KEY ? 'set' : 'NOT SET');
+
   const { harness } = await createMastraCode({
     cwd: process.cwd(),
   });
 
-  // Initialize the harness
   await harness.init();
 
-  // Subscribe to events to see responses
+  // Track responses
   harness.subscribe((event) => {
     if (event.type === 'message_update' && event.message.role === 'assistant') {
-      console.log(`Response: ${event.message.content?.toString().substring(0, 100)}...`);
+      const content = event.message.content?.toString() || '';
+      console.log(`Response (${content.length} chars): ${content.substring(0, 100)}...`);
     }
   });
 
-  // Send multiple messages
-  for (let i = 1; i <= 10; i++) {
-    console.log(`\nSending message ${i}...`);
-    await harness.sendMessage({
-      content: `Tell me fact ${i} about TypeScript`,
-    });
+  // Send 20 detailed prompts to accumulate tokens
+  const prompts = [
+    "Explain the history of TypeScript in detail",
+    "What are all the TypeScript compiler options and what do they do?",
+    "Compare TypeScript to JavaScript with examples",
+    "Explain TypeScript generics with complex examples",
+    "What are mapped types in TypeScript? Give examples",
+    "Explain conditional types in TypeScript",
+    "What is type inference in TypeScript?",
+    "Explain TypeScript decorators in detail",
+    "What are utility types in TypeScript? List all of them",
+    "Explain the TypeScript module system",
+    "What are declaration files in TypeScript?",
+    "Explain strict mode options in TypeScript",
+    "What is structural typing in TypeScript?",
+    "Explain TypeScript enums with examples",
+    "What are type guards in TypeScript?",
+    "Explain discriminated unions in TypeScript",
+    "What is the 'infer' keyword in TypeScript?",
+    "Explain variance in TypeScript generics",
+    "What are template literal types?",
+    "Summarize everything we discussed about TypeScript",
+  ];
+
+  for (let i = 0; i < prompts.length; i++) {
+    console.log(`\n[${i + 1}/${prompts.length}] ${prompts[i].substring(0, 50)}...`);
+    await harness.sendMessage({ content: prompts[i] });
   }
+
+  console.log('\nDone. Check Gateway Logs for token counts.');
 }
 
 test().catch(console.error);
@@ -359,14 +392,62 @@ test().catch(console.error);
 Run:
 
 ```bash
-npx tsx test-mastracode.ts
+npx tsx test-mastracode-gateway.ts
+```
+
+**Verification:**
+
+- [ ] Note if "Gateway URL" and "Gateway Key" are set in output
+- [ ] Note how many messages complete successfully
+- [ ] Check Gateway Dashboard → Logs for the requests
+- [ ] Note token progression in Gateway Logs
+- [ ] Note any errors or unusual behavior
+
+---
+
+#### 9f. History Replay via Local Agent
+
+Test what happens when the local agent sends requests that include conversation history (simulating how some clients replay full history).
+
+This mirrors Test 8 (direct API history replay) but goes through the local project.
+
+**Steps:**
+
+1. In local Studio, select `memory-agent`
+2. Have a 5-message conversation:
+   - "My name is Alice"
+   - "I live in Seattle"
+   - "I work as an engineer"
+   - "My favorite color is blue"
+   - "What do you know about me?"
+3. Note the thread ID from Gateway Dashboard
+4. Now test replay behavior using curl with the same thread but sending full history:
+
+```bash
+THREAD_ID="<thread-id-from-gateway>"
+
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: $THREAD_ID" \
+  -d '{
+    "model": "openai/gpt-4o-mini",
+    "messages": [
+      {"role": "user", "content": "My name is Alice"},
+      {"role": "assistant", "content": "Nice to meet you, Alice!"},
+      {"role": "user", "content": "I live in Seattle"},
+      {"role": "assistant", "content": "Seattle is a great city!"},
+      {"role": "user", "content": "What is my name and where do I live?"}
+    ]
+  }'
 ```
 
 **What to record:**
 
-- [ ] Whether messages are sent successfully
-- [ ] Any errors during initialization or messaging
-- [ ] Check Gateway Logs for the requests
+- [ ] Note message count in Gateway thread before and after replay
+- [ ] Note if Gateway deduplicated the repeated messages
+- [ ] Note token count for the replay request
+- [ ] Note any differences from Test 8 (direct API replay)
 
 ---
 
@@ -376,7 +457,8 @@ npx tsx test-mastracode.ts
 - [ ] 9b: Gateway routing verified (request appears in Gateway Logs)
 - [ ] 9c: Memory-only agent baseline completed
 - [ ] 9d: OM agent intensive test (30k+ tokens) completed
-- [ ] 9e: MastraCode integration test completed
+- [ ] 9e: MastraCode + Gateway intensive test completed
+- [ ] 9f: History replay via local agent completed
 
 ## Observations to Report
 
@@ -400,4 +482,5 @@ For each test, note:
 | 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
 | 9c: Memory-only baseline       | Token progression, thread state                      |
 | 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
-| 9e: MastraCode integration     | Token progression, Gateway Logs                      |
+| 9e: MastraCode + Gateway       | Token progression across 20 prompts, Gateway Logs    |
+| 9f: History replay via local   | Message deduplication, comparison with Test 8        |
