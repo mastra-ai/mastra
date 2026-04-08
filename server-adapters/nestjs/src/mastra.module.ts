@@ -95,6 +95,8 @@ export interface MastraModuleOptions {
   auth?: {
     /** Enable Mastra's internal auth (default: false) */
     enabled?: boolean;
+    /** Allow `?apiKey=` query auth for backward compatibility (default: false) */
+    allowQueryApiKey?: boolean;
   };
 
   /** Per-route auth configuration */

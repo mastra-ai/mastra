@@ -77,7 +77,7 @@ describe('Malformed JSON Body Handling', () => {
         body: {},
       });
 
-      // Empty JSON object — should not cause a 5xx crash
+      // An empty parsed body should not hang or crash the app.
       expect(response.status).toBeLessThan(500);
     });
 

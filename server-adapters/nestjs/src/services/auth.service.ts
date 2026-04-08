@@ -12,6 +12,13 @@ import type { Request } from 'express';
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
 
+type AuthConfigBridge = {
+  authenticateToken?: (token: string, request: unknown) => Promise<unknown> | unknown;
+  authorizeUser?: (user: unknown, request: unknown) => Promise<boolean> | boolean;
+  authorize?: (path: string, method: string, user: unknown, context: unknown) => Promise<boolean> | boolean;
+  rules?: unknown[];
+};
+
 /**
  * Service that handles authentication for Mastra routes.
  * Called after route matching to check if auth is required.
@@ -34,7 +41,7 @@ export class AuthService {
    * are Hono-centric. The runtime values work with Express requests.
    */
   async authenticate(request: Request): Promise<unknown> {
-    const authConfig = this.mastra.getServer()?.auth;
+    const authConfig = this.mastra.getServer()?.auth as AuthConfigBridge | undefined;
     const customRouteAuthConfig = this.options.customRouteAuthConfig;
     const method = request.method;
     const path = request.path;
@@ -75,8 +82,10 @@ export class AuthService {
       // Validate token using Mastra's auth system
       let user: unknown;
 
-      if (typeof (authConfig as any).authenticateToken === 'function') {
-        user = await (authConfig as any).authenticateToken(token, request as any);
+      if (typeof authConfig?.authenticateToken === 'function') {
+        // Mastra auth hooks are adapter-agnostic at runtime; Nest passes the
+        // underlying Express request object for parity with the Express adapter.
+        user = await authConfig.authenticateToken(token, request);
       } else {
         throw new Error('No token verification method configured');
       }
@@ -111,11 +120,11 @@ export class AuthService {
     path: string,
     method: string,
     user: unknown,
-    authConfig: any,
+    authConfig: AuthConfigBridge,
   ): Promise<void> {
     // Client-provided authorizeUser function
-    if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
-      const isAuthorized = await authConfig.authorizeUser(user, request as any);
+    if (typeof authConfig.authorizeUser === 'function') {
+      const isAuthorized = await authConfig.authorizeUser(user, request);
       if (!isAuthorized) {
         throw new ForbiddenException('Access denied');
       }
@@ -123,7 +132,7 @@ export class AuthService {
     }
 
     // Client-provided authorize function
-    if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+    if (typeof authConfig.authorize === 'function') {
       // Build a context object similar to Express adapter
       const context = {
         get: (key: string) => {
@@ -131,8 +140,8 @@ export class AuthService {
           if (key === 'customRouteAuthConfig') return this.options.customRouteAuthConfig;
           return undefined;
         },
-        req: request as any,
-      } as any;
+        req: request,
+      };
 
       const isAuthorized = await authConfig.authorize(path, method, user, context);
       if (!isAuthorized) {
@@ -170,8 +179,8 @@ export class AuthService {
       return authHeader.slice(7);
     }
 
-    // Fall back to API key in query params
-    if (request.query.apiKey) {
+    // Optional backward-compatibility path for legacy integrations.
+    if (this.options.auth?.allowQueryApiKey && request.query.apiKey) {
       return request.query.apiKey as string;
     }
 

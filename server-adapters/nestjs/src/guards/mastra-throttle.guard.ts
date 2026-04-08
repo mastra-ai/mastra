@@ -73,9 +73,10 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
    * Check rate limit for a request.
    * Can be called directly from controllers for manual rate limiting.
    */
-  async checkLimit(request: Request, limit: number, windowMs: number): Promise<void> {
+  async checkLimit(request: Request, limit: number, windowMs: number, rateLimitPath?: string): Promise<void> {
     const clientId = this.getClientId(request);
-    const key = `${clientId}:${request.path}`;
+    const path = rateLimitPath ?? request.path;
+    const key = `${clientId}:${path}`;
     const now = Date.now();
     let entry = this.store.get(key);
 
@@ -101,7 +102,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
     if (entry.count > limit) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
 
-      this.logger.debug(`Rate limit exceeded for client on ${request.path}`);
+      this.logger.debug(`Rate limit exceeded for client on ${path}`);
 
       throw new HttpException(
         {
@@ -117,7 +118,11 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
   /**
    * Get rate limit settings for this request.
    */
-  getRateLimitSettings(request: Request, decoratorOptions?: ThrottleOptions): { limit: number; windowMs: number } {
+  getRateLimitSettings(
+    request: Request,
+    decoratorOptions?: ThrottleOptions,
+    rateLimitPath?: string,
+  ): { limit: number; windowMs: number } {
     if (decoratorOptions && !('skip' in decoratorOptions)) {
       return {
         limit: decoratorOptions.limit,
@@ -126,7 +131,8 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
     }
 
     // Use stricter limits for /generate endpoints (LLM calls are expensive)
-    if (/\/generate(?:$|\/)/.test(request.path)) {
+    const path = rateLimitPath ?? request.path;
+    if (/\/generate(?:$|\/)/.test(path)) {
       return {
         limit: this.options.rateLimitOptions?.generateLimit ?? 10,
         windowMs: this.options.rateLimitOptions?.windowMs ?? 60000,

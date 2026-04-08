@@ -43,6 +43,14 @@ export interface RouteHandlerResult {
 export class RouteHandlerService {
   private readonly logger = new Logger(RouteHandlerService.name);
   private readonly routeMap: Map<string, ServerRoute>;
+  private readonly reservedParamKeys = new Set([
+    'mastra',
+    'requestContext',
+    'registeredTools',
+    'taskStore',
+    'abortSignal',
+    'routePrefix',
+  ]);
 
   constructor(
     @Inject(MASTRA) private readonly mastra: Mastra,
@@ -179,7 +187,7 @@ export class RouteHandlerService {
     }
 
     let validatedBody = params.body;
-    if (route.bodySchema && params.body) {
+    if (route.bodySchema && params.body !== undefined) {
       try {
         validatedBody = await route.bodySchema.parseAsync(params.body);
       } catch (error) {
@@ -200,9 +208,9 @@ export class RouteHandlerService {
     };
 
     const handlerParams = {
-      ...validatedPathParams,
-      ...validatedQueryParams,
-      ...(typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {}),
+      ...this.omitReservedKeys(validatedPathParams),
+      ...this.omitReservedKeys(validatedQueryParams),
+      ...(typeof validatedBody === 'object' && validatedBody !== null ? this.omitReservedKeys(validatedBody) : {}),
       ...context,
     };
 
@@ -217,6 +225,23 @@ export class RouteHandlerService {
 
   private getRouteKey(method: string, path: string): string {
     return `${method.toUpperCase()}:${path}`;
+  }
+
+  private omitReservedKeys(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object') {
+      return {};
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      if (this.reservedParamKeys.has(key)) {
+        this.logger.warn(`Ignoring reserved handler parameter key "${key}" from request input`);
+        continue;
+      }
+      result[key] = entryValue;
+    }
+
+    return result;
   }
 }
 

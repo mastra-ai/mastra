@@ -1,4 +1,5 @@
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import { normalizeQueryParams } from '@mastra/server/server-adapter';
 import {
   All,
   Controller,
@@ -28,9 +29,8 @@ import { getMastraRoutePath } from '../utils/route-path';
  * Main Mastra controller that handles all routes dynamically.
  * Routes are matched against SERVER_ROUTES from @mastra/server.
  *
- * Auth and rate limiting are handled via MastraRouteGuard, which:
- * 1. Avoids affecting other controllers in the user's NestJS app
- * 2. Enforces auth only for matched Mastra routes
+ * Auth and rate limiting are handled via MastraRouteGuard so they only apply
+ * to matched Mastra routes and do not affect the rest of the user's app.
  */
 @Controller()
 @UseInterceptors(RequestTrackingInterceptor, TracingInterceptor, StreamingInterceptor)
@@ -85,8 +85,9 @@ export class MastraController {
   private parseQueryParams(query: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     const dangerousKeys = new Set(['__proto__', 'prototype', 'constructor']);
+    const normalizedQuery = normalizeQueryParams(query);
 
-    for (const [key, value] of Object.entries(query)) {
+    for (const [key, value] of Object.entries(normalizedQuery)) {
       // Skip requestContext - it's handled separately
       if (key === 'requestContext') {
         continue;

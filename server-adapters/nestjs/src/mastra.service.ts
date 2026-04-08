@@ -35,6 +35,14 @@ export class MastraService {
     @Inject(ShutdownService) private readonly shutdownService: ShutdownService,
     @Inject(HttpAdapterHost) private readonly httpAdapterHost: HttpAdapterHost,
   ) {
+    const adapterType = this.httpAdapterHost?.httpAdapter?.getType?.();
+    if (adapterType && adapterType !== 'express') {
+      throw new Error(
+        `MastraModule requires NestJS to use the Express HTTP adapter. Received "${adapterType}". ` +
+          'Install @nestjs/platform-express and bootstrap with the Express platform.',
+      );
+    }
+
     // Register a real Mastra server adapter so getServerApp() works
     const app = this.httpAdapterHost?.httpAdapter?.getInstance?.();
     if (app) {

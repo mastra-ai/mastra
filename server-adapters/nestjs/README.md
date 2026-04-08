@@ -2,6 +2,8 @@
 
 NestJS server adapter for [Mastra](https://mastra.ai). Use it to expose agents, workflows, tools, MCP, and streaming endpoints through NestJS with native guards, interceptors, and DI.
 
+This package supports NestJS running on the Express adapter only. If your app uses Fastify, `MastraModule` now fails fast during bootstrap with a clear error instead of partially initializing.
+
 ## Features
 
 - **NestJS-native integration** via modules, DI, guards, interceptors, and filters
@@ -168,6 +170,22 @@ MastraModule.register({
 });
 ```
 
+## Mastra Auth Compatibility
+
+Mastra's built-in token auth is disabled by default because most NestJS apps already have their own auth layer. When enabled, bearer tokens from the `Authorization` header are the default credential source.
+
+Query-string `?apiKey=` auth is available only as an explicit backward-compatibility option:
+
+```typescript
+MastraModule.register({
+  mastra,
+  auth: {
+    enabled: true,
+    allowQueryApiKey: true,
+  },
+});
+```
+
 ## Streaming Options
 
 ```typescript
@@ -222,29 +240,29 @@ export class CustomController {
 
 ## Configuration Options
 
-| Option                              | Type                                          | Default              | Description                                 |
-| ----------------------------------- | --------------------------------------------- | -------------------- | ------------------------------------------- |
-| `mastra`                            | `Mastra`                                      | required             | The Mastra instance                         |
-| `prefix`                            | `string`                                      | `/api`               | Route prefix                                |
-| `rateLimitOptions`                  | `object`                                      | enabled              | Rate limiting configuration                 |
-| `rateLimitOptions.enabled`          | `boolean`                                     | `true`               | Enable/disable rate limiting                |
-| `rateLimitOptions.defaultLimit`     | `number`                                      | `100`                | Requests per window                         |
-| `rateLimitOptions.generateLimit`    | `number`                                      | `10`                 | Stricter limit for `/generate`              |
-| `rateLimitOptions.windowMs`         | `number`                                      | `60000`              | Window size in ms                           |
-| `shutdownOptions`                   | `object`                                      | -                    | Graceful shutdown configuration             |
-| `shutdownOptions.timeoutMs`         | `number`                                      | `30000`              | Max wait time for in-flight requests        |
-| `shutdownOptions.notifyClients`     | `boolean`                                     | `true`               | Send shutdown event to SSE clients          |
-| `bodyLimitOptions`                  | `object`                                      | -                    | Request body size limits                    |
-| `bodyLimitOptions.maxSize`          | `number`                                      | `10MB`               | Max JSON body size                          |
-| `bodyLimitOptions.maxFileSize`      | `number`                                      | -                    | Max multipart file size (no limit if unset) |
-| `bodyLimitOptions.allowedMimeTypes` | `string[]`                                    | -                    | Allowed upload MIME types                   |
-| `streamOptions`                     | `{ redact?: boolean; heartbeatMs?: number }`  | -                    | Streaming config                            |
-| `tracingOptions`                    | `{ enabled?: boolean; serviceName?: string }` | -                    | OpenTelemetry tracing                       |
-| `customRouteAuthConfig`             | `Map<string, boolean>`                        | -                    | Per-route auth overrides                    |
-| `mcpOptions`                        | `object`                                      | -                    | MCP transport options                       |
-| `mcpOptions.serverless`             | `boolean`                                     | `false`              | Stateless MCP HTTP mode                     |
-| `mcpOptions.sessionIdGenerator`     | `() => string`                                | -                    | Custom MCP session IDs                      |
-| `auth`                              | `{ enabled?: boolean }`                       | `{ enabled: false }` | Enable Mastra's built-in token auth         |
+| Option                              | Type                                                | Default              | Description                                 |
+| ----------------------------------- | --------------------------------------------------- | -------------------- | ------------------------------------------- |
+| `mastra`                            | `Mastra`                                            | required             | The Mastra instance                         |
+| `prefix`                            | `string`                                            | `/api`               | Route prefix                                |
+| `rateLimitOptions`                  | `object`                                            | enabled              | Rate limiting configuration                 |
+| `rateLimitOptions.enabled`          | `boolean`                                           | `true`               | Enable/disable rate limiting                |
+| `rateLimitOptions.defaultLimit`     | `number`                                            | `100`                | Requests per window                         |
+| `rateLimitOptions.generateLimit`    | `number`                                            | `10`                 | Stricter limit for `/generate`              |
+| `rateLimitOptions.windowMs`         | `number`                                            | `60000`              | Window size in ms                           |
+| `shutdownOptions`                   | `object`                                            | -                    | Graceful shutdown configuration             |
+| `shutdownOptions.timeoutMs`         | `number`                                            | `30000`              | Max wait time for in-flight requests        |
+| `shutdownOptions.notifyClients`     | `boolean`                                           | `true`               | Send shutdown event to SSE clients          |
+| `bodyLimitOptions`                  | `object`                                            | -                    | Request body size limits                    |
+| `bodyLimitOptions.maxSize`          | `number`                                            | `10MB`               | Max JSON body size                          |
+| `bodyLimitOptions.maxFileSize`      | `number`                                            | -                    | Max multipart file size (no limit if unset) |
+| `bodyLimitOptions.allowedMimeTypes` | `string[]`                                          | -                    | Allowed upload MIME types                   |
+| `streamOptions`                     | `{ redact?: boolean; heartbeatMs?: number }`        | -                    | Streaming config                            |
+| `tracingOptions`                    | `{ enabled?: boolean; serviceName?: string }`       | -                    | OpenTelemetry tracing                       |
+| `customRouteAuthConfig`             | `Map<string, boolean>`                              | -                    | Per-route auth overrides                    |
+| `mcpOptions`                        | `object`                                            | -                    | MCP transport options                       |
+| `mcpOptions.serverless`             | `boolean`                                           | `false`              | Stateless MCP HTTP mode                     |
+| `mcpOptions.sessionIdGenerator`     | `() => string`                                      | -                    | Custom MCP session IDs                      |
+| `auth`                              | `{ enabled?: boolean; allowQueryApiKey?: boolean }` | `{ enabled: false }` | Enable Mastra's built-in token auth         |
 
 ## Requirements
 
@@ -252,7 +270,7 @@ export class CustomController {
 - NestJS with Express adapter (`@nestjs/platform-express`)
 - Express 4.x or 5.x
 
-**Note:** This adapter supports NestJS with Express only. Fastify support is planned for v2.
+**Note:** This adapter supports NestJS with Express only. Fastify is not supported in v1, and `MastraModule` throws during bootstrap if another Nest HTTP adapter is in use.
 
 ## API Reference
 

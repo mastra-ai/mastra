@@ -7,6 +7,8 @@ import { catchError, finalize, tap } from 'rxjs/operators';
 
 import { MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
+import { RouteHandlerService } from '../services/route-handler.service';
+import { getMastraRoutePath } from '../utils/route-path';
 
 type OtelSpan = {
   setAttribute: (key: string, value: unknown) => void;
@@ -54,7 +56,10 @@ function getOtelApi(): OtelApi | null {
 export class TracingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(TracingInterceptor.name);
 
-  constructor(@Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions) {}
+  constructor(
+    @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
+    @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const enabled = this.options.tracingOptions?.enabled;
@@ -72,12 +77,15 @@ export class TracingInterceptor implements NestInterceptor {
 
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
+    const routePath = getMastraRoutePath(request.path, this.options.prefix);
+    const matchResult = this.routeHandler.matchRoute(request.method.toUpperCase(), routePath);
+    const routeTemplate = matchResult?.route.path ?? request.route?.path ?? request.path;
 
-    const span = tracer.startSpan(`HTTP ${request.method} ${request.path}`, {
+    const span = tracer.startSpan(`HTTP ${request.method} ${routeTemplate}`, {
       kind: otel.SpanKind.SERVER,
       attributes: {
         'http.method': request.method,
-        'http.route': request.path,
+        'http.route': routeTemplate,
         'http.target': request.originalUrl || request.url,
       },
     });

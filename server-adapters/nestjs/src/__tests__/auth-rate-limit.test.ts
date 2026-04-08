@@ -71,6 +71,66 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
     expect(validToken.status).toBe(200);
   });
 
+  it('should only allow query apiKey auth when explicitly enabled', async () => {
+    vi.spyOn(context.mastra, 'getServer').mockReturnValue({
+      auth: {
+        protected: ['/*'],
+        public: [],
+        authenticateToken: async (token: string) => {
+          if (token === 'valid') {
+            return { id: 'user-1', isAdmin: true };
+          }
+          return null;
+        },
+      },
+    } as any);
+
+    const disabledModuleRef = await Test.createTestingModule({
+      imports: [
+        MastraModule.register({
+          mastra: context.mastra,
+          auth: {
+            enabled: true,
+          },
+        }),
+      ],
+    }).compile();
+
+    app = disabledModuleRef.createNestApplication();
+    expressApp = app.getHttpAdapter().getInstance() as Application;
+    await app.init();
+
+    const disabledResponse = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/agents?apiKey=valid',
+    });
+    expect(disabledResponse.status).toBe(401);
+
+    await app.close();
+
+    const enabledModuleRef = await Test.createTestingModule({
+      imports: [
+        MastraModule.register({
+          mastra: context.mastra,
+          auth: {
+            enabled: true,
+            allowQueryApiKey: true,
+          },
+        }),
+      ],
+    }).compile();
+
+    app = enabledModuleRef.createNestApplication();
+    expressApp = app.getHttpAdapter().getInstance() as Application;
+    await app.init();
+
+    const enabledResponse = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/agents?apiKey=valid',
+    });
+    expect(enabledResponse.status).toBe(200);
+  });
+
   it('should rate limit requests when enabled', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [

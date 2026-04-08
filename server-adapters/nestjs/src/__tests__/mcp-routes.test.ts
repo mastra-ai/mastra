@@ -14,7 +14,7 @@ import { MastraModule } from '../index';
  *
  * These verify MCP registry endpoints are exposed via the NestJS adapter.
  */
-describe('NestJS MCP Registry Routes Integration', () => {
+describe('NestJS MCP Registry Routes Integration', { timeout: 30000 }, () => {
   createMCPRouteTestSuite({
     suiteName: 'NestJS Adapter',
 

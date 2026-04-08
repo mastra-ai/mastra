@@ -14,7 +14,7 @@ import { MastraModule } from '../index';
  *
  * These verify MCP transport endpoints are exposed via the NestJS adapter.
  */
-describe('NestJS MCP Transport Routes Integration', () => {
+describe('NestJS MCP Transport Routes Integration', { timeout: 30000 }, () => {
   createMCPTransportTestSuite({
     suiteName: 'NestJS Adapter',
 

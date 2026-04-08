@@ -49,8 +49,8 @@ export class MastraRouteGuard implements CanActivate {
 
     // Apply rate limiting to matched Mastra routes.
     if (this.options.rateLimitOptions?.enabled !== false) {
-      const { limit, windowMs } = this.throttleGuard.getRateLimitSettings(request);
-      await this.throttleGuard.checkLimit(request, limit, windowMs);
+      const { limit, windowMs } = this.throttleGuard.getRateLimitSettings(request, undefined, routePath);
+      await this.throttleGuard.checkLimit(request, limit, windowMs, routePath);
     }
 
     return true;
