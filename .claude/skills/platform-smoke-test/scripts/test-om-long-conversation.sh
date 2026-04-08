@@ -24,7 +24,7 @@ if [ -z "$API_KEY" ]; then
   exit 1
 fi
 
-THREAD_ID="om-long-$(date +%s)"
+THREAD_ID="om-long-$(date +%s)-$$-$RANDOM"
 
 # 30 prompts designed to generate long responses (~500-1000 tokens each)
 PROMPTS=(
@@ -102,7 +102,7 @@ for i in "${!PROMPTS[@]}"; do
   CACHE_READ=$(echo "$RESPONSE" | jq '.usage.cache_read_tokens // 0')
   CACHE_WRITE=$(echo "$RESPONSE" | jq '.usage.cache_creation_input_tokens // 0')
   
-  echo "Msg $MSG_NUM/30: prompt=$PROMPT_TOKENS completion=$COMPLETION_TOKENS cache_read=$CACHE_READ cache_write=$CACHE_WRITE"
+  echo "Msg $MSG_NUM/${#PROMPTS[@]}: prompt=$PROMPT_TOKENS completion=$COMPLETION_TOKENS cache_read=$CACHE_READ cache_write=$CACHE_WRITE"
   
   # Track totals
   TOTAL_PROMPT_TOKENS=$((TOTAL_PROMPT_TOKENS + PROMPT_TOKENS))
