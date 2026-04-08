@@ -1,11 +1,13 @@
 # Error Handling Testing (`--test errors`)
 
 ## Purpose
+
 Verify the application handles errors gracefully with user-friendly messages.
 
 ## Steps
 
 ### 1. Test Agent Error Handling
+
 - [ ] Navigate to `/agents`
 - [ ] Select an agent
 - [ ] Send intentionally problematic input:
@@ -15,6 +17,7 @@ Verify the application handles errors gracefully with user-friendly messages.
 - [ ] Record the error message displayed (note if stack trace or user-friendly)
 
 ### 2. Test Tool Error Handling
+
 - [ ] Navigate to `/tools`
 - [ ] Select a tool
 - [ ] Submit with invalid input:
@@ -24,6 +27,7 @@ Verify the application handles errors gracefully with user-friendly messages.
 - [ ] Record the error message displayed
 
 ### 3. Test API Error Handling (Cloud)
+
 For `--env staging` or `--env production`:
 
 ```bash
@@ -48,12 +52,14 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 - [ ] Note if stack traces appear in response
 
 ### 4. Test Navigation Errors
+
 - [ ] Navigate to invalid route: `/nonexistent-page`
 - [ ] Record what page/behavior appears
 - [ ] Navigate to invalid agent: `/agents/fake-agent-id`
 - [ ] Record the error handling behavior
 
 ### 5. Test Network Error Recovery
+
 - [ ] Start a long-running operation
 - [ ] Briefly disconnect network (if possible)
 - [ ] Record error handling behavior
@@ -61,17 +67,18 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 
 ## Observations to Report
 
-| Check | What to Record |
-|-------|----------------|
-| Agent errors | Error message text, whether stack trace shown |
-| Tool errors | Validation message content |
-| API errors | HTTP status codes, error message content |
-| 404 pages | Page behavior and content |
-| Network errors | Error handling behavior |
+| Check          | What to Record                                |
+| -------------- | --------------------------------------------- |
+| Agent errors   | Error message text, whether stack trace shown |
+| Tool errors    | Validation message content                    |
+| API errors     | HTTP status codes, error message content      |
+| 404 pages      | Page behavior and content                     |
+| Network errors | Error handling behavior                       |
 
 ## Error Message Quality
 
 Note these aspects of error messages:
+
 - Explain what went wrong
 - Suggest how to fix it
 - Not expose internal details
@@ -82,11 +89,11 @@ Note these aspects of error messages:
 
 ## Common Issues
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| Stack trace shown | Error not caught | Add error boundary |
-| Generic "Error" | Missing error message | Improve error handling |
-| Page crashes | Unhandled exception | Check error boundaries |
+| Issue             | Cause                 | Fix                    |
+| ----------------- | --------------------- | ---------------------- |
+| Stack trace shown | Error not caught      | Add error boundary     |
+| Generic "Error"   | Missing error message | Improve error handling |
+| Page crashes      | Unhandled exception   | Check error boundaries |
 
 ## Browser Actions
 

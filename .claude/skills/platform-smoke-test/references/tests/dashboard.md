@@ -1,15 +1,18 @@
 # Dashboard UI Testing (`--test dashboard`)
 
 ## Purpose
+
 Verify all dashboard pages load and function correctly.
 
 ## Prerequisites
+
 - Logged into dashboard
 - Some API requests made (for data to display)
 
 ## Steps
 
 ### 1. Projects Page
+
 Navigate to `$GATEWAY_URL`
 
 - [ ] Projects list displayed
@@ -17,6 +20,7 @@ Navigate to `$GATEWAY_URL`
 - [ ] Project status shown (if deployed)
 
 ### 2. Threads Page
+
 Navigate to Dashboard → Threads
 
 - [ ] Threads list displayed
@@ -25,6 +29,7 @@ Navigate to Dashboard → Threads
 - [ ] Timeline/flame graph working (if applicable)
 
 ### 3. Logs Page
+
 Navigate to Dashboard → Logs
 
 - [ ] Request logs displayed in table
@@ -42,12 +47,14 @@ You MUST click on a log row to expand it. Do not just observe the table.
    - [ ] cache_write_tokens or cache_read_tokens if present (record values)
 
 **Multi-Provider Verification (if multiple providers used):**
+
 1. Find a log entry for each provider you've tested
 2. **Click to expand each one**
 3. [ ] Token breakdown appears for each provider
 4. [ ] Record any differences in how tokens are displayed
 
 ### 4. Usage Page
+
 Navigate to Dashboard → Usage
 
 - [ ] Charts render correctly
@@ -56,6 +63,7 @@ Navigate to Dashboard → Usage
 - [ ] Date range selector works
 
 ### 5. Settings Page
+
 Navigate to Dashboard → Settings
 
 - [ ] Project settings accessible
@@ -64,6 +72,7 @@ Navigate to Dashboard → Settings
 - [ ] Provider keys configurable
 
 ### 6. Navigation Test
+
 **⚠️ REQUIRED: Systematically test navigation**
 
 1. **Sidebar test:**
@@ -82,21 +91,21 @@ Navigate to Dashboard → Settings
 
 ## Observations to Report
 
-| Page | What to Record |
-|------|----------------|
-| Projects | Note what appears on the page |
-| Threads | Record if list loads, note details shown |
-| Logs | Record table contents and expandability |
-| Usage | Note if charts render, record data shown |
-| Settings | Record available options |
+| Page     | What to Record                           |
+| -------- | ---------------------------------------- |
+| Projects | Note what appears on the page            |
+| Threads  | Record if list loads, note details shown |
+| Logs     | Record table contents and expandability  |
+| Usage    | Note if charts render, record data shown |
+| Settings | Record available options                 |
 
 ## Common Issues
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| Empty pages | No data | Make some requests first |
-| Charts not loading | JS error | Check browser console |
-| Settings won't save | Auth issue | Re-login |
+| Issue               | Cause      | Fix                      |
+| ------------------- | ---------- | ------------------------ |
+| Empty pages         | No data    | Make some requests first |
+| Charts not loading  | JS error   | Check browser console    |
+| Settings won't save | Auth issue | Re-login                 |
 
 ## Browser Actions
 

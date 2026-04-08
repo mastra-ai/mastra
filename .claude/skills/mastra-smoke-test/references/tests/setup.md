@@ -1,33 +1,38 @@
 # Project Setup
 
 ## Purpose
+
 Set up or verify a Mastra project for smoke testing.
 
 ## Option A: Create New Project
 
 ### 1. Navigate to Directory
+
 ```bash
 cd <directory>
 # Default: ~/mastra-smoke-tests
 ```
 
 ### 2. Create Project
+
 ```bash
 <pm> create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
 ```
 
-| Flag | Purpose |
-|------|---------|
-| `-c agents,tools,workflows,scorers` | Include all components |
-| `-l <provider>` | Set LLM provider (openai, anthropic, etc.) |
-| `-e` | Include example code |
+| Flag                                | Purpose                                    |
+| ----------------------------------- | ------------------------------------------ |
+| `-c agents,tools,workflows,scorers` | Include all components                     |
+| `-l <provider>`                     | Set LLM provider (openai, anthropic, etc.) |
+| `-e`                                | Include example code                       |
 
 ### 3. Enter Project
+
 ```bash
 cd <project-name>
 ```
 
 ### 4. Record Structure
+
 - [ ] Note if `package.json` exists
 - [ ] Note if `src/mastra/index.ts` exists
 - [ ] Record agents found in `src/mastra/agents/`
@@ -36,16 +41,19 @@ cd <project-name>
 ## Option B: Use Existing Project
 
 ### 1. Navigate to Project
+
 ```bash
 cd <existing-project-path>
 ```
 
 ### 2. Record Requirements
+
 - [ ] Note if `package.json` contains `@mastra/core`
 - [ ] Note if `src/mastra/index.ts` has Mastra instance
 - [ ] Record which agents are configured
 
 ### 3. Update Dependencies (if `--tag` provided)
+
 ```bash
 # Update ALL @mastra/* packages to avoid version drift
 <pm> add @mastra/core@<tag> @mastra/memory@<tag> mastra@<tag>
@@ -59,35 +67,41 @@ cd <existing-project-path>
 
 ## Storage Backend (`--db`)
 
-| Backend | Package | Env Variables |
-|---------|---------|---------------|
-| `libsql` (default) | `@mastra/libsql` | None |
-| `pg` | `@mastra/pg` | `DATABASE_URL` |
-| `turso` | `@mastra/turso` | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+| Backend            | Package          | Env Variables                            |
+| ------------------ | ---------------- | ---------------------------------------- |
+| `libsql` (default) | `@mastra/libsql` | None                                     |
+| `pg`               | `@mastra/pg`     | `DATABASE_URL`                           |
+| `turso`            | `@mastra/turso`  | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
 
 ### Install Non-Default Backend
+
 ```bash
 <pm> add @mastra/<backend>
 ```
 
 ### Configure in `src/mastra/index.ts`
+
 ```typescript
 import { LibSQLStore } from '@mastra/libsql'; // or PgStore, TursoStore
 
 export const mastra = new Mastra({
   // ...
-  storage: new LibSQLStore({ /* config */ }),
+  storage: new LibSQLStore({
+    /* config */
+  }),
 });
 ```
 
 ## Browser Agent (`--browser-agent`)
 
 ### 1. Install Packages
+
 ```bash
 <pm> add @mastra/stagehand @mastra/memory
 ```
 
 ### 2. Create Agent
+
 Create `src/mastra/agents/browser-agent.ts`:
 
 ```typescript
@@ -108,6 +122,7 @@ export const browserAgent = new Agent({
 ```
 
 ### 3. Register Agent
+
 Update `src/mastra/index.ts`:
 
 ```typescript
@@ -120,6 +135,7 @@ export const mastra = new Mastra({
 ```
 
 ### 4. Install Playwright
+
 ```bash
 <pm> exec playwright install chromium
 ```
@@ -129,6 +145,7 @@ export const mastra = new Mastra({
 To add custom API routes:
 
 ### 1. Create Route
+
 Create `src/mastra/routes/hello.ts`:
 
 ```typescript
@@ -136,14 +153,15 @@ import { registerApiRoute } from '@mastra/core/server';
 
 export const helloRoute = registerApiRoute('/hello', {
   method: 'GET',
-  requiresAuth: false,  // Set to true if auth required
-  handler: async (c) => {
+  requiresAuth: false, // Set to true if auth required
+  handler: async c => {
     return c.json({ message: 'Hello from custom route!' });
   },
 });
 ```
 
 ### 2. Register Route
+
 Update `src/mastra/index.ts`:
 
 ```typescript
@@ -152,7 +170,7 @@ import { helloRoute } from './routes/hello';
 export const mastra = new Mastra({
   // ...
   server: {
-    apiRoutes: [helloRoute],  // ⚠️ Must be "apiRoutes", not "routes"
+    apiRoutes: [helloRoute], // ⚠️ Must be "apiRoutes", not "routes"
   },
 });
 ```
@@ -160,6 +178,7 @@ export const mastra = new Mastra({
 **Common mistake**: Using `routes` instead of `apiRoutes` - this will silently fail.
 
 ### 3. Verify Locally
+
 ```bash
 # Start dev server
 <pm> run dev
@@ -171,6 +190,7 @@ curl http://localhost:4111/hello
 ## Environment Variables
 
 ### Check/Set LLM API Key
+
 ```bash
 # Check if set
 echo $OPENAI_API_KEY  # or ANTHROPIC_API_KEY, etc.
@@ -180,11 +200,13 @@ cat .env | grep API_KEY
 ```
 
 If not set, add to `.env`:
+
 ```
 OPENAI_API_KEY=sk-...
 ```
 
 ### Platform URL (Cloud Only)
+
 ```bash
 # Staging
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai
@@ -195,14 +217,14 @@ unset MASTRA_PLATFORM_API_URL
 
 ## Verification Checklist
 
-| Check | Command |
-|-------|---------|
-| Project exists | `ls package.json` |
-| Dependencies | `<pm> list @mastra/core` |
-| Mastra config | `cat src/mastra/index.ts` |
-| Agents exist | `ls src/mastra/agents/` |
-| Env vars | `cat .env` |
-| **TypeScript check** | `<pm> tsc --noEmit` |
+| Check                | Command                   |
+| -------------------- | ------------------------- |
+| Project exists       | `ls package.json`         |
+| Dependencies         | `<pm> list @mastra/core`  |
+| Mastra config        | `cat src/mastra/index.ts` |
+| Agents exist         | `ls src/mastra/agents/`   |
+| Env vars             | `cat .env`                |
+| **TypeScript check** | `<pm> tsc --noEmit`       |
 
 ### TypeScript Check (Required)
 
@@ -222,10 +244,10 @@ If errors appear, fix them before proceeding. Don't rely on `mastra build` or `p
 
 ## Common Issues
 
-| Issue | Fix |
-|-------|-----|
-| "Cannot find module '@mastra/core'" | Run `<pm> install` |
-| "Missing API key" | Add to `.env` file |
-| "No agents found" | Check agent exports in index.ts |
-| Custom routes not working | Use `server.apiRoutes`, not `server.routes` |
-| Config errors not caught by build | Run `tsc --noEmit` - build doesn't type-check |
+| Issue                               | Fix                                           |
+| ----------------------------------- | --------------------------------------------- |
+| "Cannot find module '@mastra/core'" | Run `<pm> install`                            |
+| "Missing API key"                   | Add to `.env` file                            |
+| "No agents found"                   | Check agent exports in index.ts               |
+| Custom routes not working           | Use `server.apiRoutes`, not `server.routes`   |
+| Config errors not caught by build   | Run `tsc --noEmit` - build doesn't type-check |

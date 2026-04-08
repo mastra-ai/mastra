@@ -13,21 +13,21 @@ Smoke test the Mastra Platform - Gateway API, dashboard, accounts, and usage tra
 
 **Do not skip tests unless you hit an actual blocker.** "Seemed complex" or "wasn't sure" are not valid reasons. Attempt everything - only stop a test when you literally cannot proceed (e.g., need a second account you don't have). Report what you tried and what blocked you.
 
-| # | Test | Reference | When Required |
-|---|------|-----------|---------------|
-| 1 | **Setup** | `references/tests/setup.md` | Always |
-| 2 | **API** | `references/tests/api.md` | `--test api` or full |
-| 3 | **Memory** | `references/tests/memory.md` | `--test memory` or full |
-| 4 | **Threads** | `references/tests/threads.md` | `--test threads` or full |
-| 5 | **OM** | `references/tests/om.md` | `--test om` or full |
-| 6 | **BYOK** | `references/tests/byok.md` | `--test byok` or full |
-| 7 | **Usage** | `references/tests/usage.md` | `--test usage` or full |
-| 8 | **Dashboard** | `references/tests/dashboard.md` | `--test dashboard` or full |
-| 9 | **Onboarding** | `references/tests/onboarding.md` | `--test onboarding` (new account) |
-| 10 | **Account** | `references/tests/account.md` | `--test account` (new account) |
-| 11 | **Invites** | `references/tests/invites.md` | `--test invites` (multi-user) |
-| 12 | **RBAC** | `references/tests/rbac.md` | `--test rbac` (multi-user) |
-| 13 | **Errors** | `references/tests/errors.md` | `--test errors` or full |
+| #   | Test           | Reference                        | When Required                     |
+| --- | -------------- | -------------------------------- | --------------------------------- |
+| 1   | **Setup**      | `references/tests/setup.md`      | Always                            |
+| 2   | **API**        | `references/tests/api.md`        | `--test api` or full              |
+| 3   | **Memory**     | `references/tests/memory.md`     | `--test memory` or full           |
+| 4   | **Threads**    | `references/tests/threads.md`    | `--test threads` or full          |
+| 5   | **OM**         | `references/tests/om.md`         | `--test om` or full               |
+| 6   | **BYOK**       | `references/tests/byok.md`       | `--test byok` or full             |
+| 7   | **Usage**      | `references/tests/usage.md`      | `--test usage` or full            |
+| 8   | **Dashboard**  | `references/tests/dashboard.md`  | `--test dashboard` or full        |
+| 9   | **Onboarding** | `references/tests/onboarding.md` | `--test onboarding` (new account) |
+| 10  | **Account**    | `references/tests/account.md`    | `--test account` (new account)    |
+| 11  | **Invites**    | `references/tests/invites.md`    | `--test invites` (multi-user)     |
+| 12  | **RBAC**       | `references/tests/rbac.md`       | `--test rbac` (multi-user)        |
+| 13  | **Errors**     | `references/tests/errors.md`     | `--test errors` or full           |
 
 ### Execution Flow
 
@@ -38,6 +38,7 @@ Smoke test the Mastra Platform - Gateway API, dashboard, accounts, and usage tra
 ### Partial Testing (`--test`)
 
 If `--test` is provided:
+
 1. Always run **Setup** (step 1)
 2. Run **only** the specified test(s)
 3. Skip other tests
@@ -72,29 +73,29 @@ platform smoke test --env staging --test onboarding
 
 ## Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `--env` | **Yes** | - | `staging` or `production` |
-| `--api-key` | No | - | Skip account creation |
-| `--test` | No | (full) | Specific test(s) |
-| `--provider` | No | `openai` | For BYOK testing |
+| Parameter    | Required | Default  | Description               |
+| ------------ | -------- | -------- | ------------------------- |
+| `--env`      | **Yes**  | -        | `staging` or `production` |
+| `--api-key`  | No       | -        | Skip account creation     |
+| `--test`     | No       | (full)   | Specific test(s)          |
+| `--provider` | No       | `openai` | For BYOK testing          |
 
 ## Test Options (`--test`)
 
-| Option | Description | Notes |
-|--------|-------------|-------|
-| `api` | API endpoints | Core functionality |
-| `memory` | Memory persistence | Uses threads |
-| `threads` | Thread CRUD | List, get, delete |
-| `om` | Observational Memory | Token tracking |
-| `byok` | Bring Your Own Key | Needs provider keys |
-| `usage` | Usage dashboard | Costs, charts |
-| `dashboard` | UI pages | All sections |
-| `onboarding` | New user flow | Fresh email needed |
-| `account` | Account creation | Fresh email needed |
-| `invites` | Team invites | Multi-user |
-| `rbac` | Role permissions | Multi-user |
-| `errors` | Error handling | API + logs |
+| Option       | Description          | Notes               |
+| ------------ | -------------------- | ------------------- |
+| `api`        | API endpoints        | Core functionality  |
+| `memory`     | Memory persistence   | Uses threads        |
+| `threads`    | Thread CRUD          | List, get, delete   |
+| `om`         | Observational Memory | Token tracking      |
+| `byok`       | Bring Your Own Key   | Needs provider keys |
+| `usage`      | Usage dashboard      | Costs, charts       |
+| `dashboard`  | UI pages             | All sections        |
+| `onboarding` | New user flow        | Fresh email needed  |
+| `account`    | Account creation     | Fresh email needed  |
+| `invites`    | Team invites         | Multi-user          |
+| `rbac`       | Role permissions     | Multi-user          |
+| `errors`     | Error handling       | API + logs          |
 
 ## Prerequisites
 
@@ -105,10 +106,10 @@ platform smoke test --env staging --test onboarding
 
 ## Gateway URLs
 
-| Environment | Dashboard | API |
-|-------------|-----------|-----|
-| Production | `gateway.mastra.ai` | `server.mastra.ai` |
-| Staging | `gateway.staging.mastra.ai` | `server.staging.mastra.ai` |
+| Environment | Dashboard                   | API                        |
+| ----------- | --------------------------- | -------------------------- |
+| Production  | `gateway.mastra.ai`         | `server.mastra.ai`         |
+| Staging     | `gateway.staging.mastra.ai` | `server.staging.mastra.ai` |
 
 ## Quick Start
 
@@ -127,8 +128,8 @@ curl -X POST "$API_URL/v1/chat/completions" \
 
 ## References
 
-| File | Purpose |
-|------|---------|
+| File                    | Purpose                      |
+| ----------------------- | ---------------------------- |
 | `references/tests/*.md` | Detailed steps for each test |
 
 ## Result Reporting
@@ -155,11 +156,11 @@ After testing, provide:
 
 ## Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| 401 errors | Check API key, re-create if needed |
-| "No provider" | Use `provider/model` format |
-| Thread not found | Check thread ID |
-| Dashboard empty | Make some requests first |
+| Issue            | Fix                                |
+| ---------------- | ---------------------------------- |
+| 401 errors       | Check API key, re-create if needed |
+| "No provider"    | Use `provider/model` format        |
+| Thread not found | Check thread ID                    |
+| Dashboard empty  | Make some requests first           |
 
 > For deployed Studio/Server testing, use `mastra-smoke-test` instead.

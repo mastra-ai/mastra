@@ -28,6 +28,7 @@ curl -X POST https://<project>.server.staging.mastra.cloud/api/agents/weather-ag
 ```
 
 Supported headers:
+
 - `x-openai-api-key` - OpenAI
 - `x-anthropic-api-key` - Anthropic
 - `x-google-api-key` - Google
@@ -68,9 +69,9 @@ export TURSO_AUTH_TOKEN="your-token"
 
 ## Extended Test Verification Checklist
 
-| Category    | Test           | Expected Result                      | Status |
-| ----------- | -------------- | ------------------------------------ | ------ |
-| **BYOK**    | Header key     | Agent uses key from header           | ⬜     |
-| **BYOK**    | Settings key   | Agent uses key from project settings | ⬜     |
-| **Storage** | DB connector   | Project works with selected DB       | ⬜     |
-| **Storage** | Data persists  | Data survives server restart         | ⬜     |
+| Category    | Test          | Expected Result                      | Status |
+| ----------- | ------------- | ------------------------------------ | ------ |
+| **BYOK**    | Header key    | Agent uses key from header           | ⬜     |
+| **BYOK**    | Settings key  | Agent uses key from project settings | ⬜     |
+| **Storage** | DB connector  | Project works with selected DB       | ⬜     |
+| **Storage** | Data persists | Data survives server restart         | ⬜     |

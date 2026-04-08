@@ -13,19 +13,19 @@ Comprehensive smoke testing for Mastra projects.
 
 **Do not skip tests unless you hit an actual blocker.** "Seemed complex" or "wasn't sure" are not valid reasons. Attempt everything - only stop a test when you literally cannot proceed. Report what you tried and what blocked you.
 
-| # | Test | Reference | When Required |
-|---|------|-----------|---------------|
-| 1 | **Setup** | `references/tests/setup.md` | Always |
-| 2 | **Agents** | `references/tests/agents.md` | `--test agents` or full |
-| 3 | **Tools** | `references/tests/tools.md` | `--test tools` or full |
-| 4 | **Workflows** | `references/tests/workflows.md` | `--test workflows` or full |
-| 5 | **Traces** | `references/tests/traces.md` | `--test traces` or full |
-| 6 | **Scorers** | `references/tests/scorers.md` | `--test scorers` or full |
-| 7 | **Memory** | `references/tests/memory.md` | `--test memory` or full |
-| 8 | **MCP** | `references/tests/mcp.md` | `--test mcp` or full |
-| 9 | **Errors** | `references/tests/errors.md` | `--test errors` or full |
-| 10 | **Studio Deploy** | `references/tests/studio.md` | `--test studio` (cloud only) |
-| 11 | **Server Deploy** | `references/tests/server.md` | `--test server` (cloud only) |
+| #   | Test              | Reference                       | When Required                |
+| --- | ----------------- | ------------------------------- | ---------------------------- |
+| 1   | **Setup**         | `references/tests/setup.md`     | Always                       |
+| 2   | **Agents**        | `references/tests/agents.md`    | `--test agents` or full      |
+| 3   | **Tools**         | `references/tests/tools.md`     | `--test tools` or full       |
+| 4   | **Workflows**     | `references/tests/workflows.md` | `--test workflows` or full   |
+| 5   | **Traces**        | `references/tests/traces.md`    | `--test traces` or full      |
+| 6   | **Scorers**       | `references/tests/scorers.md`   | `--test scorers` or full     |
+| 7   | **Memory**        | `references/tests/memory.md`    | `--test memory` or full      |
+| 8   | **MCP**           | `references/tests/mcp.md`       | `--test mcp` or full         |
+| 9   | **Errors**        | `references/tests/errors.md`    | `--test errors` or full      |
+| 10  | **Studio Deploy** | `references/tests/studio.md`    | `--test studio` (cloud only) |
+| 11  | **Server Deploy** | `references/tests/server.md`    | `--test server` (cloud only) |
 
 ### Execution Flow
 
@@ -36,6 +36,7 @@ Comprehensive smoke testing for Mastra projects.
 ### Partial Testing (`--test`)
 
 If `--test` is provided:
+
 1. Always run **Setup** (step 1)
 2. Run **only** the specified test(s)
 3. Skip other tests
@@ -58,48 +59,51 @@ smoke test --env production --existing-project ~/my-app --test studio,server,tra
 
 ## Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `--env` | **Yes** | - | `local`, `staging`, `production` |
-| `--directory` | * | `~/mastra-smoke-tests` | Parent dir for new project |
-| `--name` | * | - | Project name |
-| `--existing-project` | * | - | Path to existing project |
-| `--tag` | No | `latest` | Version tag (e.g., `alpha`) |
-| `--pm` | No | `pnpm` | Package manager |
-| `--llm` | No | `openai` | LLM provider |
-| `--db` | No | `libsql` | Storage: `libsql`, `pg`, `turso` |
-| `--test` | No | (full) | Specific test(s) to run |
-| `--browser-agent` | No | `false` | Add browser agent |
-| `--skip-browser` | No | `false` | Curl-only (no browser UI) |
-| `--byok` | No | `false` | Test bring-your-own-key |
+| Parameter            | Required | Default                | Description                      |
+| -------------------- | -------- | ---------------------- | -------------------------------- |
+| `--env`              | **Yes**  | -                      | `local`, `staging`, `production` |
+| `--directory`        | \*       | `~/mastra-smoke-tests` | Parent dir for new project       |
+| `--name`             | \*       | -                      | Project name                     |
+| `--existing-project` | \*       | -                      | Path to existing project         |
+| `--tag`              | No       | `latest`               | Version tag (e.g., `alpha`)      |
+| `--pm`               | No       | `pnpm`                 | Package manager                  |
+| `--llm`              | No       | `openai`               | LLM provider                     |
+| `--db`               | No       | `libsql`               | Storage: `libsql`, `pg`, `turso` |
+| `--test`             | No       | (full)                 | Specific test(s) to run          |
+| `--browser-agent`    | No       | `false`                | Add browser agent                |
+| `--skip-browser`     | No       | `false`                | Curl-only (no browser UI)        |
+| `--byok`             | No       | `false`                | Test bring-your-own-key          |
 
 \* Either `--directory` + `--name` OR `--existing-project` required
 
 ## Test Options (`--test`)
 
-| Option | Description | Environments |
-|--------|-------------|--------------|
-| `agents` | Agent page and chat | All |
-| `tools` | Tools page and execution | All |
-| `workflows` | Workflows page and run | All |
-| `traces` | Observability/traces | All |
-| `scorers` | Evaluation/scorers page | All |
-| `memory` | Conversation persistence | All |
-| `mcp` | MCP servers page | All |
-| `errors` | Error handling | All |
-| `studio` | Studio deploy only | Cloud |
-| `server` | Server deploy only | Cloud |
+| Option      | Description              | Environments |
+| ----------- | ------------------------ | ------------ |
+| `agents`    | Agent page and chat      | All          |
+| `tools`     | Tools page and execution | All          |
+| `workflows` | Workflows page and run   | All          |
+| `traces`    | Observability/traces     | All          |
+| `scorers`   | Evaluation/scorers page  | All          |
+| `memory`    | Conversation persistence | All          |
+| `mcp`       | MCP servers page         | All          |
+| `errors`    | Error handling           | All          |
+| `studio`    | Studio deploy only       | Cloud        |
+| `server`    | Server deploy only       | Cloud        |
 
 ## Prerequisites
 
 **All environments:**
+
 - Node.js + package manager
 - LLM API key in env or `.env`
 
 **Local (`--env local`):**
+
 - Browser tools enabled (`/browser on`)
 
 **Cloud (`--env staging/production`):**
+
 - Mastra platform account
 
 ## Quick Start Flow
@@ -114,15 +118,15 @@ smoke test --env production --existing-project ~/my-app --test studio,server,tra
 
 ## References
 
-| File | Purpose |
-|------|---------|
-| `references/tests/*.md` | Detailed steps for each test |
-| `references/local-setup.md` | Local dev server setup |
-| `references/cloud-deploy.md` | Cloud deploy details |
-| `references/cloud-advanced.md` | BYOK, storage testing |
-| `references/common-errors.md` | Troubleshooting |
-| `references/gcp-debugging.md` | Infrastructure debugging |
-| `scripts/test-server.sh` | Server API test script |
+| File                           | Purpose                      |
+| ------------------------------ | ---------------------------- |
+| `references/tests/*.md`        | Detailed steps for each test |
+| `references/local-setup.md`    | Local dev server setup       |
+| `references/cloud-deploy.md`   | Cloud deploy details         |
+| `references/cloud-advanced.md` | BYOK, storage testing        |
+| `references/common-errors.md`  | Troubleshooting              |
+| `references/gcp-debugging.md`  | Infrastructure debugging     |
+| `scripts/test-server.sh`       | Server API test script       |
 
 ## Platform Dashboards
 

@@ -1,11 +1,13 @@
 # Platform Setup
 
 ## Purpose
+
 Set up environment and authentication for platform testing.
 
 ## Steps
 
 ### 1. Set Environment URLs
+
 ```bash
 # Production
 export GATEWAY_URL="https://gateway.mastra.ai"
@@ -19,13 +21,16 @@ export API_URL="https://server.staging.mastra.ai"
 ### 2. Get API Key
 
 **Option A: Use Existing Key (`--api-key`)**
+
 ```bash
 export MASTRA_API_KEY="msk_..."
 ```
+
 - [ ] Set the key
 - [ ] Skip to API testing
 
 **Option B: Create New Account (Test Onboarding)**
+
 1. [ ] Navigate to `$GATEWAY_URL` in browser
 2. [ ] Click "Sign up" / "Get started"
 3. [ ] Complete registration (Google SSO or email)
@@ -34,27 +39,29 @@ export MASTRA_API_KEY="msk_..."
 6. [ ] Set: `export MASTRA_API_KEY="msk_..."`
 
 ### 3. Verify Authentication
+
 ```bash
 curl -X POST "$API_URL/v1/chat/completions" \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hi"}]}'
 ```
+
 - [ ] Returns 200 OK
 - [ ] Response includes completion
 
 ## Observations to Report
 
-| Check | What to Record |
-|-------|----------------|
-| Env vars set | Record output of `echo $GATEWAY_URL` |
-| API key set | Record if `echo $MASTRA_API_KEY` returns key |
-| Auth works | Record status code from test request |
+| Check        | What to Record                               |
+| ------------ | -------------------------------------------- |
+| Env vars set | Record output of `echo $GATEWAY_URL`         |
+| API key set  | Record if `echo $MASTRA_API_KEY` returns key |
+| Auth works   | Record status code from test request         |
 
 ## Common Issues
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| 401 on test request | Invalid/expired key | Get new key from dashboard |
-| Can't access dashboard | Wrong environment | Check URL matches `--env` |
-| No API key shown | Onboarding incomplete | Complete signup flow |
+| Issue                  | Cause                 | Fix                        |
+| ---------------------- | --------------------- | -------------------------- |
+| 401 on test request    | Invalid/expired key   | Get new key from dashboard |
+| Can't access dashboard | Wrong environment     | Check URL matches `--env`  |
+| No API key shown       | Onboarding incomplete | Complete signup flow       |

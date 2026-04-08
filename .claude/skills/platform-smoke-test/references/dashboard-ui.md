@@ -4,9 +4,9 @@ Detailed UI testing procedures for the Gateway dashboard.
 
 ## Dashboard URLs
 
-| Environment | URL |
-|-------------|-----|
-| Production  | `https://gateway.mastra.ai` |
+| Environment | URL                                 |
+| ----------- | ----------------------------------- |
+| Production  | `https://gateway.mastra.ai`         |
 | Staging     | `https://gateway.staging.mastra.ai` |
 
 ## Onboarding Flow
@@ -24,6 +24,7 @@ Detailed UI testing procedures for the Gateway dashboard.
 ### First-Time Experience
 
 After registration, verify:
+
 - [ ] Organization created automatically
 - [ ] Default project created
 - [ ] API key generated and visible
@@ -44,6 +45,7 @@ Path: `/orgs/{orgId}/projects`
 ### Project Card
 
 Each project card should show:
+
 - Project name
 - Status indicator
 - Quick actions (if any)
@@ -82,6 +84,7 @@ Path: `/orgs/{orgId}/projects/{projectId}/logs`
 ### Log Entry Details
 
 Each log should show:
+
 - Request timestamp
 - Model used
 - Token counts (prompt, completion, total)
@@ -172,6 +175,7 @@ Path: `/orgs/{orgId}/settings/team`
 ## Responsive Behavior
 
 Test on different viewport sizes:
+
 - [ ] Desktop (1920x1080)
 - [ ] Laptop (1366x768)
 - [ ] Tablet (768x1024)
@@ -179,6 +183,7 @@ Test on different viewport sizes:
 ## Browser Compatibility
 
 Test on:
+
 - [ ] Chrome
 - [ ] Firefox
 - [ ] Safari

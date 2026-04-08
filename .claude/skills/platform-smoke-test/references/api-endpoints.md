@@ -4,9 +4,9 @@ Complete reference for Gateway API endpoints.
 
 ## Base URLs
 
-| Environment | URL |
-|-------------|-----|
-| Production  | `https://server.mastra.ai` |
+| Environment | URL                                |
+| ----------- | ---------------------------------- |
+| Production  | `https://server.mastra.ai`         |
 | Staging     | `https://server.staging.mastra.ai` |
 
 ## Authentication
@@ -19,15 +19,15 @@ Authorization: Bearer msk_your_api_key
 
 ## Headers
 
-| Header | Required | Description |
-|--------|----------|-------------|
-| `Authorization` | Yes | API key: `Bearer msk_xxx` |
-| `Content-Type` | Yes | `application/json` |
-| `x-thread-id` | No | Thread ID for memory persistence |
-| `x-resource-id` | No | Resource ID for grouping threads |
-| `x-openai-api-key` | No | BYOK: OpenAI key |
-| `x-anthropic-api-key` | No | BYOK: Anthropic key |
-| `x-google-api-key` | No | BYOK: Google key |
+| Header                | Required | Description                      |
+| --------------------- | -------- | -------------------------------- |
+| `Authorization`       | Yes      | API key: `Bearer msk_xxx`        |
+| `Content-Type`        | Yes      | `application/json`               |
+| `x-thread-id`         | No       | Thread ID for memory persistence |
+| `x-resource-id`       | No       | Resource ID for grouping threads |
+| `x-openai-api-key`    | No       | BYOK: OpenAI key                 |
+| `x-anthropic-api-key` | No       | BYOK: Anthropic key              |
+| `x-google-api-key`    | No       | BYOK: Google key                 |
 
 ## Chat Completions
 
@@ -41,8 +41,8 @@ OpenAI-compatible chat completions endpoint.
 {
   "model": "openai/gpt-4o",
   "messages": [
-    {"role": "system", "content": "You are a helpful assistant"},
-    {"role": "user", "content": "Hello!"}
+    { "role": "system", "content": "You are a helpful assistant" },
+    { "role": "user", "content": "Hello!" }
   ],
   "temperature": 0.7,
   "max_tokens": 1000,
@@ -59,14 +59,16 @@ OpenAI-compatible chat completions endpoint.
   "created": 1234567890,
   "model": "openai/gpt-4o",
   "provider": "OpenAI",
-  "choices": [{
-    "index": 0,
-    "message": {
-      "role": "assistant",
-      "content": "Hello! How can I help you today?"
-    },
-    "finish_reason": "stop"
-  }],
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
   "usage": {
     "prompt_tokens": 20,
     "completion_tokens": 10,
@@ -175,8 +177,8 @@ Returns messages in a thread.
 ```json
 {
   "messages": [
-    {"role": "user", "content": "Hello"},
-    {"role": "assistant", "content": "Hi there!"}
+    { "role": "user", "content": "Hello" },
+    { "role": "assistant", "content": "Hi there!" }
   ]
 }
 ```
@@ -229,11 +231,11 @@ Updates per-thread OM threshold settings.
 
 Models must use `provider/model` format:
 
-| Provider | Example Models |
-|----------|----------------|
-| OpenAI | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/gpt-5` |
+| Provider  | Example Models                                                           |
+| --------- | ------------------------------------------------------------------------ |
+| OpenAI    | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/gpt-5`                    |
 | Anthropic | `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-opus-4-20250514` |
-| Google | `google/gemini-1.5-pro`, `google/gemini-2.0-flash` |
+| Google    | `google/gemini-1.5-pro`, `google/gemini-2.0-flash`                       |
 
 ## Error Responses
 

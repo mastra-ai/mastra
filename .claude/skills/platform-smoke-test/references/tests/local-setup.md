@@ -1,6 +1,7 @@
 # Local Project Setup for Gateway Testing
 
 ## Purpose
+
 Set up a dedicated local Mastra project to test Local + Gateway OM interactions (Test 8).
 
 **Important:** Create a fresh project for this test. Do not reuse projects from other test suites.
@@ -17,11 +18,11 @@ cd gateway-om-test
 pnpm install
 ```
 
-| Flag | Purpose |
-|------|---------|
-| `-c agents,tools` | Include agents and tools |
-| `-l openai` | Set OpenAI as provider (skips interactive prompt) |
-| `-e` | Include example code |
+| Flag              | Purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `-c agents,tools` | Include agents and tools                          |
+| `-l openai`       | Set OpenAI as provider (skips interactive prompt) |
+| `-e`              | Include example code                              |
 
 ## Add Test Agents
 
@@ -91,6 +92,7 @@ export const mastra = new Mastra({
 ```
 
 ### 4. Install Memory Package (if not present)
+
 ```bash
 pnpm add @mastra/memory
 ```
@@ -104,6 +106,7 @@ Set up the project to route requests through the Gateway.
 ### 1. Set Environment Variables
 
 Add to `.env`:
+
 ```bash
 # Route OpenAI requests through Gateway
 OPENAI_API_KEY=msk_your_gateway_api_key
@@ -116,11 +119,13 @@ OPENAI_BASE_URL=https://server.mastra.ai/v1
 **Important:** Use your Gateway API key (starts with `msk_`), not an OpenAI key.
 
 ### 2. Verify TypeScript Compiles
+
 ```bash
 pnpm tsc --noEmit
 ```
 
 ### 3. Start Dev Server
+
 ```bash
 pnpm dev
 ```
@@ -144,10 +149,10 @@ Before proceeding to Test 8 scenarios:
 
 ## Common Issues
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| Interactive prompt appears | Missing `-l` flag | Use `-l openai` |
-| Memory import fails | Package not installed | `pnpm add @mastra/memory` |
-| Agent not in Studio | Not registered in index.ts | Add to `agents` object |
-| TypeScript errors | Type mismatch | Run `pnpm tsc --noEmit` to see errors |
-| Gateway 401 | Wrong API key | Use `msk_` key, not `sk-` |
+| Issue                      | Cause                      | Fix                                   |
+| -------------------------- | -------------------------- | ------------------------------------- |
+| Interactive prompt appears | Missing `-l` flag          | Use `-l openai`                       |
+| Memory import fails        | Package not installed      | `pnpm add @mastra/memory`             |
+| Agent not in Studio        | Not registered in index.ts | Add to `agents` object                |
+| TypeScript errors          | Type mismatch              | Run `pnpm tsc --noEmit` to see errors |
+| Gateway 401                | Wrong API key              | Use `msk_` key, not `sk-`             |
