@@ -173,9 +173,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       container.addChild(new Spacer(1));
       container.addChild(detailText);
       container.addChild(new Spacer(1));
-      container.addChild(
-        new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0),
-      );
+      container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0));
       updateDetail(currentSelection);
       ctx.state.ui.requestRender();
     };
@@ -209,9 +207,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     container.addChild(new Spacer(1));
     container.addChild(detailText);
     container.addChild(new Spacer(1));
-    container.addChild(
-      new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0),
-    );
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0));
 
     updateDetail(providers[0]!.provider);
 
