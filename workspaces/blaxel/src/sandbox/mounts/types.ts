@@ -58,6 +58,32 @@ export function validateEndpoint(endpoint: string): void {
 }
 
 /**
+ * Validate and normalize a mount prefix before interpolating into shell commands.
+ * Returns the normalized prefix (no leading/trailing slashes).
+ */
+const SAFE_PREFIX_PATH = /^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$/;
+
+export function validatePrefix(prefix: string): string {
+  // Trim leading/trailing slashes
+  let normalized = prefix;
+  while (normalized.startsWith('/')) normalized = normalized.slice(1);
+  while (normalized.endsWith('/')) normalized = normalized.slice(0, -1);
+
+  if (!normalized) {
+    throw new Error('Mount prefix cannot be empty after normalization.');
+  }
+  if (normalized.includes('//') || normalized.split('/').some(s => s === '.' || s === '..')) {
+    throw new Error(`Invalid mount prefix: "${prefix}". Path traversal is not allowed.`);
+  }
+  if (!SAFE_PREFIX_PATH.test(normalized)) {
+    throw new Error(
+      `Invalid mount prefix: "${prefix}". Must contain only alphanumeric characters, hyphens, dots, underscores, and forward slashes.`,
+    );
+  }
+  return normalized;
+}
+
+/**
  * Detected system package manager.
  */
 export type PackageManager = 'apt' | 'apk' | 'unknown';

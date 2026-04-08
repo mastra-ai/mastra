@@ -45,6 +45,12 @@ export interface S3MountConfig extends FilesystemMountConfig {
   secretAccessKey?: string;
   /** AWS session token for temporary credentials (SSO, AssumeRole, container credentials, etc.) */
   sessionToken?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax to scope the mount to a specific path.
+   * Leading/trailing slashes are normalized automatically.
+   */
+  prefix?: string;
   /** Mount as read-only */
   readOnly?: boolean;
 }
@@ -301,6 +307,10 @@ export class S3Filesystem extends MastraFilesystem {
       if (this.sessionToken) {
         config.sessionToken = this.sessionToken;
       }
+    }
+
+    if (this.prefix) {
+      config.prefix = this.prefix;
     }
 
     if (this.readOnly) {
