@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { SelectedToolList } from './selected-tool-list';
 import { ToolList } from './tool-list';
-import { ToolkitList } from './toolkit-list';
+import { SELECTED_TOOLKIT_SENTINEL, ToolkitList } from './toolkit-list';
 import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 
@@ -83,18 +84,27 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
               providerId={provider.id}
               selectedToolkit={selectedToolkit}
               onSelectToolkit={setSelectedToolkit}
+              selectedCount={localSelection.size}
             />
           )}
         </div>
 
         <div className="overflow-hidden">
-          {provider && (
-            <ToolList
+          {provider && selectedToolkit === SELECTED_TOOLKIT_SENTINEL ? (
+            <SelectedToolList
               providerId={provider.id}
-              toolkit={selectedToolkit}
-              selectedIds={selectedIdSet}
+              selectedTools={localSelection}
               onToggle={onSubmit ? handleToggle : undefined}
             />
+          ) : (
+            provider && (
+              <ToolList
+                providerId={provider.id}
+                toolkit={selectedToolkit}
+                selectedIds={selectedIdSet}
+                onToggle={onSubmit ? handleToggle : undefined}
+              />
+            )
           )}
         </div>
       </div>
