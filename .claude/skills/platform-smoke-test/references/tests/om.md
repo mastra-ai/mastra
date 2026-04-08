@@ -21,7 +21,7 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 | 4. OM Threshold Settings | ✅ | Settings page check |
 | 5. Multi-Model OM | ✅ | Cross-provider test |
 | 6. Message Buffering (Flood) | ✅ | Concurrency test |
-| 7. Token Explosion (Intensive) | ✅ **CRITICAL** | Run ALL 30 prompts |
+| 7. Long Conversation (30 prompts) | ✅ Required | Run ALL 30 prompts |
 | 8. Local + Gateway OM | ✅ **CRITICAL** | Run ALL scenarios (8a-8f) |
 
 **Your job is to:**
@@ -152,11 +152,11 @@ echo "All requests sent"
 - [ ] Check Logs page for request order and status
 - [ ] Check thread for message integrity
 
-### 7. Token Explosion Test (Intensive) — CRITICAL, DO NOT SKIP
+### 7. Long Conversation Test (30 Prompts)
 
 **Run ALL 30 prompts to completion. Do not stop early unless an error occurs.**
 
-This test generates a high-token conversation. Each prompt is designed to produce detailed responses.
+This tests Gateway behavior over a long conversation with ~25k tokens. Note: This does NOT trigger OM (threshold is 30k). Test 8 is required to test OM activation.
 
 ```bash
 THREAD_ID="om-explosion-$(date +%s)"
@@ -195,7 +195,7 @@ PROMPTS=(
   "Explain WebSocket protocol and real-time bidirectional communication"
 )
 
-echo "Starting intensive token explosion test with ${#PROMPTS[@]} detailed prompts"
+echo "Starting long conversation test with ${#PROMPTS[@]} detailed prompts"
 echo "Thread ID: $THREAD_ID"
 echo ""
 
@@ -231,15 +231,23 @@ echo "Test complete. Check Logs page for full token breakdown."
 ```
 
 **What to record:**
-- [ ] Token progression - does prompt_tokens grow linearly or plateau?
-- [ ] Cache behavior - any sudden drops in cache_read_tokens? (may indicate observations activated)
-- [ ] Any "Message too long" errors
-- [ ] Final prompt_tokens count
-- [ ] Check Settings → OM Thresholds to see if you approached/exceeded them
+- [ ] Token progression - linear growth is normal at this level
+- [ ] Cache behavior (cache_read_tokens)
+- [ ] Final prompt_tokens count (likely ~25k, below OM threshold)
+- [ ] Any errors
+
+**Note:** This test stays below the 30k OM threshold, so no OM activation is expected. Test 8 is designed to trigger OM.
 
 ### 8. Local + Gateway OM Test — CRITICAL, DO NOT SKIP
 
-**Run ALL scenarios (8a-8f). Do not skip any.**
+**Goal: Test local agent + Gateway OM interaction at high token counts.**
+
+This tests what happens when:
+1. A local Mastra agent has OM enabled
+2. Requests route through Gateway (which also has OM)
+3. Conversation reaches ~30k+ tokens (OM activation threshold)
+
+Run ALL scenarios (8a-8f). Do not skip any.
 
 ---
 
@@ -275,22 +283,34 @@ Test the `memory-agent` (no local OM):
 
 ---
 
-#### 8c. Local OM + Gateway OM
+#### 8c. Local OM + Gateway OM (Intensive)
 
-Test the `om-agent` (local OM enabled):
+Test the `om-agent` (local OM enabled) with enough tokens to reach the OM threshold.
+
+**Strategy:** Use detailed prompts + tool calls to accumulate tokens faster.
 
 1. Select `om-agent` in local Studio
-2. Send 15+ messages in sequence (try to build up tokens)
-3. Check Gateway dashboard:
-   - [ ] Note thread state
-   - [ ] Note message count vs what you sent
-   - [ ] Note token counts in Logs
-   - [ ] Note any unusual jumps in token counts
+2. Send prompts that generate long responses AND use tools:
+   - "Read the contents of package.json and explain each dependency"
+   - "List all files in src/ and describe what each one does"
+   - "Read tsconfig.json and explain each compiler option"
+   - "Search for all imports in the codebase and summarize"
+   - Continue with detailed questions about what you read
+3. **Keep going until you reach ~30k+ tokens** (check Logs page for token counts)
+4. After reaching threshold, send 5 more messages
+
+**Check Gateway dashboard:**
+- [ ] Note thread state
+- [ ] Note message count vs what you sent
+- [ ] Note token counts in Logs
+- [ ] Note cache behavior changes
+- [ ] Note any sudden jumps or drops in token counts
 
 **What to record:**
-- Whether message count matches
-- Token progression pattern
-- Any errors
+- Token progression (especially around 30k)
+- Message count comparison (local vs Gateway)
+- Any errors ("Message too long", etc.)
+- Any unexpected behavior after hitting threshold
 
 ---
 
@@ -383,19 +403,24 @@ npx tsx test-mastracode.ts
 
 ---
 
-#### 8f. Long Conversation via Local Agent
+#### 8f. Long Conversation via Local Agent (30k+ tokens)
 
-Use the `om-agent` and send 30+ messages to try to trigger OM thresholds:
+Use `om-agent` to build up a conversation that exceeds the OM threshold.
 
 1. Select `om-agent` in local Studio
-2. Use the same detailed prompts from Test 7 (Token Explosion)
-3. Send at least 20 of them through the local agent
+2. **Combine tool usage with detailed prompts:**
+   - Ask it to read files and explain them in detail
+   - Ask follow-up questions referencing earlier context
+   - Request code analysis, refactoring suggestions, documentation
+3. **Monitor token count in Gateway Logs** - aim for 30k+
+4. After passing 30k, send 10 more messages and observe behavior
 
 **What to record:**
-- [ ] Token progression
-- [ ] Any sudden changes in behavior
-- [ ] Any errors ("Message too long", etc.)
-- [ ] Gateway Logs token breakdown
+- [ ] Token progression before and after 30k
+- [ ] Message count (local vs Gateway dashboard)
+- [ ] Cache behavior changes
+- [ ] Any errors
+- [ ] Any changes in response behavior
 
 ---
 
@@ -423,9 +448,9 @@ For each test, note:
 | Settings | OM threshold values displayed |
 | Multi-model | Whether context persists across providers |
 | Flood test | Success/failure counts, any buffering behavior |
-| Token explosion (30 prompts) | Token progression, cache behavior, any errors |
+| Long conversation (30 prompts) | Token progression (~25k), cache behavior |
 | 8b: Memory-only baseline | Token progression, thread state |
-| 8c: Local OM + Gateway | Message count match, token jumps, errors |
+| 8c: Local OM + Gateway (intensive) | Behavior at 30k+ tokens, message count, cache changes |
 | 8d: Full history replay | How Gateway handles full history send |
 | 8e: MastraCode integration | Token progression, Gateway Logs |
-| 8f: Long conversation local | Behavior over 30+ messages |
+| 8f: Long conversation local (30k+) | Behavior before/after threshold, message count |
