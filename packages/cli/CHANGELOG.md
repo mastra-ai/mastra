@@ -1,5 +1,17 @@
 # mastra
 
+## 1.5.0-alpha.1
+
+### Minor Changes
+
+- Added `mastra server env` CLI commands for managing environment variables on deployed servers. New subcommands: `list`, `set`, `unset`, and `import` allow pushing env vars to production without using the UI. ([#15159](https://github.com/mastra-ai/mastra/pull/15159))
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+  - @mastra/deployer@1.24.1-alpha.0
+
 ## 1.4.2-alpha.0
 
 ### Patch Changes

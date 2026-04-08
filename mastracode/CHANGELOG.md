@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- Added collapsible output for shell passthrough (! commands). Output now defaults to 20 lines with Ctrl+E to expand/collapse, matching the existing tool call output behavior. ([#15092](https://github.com/mastra-ai/mastra/pull/15092))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+
 ## 0.12.1
 
 ### Patch Changes
