@@ -89,7 +89,7 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 
 ## Browser Actions
 
-```
+```text
 Navigate to: /observability
 Wait: For traces to load
 Verify: At least one trace visible

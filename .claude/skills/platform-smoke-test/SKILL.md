@@ -136,7 +136,7 @@ curl -X POST "$API_URL/v1/chat/completions" \
 
 After testing, provide:
 
-```
+```md
 ## Platform Smoke Test Results
 
 **Environment**: staging/production

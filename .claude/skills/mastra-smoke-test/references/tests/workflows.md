@@ -20,7 +20,7 @@ Verify workflows page loads and workflow execution works.
 
 ### 3. Execute Workflow
 
-- [ ] Enter required input (e.g., "Berlin" for city)
+- [ ] Enter the required input (e.g., "Berlin" for city)
 - [ ] Click "Run" or "Execute"
 - [ ] Wait for workflow to complete
 
@@ -56,7 +56,7 @@ Verify workflows page loads and workflow execution works.
 
 ## Browser Actions
 
-```
+```text
 Navigate to: /workflows
 Click: First workflow in list
 Type in input (if required): "Berlin"

@@ -108,7 +108,7 @@ smoke test --env production --existing-project ~/my-app --test studio,server,tra
 
 ## Quick Start Flow
 
-```
+```text
 1. Setup      → Read references/tests/setup.md, create/verify project
 2. Start      → `pnpm run dev` (local) or deploy (cloud)
 3. Test       → For each test, read its reference file and execute
@@ -139,7 +139,7 @@ smoke test --env production --existing-project ~/my-app --test studio,server,tra
 
 After testing, provide:
 
-```
+```md
 ## Smoke Test Results
 
 **Environment**: local/staging/production
@@ -154,5 +154,5 @@ After testing, provide:
 
 **Issues Found**: (list any)
 **Warnings**: (list any deploy/runtime warnings)
-**Skipped Tests**: (list with reason - e.g., "RBAC - requires multiple accounts")
+**Skipped Tests**: (list with reason - e.g., "Server Deploy - not applicable in local environment")
 ```
