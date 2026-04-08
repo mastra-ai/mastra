@@ -1169,6 +1169,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           retryCount: retryCount + 1,
+          perStep,
+          state: currentState,
+          outputOptions,
         },
         {
           pubsub: this.mastra.pubsub,

@@ -60,6 +60,32 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  // Accumulate iteration history so all iteration results are preserved in metadata.iterations
+  const existingIterations = (stepResults[step.step?.id]?.metadata as any)?.iterations ?? [];
+  const currentIteration = {
+    iterationIndex: prevIterationCount,
+    output: (stepResult as any)?.output,
+    status: stepResult?.status,
+    startedAt: (stepResult as any)?.startedAt,
+    endedAt: (stepResult as any)?.endedAt,
+  };
+  const iterations = [...existingIterations, currentIteration];
+
+  const updatedStepResult = {
+    ...stepResult,
+    metadata: {
+      ...(stepResult as any)?.metadata,
+      iterationCount,
+      iterations,
+    },
+  };
+
+  const updatedStepResults = {
+    ...stepResults,
+    [step.step.id]: updatedStepResult,
+    __state: currentState,
+  };
+
   if (step.loopType === 'dountil') {
     if (loopCondition) {
       await pubsub.publish('workflows', {
@@ -71,8 +97,8 @@ export async function processWorkflowLoop(
           runId,
           executionPath,
           resumeSteps,
-          stepResults,
-          prevResult: stepResult,
+          stepResults: updatedStepResults,
+          prevResult: updatedStepResult,
           resumeData,
           activeSteps,
           requestContext,
@@ -91,10 +117,10 @@ export async function processWorkflowLoop(
           runId,
           executionPath,
           resumeSteps,
-          stepResults,
+          stepResults: updatedStepResults,
           state: currentState,
           outputOptions,
-          prevResult: stepResult,
+          prevResult: updatedStepResult,
           resumeData,
           activeSteps,
           requestContext,
@@ -114,8 +140,8 @@ export async function processWorkflowLoop(
           runId,
           executionPath,
           resumeSteps,
-          stepResults,
-          prevResult: stepResult,
+          stepResults: updatedStepResults,
+          prevResult: updatedStepResult,
           resumeData,
           activeSteps,
           requestContext,
@@ -135,8 +161,8 @@ export async function processWorkflowLoop(
           runId,
           executionPath,
           resumeSteps,
-          stepResults,
-          prevResult: stepResult,
+          stepResults: updatedStepResults,
+          prevResult: updatedStepResult,
           resumeData,
           activeSteps,
           requestContext,

@@ -263,6 +263,86 @@ export function createLoopsWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should preserve all iteration states in metadata.iterations
+  {
+    mockRegistry.register('loops-iteration-history:counter', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        const currentValue = inputData.value ?? 0;
+        return { value: currentValue + 1 };
+      }),
+    );
+
+    const counterStep = createStep({
+      id: 'counter',
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('loops-iteration-history:counter')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'loops-iteration-history',
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow
+      .dountil(counterStep, async ({ inputData }) => {
+        return (inputData?.value ?? 0) >= 4;
+      })
+      .commit();
+
+    workflows['loops-iteration-history'] = {
+      workflow,
+      mocks: {
+        get counter() {
+          return mockRegistry.get('loops-iteration-history:counter');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should preserve iteration states in dowhile loops
+  {
+    mockRegistry.register('loops-while-iteration-history:counter', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        const currentValue = inputData.value ?? 0;
+        return { value: currentValue + 1 };
+      }),
+    );
+
+    const counterStep = createStep({
+      id: 'counter',
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('loops-while-iteration-history:counter')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'loops-while-iteration-history',
+      inputSchema: z.object({ value: z.number().optional() }),
+      outputSchema: z.object({ value: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow
+      .dowhile(counterStep, async ({ inputData }) => {
+        return (inputData?.value ?? 0) < 4;
+      })
+      .commit();
+
+    workflows['loops-while-iteration-history'] = {
+      workflow,
+      mocks: {
+        get counter() {
+          return mockRegistry.get('loops-while-iteration-history:counter');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -331,6 +411,52 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.result?.count).toBe(3);
       // @ts-expect-error - result type
       expect(result.result?.items).toEqual(['item-1', 'item-2', 'item-3']);
+    });
+
+    it('should preserve all dountil iteration states in metadata.iterations', async () => {
+      const { workflow, resetMocks } = registry!['loops-iteration-history']!;
+      resetMocks?.();
+
+      const result = await execute(workflow, { value: 0 });
+
+      expect(result.status).toBe('success');
+      // Loop runs 4 times: value goes 0→1→2→3→4, exits when >= 4
+      expect((result.steps.counter as any).output).toEqual({ value: 4 });
+
+      // Verify iteration history is preserved in metadata
+      const metadata = (result.steps.counter as any).metadata;
+      expect(metadata).toBeDefined();
+      expect(metadata.iterationCount).toBe(4);
+      expect(metadata.iterations).toHaveLength(4);
+
+      // Each iteration should have the correct output
+      expect(metadata.iterations[0]).toMatchObject({ iterationIndex: 0, output: { value: 1 }, status: 'success' });
+      expect(metadata.iterations[1]).toMatchObject({ iterationIndex: 1, output: { value: 2 }, status: 'success' });
+      expect(metadata.iterations[2]).toMatchObject({ iterationIndex: 2, output: { value: 3 }, status: 'success' });
+      expect(metadata.iterations[3]).toMatchObject({ iterationIndex: 3, output: { value: 4 }, status: 'success' });
+    });
+
+    it('should preserve all dowhile iteration states in metadata.iterations', async () => {
+      const { workflow, resetMocks } = registry!['loops-while-iteration-history']!;
+      resetMocks?.();
+
+      const result = await execute(workflow, { value: 0 });
+
+      expect(result.status).toBe('success');
+      // Loop runs 4 times: value goes 0→1→2→3→4, continues while < 4
+      expect((result.steps.counter as any).output).toEqual({ value: 4 });
+
+      // Verify iteration history is preserved in metadata
+      const metadata = (result.steps.counter as any).metadata;
+      expect(metadata).toBeDefined();
+      expect(metadata.iterationCount).toBe(4);
+      expect(metadata.iterations).toHaveLength(4);
+
+      // Each iteration should have the correct output
+      expect(metadata.iterations[0]).toMatchObject({ iterationIndex: 0, output: { value: 1 }, status: 'success' });
+      expect(metadata.iterations[1]).toMatchObject({ iterationIndex: 1, output: { value: 2 }, status: 'success' });
+      expect(metadata.iterations[2]).toMatchObject({ iterationIndex: 2, output: { value: 3 }, status: 'success' });
+      expect(metadata.iterations[3]).toMatchObject({ iterationIndex: 3, output: { value: 4 }, status: 'success' });
     });
   });
 }

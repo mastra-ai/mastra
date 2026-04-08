@@ -630,10 +630,29 @@ export async function executeLoop(
       perStep,
     });
 
+    // Preserve iteration history before Object.assign overwrites the step result
+    const existingIterations = (stepResults[step.id] as any)?.metadata?.iterations ?? [];
+
     // Apply context changes from loop step execution
     engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
     Object.assign(stepResults, stepExecResult.stepResults);
     result = stepExecResult.result;
+
+    // Accumulate iteration history so all iteration results are preserved in metadata.iterations
+    if (stepResults[step.id]) {
+      const currentIteration = {
+        iterationIndex: iteration,
+        output: (result as any)?.output,
+        status: result?.status,
+        startedAt: (result as any)?.startedAt,
+        endedAt: (result as any)?.endedAt,
+      };
+      (stepResults[step.id] as any).metadata = {
+        ...(stepResults[step.id] as any)?.metadata,
+        iterationCount: iteration + 1,
+        iterations: [...existingIterations, currentIteration],
+      };
+    }
 
     //Clear restart & time travel for next iteration
     currentRestart = undefined;
