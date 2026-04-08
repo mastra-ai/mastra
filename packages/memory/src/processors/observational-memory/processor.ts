@@ -96,6 +96,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       return messageList;
     }
 
+    // When the agent is using a Mastra gateway model, the gateway handles OM
+    // (observation, reflection, context injection) server-side. Running it
+    // locally would double-process messages and cause history duplication.
+    if (requestContext?.get('__mastra_gateway_memory')) {
+      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
+      return messageList;
+    }
+
     const { threadId, resourceId } = context;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
@@ -255,6 +263,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
+
+    // Gateway handles OM — skip local output processing (see processInputStep).
+    if (requestContext?.get('__mastra_gateway_memory')) return messageList;
 
     const observabilityContext = getOmObservabilityContext(args);
     state.__omObservabilityContext = observabilityContext;
