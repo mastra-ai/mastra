@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed message history doubling when using Observational Memory with the Mastra gateway. The local ObservationalMemoryProcessor now detects when the agent's model is routed through the Mastra gateway and skips its input/output processing, since the gateway handles OM server-side. ([#15161](https://github.com/mastra-ai/mastra/pull/15161))
+
 ## 1.15.0-alpha.1
 
 ### Patch Changes
