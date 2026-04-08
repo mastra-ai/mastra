@@ -93,10 +93,10 @@ If UI traces aren't appearing but you need to verify the trace pipeline:
 
 ### Mobs-Query URLs
 
-| Environment | URL                                              |
-| ----------- | ------------------------------------------------ |
-| Production  | `https://mobs-query-vgvrl5lbxq-uc.a.run.app`     |
-| Staging     | `https://mobs-query-pvyw2kfhjq-uc.a.run.app`     |
+| Environment | URL                                          |
+| ----------- | -------------------------------------------- |
+| Production  | `https://mobs-query-vgvrl5lbxq-uc.a.run.app` |
+| Staging     | `https://mobs-query-pvyw2kfhjq-uc.a.run.app` |
 
 ### Get Auth Token
 
@@ -104,8 +104,8 @@ Credentials are stored in `~/.mastra/credentials.json` after `mastra auth login`
 
 ```json
 {
-  "token": "eyJhbG...",           // Access token (5 min expiry)
-  "refreshToken": "eyJhbG...",    // Refresh token (long-lived)
+  "token": "eyJhbG...", // Access token (5 min expiry)
+  "refreshToken": "eyJhbG...", // Refresh token (long-lived)
   "user": { "id": "...", "email": "..." },
   "organizationId": "org_01KN...",
   "currentOrgId": "org_01KN..."

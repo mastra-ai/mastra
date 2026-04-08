@@ -8,11 +8,11 @@ Set up or verify a Mastra project for smoke testing.
 
 One project can target multiple environments using separate config files:
 
-| Environment | Config File                    | Platform API URL                       | Studio/Server Domain                    |
-| ----------- | ------------------------------ | -------------------------------------- | --------------------------------------- |
-| Local       | N/A (no deploy)                | N/A                                    | `localhost:4111`                        |
-| Staging     | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai`   | `*.studio.staging.mastra.cloud`         |
-| Production  | `.mastra-project.json`         | `https://platform.mastra.ai`           | `*.studio.mastra.cloud`                 |
+| Environment | Config File                    | Platform API URL                     | Studio/Server Domain            |
+| ----------- | ------------------------------ | ------------------------------------ | ------------------------------- |
+| Local       | N/A (no deploy)                | N/A                                  | `localhost:4111`                |
+| Staging     | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai` | `*.studio.staging.mastra.cloud` |
+| Production  | `.mastra-project.json`         | `https://platform.mastra.ai`         | `*.studio.mastra.cloud`         |
 
 - **Local** = Running your Mastra project with `pnpm dev` (no cloud deploy)
 - **Staging/Production** = Deploying to Mastra Cloud
