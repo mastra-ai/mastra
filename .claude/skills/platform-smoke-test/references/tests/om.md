@@ -15,17 +15,17 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 
 **ALL of these tests must be run. Do not skip any unless a hard blocker prevents it.**
 
-| Test                              | Required        | Notes                        |
-| --------------------------------- | --------------- | ---------------------------- |
-| 1. Extended Conversation          | ✅              | Baseline test                |
-| 2. Token Usage Analysis           | ✅              | Dashboard verification       |
-| 3. OM Token Tracking              | ✅              | Usage page check             |
-| 4. OM Threshold Settings          | ✅              | Settings page check          |
-| 5. Multi-Model OM                 | ✅              | Cross-provider test          |
-| 6. Message Buffering (Flood)      | ✅              | Concurrency test             |
-| 7. Long Conversation (30 prompts) | ✅ Required     | Run ALL 30 prompts           |
-| 8. Full History Replay            | ✅              | Tests stateless client       |
-| 9. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (9a-9f)    |
+| Test                              | Required        | Notes                     |
+| --------------------------------- | --------------- | ------------------------- |
+| 1. Extended Conversation          | ✅              | Baseline test             |
+| 2. Token Usage Analysis           | ✅              | Dashboard verification    |
+| 3. OM Token Tracking              | ✅              | Usage page check          |
+| 4. OM Threshold Settings          | ✅              | Settings page check       |
+| 5. Multi-Model OM                 | ✅              | Cross-provider test       |
+| 6. Message Buffering (Flood)      | ✅              | Concurrency test          |
+| 7. Long Conversation (30 prompts) | ✅ Required     | Run ALL 30 prompts        |
+| 8. Full History Replay            | ✅              | Tests stateless client    |
+| 9. Local + Gateway OM             | ✅ **CRITICAL** | Run ALL scenarios (9a-9f) |
 
 **Your job is to:**
 
@@ -323,6 +323,7 @@ Test MastraCode routing through Gateway with enough messages to trigger OM obser
 **How MastraCode routes to Gateway:**
 
 MastraCode only routes through Gateway when:
+
 1. `MASTRA_GATEWAY_API_KEY` is set, AND
 2. The model ID has a `mastra/` prefix (e.g., `mastra/openai/gpt-4o-mini`)
 
@@ -336,16 +337,16 @@ Create `test-mastracode-gateway.ts`:
 import { createMastraCode } from 'mastracode';
 
 // Set Gateway env vars BEFORE calling createMastraCode
-process.env.MASTRA_GATEWAY_API_KEY = 'msk_your_key_here';  // Replace with actual key
+process.env.MASTRA_GATEWAY_API_KEY = 'msk_your_key_here'; // Replace with actual key
 process.env.MASTRA_GATEWAY_URL = 'https://server.mastra.ai';
 
 async function test() {
   console.log('Creating MastraCode with Gateway routing...');
-  
+
   const { harness } = await createMastraCode({
     cwd: process.cwd(),
     initialState: {
-      currentModelId: 'mastra/openai/gpt-4o-mini',  // mastra/ prefix required!
+      currentModelId: 'mastra/openai/gpt-4o-mini', // mastra/ prefix required!
     },
   });
 
@@ -354,36 +355,36 @@ async function test() {
 
   // Send 30 detailed prompts to accumulate tokens toward OM threshold (~30k)
   const prompts = [
-    "Explain the history of TypeScript in detail, covering its origins and evolution",
-    "What are all the TypeScript compiler options? Explain each one",
-    "Compare TypeScript to JavaScript with detailed code examples",
-    "Explain TypeScript generics with complex real-world examples",
-    "What are mapped types in TypeScript? Give multiple examples",
-    "Explain conditional types in TypeScript with examples",
-    "What is type inference in TypeScript? How does it work?",
-    "Explain TypeScript decorators in detail with examples",
-    "List and explain all utility types in TypeScript",
-    "Explain the TypeScript module system comprehensively",
-    "What are declaration files in TypeScript? When do you need them?",
-    "Explain all strict mode options in TypeScript",
-    "What is structural typing in TypeScript? Compare to nominal typing",
-    "Explain TypeScript enums with examples of string and numeric enums",
-    "What are type guards in TypeScript? Show different approaches",
-    "Explain discriminated unions in TypeScript with examples",
+    'Explain the history of TypeScript in detail, covering its origins and evolution',
+    'What are all the TypeScript compiler options? Explain each one',
+    'Compare TypeScript to JavaScript with detailed code examples',
+    'Explain TypeScript generics with complex real-world examples',
+    'What are mapped types in TypeScript? Give multiple examples',
+    'Explain conditional types in TypeScript with examples',
+    'What is type inference in TypeScript? How does it work?',
+    'Explain TypeScript decorators in detail with examples',
+    'List and explain all utility types in TypeScript',
+    'Explain the TypeScript module system comprehensively',
+    'What are declaration files in TypeScript? When do you need them?',
+    'Explain all strict mode options in TypeScript',
+    'What is structural typing in TypeScript? Compare to nominal typing',
+    'Explain TypeScript enums with examples of string and numeric enums',
+    'What are type guards in TypeScript? Show different approaches',
+    'Explain discriminated unions in TypeScript with examples',
     "What is the 'infer' keyword in TypeScript? Give examples",
-    "Explain variance in TypeScript generics (covariance, contravariance)",
-    "What are template literal types in TypeScript?",
+    'Explain variance in TypeScript generics (covariance, contravariance)',
+    'What are template literal types in TypeScript?',
     "Explain the 'satisfies' operator in TypeScript",
-    "What are assertion functions in TypeScript?",
-    "Explain module augmentation in TypeScript",
-    "What is declaration merging in TypeScript?",
+    'What are assertion functions in TypeScript?',
+    'Explain module augmentation in TypeScript',
+    'What is declaration merging in TypeScript?',
     "Explain the 'const' assertion in TypeScript",
-    "What are branded types in TypeScript? How do you implement them?",
-    "Explain recursive types in TypeScript with examples",
+    'What are branded types in TypeScript? How do you implement them?',
+    'Explain recursive types in TypeScript with examples',
     "What is the 'never' type in TypeScript? When is it useful?",
-    "Explain index signatures in TypeScript",
-    "What are type predicates in TypeScript?",
-    "Summarize everything we discussed about TypeScript",
+    'Explain index signatures in TypeScript',
+    'What are type predicates in TypeScript?',
+    'Summarize everything we discussed about TypeScript',
   ];
 
   for (let i = 0; i < prompts.length; i++) {
@@ -470,18 +471,18 @@ For each test, note:
 - Dashboard UI behavior (Logs, Usage, Settings pages)
 - Thread integrity (messages in correct order, no duplicates)
 
-| Test                           | What to Record                                       |
-| ------------------------------ | ---------------------------------------------------- |
-| Extended conversation          | Token progression across 12 messages                 |
-| Token usage analysis           | Breakdown visible in Logs page                       |
-| OM tracking                    | Whether "Memory Tokens" appears in Usage             |
-| Settings                       | OM threshold values displayed                        |
-| Multi-model                    | Whether context persists across providers            |
-| Flood test                     | Success/failure counts, any buffering behavior       |
-| Long conversation (30 prompts) | Token progression (~25k), cache behavior             |
-| Full history replay            | How Gateway handles full history send                |
-| 9b: Gateway routing            | Whether local requests appear in Gateway Logs        |
-| 9c: Memory-only baseline       | Token progression, thread state                      |
-| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes  |
-| 9e: MastraCode + Gateway       | Token progression across 30 prompts, OM activation   |
-| 9f: History replay via local   | Message deduplication, comparison with Test 8        |
+| Test                           | What to Record                                      |
+| ------------------------------ | --------------------------------------------------- |
+| Extended conversation          | Token progression across 12 messages                |
+| Token usage analysis           | Breakdown visible in Logs page                      |
+| OM tracking                    | Whether "Memory Tokens" appears in Usage            |
+| Settings                       | OM threshold values displayed                       |
+| Multi-model                    | Whether context persists across providers           |
+| Flood test                     | Success/failure counts, any buffering behavior      |
+| Long conversation (30 prompts) | Token progression (~25k), cache behavior            |
+| Full history replay            | How Gateway handles full history send               |
+| 9b: Gateway routing            | Whether local requests appear in Gateway Logs       |
+| 9c: Memory-only baseline       | Token progression, thread state                     |
+| 9d: Local OM + Gateway (30k+)  | Behavior at threshold, message count, cache changes |
+| 9e: MastraCode + Gateway       | Token progression across 30 prompts, OM activation  |
+| 9f: History replay via local   | Message deduplication, comparison with Test 8       |
