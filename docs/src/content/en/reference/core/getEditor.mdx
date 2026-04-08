@@ -1,0 +1,51 @@
+---
+title: "Reference: Mastra.getEditor() | Core"
+description: "Documentation for the `Mastra.getEditor()` method in Mastra, which retrieves the configured editor instance."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Mastra.getEditor()
+
+The `.getEditor()` method is used to retrieve the editor instance that has been configured on the Mastra instance. The editor exposes CRUD namespaces for managing stored agents, prompt blocks, MCP clients, scorers, skills, and workspaces programmatically.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+const mastra = new Mastra({
+  editor: new MastraEditor(),
+})
+
+const editor = mastra.getEditor()
+
+const agent = await editor?.agent.create({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help customers with their questions.',
+})
+```
+
+## Parameters
+
+This method doesn't accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'editor',
+    type: 'MastraEditor | undefined',
+    description: 'The configured editor instance, or undefined if no editor has been configured.',
+  },
+]}
+/>
+
+## Related
+
+- [Editor overview](/docs/editor/overview)
+- [MastraEditor reference](/reference/editor/mastra-editor)

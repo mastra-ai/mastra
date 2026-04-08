@@ -69,6 +69,76 @@ Go to the **Agents** tab in Studio and select an agent to edit. Select the **Edi
 
 Modify the system prompt and save a new draft version. Afterwards, publish the draft to make it the active version.
 
+## Programmatic control
+
+Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
+
+Call `mastra.getEditor()` from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
+
+```typescript title="src/scripts/seed-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()
+if (!editor) throw new Error('Editor is not registered on Mastra')
+
+// Create a stored agent override for an existing code-defined agent
+await editor.agent.create({
+  id: 'support-agent',
+  instructions: 'You are a friendly support agent for Acme Inc.',
+  tools: {
+    search_kb: { description: 'Search the Acme knowledge base' },
+  },
+})
+```
+
+Use `editor.agent.update()` to change an existing stored configuration. Every update creates a new draft version automatically:
+
+```typescript title="src/scripts/update-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions:
+    "You are a friendly support agent for Acme Inc. Always respond in the user's language.",
+})
+```
+
+The `editor.agent` namespace also exposes `getById`, `list`, `listResolved`, and `delete`. The `editor.prompt` namespace exposes the same CRUD methods for prompt blocks. See [Prompts](/docs/editor/prompts#programmatic-control) for examples.
+
+### Server endpoints
+
+The same operations are available over HTTP through the Mastra server. Use these when you want to manage stored agents from a separate service or from a non-TypeScript client:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/agents` | List all stored agents. |
+| `POST` | `/stored/agents` | Create a stored agent. |
+| `GET` | `/stored/agents/:storedAgentId` | Get a stored agent by ID. |
+| `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
+| `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
+
+The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
+
+### Automated experimentation
+
+Because stored agents are just data, you can build automation loops that tune agents without human involvement. A common pattern is to pair the editor API with [datasets](/docs/evals/datasets/overview) and [experiments](/docs/evals/datasets/running-experiments):
+
+- Run a dataset through the current version of an agent and score the results.
+- Have another agent read the failing cases and propose changes to the instructions or tools.
+- Apply those changes with `editor.agent.update()` to create a new draft.
+- Re-run the experiment against the draft and compare scores to the baseline.
+- Promote the draft to the published version when the scores improve.
+
+This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested.
+
+:::note
+
+See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
+
+:::
+
 ## What can be overridden
 
 When you edit a code-defined agent through the editor, only specific fields can be changed:
