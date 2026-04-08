@@ -297,10 +297,11 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     score: s.score,
     reason: s.reason ?? null,
     ...correlationFields,
+    entityType: correlationFields.entityType ?? s.targetEntityType ?? null,
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.metadata ?? null,
+    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
   };
 }
 

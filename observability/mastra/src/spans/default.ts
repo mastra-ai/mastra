@@ -85,7 +85,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     const { error, endSpan = true, attributes, metadata } = options;
 
-    this.errorInfo =
+    this.errorInfo = deepClean(
       error instanceof MastraError
         ? {
             id: error.id,
@@ -93,10 +93,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
             category: error.category,
             domain: error.domain,
             message: error.message,
+            name: error.name,
+            stack: error.stack,
           }
         : {
             message: error.message,
-          };
+            name: error.name,
+            stack: error.stack,
+          },
+      this.deepCleanOptions,
+    );
 
     // Update attributes if provided
     if (attributes) {

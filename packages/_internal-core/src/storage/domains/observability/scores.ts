@@ -10,6 +10,7 @@ import {
   experimentIdField,
   contextFields,
   dimensionsField,
+  entityTypeField,
   groupBySchema,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -26,8 +27,9 @@ import {
 // ============================================================================
 
 const scorerIdField = z.string().describe('Identifier of the scorer (e.g., relevance, accuracy)');
+const scorerNameField = z.string().describe('Display name of the scorer');
 const scorerVersionField = z.string().describe('Version of the scorer');
-const scoreSourceField = z.string().describe('Source of the score (e.g., manual, automated, experiment)');
+const scoreSourceField = z.string().describe('How the score was produced (e.g., manual, automated, experiment)');
 const scoreValueField = z.number().describe('Score value (range defined by scorer)');
 const scoreReasonField = z.string().describe('Explanation for the score');
 
@@ -44,11 +46,12 @@ export const scoreRecordSchema = z
     timestamp: z.date().describe('When the score was recorded'),
 
     // Target
-    traceId: traceIdField,
+    traceId: traceIdField.nullish().describe('Trace that anchors the scored target when available'),
     spanId: spanIdField.nullish().describe('Span ID this score applies to'),
 
     // Score data
     scorerId: scorerIdField,
+    scorerName: scorerNameField.nullish(),
     scorerVersion: scorerVersionField.nullish(),
     scoreSource: scoreSourceField.nullish(),
     /**
@@ -83,6 +86,7 @@ export type ScoreRecord = z.infer<typeof scoreRecordSchema>;
 export const scoreInputSchema = z
   .object({
     scorerId: scorerIdField,
+    scorerName: scorerNameField.optional(),
     scorerVersion: scorerVersionField.optional(),
     scoreSource: scoreSourceField.optional(),
     /**
@@ -94,6 +98,7 @@ export const scoreInputSchema = z
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional scorer-specific metadata'),
     experimentId: experimentIdField.optional(),
     scoreTraceId: z.string().optional().describe('Trace ID of the scoring run for debugging score generation'),
+    targetEntityType: entityTypeField.optional().describe('Entity type the scorer evaluated when known'),
   })
   .describe('User-provided score input');
 
@@ -160,11 +165,11 @@ export const scoresFilterSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Filter by scorer ID(s)'),
-    scoreSource: scoreSourceField.optional().describe('Filter by score source'),
+    scoreSource: scoreSourceField.optional().describe('Filter by how the score was produced'),
     /**
      * @deprecated Use `scoreSource` instead.
      */
-    source: scoreSourceField.optional().describe('Filter by score source'),
+    source: scoreSourceField.optional().describe('Filter by how the score was produced'),
   })
   .describe('Filters for querying scores');
 

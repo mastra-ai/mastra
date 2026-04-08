@@ -48,6 +48,7 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
+import { gatewayAgent } from './agents/gateway';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -66,6 +67,7 @@ const storage = new MastraCompositeStore({
 
 const config = {
   agents: {
+    gatewayAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -112,10 +114,10 @@ const config = {
     sourcemap: true,
   },
   editor: new MastraEditor(),
-  // server: {
-  //   auth: mastraAuth,
-  //   rbac: rbacProvider,
-  // },
+  server: {
+    auth: mastraAuth,
+    rbac: rbacProvider,
+  },
 };
 
 export const mastra = new Mastra({

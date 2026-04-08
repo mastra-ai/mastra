@@ -211,6 +211,9 @@ describe('Standalone observe() method', () => {
 
       expect(onObservationStart).toHaveBeenCalledOnce();
       expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
 
     it('should NOT call hooks when threshold is not met', async () => {
@@ -323,6 +326,9 @@ describe('Standalone observe() method', () => {
 
       expect(onObservationStart).toHaveBeenCalledOnce();
       expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
   });
 

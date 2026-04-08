@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
-    "test:client": "vitest run ./src/client/client.test.ts",
+    "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",

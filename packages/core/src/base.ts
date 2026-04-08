@@ -44,7 +44,10 @@ export class MastraBase {
    * @param logger
    */
   __setLogger(logger: IMastraLogger) {
-    this.logger = logger;
+    this.logger =
+      'child' in logger && typeof (logger as any).child === 'function'
+        ? (logger as any).child({ component: this.component })
+        : logger;
   }
 }
 

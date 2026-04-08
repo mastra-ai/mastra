@@ -2947,6 +2947,7 @@ export class Run<
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
+      entityName: this.workflowId,
       input: inputData,
       metadata: {
         resourceId: this.resourceId,
@@ -3723,6 +3724,7 @@ export class Run<
       name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
+      entityName: this.workflowId,
       input: resumeDataToUse,
       metadata: {
         resourceId: this.resourceId,
@@ -3862,6 +3864,7 @@ export class Run<
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
+      entityName: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3996,6 +3999,7 @@ export class Run<
       input: inputData,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
+      entityName: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,

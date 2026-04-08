@@ -21,11 +21,13 @@ import {
   useEnvironments,
   useServiceNames,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 
 import { BookIcon, EyeIcon } from 'lucide-react';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
@@ -203,11 +205,23 @@ export default function Observability() {
     return result;
   }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
 
-  // Sync URL traceId to state
-  if (traceId && traceId !== selectedTraceId) {
-    setSelectedTraceId(traceId);
-    setDialogIsOpen(true);
-  }
+  useEffect(() => {
+    if (traceId) {
+      if (traceId !== selectedTraceId) {
+        setSelectedTraceId(traceId);
+      }
+      setDialogIsOpen(true);
+      return;
+    }
+
+    if (selectedTraceId) {
+      setSelectedTraceId(undefined);
+    }
+
+    if (dialogIsOpen) {
+      setDialogIsOpen(false);
+    }
+  }, [dialogIsOpen, selectedTraceId, traceId]);
 
   const agentOptions: EntityOptions[] = useMemo(
     () =>
@@ -274,10 +288,11 @@ export default function Observability() {
 
   const handleTraceClick = (id: string) => {
     if (id === selectedTraceId) {
-      return setSelectedTraceId(undefined);
+      void navigate('/observability');
+      return;
     }
-    setSelectedTraceId(id);
-    setDialogIsOpen(true);
+
+    void navigate(`/observability?traceId=${encodeURIComponent(id)}`);
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
@@ -298,6 +313,39 @@ export default function Observability() {
     }
     return ordered;
   }, [traces, groupByThread]);
+
+  // 401 check - session expired, needs re-authentication
+  if (TracesError && is401UnauthorizedError(TracesError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <EyeIcon /> Observability
+              </MainHeader.Title>
+              <MainHeader.Description>Explore observability traces for your entities</MainHeader.Description>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Observability documentation"
+                tooltipContent="Go to Observability documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
 
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {

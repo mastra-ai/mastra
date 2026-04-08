@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   useEvaluationScorers,
   useEvaluationDatasets,
@@ -12,25 +12,38 @@ import { EvaluationExperimentsList } from './evaluation-experiments-list';
 import { EvaluationKpiCards } from './evaluation-kpi-cards';
 import { EvaluationScorersList } from './evaluation-scorers-list';
 import { ExperimentStatusCard } from './experiment-status-card';
-
 import { ReviewPipelineCard } from './review-pipeline-card';
 import { ScoresOverTimeCard } from './scores-over-time-card';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
-import { useLinkComponent } from '@/lib/framework';
 
 export type EvaluationTab = 'overview' | 'scorers' | 'datasets' | 'experiments';
 
 interface EvaluationDashboardProps {
   activeTab?: EvaluationTab;
   defaultTab?: EvaluationTab;
-  onDatasetCreated?: (datasetId: string) => void;
+  scorerSearch?: string;
+  scorerSourceFilter?: string;
+  datasetSearch?: string;
+  datasetTargetFilter?: string;
+  datasetExperimentFilter?: string;
+  datasetTagFilter?: string;
+  experimentSearch?: string;
+  experimentStatusFilter?: string;
+  experimentDatasetFilter?: string;
 }
 
 export function EvaluationDashboard({
   activeTab,
   defaultTab = 'overview',
-  onDatasetCreated,
+  scorerSearch,
+  scorerSourceFilter,
+  datasetSearch,
+  datasetTargetFilter,
+  datasetExperimentFilter,
+  datasetTagFilter,
+  experimentSearch,
+  experimentStatusFilter,
+  experimentDatasetFilter,
 }: EvaluationDashboardProps) {
   const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useEvaluationScorers();
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useEvaluationDatasets();
@@ -42,13 +55,9 @@ export function EvaluationDashboard({
   const { data: scoreMetrics, isLoading: isLoadingScores, isError: isErrorScores } = useEvaluationScoreMetrics();
   const { data: reviewSummary, isLoading: isLoadingReview, isError: errorReview } = useReviewSummary();
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const { navigate, paths } = useLinkComponent();
-
   const datasets = datasetsData?.datasets;
   const experiments = experimentsData?.experiments;
 
-  // Build maps for review counts by experiment and dataset
   const reviewByExperiment = useMemo(() => {
     const map = new Map<string, { needsReview: number; complete: number; total: number }>();
     if (!reviewSummary?.counts) return map;
@@ -86,15 +95,6 @@ export function EvaluationDashboard({
     );
   }, [reviewSummary]);
 
-  const handleDatasetCreated = (datasetId: string) => {
-    setIsCreateDialogOpen(false);
-    if (onDatasetCreated) {
-      onDatasetCreated(datasetId);
-    } else {
-      navigate(paths.datasetLink(datasetId));
-    }
-  };
-
   const tab = activeTab ?? defaultTab;
 
   return (
@@ -124,7 +124,7 @@ export function EvaluationDashboard({
             isLoading={isLoadingScores}
             isError={isErrorScores}
           />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <DatasetHealthCard
               experiments={experiments}
               isLoading={isLoadingExperiments}
@@ -148,25 +148,27 @@ export function EvaluationDashboard({
       )}
 
       {tab === 'scorers' && (
-        <EvaluationScorersList scorers={scorers ?? {}} isLoading={isLoadingScorers} error={errorScorers} />
+        <EvaluationScorersList
+          scorers={scorers ?? {}}
+          isLoading={isLoadingScorers}
+          error={errorScorers}
+          search={scorerSearch}
+          sourceFilter={scorerSourceFilter}
+        />
       )}
 
       {tab === 'datasets' && (
-        <>
-          <EvaluationDatasetsList
-            datasets={datasets ?? []}
-            experiments={experiments ?? []}
-            reviewByDataset={reviewByDataset}
-            isLoading={isLoadingDatasets || isLoadingExperiments}
-            error={errorDatasets}
-            onCreateClick={() => setIsCreateDialogOpen(true)}
-          />
-          <CreateDatasetDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-            onSuccess={handleDatasetCreated}
-          />
-        </>
+        <EvaluationDatasetsList
+          datasets={datasets ?? []}
+          experiments={experiments ?? []}
+          reviewByDataset={reviewByDataset}
+          isLoading={isLoadingDatasets || isLoadingExperiments}
+          error={errorDatasets ?? errorExperiments}
+          search={datasetSearch}
+          targetFilter={datasetTargetFilter}
+          experimentFilter={datasetExperimentFilter}
+          tagFilter={datasetTagFilter}
+        />
       )}
 
       {tab === 'experiments' && (
@@ -175,6 +177,9 @@ export function EvaluationDashboard({
           datasets={datasets ?? []}
           reviewByExperiment={reviewByExperiment}
           isLoading={isLoadingExperiments}
+          search={experimentSearch}
+          statusFilter={experimentStatusFilter}
+          datasetFilter={experimentDatasetFilter}
         />
       )}
     </>

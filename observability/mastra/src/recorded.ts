@@ -46,6 +46,8 @@ function normalizeErrorInfo(error: SpanRecord['error']): RecordedErrorInfo {
   return {
     message: error.message,
     id: 'id' in error && typeof error.id === 'string' ? error.id : undefined,
+    name: 'name' in error && typeof error.name === 'string' ? error.name : undefined,
+    stack: 'stack' in error && typeof error.stack === 'string' ? error.stack : undefined,
     domain: 'domain' in error && typeof error.domain === 'string' ? error.domain : undefined,
     category: 'category' in error && typeof error.category === 'string' ? error.category : undefined,
     details:
@@ -85,20 +87,20 @@ function buildCorrelationContext(
   };
 }
 
-export function buildRecordedScoreEvent(args: {
-  span: SpanRecord;
-  rootSpan: SpanRecord;
-  parent?: CorrelationParent;
-  score: ScoreInput;
+export function buildScoreEvent(args: {
+  traceId?: string;
   spanId?: string;
+  correlationContext?: CorrelationContext;
+  score: ScoreInput;
+  inheritedMetadata?: Record<string, any> | null;
 }): ScoreEvent {
-  const { span, rootSpan, parent, score, spanId } = args;
+  const { traceId, spanId, correlationContext, score, inheritedMetadata } = args;
 
   return {
     type: 'score',
     score: {
       timestamp: new Date(),
-      traceId: span.traceId,
+      traceId,
       spanId,
       scorerId: score.scorerId,
       scorerVersion: score.scorerVersion,
@@ -108,26 +110,26 @@ export function buildRecordedScoreEvent(args: {
       reason: score.reason,
       experimentId: score.experimentId,
       scoreTraceId: score.scoreTraceId,
-      correlationContext: buildCorrelationContext(span, rootSpan, parent),
-      metadata: mergeMetadata(span.metadata, score.metadata),
+      correlationContext,
+      metadata: mergeMetadata(inheritedMetadata, score.metadata),
     },
   };
 }
 
-export function buildRecordedFeedbackEvent(args: {
-  span: SpanRecord;
-  rootSpan: SpanRecord;
-  parent?: CorrelationParent;
-  feedback: FeedbackInput;
+export function buildFeedbackEvent(args: {
+  traceId?: string;
   spanId?: string;
+  correlationContext?: CorrelationContext;
+  feedback: FeedbackInput;
+  inheritedMetadata?: Record<string, any> | null;
 }): FeedbackEvent {
-  const { span, rootSpan, parent, feedback, spanId } = args;
+  const { traceId, spanId, correlationContext, feedback, inheritedMetadata } = args;
 
   return {
     type: 'feedback',
     feedback: {
       timestamp: new Date(),
-      traceId: span.traceId,
+      traceId,
       spanId,
       source: feedback.source,
       feedbackSource: feedback.feedbackSource,
@@ -138,8 +140,8 @@ export function buildRecordedFeedbackEvent(args: {
       comment: feedback.comment,
       sourceId: feedback.sourceId,
       experimentId: feedback.experimentId,
-      correlationContext: buildCorrelationContext(span, rootSpan, parent),
-      metadata: mergeMetadata(span.metadata, feedback.metadata),
+      correlationContext,
+      metadata: mergeMetadata(inheritedMetadata, feedback.metadata),
     },
   };
 }
@@ -162,12 +164,12 @@ export function buildRecordedScoreEventFromTrace(args: {
 
   const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
 
-  return buildRecordedScoreEvent({
-    span,
-    rootSpan,
-    parent,
-    score: args.score,
+  return buildScoreEvent({
+    traceId: span.traceId,
     spanId: args.spanId,
+    correlationContext: buildCorrelationContext(span, rootSpan, parent),
+    score: args.score,
+    inheritedMetadata: span.metadata,
   });
 }
 
@@ -184,12 +186,12 @@ export function buildRecordedFeedbackEventFromTrace(args: {
 
   const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
 
-  return buildRecordedFeedbackEvent({
-    span,
-    rootSpan,
-    parent,
-    feedback: args.feedback,
+  return buildFeedbackEvent({
+    traceId: span.traceId,
     spanId: args.spanId,
+    correlationContext: buildCorrelationContext(span, rootSpan, parent),
+    feedback: args.feedback,
+    inheritedMetadata: span.metadata,
   });
 }
 
@@ -211,6 +213,8 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   public readonly errorInfo?: {
     message: string;
     id?: string;
+    name?: string;
+    stack?: string;
     domain?: string;
     category?: string;
     details?: Record<string, any>;
@@ -271,12 +275,12 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
     }
 
     await this.#emitRecordedEvent(
-      buildRecordedScoreEvent({
-        span: this.#raw,
-        rootSpan: this.#rootSpan,
-        parent: this.parent,
-        score,
+      buildScoreEvent({
+        traceId: this.#raw.traceId,
         spanId: this.id,
+        correlationContext: buildCorrelationContext(this.#raw, this.#rootSpan, this.parent),
+        score,
+        inheritedMetadata: this.#raw.metadata,
       }),
     );
   }
@@ -288,12 +292,12 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
     }
 
     await this.#emitRecordedEvent(
-      buildRecordedFeedbackEvent({
-        span: this.#raw,
-        rootSpan: this.#rootSpan,
-        parent: this.parent,
-        feedback,
+      buildFeedbackEvent({
+        traceId: this.#raw.traceId,
         spanId: this.id,
+        correlationContext: buildCorrelationContext(this.#raw, this.#rootSpan, this.parent),
+        feedback,
+        inheritedMetadata: this.#raw.metadata,
       }),
     );
   }
@@ -340,10 +344,11 @@ class RecordedTraceImpl implements RecordedTrace {
     }
 
     await this.#emitRecordedEvent(
-      buildRecordedScoreEvent({
-        span: this.#rootRecord,
-        rootSpan: this.#rootRecord,
+      buildScoreEvent({
+        traceId: this.#rootRecord.traceId,
+        correlationContext: buildCorrelationContext(this.#rootRecord, this.#rootRecord),
         score,
+        inheritedMetadata: this.#rootRecord.metadata,
       }),
     );
   }
@@ -355,10 +360,11 @@ class RecordedTraceImpl implements RecordedTrace {
     }
 
     await this.#emitRecordedEvent(
-      buildRecordedFeedbackEvent({
-        span: this.#rootRecord,
-        rootSpan: this.#rootRecord,
+      buildFeedbackEvent({
+        traceId: this.#rootRecord.traceId,
+        correlationContext: buildCorrelationContext(this.#rootRecord, this.#rootRecord),
         feedback,
+        inheritedMetadata: this.#rootRecord.metadata,
       }),
     );
   }

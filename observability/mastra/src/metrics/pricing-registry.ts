@@ -73,7 +73,17 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
-    return this.pricingModels.get(makePricingKey(args)) ?? null;
+    const key = makePricingKey(args);
+    const exact = this.pricingModels.get(key);
+    if (exact) return exact;
+
+    // Fallback: dots → dashes in model name (e.g. "gpt-5.2" → "gpt-5-2")
+    const dashedKey = makePricingKey({ provider: args.provider, model: args.model.replace(/\./g, '-') });
+    if (dashedKey !== key) {
+      return this.pricingModels.get(dashedKey) ?? null;
+    }
+
+    return null;
   }
 }
 

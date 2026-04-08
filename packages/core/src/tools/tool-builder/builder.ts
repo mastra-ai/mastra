@@ -14,18 +14,12 @@ import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
-import {
-  SpanType,
-  wrapMastra,
-  executeWithContext,
-  EntityType,
-  getOrCreateSpan,
-  createObservabilityContext,
-} from '../../observability';
+import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
-import { isVercelTool } from '../../tools/toolchecks';
+import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
@@ -79,6 +73,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (
       !isVercelTool(this.originalTool) &&
+      !isProviderDefinedTool(this.originalTool) &&
       (input.autoResumeSuspendedTools ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
@@ -375,6 +370,8 @@ export class CoreToolBuilder extends MastraBase {
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
+            // Browser for web automation (lazily initialized on first use)
+            browser: options.browser,
             writer: new ToolStream(
               {
                 prefix: 'tool',

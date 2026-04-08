@@ -12,7 +12,8 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, executeWithContextSync, SpanType } from '../../../observability';
+import { createObservabilityContext, SpanType } from '../../../observability';
+import { executeWithContextSync } from '../../../observability/utils';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -397,6 +398,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
+                  ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
                 },
               ],
               ...buildResponseModelMetadata(runState),
@@ -438,7 +440,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
       case 'finish':
         runState.setState({
-          providerOptions: chunk.payload.metadata.providerMetadata,
+          providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
             logprobs: chunk.payload.logprobs,
@@ -491,7 +493,6 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: chunk.payload.providerMetadata,
-            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -512,7 +513,6 @@ async function processOutputStream<OUTPUT = undefined>({
             args: chunk.payload.args,
           },
           providerMetadata: chunk.payload.providerMetadata,
-          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
           providerExecuted: inferredProviderExecuted,
         };
 
@@ -990,12 +990,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                // Merge headers: modelConfig headers first, then modelSettings overrides them
-                // Only create object if there are actual headers to avoid passing empty {}
-                headers:
-                  modelHeaders || currentStep.modelSettings?.headers
-                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
-                    : undefined,
+                // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
+                // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                headers: (() => {
+                  const memoryHeaders: Record<string, string> = {};
+                  if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
+                  if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                  const merged = {
+                    ...memoryHeaders,
+                    ...modelHeaders,
+                    ...currentStep.modelSettings?.headers,
+                  };
+                  return Object.keys(merged).length > 0 ? merged : undefined;
+                })(),
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({
