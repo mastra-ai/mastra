@@ -729,6 +729,7 @@ describe('BlaxelSandbox Mount Configuration', () => {
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
       expect(s3fsMountCall[0].command).toContain('test-bucket:/workspace/data');
+      expect(s3fsMountCall[0].command).not.toContain('test-bucket:/workspace/data/');
     }
   });
 });

@@ -795,6 +795,7 @@ describe('E2BSandbox Mount Configuration', () => {
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
       expect(s3fsMountCall[0]).toContain('test-bucket:/workspace/data');
+      expect(s3fsMountCall[0]).not.toContain('test-bucket:/workspace/data/');
     }
   });
 });
