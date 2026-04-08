@@ -5,6 +5,7 @@ import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { useAgent } from '../../hooks/use-agent';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
@@ -64,6 +65,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const codemirrorTheme = useCodemirrorTheme();
+  const { isCmsAvailable } = useIsCmsAvailable();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -227,6 +229,24 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
           theme={codemirrorTheme}
         />
+        {!isCmsAvailable && (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Read-only</AlertTitle>
+            <AlertDescription as="p">
+              To edit the system prompt in Studio, add{' '}
+              <code className="font-medium">@mastra/editor</code> to your project. See the{' '}
+              <a
+                href="https://mastra.ai/docs/editor/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
