@@ -69,7 +69,13 @@ export async function processWorkflowLoop(
     startedAt: (stepResult as any)?.startedAt,
     endedAt: (stepResult as any)?.endedAt,
   };
-  const iterations = [...existingIterations, currentIteration];
+  // If the last entry has the same iterationIndex (e.g. suspend then resume), replace it
+  const lastEntry = existingIterations[existingIterations.length - 1];
+  const base =
+    lastEntry?.iterationIndex === currentIteration.iterationIndex
+      ? existingIterations.slice(0, -1)
+      : existingIterations;
+  const iterations = [...base, currentIteration];
 
   const updatedStepResult = {
     ...stepResult,

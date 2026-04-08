@@ -650,7 +650,11 @@ export async function executeLoop(
       (stepResults[step.id] as any).metadata = {
         ...(stepResults[step.id] as any)?.metadata,
         iterationCount: iteration + 1,
-        iterations: [...existingIterations, currentIteration],
+        // If the last entry has the same iterationIndex (e.g. suspend then resume), replace it
+        iterations:
+          existingIterations[existingIterations.length - 1]?.iterationIndex === currentIteration.iterationIndex
+            ? [...existingIterations.slice(0, -1), currentIteration]
+            : [...existingIterations, currentIteration],
       };
     }
 
