@@ -73,7 +73,7 @@ Modify the system prompt and save a new draft version. Afterwards, publish the d
 
 Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
 
-Call [`mastra.getEditor()`](/reference/core/getEditor) from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
+Call `mastra.getEditor()` from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
 
 ```typescript title="src/scripts/seed-agent.ts"
 import { mastra } from '../mastra'
@@ -119,7 +119,7 @@ The same operations are available over HTTP through the Mastra server. Use these
 | `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
 | `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
 
-The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions` — see [Version management](/reference/client-js/agents#version-management) for the full list.
+The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
 
 ### Automated experimentation
 
