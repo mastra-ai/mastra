@@ -124,6 +124,50 @@ export const mastra = new Mastra({
 <pm> exec playwright install chromium
 ```
 
+## Custom API Routes
+
+To add custom API routes:
+
+### 1. Create Route
+Create `src/mastra/routes/hello.ts`:
+
+```typescript
+import { registerApiRoute } from '@mastra/core/server';
+
+export const helloRoute = registerApiRoute('/hello', {
+  method: 'GET',
+  requiresAuth: false,  // Set to true if auth required
+  handler: async (c) => {
+    return c.json({ message: 'Hello from custom route!' });
+  },
+});
+```
+
+### 2. Register Route
+Update `src/mastra/index.ts`:
+
+```typescript
+import { helloRoute } from './routes/hello';
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    apiRoutes: [helloRoute],  // ⚠️ Must be "apiRoutes", not "routes"
+  },
+});
+```
+
+**Common mistake**: Using `routes` instead of `apiRoutes` - this will silently fail.
+
+### 3. Verify Locally
+```bash
+# Start dev server
+<pm> run dev
+
+# Test route
+curl http://localhost:4111/hello
+```
+
 ## Environment Variables
 
 ### Check/Set LLM API Key
@@ -158,6 +202,23 @@ unset MASTRA_PLATFORM_API_URL
 | Mastra config | `cat src/mastra/index.ts` |
 | Agents exist | `ls src/mastra/agents/` |
 | Env vars | `cat .env` |
+| **TypeScript check** | `<pm> tsc --noEmit` |
+
+### TypeScript Check (Required)
+
+**Always run `tsc --noEmit` after modifying config files.** This catches most config mistakes that `mastra build` silently ignores:
+
+- Wrong property names (`routes` vs `apiRoutes`)
+- Type mismatches (`timeout: "30"` vs `timeout: 30`)
+- Missing imports
+- Unknown properties
+
+```bash
+<pm> tsc --noEmit
+# Should complete with no errors
+```
+
+If errors appear, fix them before proceeding. Don't rely on `mastra build` or `pnpm dev` to catch these.
 
 ## Common Issues
 
@@ -166,3 +227,5 @@ unset MASTRA_PLATFORM_API_URL
 | "Cannot find module '@mastra/core'" | Run `<pm> install` |
 | "Missing API key" | Add to `.env` file |
 | "No agents found" | Check agent exports in index.ts |
+| Custom routes not working | Use `server.apiRoutes`, not `server.routes` |
+| Config errors not caught by build | Run `tsc --noEmit` - build doesn't type-check |
