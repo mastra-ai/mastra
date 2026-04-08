@@ -58,10 +58,6 @@ export default function Traces() {
 
   const handleTraceClick = useCallback(
     (traceId: string) => {
-      // Skip if the URL already matches to avoid unnecessary updates
-      const currentTraceId = searchParams.get('traceId') || '';
-      if (traceId === currentTraceId) return;
-
       const params: Record<string, string> = {};
       const entity = searchParams.get('entity');
       if (entity) params.entity = entity;

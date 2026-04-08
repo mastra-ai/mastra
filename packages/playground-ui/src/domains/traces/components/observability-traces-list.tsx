@@ -72,7 +72,7 @@ export function ObservabilityTracesList({
   groupByThread,
   threadTitles,
 }: ObservabilityTracesListProps) {
-  const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
+  const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(selectedTraceId ?? null);
   const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(initialSpanId ?? null);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
@@ -116,45 +116,34 @@ export function ObservabilityTracesList({
     }
   }, [initialScoreId, spanScoresData?.scores, featuredScore]);
 
+  const resetSpanState = useCallback(() => {
+    setFeaturedSpanRecord(undefined);
+    setFeaturedSpanId(null);
+    setFeaturedScore(undefined);
+    setSpanTab('details');
+  }, []);
+
   const handleTraceClick = useCallback(
     (trace: Trace) => {
       const id = trace.traceId;
       if (featuredTraceId === id) {
         setFeaturedTraceId(null);
-        setFeaturedSpanRecord(undefined);
-        setFeaturedSpanId(null);
-        setFeaturedScore(undefined);
-        setSpanTab('details');
+        resetSpanState();
         onTraceClick?.('');
-        onSpanChange?.(null);
-        onScoreChange?.(null);
-        onSpanTabChange?.('details');
         return;
       }
       setFeaturedTraceId(id);
-      setFeaturedSpanRecord(undefined);
-      setFeaturedSpanId(null);
-      setFeaturedScore(undefined);
-      setSpanTab('details');
+      resetSpanState();
       onTraceClick?.(id);
-      onSpanChange?.(null);
-      onScoreChange?.(null);
-      onSpanTabChange?.('details');
     },
-    [featuredTraceId, onTraceClick, onSpanChange, onScoreChange, onSpanTabChange],
+    [featuredTraceId, onTraceClick, resetSpanState],
   );
 
   const handleTraceClose = useCallback(() => {
     setFeaturedTraceId(null);
-    setFeaturedSpanRecord(undefined);
-    setFeaturedSpanId(null);
-    setFeaturedScore(undefined);
-    setSpanTab('details');
+    resetSpanState();
     onTraceClick?.('');
-    onSpanChange?.(null);
-    onScoreChange?.(null);
-    onSpanTabChange?.('details');
-  }, [onTraceClick, onSpanChange, onScoreChange, onSpanTabChange]);
+  }, [onTraceClick, resetSpanState]);
 
   const handleSpanSelect = useCallback(
     (span: SpanRecord | undefined) => {
@@ -165,12 +154,12 @@ export function ObservabilityTracesList({
       if (!isSameSpan) {
         setFeaturedScore(undefined);
         setSpanTab('details');
-        onScoreChange?.(null);
-        onSpanTabChange?.('details');
+        if (id) {
+          onSpanChange?.(id);
+        }
       }
-      onSpanChange?.(id);
     },
-    [featuredSpanId, onSpanChange, onScoreChange, onSpanTabChange],
+    [featuredSpanId, onSpanChange],
   );
 
   const handleSpanClose = useCallback(() => {
@@ -179,9 +168,7 @@ export function ObservabilityTracesList({
     setFeaturedScore(undefined);
     setSpanTab('details');
     onSpanChange?.(null);
-    onScoreChange?.(null);
-    onSpanTabChange?.('details');
-  }, [onSpanChange, onScoreChange, onSpanTabChange]);
+  }, [onSpanChange]);
 
   const handleSpanTabChange = useCallback(
     (tab: string) => {
@@ -264,10 +251,8 @@ export function ObservabilityTracesList({
       ? () => {
           const prevTrace = traces[featuredIdx - 1];
           setFeaturedTraceId(prevTrace.traceId);
-          setFeaturedSpanRecord(undefined);
-          setFeaturedSpanId(null);
+          resetSpanState();
           onTraceClick?.(prevTrace.traceId);
-          onSpanChange?.(null);
         }
       : undefined;
 
@@ -276,10 +261,8 @@ export function ObservabilityTracesList({
       ? () => {
           const nextTrace = traces[featuredIdx + 1];
           setFeaturedTraceId(nextTrace.traceId);
-          setFeaturedSpanRecord(undefined);
-          setFeaturedSpanId(null);
+          resetSpanState();
           onTraceClick?.(nextTrace.traceId);
-          onSpanChange?.(null);
         }
       : undefined;
 
