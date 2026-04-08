@@ -365,17 +365,19 @@ curl -s -X POST "$API_URL/v1/chat/completions" \
 
 Test using `createMastraCode` which has built-in Memory + OM + Gateway support.
 
+**Setup:**
+```bash
+pnpm add mastracode
+```
+
 Create a test script `test-mastracode.ts`:
 ```typescript
 import { createMastraCode } from 'mastracode';
 
 async function test() {
-  const mc = await createMastraCode({
+  const { harness } = await createMastraCode({
     cwd: process.cwd(),
   });
-  
-  // Get the harness and run a simple conversation
-  const harness = mc.harness;
   
   // Send multiple messages
   for (let i = 1; i <= 10; i++) {

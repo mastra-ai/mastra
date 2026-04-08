@@ -1,43 +1,20 @@
 # Local Project Setup for Gateway Testing
 
 ## Purpose
-Set up a local Mastra project to test Local + Gateway OM interactions (Test 8).
+Set up a dedicated local Mastra project to test Local + Gateway OM interactions (Test 8).
 
-## Option A: Reuse Existing Project (Preferred)
+**Important:** Create a fresh project for this test. Do not reuse projects from other test suites.
 
-If a project already exists from `mastra-smoke-test` or other testing:
+## Create Project
 
-```bash
-# Check for existing projects
-ls ~/mastra-smoke-tests/
+### 1. Create Project (Non-Interactive)
 
-# Use an existing one
-cd ~/mastra-smoke-tests/<existing-project>
-```
-
-**Requirements for reuse:**
-- [ ] Has `@mastra/core` in `package.json`
-- [ ] Has `src/mastra/index.ts` with Mastra instance
-- [ ] Has at least one agent configured
-
-If reusing, skip to "Add Gateway Test Agents" below.
-
----
-
-## Option B: Create New Project
-
-### 1. Create Directory
 ```bash
 mkdir -p ~/mastra-smoke-tests
 cd ~/mastra-smoke-tests
-```
-
-### 2. Create Project (Non-Interactive)
-
-Use `-l openai` to skip the provider selection prompt:
-
-```bash
-pnpm create mastra@latest gateway-local-test -c agents,tools -l openai -e
+pnpm create mastra@latest gateway-om-test -c agents,tools -l openai -e
+cd gateway-om-test
+pnpm install
 ```
 
 | Flag | Purpose |
@@ -46,15 +23,7 @@ pnpm create mastra@latest gateway-local-test -c agents,tools -l openai -e
 | `-l openai` | Set OpenAI as provider (skips interactive prompt) |
 | `-e` | Include example code |
 
-### 3. Enter Project and Install
-```bash
-cd gateway-local-test
-pnpm install
-```
-
----
-
-## Add Gateway Test Agents
+## Add Test Agents
 
 Add these agents to test different Memory configurations.
 
