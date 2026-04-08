@@ -1,10 +1,10 @@
+import type { UISpan } from '../types';
 import { useEffect } from 'react';
 import { getSpanDescendantIds } from '../hooks/get-all-span-ids';
 import { getSpanTypeUi } from './shared';
 import { TimelineExpandCol } from './timeline-expand-col';
 import { TimelineNameCol } from './timeline-name-col';
 import { TimelineTimingCol } from './timeline-timing-col';
-import type { UISpan } from '../types';
 
 type TraceTimelineSpanProps = {
   span: UISpan;

@@ -1,5 +1,5 @@
-import { TimelineStructureSign } from './timeline-structure-sign';
 import type { UISpan, UISpanStyle } from '../types';
+import { TimelineStructureSign } from './timeline-structure-sign';
 import { cn } from '@/lib/utils';
 
 type TimelineNameColProps = {
