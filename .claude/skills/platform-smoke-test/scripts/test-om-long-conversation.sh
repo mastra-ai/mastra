@@ -6,7 +6,11 @@
 # Note: This stays BELOW the 30k OM threshold, so OM won't activate.
 # Use this to test basic long conversation handling.
 
-set -e
+set -o pipefail
+
+# Temp file with cleanup trap
+RESP_FILE="$(mktemp -t om-long-response.XXXXXX)"
+trap 'rm -f "$RESP_FILE"' EXIT
 
 # Preflight checks
 command -v curl >/dev/null 2>&1 || { echo "Error: curl is required but not installed"; exit 1; }
@@ -75,14 +79,17 @@ for i in "${!PROMPTS[@]}"; do
   # Safely encode prompt as JSON string
   JSON_PROMPT=$(printf '%s' "$PROMPT" | jq -Rs .)
   
-  HTTP_CODE=$(curl -s -w '%{http_code}' -o /tmp/response_$$.json --connect-timeout 10 --max-time 120 \
+  if ! HTTP_CODE=$(curl -s -w '%{http_code}' -o "$RESP_FILE" --connect-timeout 10 --max-time 120 \
     -X POST "$API_URL/v1/chat/completions" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]}")
-  RESPONSE=$(cat /tmp/response_$$.json)
-  rm -f /tmp/response_$$.json
+    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]}"); then
+    echo "ERROR at message $MSG_NUM: curl request failed"
+    FAILED=1
+    break
+  fi
+  RESPONSE=$(cat "$RESP_FILE")
   
   if [ "$HTTP_CODE" -ge 400 ]; then
     echo "ERROR at message $MSG_NUM: HTTP $HTTP_CODE"
@@ -90,8 +97,8 @@ for i in "${!PROMPTS[@]}"; do
     break
   fi
   
-  PROMPT_TOKENS=$(echo "$RESPONSE" | jq '.usage.prompt_tokens // 0')
-  COMPLETION_TOKENS=$(echo "$RESPONSE" | jq '.usage.completion_tokens // 0')
+  PROMPT_TOKENS=$(echo "$RESPONSE" | jq -r '.usage.prompt_tokens // 0') || { echo "ERROR at message $MSG_NUM: invalid JSON"; FAILED=1; break; }
+  COMPLETION_TOKENS=$(echo "$RESPONSE" | jq -r '.usage.completion_tokens // 0') || { echo "ERROR at message $MSG_NUM: invalid JSON"; FAILED=1; break; }
   CACHE_READ=$(echo "$RESPONSE" | jq '.usage.cache_read_tokens // 0')
   CACHE_WRITE=$(echo "$RESPONSE" | jq '.usage.cache_creation_input_tokens // 0')
   
