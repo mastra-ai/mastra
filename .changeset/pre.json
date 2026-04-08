@@ -126,10 +126,16 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "automated-provider-registry-20260408-183824",
     "common-results-stick",
     "evaluation-header-docs",
     "green-birds-knock",
     "humble-plums-feel",
-    "logs-error-handling"
+    "inngest-workflow-entityname",
+    "logs-error-handling",
+    "lucky-rivers-lie",
+    "old-steaks-sleep",
+    "social-impalas-walk",
+    "witty-jokes-design"
   ]
 }
