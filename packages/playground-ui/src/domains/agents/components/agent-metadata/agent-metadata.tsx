@@ -65,7 +65,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const codemirrorTheme = useCodemirrorTheme();
-  const { isCmsAvailable } = useIsCmsAvailable();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -229,7 +229,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
           theme={codemirrorTheme}
         />
-        {!isCmsAvailable && (
+        {!isCmsLoading && !isCmsAvailable && (
           <Alert variant="warning">
             <AlertTitle as="h5">Read-only</AlertTitle>
             <AlertDescription as="p">
