@@ -57,14 +57,31 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 | Studio | UI interactions (chat, tool runs) | From Studio domain |
 | Server | Direct API calls | From server domain |
 
+## Handling Deploy Warnings
+
+**If you see `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_LOGS` or `404` during deploy:**
+
+This is a **warning, not a blocker**. The deploy succeeded, but traces won't be sent to cloud.
+
+What to do:
+1. **Continue testing** - the app works, just without cloud observability
+2. **Test local traces** - `/observability` may still show Studio-originated traces
+3. **Report as**: "Traces: ⚠️ - CloudExporter 404 during deploy, server traces won't appear"
+4. **Don't skip trace testing entirely** - verify the page loads and Studio traces work
+
+**If you see `mastra-cloud-observability-exporter disabled`:**
+- Server traces definitely won't appear
+- Studio traces may still work
+- Report and continue with other tests
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | No traces at all | OTel not configured | Check `telemetry` in mastra config |
-| Studio traces only | Server token issue | Redeploy server |
+| Studio traces only | Server token issue | Note warning, continue testing |
 | "Something went wrong" | Auth/session issue | Re-authenticate in Studio |
-| `CLOUD_EXPORTER` warnings | Missing token | Infrastructure issue - note it |
+| `CLOUD_EXPORTER` warnings | Infrastructure issue | Note it, test what you can |
 
 ## Local vs Cloud
 

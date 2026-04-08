@@ -84,10 +84,20 @@ curl -X DELETE "$API_URL/v1/threads/$THREAD_ID" \
 | By resource ID | Filtered messages |
 | Delete | Thread removed |
 
+## API Status Note
+
+**These endpoints may return 404 if not yet implemented.** The Thread API is evolving.
+
+If you get 404s on all thread endpoints:
+1. Verify threads work in the **Dashboard UI** (Threads page)
+2. Report as: "Thread API: ❌ - All endpoints return 404, but Dashboard shows threads"
+3. This indicates the REST API isn't exposed yet, not that threading is broken
+
 ## Common Issues
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| 404 on get | Thread doesn't exist | Create thread first |
+| 404 on all endpoints | API not exposed | Check Dashboard UI instead, report as "API not available" |
+| 404 on specific thread | Thread doesn't exist | Create thread first |
 | Empty list | No threads for project | Create some first |
 | 404 on messages | Thread ID wrong | Check exact ID |

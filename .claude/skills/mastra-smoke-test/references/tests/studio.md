@@ -86,6 +86,23 @@ pnpx mastra@latest studio deploy -y
 | 404 after deploy | DNS propagation | Wait 1-2 minutes |
 | Build fails | Code errors | Check build output |
 
+## Studio vs Server: When to Use Each
+
+| Deploy | What It Does | Use For |
+|--------|--------------|---------|
+| `studio deploy` | Deploys the Studio UI | Interactive testing, viewing traces, debugging |
+| `server deploy` | Deploys the API server | API access, production use, programmatic access |
+
+**Typical flow:**
+1. Deploy Studio first (for UI access)
+2. Deploy Server (for API access)
+3. Test via both UI and API
+4. Server traces should appear in Studio
+
+**You can deploy one without the other**, but:
+- Studio-only: No API access, can't test server traces
+- Server-only: No UI, must use curl/API clients
+
 ## Notes
 
 - First deploy may take longer (2-5 minutes)
