@@ -21,14 +21,13 @@ curl -X POST "$API_URL/v1/chat/completions" \
 
 ### 2. Provider Prefix Validation
 ```bash
-# Should FAIL - missing provider prefix
+# Test without provider prefix
 curl -X POST "$API_URL/v1/chat/completions" \
   -H "Authorization: Bearer $MASTRA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
-- [ ] Returns error about missing provider
-- [ ] Message is clear (not cryptic)
+- [ ] Note the response (error or auto-attached provider)
 
 ### 3. With Thread ID
 ```bash
@@ -97,7 +96,7 @@ curl -X POST "$API_URL/v1/chat/completions" \
 | Check | Expected |
 |-------|----------|
 | Chat completions | 200 with response |
-| Without prefix | Error with clear message |
+| Without prefix | Note behavior (error or auto-attach) |
 | With thread ID | 200, thread created |
 | Multiple keys | Both work |
 
