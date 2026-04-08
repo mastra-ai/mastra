@@ -8,17 +8,27 @@ Instructions specific to `--env staging` and `--env production` testing.
 - `pnpx` (or `npx`) available
 - For debugging: GCP Console access (see `gcp-debugging.md`)
 
+## Multi-Environment Config
+
+Deploy to staging and production from the same project using separate config files:
+
+| Environment | Config File                    | Platform API URL                     | Deploy URLs                             |
+| ----------- | ------------------------------ | ------------------------------------ | --------------------------------------- |
+| Production  | `.mastra-project.json`         | `https://platform.mastra.ai`         | `<project>.studio.mastra.cloud`         |
+| Staging     | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai` | `<project>.studio.staging.mastra.cloud` |
+
+Each environment gets its own project ID, so they don't interfere.
+
 ## Environment Setup
 
 Set the platform URL based on target environment:
 
 ```bash
+# For production
+export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
+
 # For staging
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai
-
-# For production (default, can be unset)
-export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
-# Or simply: unset MASTRA_PLATFORM_API_URL
 ```
 
 ## LLM API Key
@@ -34,6 +44,40 @@ Ensure `.env` has the required API key:
 
 ## Authenticate with Platform
 
+### Check Existing Credentials
+
+Before triggering a browser login, check if credentials exist and are valid:
+
+```bash
+# Check if credentials file exists
+cat ~/.mastra/credentials.json | jq '{email: .user.email, organizationId}'
+
+# Verify token is still valid
+TOKEN=$(jq -r '.token' ~/.mastra/credentials.json)
+ORG_ID=$(jq -r '.currentOrgId // .organizationId' ~/.mastra/credentials.json)
+curl -s "$MASTRA_PLATFORM_API_URL/v1/auth/verify" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-organization-id: $ORG_ID" | jq '.user.email'
+```
+
+### Token Refresh (if expired)
+
+WorkOS tokens expire in 5 minutes, but can be refreshed without re-login:
+
+```bash
+REFRESH_TOKEN=$(jq -r '.refreshToken' ~/.mastra/credentials.json)
+curl -s "$MASTRA_PLATFORM_API_URL/v1/auth/refresh-token" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"refreshToken\": \"$REFRESH_TOKEN\"}"
+```
+
+See `references/tests/traces.md` for the full `get_valid_token` helper function.
+
+### Login (only if refresh fails)
+
+**⚠️ Always warn the user before running this** — it opens a browser:
+
 ```bash
 # Logout first for clean state (optional)
 pnpx mastra@latest auth logout
@@ -44,31 +88,47 @@ pnpx mastra@latest auth login
 
 This opens a browser for OAuth. Complete the login flow.
 
+### Verify Organization
+
+The browser may default to a different account/org. Always verify after login:
+
+```bash
+cat ~/.mastra/credentials.json | jq '{email: .user.email, organizationId}'
+```
+
 ## Deploy Studio
 
 ```bash
+# Production (uses .mastra-project.json by default)
 pnpx mastra@latest studio deploy -y
+
+# Staging (specify config file)
+pnpx mastra@latest studio deploy --config .mastra-project-staging.json -y
 ```
 
-Wait for deployment. Note the URL:
+Wait for deployment. Note the URL from output:
 
-- Staging: `https://<project>.studio.staging.mastra.cloud`
 - Production: `https://<project>.studio.mastra.cloud`
+- Staging: `https://<project>.studio.staging.mastra.cloud`
 
 **Verify**: Open URL, sign in, confirm Studio UI loads.
 
 ## Deploy Server
 
 ```bash
+# Production
 pnpx mastra@latest server deploy -y
+
+# Staging
+pnpx mastra@latest server deploy --config .mastra-project-staging.json -y
 ```
 
 The `-y` flag auto-confirms settings.
 
-Note the URL:
+Note the URL from output:
 
-- Staging: `https://<project>.server.staging.mastra.cloud`
 - Production: `https://<project>.server.mastra.cloud`
+- Staging: `https://<project>.server.staging.mastra.cloud`
 
 **Verify health**:
 
@@ -146,34 +206,76 @@ When testing browser agents in deployed environments:
 
 ```bash
 # === Environment ===
+export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai          # production
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai  # staging
-unset MASTRA_PLATFORM_API_URL  # production
 
-# === Auth ===
+# === Auth (warn user before login - opens browser!) ===
 pnpx mastra@latest auth login
 pnpx mastra@latest auth logout
 
-# === Deploy ===
+# === Deploy (production) ===
 pnpx mastra@latest studio deploy -y
 pnpx mastra@latest server deploy -y
 
-# === Test (use actual URLs from deploy output) ===
-# Staging:
-curl https://<project>.server.staging.mastra.cloud/health
-# Production:
-curl https://<project>.server.mastra.cloud/health
+# === Deploy (staging) ===
+pnpx mastra@latest studio deploy --config .mastra-project-staging.json -y
+pnpx mastra@latest server deploy --config .mastra-project-staging.json -y
 
-# Agent call (replace with actual URL)
+# === Test (use actual URLs from deploy output) ===
+curl https://<project>.server.mastra.cloud/health           # production
+curl https://<project>.server.staging.mastra.cloud/health   # staging
+
+# === Agent call ===
 curl -X POST <server-url>/api/agents/<agent-id>/generate \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Hello"}]}'
+
+# === Check traces directly ===
+TOKEN=$(jq -r '.token' ~/.mastra/credentials.json)
+PROJECT_ID=$(jq -r '.projectId' .mastra-project.json)
+ORG_ID=$(jq -r '.organizationId' .mastra-project.json)
+curl -s "https://mobs-query-vgvrl5lbxq-uc.a.run.app/api/observability/traces?resourceId=$PROJECT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-organization-id: $ORG_ID" | jq '.traces | length'
 ```
 
 ## Troubleshooting
 
+### Wrong Organization on Login
+
+The browser may default to a different account/org. Always verify after login:
+
+```bash
+cat ~/.mastra/credentials.json | jq '{email: .user.email, organizationId}'
+```
+
+### Token Expired (401 errors)
+
+WorkOS tokens expire after 5 minutes. Check token validity before re-logging in — use the refresh token first. See the `get_valid_token` helper in `references/tests/traces.md`.
+
 ### "Session expired" errors in Studio
 
 Known issue with cookie domain mismatch. The Studio may need re-authentication periodically.
+
+### Custom Routes Not Working
+
+Custom routes must use `apiRoutes` (not `routes`) in the server config:
+
+```typescript
+server: {
+  apiRoutes: [helloRoute],  // ✅ Correct
+  // routes: [helloRoute],  // ❌ Wrong - silently fails
+}
+```
+
+This is a common typo that causes routes to silently not register.
+
+### CORS Errors
+
+Server deploys inject CORS config via `SERVER_WRAPPER`. If you see CORS errors:
+
+1. Check `MASTRA_CORS_ORIGIN` env var is set correctly on the deploy
+2. Verify the origin domain matches the studio domain pattern
 
 ### Server traces not appearing
 

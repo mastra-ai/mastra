@@ -1,5 +1,28 @@
 # @mastra/observability
 
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Added support for project-scoped CloudExporter collector routes for organization API keys. ([#15189](https://github.com/mastra-ai/mastra/pull/15189))
+
+  **What changed**
+  CloudExporter now accepts a `projectId` option and reads `MASTRA_PROJECT_ID` so remote writes can target project-scoped collector URLs when you authenticate with an organization API key.
+
+  ```ts
+  new CloudExporter({
+    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PROJECT_ID,
+  });
+  ```
+
+  When `projectId` is set, base endpoints resolve to `/projects/:projectId/ai/{signal}/publish`. Without it, existing JWT-style `/ai/{signal}/publish` routes still work as before.
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+
 ## 1.8.0
 
 ### Minor Changes

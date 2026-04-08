@@ -125,5 +125,18 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260408-183824",
+    "common-results-stick",
+    "evaluation-header-docs",
+    "green-birds-knock",
+    "humble-plums-feel",
+    "inngest-workflow-entityname",
+    "logs-error-handling",
+    "lucky-rivers-lie",
+    "old-steaks-sleep",
+    "silver-hands-cheer",
+    "social-impalas-walk",
+    "witty-jokes-design"
+  ]
 }
