@@ -198,15 +198,17 @@ Test what happens when the client sends full conversation history (simulating st
 
 The script:
 
-1. Builds a 5-message conversation
+1. Builds a 5-message conversation (5 user + 5 assistant = 10 messages)
 2. Sends ALL history again with one new message
-3. Checks thread state for message deduplication
+3. Checks thread state
 
 **What to record:**
 
+- [ ] Message count BEFORE replay (note the exact number)
+- [ ] Message count AFTER replay (note the exact number)
+- [ ] If counts differ, note by how much (e.g., "was 10, now 12 = +2 messages")
 - [ ] Token count for the full-history request
-- [ ] Final message count in Gateway vs expected
-- [ ] Whether Gateway handled replay correctly
+- [ ] If messages were added, note examples of what was duplicated (e.g., "second copy of 'My name is Alice' appeared")
 
 ---
 
@@ -220,7 +222,7 @@ This tests what happens when:
 2. Requests route through Gateway (which also has OM)
 3. Conversation reaches ~30k+ tokens (OM activation threshold)
 
-Run ALL scenarios (9a-9e). Do not skip any.
+Run ALL scenarios (9a-9f). Do not skip any.
 
 ---
 
@@ -318,98 +320,65 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed th
 
 Test MastraCode routing through Gateway with enough messages to accumulate significant tokens.
 
-**Important:** MastraCode uses its own auth, not the project's `.env`. You must set Gateway env vars:
+**How MastraCode routes to Gateway:**
 
+MastraCode only routes through Gateway when:
+1. `MASTRA_GATEWAY_API_KEY` is set, AND
+2. The model ID has a `mastra/` prefix (e.g., `mastra/openai/gpt-4o`)
+
+Without the `mastra/` prefix, requests go directly to the provider (OpenAI, Anthropic, etc.).
+
+**Setup:**
+
+1. Set Gateway environment:
 ```bash
 export MASTRA_GATEWAY_API_KEY="$MASTRA_API_KEY"
 export MASTRA_GATEWAY_URL="$API_URL"
 ```
 
-**Setup:**
+2. Configure MastraCode to use Gateway (interactive):
+```bash
+npx mastracode memory-gateway
+# Enter your Gateway API key when prompted
+# Enter the Gateway URL (e.g., https://server.mastra.ai)
+```
+
+3. Verify configuration:
+```bash
+# Check that auth is stored
+cat ~/.mastracode/auth.json | grep -A2 "mastra-gateway"
+```
+
+**Alternative: Programmatic test**
+
+If the interactive setup doesn't work, you can test Gateway routing directly:
 
 ```bash
-pnpm add mastracode
+# This should route through Gateway (note the mastra/ prefix)
+curl -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mastra/openai/gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-Create `test-mastracode-gateway.ts`:
+**What to record:**
 
-```typescript
-import { createMastraCode } from 'mastracode';
+- [ ] Whether `mastracode memory-gateway` setup succeeded
+- [ ] Whether requests appear in Gateway Dashboard → Logs
+- [ ] If requests don't appear in Gateway, note where they went (direct to provider?)
+- [ ] Any errors during setup or execution
 
-async function test() {
-  console.log('Gateway URL:', process.env.MASTRA_GATEWAY_URL);
-  console.log('Gateway Key:', process.env.MASTRA_GATEWAY_API_KEY ? 'set' : 'NOT SET');
+**If requests appear in Gateway, also check for duplication:**
 
-  const { harness } = await createMastraCode({
-    cwd: process.cwd(),
-  });
-
-  await harness.init();
-
-  // Track responses
-  harness.subscribe((event) => {
-    if (event.type === 'message_update' && event.message.role === 'assistant') {
-      const content = event.message.content?.toString() || '';
-      console.log(`Response (${content.length} chars): ${content.substring(0, 100)}...`);
-    }
-  });
-
-  // Send 20 detailed prompts to accumulate tokens
-  const prompts = [
-    "Explain the history of TypeScript in detail",
-    "What are all the TypeScript compiler options and what do they do?",
-    "Compare TypeScript to JavaScript with examples",
-    "Explain TypeScript generics with complex examples",
-    "What are mapped types in TypeScript? Give examples",
-    "Explain conditional types in TypeScript",
-    "What is type inference in TypeScript?",
-    "Explain TypeScript decorators in detail",
-    "What are utility types in TypeScript? List all of them",
-    "Explain the TypeScript module system",
-    "What are declaration files in TypeScript?",
-    "Explain strict mode options in TypeScript",
-    "What is structural typing in TypeScript?",
-    "Explain TypeScript enums with examples",
-    "What are type guards in TypeScript?",
-    "Explain discriminated unions in TypeScript",
-    "What is the 'infer' keyword in TypeScript?",
-    "Explain variance in TypeScript generics",
-    "What are template literal types?",
-    "Summarize everything we discussed about TypeScript",
-  ];
-
-  for (let i = 0; i < prompts.length; i++) {
-    console.log(`\n[${i + 1}/${prompts.length}] ${prompts[i].substring(0, 50)}...`);
-    await harness.sendMessage({ content: prompts[i] });
-  }
-
-  console.log('\nDone. Check Gateway Logs for token counts.');
-}
-
-test().catch(console.error);
-```
-
-Run:
-
-```bash
-npx tsx test-mastracode-gateway.ts
-```
-
-**Verification:**
-
-- [ ] Note if "Gateway URL" and "Gateway Key" are set in output
-- [ ] Note how many messages complete successfully
-- [ ] Check Gateway Dashboard → Logs for the requests
-- [ ] Note token progression in Gateway Logs
-- [ ] Note any errors or unusual behavior
+- [ ] Note the thread ID from Gateway Dashboard
+- [ ] Count messages sent vs messages in Gateway thread
+- [ ] If counts don't match, note examples (e.g., "sent 5 messages but thread shows 7 - duplicates of X and Y")
 
 ---
 
 #### 9f. History Replay via Local Agent
 
-Test what happens when the local agent sends requests that include conversation history (simulating how some clients replay full history).
-
-This mirrors Test 8 (direct API history replay) but goes through the local project.
+Test thread behavior when messages are sent via local Studio, then accessed again.
 
 **Steps:**
 
@@ -420,34 +389,17 @@ This mirrors Test 8 (direct API history replay) but goes through the local proje
    - "I work as an engineer"
    - "My favorite color is blue"
    - "What do you know about me?"
-3. Note the thread ID from Gateway Dashboard
-4. Now test replay behavior using curl with the same thread but sending full history:
-
-```bash
-THREAD_ID="<thread-id-from-gateway>"
-
-curl -X POST "$API_URL/v1/chat/completions" \
-  -H "Authorization: Bearer $MASTRA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -H "x-thread-id: $THREAD_ID" \
-  -d '{
-    "model": "openai/gpt-4o-mini",
-    "messages": [
-      {"role": "user", "content": "My name is Alice"},
-      {"role": "assistant", "content": "Nice to meet you, Alice!"},
-      {"role": "user", "content": "I live in Seattle"},
-      {"role": "assistant", "content": "Seattle is a great city!"},
-      {"role": "user", "content": "What is my name and where do I live?"}
-    ]
-  }'
-```
+3. Go to Gateway Dashboard → Threads
+4. Find the thread created by the local agent
+5. Count the messages and note the exact content
 
 **What to record:**
 
-- [ ] Note message count in Gateway thread before and after replay
-- [ ] Note if Gateway deduplicated the repeated messages
-- [ ] Note token count for the replay request
-- [ ] Note any differences from Test 8 (direct API replay)
+- [ ] Thread ID from Gateway
+- [ ] Exact message count in Gateway (e.g., "10 messages: 5 user + 5 assistant")
+- [ ] Whether message count matches what you sent (5 user messages should = 5 user + 5 assistant in thread)
+- [ ] If counts don't match, note examples (e.g., "sent 5 user messages but thread shows 7 user messages - duplicates of 'My name is Alice' and 'I live in Seattle'")
+- [ ] Compare to Test 8 - any differences in how Gateway handled local-origin vs direct-API threads?
 
 ---
 
