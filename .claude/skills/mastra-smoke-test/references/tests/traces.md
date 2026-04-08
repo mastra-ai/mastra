@@ -87,6 +87,132 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 - Persist across sessions
 - Note if both Studio and Server traces appear
 
+## Direct Trace API (Cloud Only)
+
+If UI traces aren't appearing but you need to verify the trace pipeline:
+
+### Mobs-Query URLs
+
+| Environment | URL                                              |
+| ----------- | ------------------------------------------------ |
+| Production  | `https://mobs-query-vgvrl5lbxq-uc.a.run.app`     |
+| Staging     | `https://mobs-query-pvyw2kfhjq-uc.a.run.app`     |
+
+### Get Auth Token
+
+Credentials are stored in `~/.mastra/credentials.json` after `mastra auth login`:
+
+```json
+{
+  "token": "eyJhbG...",           // Access token (5 min expiry)
+  "refreshToken": "eyJhbG...",    // Refresh token (long-lived)
+  "user": { "id": "...", "email": "..." },
+  "organizationId": "org_01KN...",
+  "currentOrgId": "org_01KN..."
+}
+```
+
+### Token Refresh Helper
+
+WorkOS tokens expire in **5 minutes**. Use this helper to auto-refresh:
+
+```bash
+get_valid_token() {
+  local PLATFORM_URL="${1:-https://platform.mastra.ai}"
+  local TOKEN=$(jq -r '.token' ~/.mastra/credentials.json)
+  local ORG_ID=$(jq -r '.currentOrgId // .organizationId' ~/.mastra/credentials.json)
+
+  # Try current token
+  local VERIFY=$(curl -s "$PLATFORM_URL/v1/auth/verify" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "x-organization-id: $ORG_ID")
+
+  if echo "$VERIFY" | jq -e '.user' > /dev/null 2>&1; then
+    echo "$TOKEN"
+    return 0
+  fi
+
+  # Token expired — try refresh
+  local REFRESH_TOKEN=$(jq -r '.refreshToken' ~/.mastra/credentials.json)
+  if [ -z "$REFRESH_TOKEN" ] || [ "$REFRESH_TOKEN" = "null" ]; then
+    echo "No refresh token. Re-login required." >&2
+    return 1
+  fi
+
+  local REFRESH_RESULT=$(curl -s "$PLATFORM_URL/v1/auth/refresh-token" \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"refreshToken\": \"$REFRESH_TOKEN\"}")
+
+  if echo "$REFRESH_RESULT" | jq -e '.accessToken' > /dev/null 2>&1; then
+    local NEW_TOKEN=$(echo "$REFRESH_RESULT" | jq -r '.accessToken')
+    local NEW_REFRESH=$(echo "$REFRESH_RESULT" | jq -r '.refreshToken')
+
+    # Update credentials file
+    jq --arg t "$NEW_TOKEN" --arg r "$NEW_REFRESH" \
+      '.token = $t | .refreshToken = $r' \
+      ~/.mastra/credentials.json > ~/.mastra/credentials.json.tmp \
+      && mv ~/.mastra/credentials.json.tmp ~/.mastra/credentials.json
+
+    echo "$NEW_TOKEN"
+    return 0
+  fi
+
+  echo "Refresh failed. Re-login required." >&2
+  return 1
+}
+
+# Usage
+TOKEN=$(get_valid_token "https://platform.mastra.ai") || exit 1
+```
+
+### Query Traces
+
+```bash
+# Get project info from config file
+PROJECT_ID=$(jq -r '.projectId' .mastra-project.json)  # or .mastra-project-staging.json
+ORG_ID=$(jq -r '.organizationId' .mastra-project.json)
+TOKEN=$(get_valid_token "https://platform.mastra.ai")
+
+# Production
+curl -s "https://mobs-query-vgvrl5lbxq-uc.a.run.app/api/observability/traces?page=0&perPage=10&resourceId=$PROJECT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-organization-id: $ORG_ID" | jq '.'
+
+# Staging
+TOKEN=$(get_valid_token "https://platform.staging.mastra.ai")
+curl -s "https://mobs-query-pvyw2kfhjq-uc.a.run.app/api/observability/traces?page=0&perPage=10&resourceId=$PROJECT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-organization-id: $ORG_ID" | jq '.'
+```
+
+### Trace Response Structure
+
+```json
+{
+  "pagination": { "total": 10, "page": 0, "perPage": 10, "hasMore": false },
+  "traces": [
+    {
+      "traceId": "37f0d68d760887e994135c984ebd7b89",
+      "name": "agent run: 'weather-agent'",
+      "spanType": "agent_run",
+      "startedAt": "2026-04-08T15:29:27.123Z",
+      "endedAt": "2026-04-08T15:29:30.456Z",
+      "metadata": { "buildId": "...", "runId": "..." },
+      "requestContext": { "user": { "id": "...", "email": "..." } },
+      "status": "success"
+    }
+  ]
+}
+```
+
+| Field              | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| `metadata.buildId` | Deploy ID (studio or server)                                      |
+| `requestContext`   | Present for studio traces (authenticated), null for server traces |
+| `spanType`         | `agent_run`, `tool_call`, `workflow_run`, etc.                    |
+| `status`           | `success`, `error`, `running`                                     |
+
 ## Browser Actions
 
 ```text

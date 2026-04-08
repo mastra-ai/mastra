@@ -55,7 +55,24 @@ smoke test --env staging -d ~/projects -n test-app
 # Partial testing
 smoke test --env local --existing-project ~/my-app --test agents
 smoke test --env production --existing-project ~/my-app --test studio,server,traces
+
+# Multi-environment: same project, different targets
+smoke test --env staging --existing-project ~/my-app   # Uses .mastra-project-staging.json
+smoke test --env production --existing-project ~/my-app # Uses .mastra-project.json
 ```
+
+## Multi-Environment Support
+
+One project can target all environments using separate config files:
+
+| Environment    | Config File                    | What Happens                              |
+| -------------- | ------------------------------ | ----------------------------------------- |
+| Local          | N/A                            | `pnpm dev` → localhost:4111               |
+| Local Platform | `.mastra-project-local.json`   | Deploys to localhost:3010 (platform devs) |
+| Staging        | `.mastra-project-staging.json` | Deploys to staging.mastra.cloud           |
+| Production     | `.mastra-project.json`         | Deploys to mastra.cloud                   |
+
+See `references/tests/setup.md` for setup details.
 
 ## Parameters
 
