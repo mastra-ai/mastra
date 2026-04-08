@@ -102,6 +102,16 @@ await editor.prompt.update({
 
 Use `editor.prompt.list()` to paginate through stored blocks or `editor.prompt.getById()` to fetch a specific block. To preview an agent's full instructions with a set of prompt blocks applied, call `editor.prompt.preview()` with the draft content.
 
+The same operations are available over HTTP through the Mastra server:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/prompt-blocks` | List all stored prompt blocks. |
+| `POST` | `/stored/prompt-blocks` | Create a stored prompt block. |
+| `GET` | `/stored/prompt-blocks/:storedPromptBlockId` | Get a stored prompt block by ID. |
+| `PATCH` | `/stored/prompt-blocks/:storedPromptBlockId` | Update a stored prompt block. |
+| `DELETE` | `/stored/prompt-blocks/:storedPromptBlockId` | Delete a stored prompt block. |
+
 Once a prompt block is created, reference it from an agent's `instructions` field as a `prompt_block_ref`:
 
 ```typescript title="src/scripts/attach-prompt.ts"

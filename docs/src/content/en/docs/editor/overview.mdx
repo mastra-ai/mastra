@@ -107,6 +107,20 @@ await editor.agent.update({
 
 The `editor.agent` namespace also exposes `getById`, `list`, `listResolved`, and `delete`. The `editor.prompt` namespace exposes the same CRUD methods for prompt blocks. See [Prompts](/docs/editor/prompts#programmatic-control) for examples.
 
+### Server endpoints
+
+The same operations are available over HTTP through the Mastra server. Use these when you want to manage stored agents from a separate service or from a non-TypeScript client:
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/stored/agents` | List all stored agents. |
+| `POST` | `/stored/agents` | Create a stored agent. |
+| `GET` | `/stored/agents/:storedAgentId` | Get a stored agent by ID. |
+| `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
+| `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
+
+The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions` — see [Version management](/reference/client-js/agents#version-management) for the full list.
+
 ### Automated experimentation
 
 Because stored agents are just data, you can build automation loops that tune agents without human involvement. A common pattern is to pair the editor API with [datasets](/docs/evals/datasets/overview) and [experiments](/docs/evals/datasets/running-experiments):
