@@ -72,12 +72,23 @@ for i in "${!PROMPTS[@]}"; do
   MSG_NUM=$((i + 1))
   PROMPT="${PROMPTS[$i]}"
   
-  RESPONSE=$(curl -s --connect-timeout 10 --max-time 120 \
+  # Safely encode prompt as JSON string
+  JSON_PROMPT=$(printf '%s' "$PROMPT" | jq -Rs .)
+  
+  HTTP_CODE=$(curl -s -w '%{http_code}' -o /tmp/response_$$.json --connect-timeout 10 --max-time 120 \
     -X POST "$API_URL/v1/chat/completions" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -H "x-thread-id: $THREAD_ID" \
-    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]}")
+    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]}")
+  RESPONSE=$(cat /tmp/response_$$.json)
+  rm -f /tmp/response_$$.json
+  
+  if [ "$HTTP_CODE" -ge 400 ]; then
+    echo "ERROR at message $MSG_NUM: HTTP $HTTP_CODE"
+    FAILED=1
+    break
+  fi
   
   PROMPT_TOKENS=$(echo "$RESPONSE" | jq '.usage.prompt_tokens // 0')
   COMPLETION_TOKENS=$(echo "$RESPONSE" | jq '.usage.completion_tokens // 0')

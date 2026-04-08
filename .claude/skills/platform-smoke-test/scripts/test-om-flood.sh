@@ -38,7 +38,7 @@ FAILED=0
 TMPDIR=$(mktemp -d)
 
 # Send messages rapidly without waiting
-for i in $(seq 1 $COUNT); do
+for i in $(seq 1 "$COUNT"); do
   (
     set +e
     RESPONSE=$(curl -s --connect-timeout 10 --max-time 60 -w "\n%{http_code}" \
@@ -48,7 +48,6 @@ for i in $(seq 1 $COUNT); do
       -H "x-thread-id: $THREAD_ID" \
       -d "{\"model\": \"openai/gpt-4o-mini\", \"messages\": [{\"role\": \"user\", \"content\": \"Rapid message $i - respond with just the number $i\"}]}")
     CURL_EXIT=$?
-    set -e
     
     if [ "$CURL_EXIT" -ne 0 ]; then
       echo "curl_error_$CURL_EXIT" > "$TMPDIR/failed_$i"
@@ -57,7 +56,10 @@ for i in $(seq 1 $COUNT); do
     
     STATUS=$(printf '%s\n' "$RESPONSE" | tail -n 1)
     
-    if [ "$STATUS" -eq 200 ]; then
+    # Validate STATUS is numeric before comparison
+    if ! [[ "$STATUS" =~ ^[0-9]+$ ]]; then
+      echo "invalid_response" > "$TMPDIR/failed_$i"
+    elif [ "$STATUS" -eq 200 ]; then
       echo "1" > "$TMPDIR/success_$i"
     else
       echo "$STATUS" > "$TMPDIR/failed_$i"
@@ -70,8 +72,8 @@ echo "Waiting for all requests to complete..."
 wait
 
 # Count results
-SUCCESS=$(ls -1 "$TMPDIR"/success_* 2>/dev/null | wc -l | tr -d ' ')
-FAILED=$(ls -1 "$TMPDIR"/failed_* 2>/dev/null | wc -l | tr -d ' ')
+SUCCESS=$(find "$TMPDIR" -maxdepth 1 -name 'success_*' 2>/dev/null | wc -l | tr -d ' ')
+FAILED=$(find "$TMPDIR" -maxdepth 1 -name 'failed_*' 2>/dev/null | wc -l | tr -d ' ')
 
 echo ""
 echo "Results"

@@ -30,19 +30,24 @@ Verify the application handles errors gracefully with user-friendly messages.
 
 For `--env staging` or `--env production`:
 
+> Replace `<server-url>` with your environment URL, `<agent-id>` with an agent from your setup, and `<your-api-key>` from the platform dashboard.
+
 ```bash
 # Invalid agent
 curl -X POST <server-url>/api/agents/nonexistent-agent/generate \
+  -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"test"}]}'
 
 # Invalid JSON
-curl -X POST <server-url>/api/agents/weather-agent/generate \
+curl -X POST <server-url>/api/agents/<agent-id>/generate \
+  -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
   -d 'not valid json'
 
 # Missing required fields
-curl -X POST <server-url>/api/agents/weather-agent/generate \
+curl -X POST <server-url>/api/agents/<agent-id>/generate \
+  -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -62,7 +67,7 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 
 - [ ] Start a long-running operation
 - [ ] Briefly disconnect network (if possible)
-- [ ] Record error handling behavior
+- [ ] Record error-handling behavior
 - [ ] Note if retry or recovery options appear
 
 ## Observations to Report
