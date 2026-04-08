@@ -137,6 +137,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
+        { type: 'doc', id: 'core/getEditor', label: '.getEditor()' },
         { type: 'doc', id: 'core/getGateway', label: '.getGateway()' },
         { type: 'doc', id: 'core/getGatewayById', label: '.getGatewayById()' },
         { type: 'doc', id: 'core/getLogger', label: '.getLogger()' },
