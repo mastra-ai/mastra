@@ -303,9 +303,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -678,14 +675,14 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
+      label: 'Mastra Platform',
       customProps: {
-        tags: ['beta'],
+        tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastra-cloud/overview',
+          id: 'mastra-platform/overview',
           label: 'Overview',
         },
         {

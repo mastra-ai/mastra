@@ -178,7 +178,6 @@ const sidebars = {
       type: 'category',
       label: 'Editor',
       collapsed: true,
-      customProps: { tags: ['new'] },
       items: [
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
