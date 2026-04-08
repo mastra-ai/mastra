@@ -7,6 +7,15 @@ Test all OpenAI-compatible API endpoints.
 - `MASTRA_API_KEY` set
 - `API_URL` set
 
+## Quick Run
+
+Run all API tests at once:
+```bash
+./scripts/test-api.sh "$API_URL" "$MASTRA_API_KEY"
+```
+
+Or run individual tests manually below.
+
 ## Steps
 
 ### 1. Chat Completions (Primary)

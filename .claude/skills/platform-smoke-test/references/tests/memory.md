@@ -7,6 +7,15 @@ Test that memory persists across requests using thread IDs.
 - `MASTRA_API_KEY` set
 - `API_URL` set
 
+## Quick Run
+
+Run all memory tests at once:
+```bash
+./scripts/test-memory.sh "$API_URL" "$MASTRA_API_KEY"
+```
+
+Or run individual tests manually below.
+
 ## Steps
 
 ### 1. Create Thread with Context
