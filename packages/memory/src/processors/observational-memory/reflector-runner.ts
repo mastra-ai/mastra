@@ -36,6 +36,7 @@ import type {
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
+  ThresholdRange,
 } from './types';
 
 type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
@@ -393,7 +394,11 @@ export class ReflectorRunner {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    const bufOverrides = (
+      currentRecord.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const bufEffectiveTokens = bufOverrides?.reflection?.observationTokens ?? this.reflectionConfig.observationTokens;
+    const reflectThreshold = getMaxThreshold(bufEffectiveTokens);
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -605,7 +610,12 @@ export class ReflectorRunner {
       observabilityContext,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const effectiveObservationTokens =
+      overrides?.reflection?.observationTokens ?? this.reflectionConfig.observationTokens;
+    const reflectThreshold = getMaxThreshold(effectiveObservationTokens);
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
