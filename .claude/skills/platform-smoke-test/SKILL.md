@@ -142,12 +142,12 @@ After testing, provide:
 **Environment**: staging/production
 **API Key**: (provided / created)
 
-| Test | Status | Notes |
-|------|--------|-------|
-| Setup | ✅/❌ | |
-| API | ✅/❌ | |
-| Memory | ✅/❌ | |
-| ... | | |
+| Test   | Status | Notes |
+| ------ | ------ | ----- |
+| Setup  | ✅/❌  |       |
+| API    | ✅/❌  |       |
+| Memory | ✅/❌  |       |
+| ...    |        |       |
 
 **Issues Found**: (list any)
 **Warnings**: (list any)

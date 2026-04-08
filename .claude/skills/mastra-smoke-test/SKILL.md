@@ -145,12 +145,12 @@ After testing, provide:
 **Environment**: local/staging/production
 **Project**: <name>
 
-| Test | Status | Notes |
-|------|--------|-------|
-| Setup | ✅/❌ | |
-| Agents | ✅/❌ | |
-| Tools | ✅/❌ | |
-| ... | | |
+| Test   | Status | Notes |
+| ------ | ------ | ----- |
+| Setup  | ✅/❌  |       |
+| Agents | ✅/❌  |       |
+| Tools  | ✅/❌  |       |
+| ...    |        |       |
 
 **Issues Found**: (list any)
 **Warnings**: (list any deploy/runtime warnings)
