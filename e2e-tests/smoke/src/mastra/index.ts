@@ -1,5 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { DuckDBStore } from '@mastra/duckdb';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter } from '@mastra/observability';
 
@@ -107,9 +109,15 @@ export const mastra = new Mastra({
     suffix: suffixProcessor,
     'tripwire-test': tripwireProcessor,
   },
-  storage: new LibSQLStore({
-    id: 'smoke-test',
-    url: 'file:test.db',
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'smoke-test',
+      url: 'file:test.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
   }),
   observability: new Observability({
     configs: {

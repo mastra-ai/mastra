@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@mastra/core": "alpha",
+    "@mastra/duckdb": "alpha",
     "@mastra/libsql": "alpha",
     "@mastra/mcp": "alpha",
     "@mastra/memory": "alpha",

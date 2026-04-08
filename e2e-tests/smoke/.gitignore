@@ -3,3 +3,4 @@ reports/
 playwright-report/
 test-workspace/
 .env
+*duckdb*

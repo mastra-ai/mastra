@@ -3,11 +3,10 @@ import { fillAndSend, waitForAssistantMessage } from '../helpers';
 
 /**
  * Locate non-skeleton trace entries in the observability list.
- * Each trace is a <button> inside an <li> within the EntryList <ul>.
- * Skeleton rows have disabled buttons, so we exclude them.
+ * Trace entries are <button class="data-list-row"> elements inside a grid container.
  */
 function traceEntries(page: Page) {
-  return page.locator('ul.bg-surface3 > li button:not([disabled])');
+  return page.locator('button.data-list-row');
 }
 
 /**
@@ -27,7 +26,7 @@ test.describe('Observability', () => {
   test('traces appear after workflow run', async ({ page }) => {
     // Run a workflow to generate a fresh trace
     await page.goto('/workflows/sequential-steps/graph');
-    await page.getByRole('textbox', { name: 'Name' }).fill('observability-test');
+    await page.getByRole('textbox', { name: 'Name' }).first().fill('observability-test');
     await page.getByRole('button', { name: 'Run' }).click();
     const lastNode = page.locator('[data-workflow-node]').last();
     await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
@@ -62,12 +61,11 @@ test.describe('Observability', () => {
   test('traces list page loads with trace entries', async ({ page }) => {
     await page.goto('/observability');
 
-    await expect(page.locator('h1').first()).toHaveText('Observability');
+    await expect(page.getByRole('heading', { name: 'Traces', level: 1 })).toBeVisible();
 
     // Filter controls should be visible
     await expect(page.getByRole('button', { name: 'Filter' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Group by thread' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Reset' })).toBeVisible();
 
     // At least one trace entry should exist (seeded by the tests above)
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
@@ -91,28 +89,25 @@ test.describe('Observability', () => {
     // Filtered entries should contain the workflow name
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
     await expect(traceEntries(page).first()).toContainText('sequential-steps');
-
-    // Reset filter
-    await page.getByRole('button', { name: 'Reset' }).click();
   });
 
-  test('click trace to open detail dialog', async ({ page }) => {
+  test('click trace to open detail panel', async ({ page }) => {
     await page.goto('/observability');
 
     // Click the first trace entry
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
     await traceEntries(page).first().click();
 
-    // The trace detail dialog should open
-    await expect(page.getByRole('heading', { name: 'Observability Trace' })).toBeVisible({ timeout: 5_000 });
+    // The trace detail panel should open (heading is "Trace # <id>")
+    await expect(page.getByRole('heading', { name: /^Trace #/ })).toBeVisible({ timeout: 5_000 });
 
-    // Timeline section should be visible with span search
-    await expect(page.getByRole('heading', { name: 'Timeline' })).toBeVisible();
-    await expect(page.getByPlaceholder('Look for span name')).toBeVisible();
+    // Span buttons should be visible in the timeline
+    const spanButton = page.getByRole('button', { name: /workflow (run|step):/ });
+    await expect(spanButton.first()).toBeVisible();
 
-    // Close the dialog
-    await page.getByRole('button', { name: 'Close' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Observability Trace' })).not.toBeVisible();
+    // Close the panel
+    await page.getByRole('button', { name: 'Close Panel' }).first().click();
+    await expect(page.getByRole('heading', { name: /^Trace #/ })).not.toBeVisible();
   });
 
   test('span inspection within trace', async ({ page }) => {
@@ -123,19 +118,15 @@ test.describe('Observability', () => {
     // Click the first workflow trace
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
     await traceEntries(page).first().click();
-    await expect(page.getByRole('heading', { name: 'Observability Trace' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: /^Trace #/ })).toBeVisible({ timeout: 5_000 });
 
     // Click a step span in the timeline
     const stepSpan = page.getByRole('button', { name: /workflow step:/ });
     await expect(stepSpan.first()).toBeVisible({ timeout: 5_000 });
     await stepSpan.first().click();
 
-    // The span detail dialog should open with Details tab
-    await expect(page.getByRole('heading', { name: 'Observability Span' })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
-
-    // Span detail sections should be visible
-    await expect(page.getByRole('heading', { name: 'Input' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Output' })).toBeVisible();
+    // The span detail panel should open (heading is "Span # <id>")
+    await expect(page.getByRole('heading', { name: /^Span #/ })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('tab', { name: 'Details' })).toBeVisible();
   });
 });
