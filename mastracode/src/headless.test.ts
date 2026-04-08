@@ -144,9 +144,9 @@ describe('parseHeadlessArgs', () => {
   });
 
   it('throws on --continue with --thread', () => {
-    expect(() =>
-      parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--continue', '--thread', 'abc123']),
-    ).toThrow('--continue and --thread cannot be used together');
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--continue', '--thread', 'abc123'])).toThrow(
+      '--continue and --thread cannot be used together',
+    );
   });
 });
 
