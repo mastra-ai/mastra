@@ -22,7 +22,7 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 | 5. Multi-Model OM | ✅ | Cross-provider test |
 | 6. Message Buffering (Flood) | ✅ | Concurrency test |
 | 7. Long Conversation (30 prompts) | ✅ Required | Run ALL 30 prompts |
-| 8. Local + Gateway OM | ✅ **CRITICAL** | Run ALL scenarios (8a-8f) |
+| 8. Local + Gateway OM | ✅ **CRITICAL** | Run ALL scenarios (8a-8e) |
 
 **Your job is to:**
 1. Run each test to completion
@@ -283,9 +283,9 @@ Test the `memory-agent` (no local OM):
 
 ---
 
-#### 8c. Local OM + Gateway OM (Intensive)
+#### 8c. Local OM + Gateway OM (Intensive, 30k+ tokens)
 
-Test the `om-agent` (local OM enabled) with enough tokens to reach the OM threshold.
+Test the `om-agent` (local OM enabled) with enough tokens to reach and exceed the OM threshold.
 
 **Strategy:** Use detailed prompts + tool calls to accumulate tokens faster.
 
@@ -295,22 +295,24 @@ Test the `om-agent` (local OM enabled) with enough tokens to reach the OM thresh
    - "List all files in src/ and describe what each one does"
    - "Read tsconfig.json and explain each compiler option"
    - "Search for all imports in the codebase and summarize"
-   - Continue with detailed questions about what you read
-3. **Keep going until you reach ~30k+ tokens** (check Logs page for token counts)
-4. After reaching threshold, send 5 more messages
+   - Ask follow-up questions referencing earlier context
+   - Request code analysis, refactoring suggestions, documentation
+3. **Monitor token count in Gateway Logs** - aim for 30k+
+4. After reaching 30k, send 10 more messages and continue observing
 
 **Check Gateway dashboard:**
 - [ ] Note thread state
 - [ ] Note message count vs what you sent
-- [ ] Note token counts in Logs
+- [ ] Note token counts in Logs (before and after 30k)
 - [ ] Note cache behavior changes
 - [ ] Note any sudden jumps or drops in token counts
 
 **What to record:**
-- Token progression (especially around 30k)
+- Token progression (especially around 30k threshold)
 - Message count comparison (local vs Gateway)
+- Cache behavior changes after threshold
 - Any errors ("Message too long", etc.)
-- Any unexpected behavior after hitting threshold
+- Any changes in response behavior after threshold
 
 ---
 
@@ -405,34 +407,12 @@ npx tsx test-mastracode.ts
 
 ---
 
-#### 8f. Long Conversation via Local Agent (30k+ tokens)
-
-Use `om-agent` to build up a conversation that exceeds the OM threshold.
-
-1. Select `om-agent` in local Studio
-2. **Combine tool usage with detailed prompts:**
-   - Ask it to read files and explain them in detail
-   - Ask follow-up questions referencing earlier context
-   - Request code analysis, refactoring suggestions, documentation
-3. **Monitor token count in Gateway Logs** - aim for 30k+
-4. After passing 30k, send 10 more messages and observe behavior
-
-**What to record:**
-- [ ] Token progression before and after 30k
-- [ ] Message count (local vs Gateway dashboard)
-- [ ] Cache behavior changes
-- [ ] Any errors
-- [ ] Any changes in response behavior
-
----
-
 #### Summary Checklist
 
 - [ ] 8b: Memory-only agent baseline completed
-- [ ] 8c: OM agent test completed  
+- [ ] 8c: OM agent intensive test (30k+ tokens) completed  
 - [ ] 8d: Full history replay test completed
 - [ ] 8e: MastraCode integration test completed
-- [ ] 8f: Long conversation via local agent completed
 
 ## Observations to Report
 
@@ -452,7 +432,6 @@ For each test, note:
 | Flood test | Success/failure counts, any buffering behavior |
 | Long conversation (30 prompts) | Token progression (~25k), cache behavior |
 | 8b: Memory-only baseline | Token progression, thread state |
-| 8c: Local OM + Gateway (intensive) | Behavior at 30k+ tokens, message count, cache changes |
+| 8c: Local OM + Gateway (30k+) | Behavior at threshold, message count, cache changes |
 | 8d: Full history replay | How Gateway handles full history send |
 | 8e: MastraCode integration | Token progression, Gateway Logs |
-| 8f: Long conversation local (30k+) | Behavior before/after threshold, message count |
