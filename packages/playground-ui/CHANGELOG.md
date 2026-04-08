@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 22.1.1-alpha.1
+
+### Patch Changes
+
+- Fixed integration tools (Composio, Arcade) not saving when added to code-defined agents in the Agent Editor ([#15185](https://github.com/mastra-ai/mastra/pull/15185))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+  - @mastra/client-js@1.13.3-alpha.0
+  - @mastra/react@0.2.25-alpha.0
+
 ## 22.1.1-alpha.0
 
 ### Patch Changes
