@@ -8,6 +8,9 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 - `API_URL` set
 - Dashboard access
 
+## Time Estimate
+~45 seconds for Step 1 (12 messages × 2s sleep + API time), ~5 minutes total.
+
 ## Steps
 
 ### 1. Extended Conversation Test

@@ -148,4 +148,5 @@ After testing, provide:
 
 **Issues Found**: (list any)
 **Warnings**: (list any deploy/runtime warnings)
+**Skipped Tests**: (list with reason - e.g., "RBAC - requires multiple accounts")
 ```

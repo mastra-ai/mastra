@@ -142,7 +142,8 @@ After testing, provide:
 | ... | | |
 
 **Issues Found**: (list any)
-**Skipped Tests**: (list with reason)
+**Warnings**: (list any)
+**Skipped Tests**: (list with reason - e.g., "Invites - requires multiple accounts")
 ```
 
 ## Troubleshooting
