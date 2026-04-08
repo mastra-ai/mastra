@@ -233,8 +233,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           <Alert variant="warning">
             <AlertTitle as="h5">Read-only</AlertTitle>
             <AlertDescription as="p">
-              To edit the system prompt in Studio, add{' '}
-              <code className="font-medium">@mastra/editor</code> to your project. See the{' '}
+              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+              project. See the{' '}
               <a
                 href="https://mastra.ai/docs/editor/overview"
                 target="_blank"
