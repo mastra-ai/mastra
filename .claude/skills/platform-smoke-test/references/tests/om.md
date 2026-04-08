@@ -7,7 +7,7 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 - `MASTRA_API_KEY` set
 - `API_URL` set
 - Dashboard access
-- For Test 8: A local Mastra project (create one if needed)
+- For Test 8: A local Mastra project — see `references/tests/local-setup.md`
 
 ## Required Tests
 
@@ -22,7 +22,7 @@ Test Observational Memory (OM) features - Observer, Reflector, and token trackin
 | 5. Multi-Model OM | ✅ | Cross-provider test |
 | 6. Message Buffering (Flood) | ✅ | Concurrency test |
 | 7. Token Explosion (Intensive) | ✅ **CRITICAL** | Run ALL 30 prompts |
-| 8. Local + Gateway OM | ✅ **CRITICAL** | Set up local project if needed |
+| 8. Local + Gateway OM | ✅ **CRITICAL** | Run ALL scenarios (8a-8f) |
 
 **Your job is to:**
 1. Run each test to completion
@@ -239,73 +239,173 @@ echo "Test complete. Check Logs page for full token breakdown."
 
 ### 8. Local + Gateway OM Test — CRITICAL, DO NOT SKIP
 
-**This test requires a local Mastra project. If you don't have one, create it as part of this test.**
+**Run ALL scenarios (8a-8f). Do not skip any.**
 
-Test behavior when a local Mastra project with memory routes requests through the Gateway.
+---
 
-**Setup (create if needed):**
+#### 8a. Setup
 
-1. Create a local Mastra project:
+**Read `references/tests/local-setup.md` first.** Follow those instructions to:
+1. Create or reuse a local Mastra project
+2. Add `memory-agent` (Memory only) and `om-agent` (Memory + OM)
+3. Configure Gateway routing in `.env`
+4. Start the dev server
+
+**Do not proceed until:**
+- [ ] Both agents are visible in local Studio (`http://localhost:4111`)
+- [ ] `.env` has `OPENAI_BASE_URL` pointing to Gateway
+
+---
+
+#### 8b. Baseline: Memory Only → Gateway
+
+Test the `memory-agent` (no local OM):
+
+1. Open local Studio (`http://localhost:4111`)
+2. Select `memory-agent`
+3. Send 10 messages in sequence
+4. Check Gateway dashboard:
+   - [ ] Note thread appears
+   - [ ] Note message count
+   - [ ] Note token counts in Logs
+
+**What to record:**
+- Token progression
+- Whether messages appear correctly in Gateway thread
+
+---
+
+#### 8c. Local OM + Gateway OM
+
+Test the `om-agent` (local OM enabled):
+
+1. Select `om-agent` in local Studio
+2. Send 15+ messages in sequence (try to build up tokens)
+3. Check Gateway dashboard:
+   - [ ] Note thread state
+   - [ ] Note message count vs what you sent
+   - [ ] Note token counts in Logs
+   - [ ] Note any unusual jumps in token counts
+
+**What to record:**
+- Whether message count matches
+- Token progression pattern
+- Any errors
+
+---
+
+#### 8d. Full History Replay Test
+
+Test what happens when the client sends full conversation history (simulating stateless replay):
+
 ```bash
-cd ~/mastra-smoke-tests
-pnpx create-mastra@latest local-gateway-test --components agents,tools
-cd local-gateway-test
+THREAD_ID="local-replay-$(date +%s)"
+
+# Build up history with 5 messages
+for i in {1..5}; do
+  curl -s -X POST "$API_URL/v1/chat/completions" \
+    -H "Authorization: Bearer $MASTRA_API_KEY" \
+    -H "Content-Type: application/json" \
+    -H "x-thread-id: $THREAD_ID" \
+    -d "{\"model\": \"openai/gpt-4o\", \"messages\": [{\"role\": \"user\", \"content\": \"Message $i\"}]}"
+  sleep 1
+done
+
+# Now send ALL history again (simulating what a local client might do)
+curl -s -X POST "$API_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $MASTRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-thread-id: $THREAD_ID" \
+  -d '{
+    "model": "openai/gpt-4o",
+    "messages": [
+      {"role": "user", "content": "Message 1"},
+      {"role": "assistant", "content": "Response 1"},
+      {"role": "user", "content": "Message 2"},
+      {"role": "assistant", "content": "Response 2"},
+      {"role": "user", "content": "Message 3"},
+      {"role": "assistant", "content": "Response 3"},
+      {"role": "user", "content": "Message 4"},
+      {"role": "assistant", "content": "Response 4"},
+      {"role": "user", "content": "Message 5"},
+      {"role": "assistant", "content": "Response 5"},
+      {"role": "user", "content": "Message 6 - new message after full replay"}
+    ]
+  }'
 ```
 
-2. Configure agent to use Gateway as the model provider. In `src/mastra/agents/index.ts`:
+**What to record:**
+- [ ] Token count for the full-history request
+- [ ] Whether Gateway handled the replay correctly
+- [ ] Check thread in dashboard for message count
+
+---
+
+#### 8e. MastraCode Integration Test
+
+Test using `createMastraCode` which has built-in Memory + OM + Gateway support.
+
+Create a test script `test-mastracode.ts`:
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { createMastraCode } from 'mastracode';
 
-export const gatewayAgent = new Agent({
-  name: 'gateway-agent',
-  instructions: 'You are a helpful assistant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
-  },
-  memory: new Memory(),
-});
+async function test() {
+  const mc = await createMastraCode({
+    cwd: process.cwd(),
+  });
+  
+  // Get the harness and run a simple conversation
+  const harness = mc.harness;
+  
+  // Send multiple messages
+  for (let i = 1; i <= 10; i++) {
+    console.log(`Sending message ${i}...`);
+    const result = await harness.generate({
+      messages: [{ role: 'user', content: `Tell me fact ${i} about TypeScript` }],
+    });
+    console.log(`Response ${i}: ${result.text?.substring(0, 100)}...`);
+    console.log(`Tokens: ${JSON.stringify(result.usage)}`);
+  }
+}
+
+test().catch(console.error);
 ```
 
-3. Set environment to route through Gateway. In `.env`:
+Run:
 ```bash
-OPENAI_API_KEY=msk_your_gateway_api_key  # Use your Gateway API key
-OPENAI_BASE_URL=https://server.mastra.ai/v1  # Point to Gateway
+npx tsx test-mastracode.ts
 ```
 
-4. Start the local dev server:
-```bash
-pnpm dev
-```
+**What to record:**
+- [ ] Token progression across 10 messages
+- [ ] Any errors
+- [ ] Check Gateway Logs for the requests
 
-**Test Steps:**
+---
 
-1. Open local Studio (usually `http://localhost:4111`)
-2. Chat with the gateway-agent:
-   - Send 5+ messages in sequence
-   - Record each response and any delays
+#### 8f. Long Conversation via Local Agent
 
-3. Check Gateway dashboard (`$GATEWAY_URL`):
-   - Navigate to Threads page
-   - [ ] Note if thread appears from local agent
-   - [ ] Note message count in thread
+Use the `om-agent` and send 30+ messages to try to trigger OM thresholds:
 
-4. Check Gateway Logs:
-   - [ ] Note token counts for each request
-   - [ ] Note if requests show as coming from local agent
+1. Select `om-agent` in local Studio
+2. Use the same detailed prompts from Test 7 (Token Explosion)
+3. Send at least 20 of them through the local agent
 
-5. Compare to direct API:
-   - [ ] Note any differences in token counts
-   - [ ] Note any message duplication
-   - [ ] Note any "message too long" errors
+**What to record:**
+- [ ] Token progression
+- [ ] Any sudden changes in behavior
+- [ ] Any errors ("Message too long", etc.)
+- [ ] Gateway Logs token breakdown
 
-**Verification:**
-- [ ] Record whether Gateway received requests from local agent
-- [ ] Record token counts from Gateway Logs
-- [ ] Record thread state in Gateway dashboard
-- [ ] Note any errors or unexpected behavior
+---
+
+#### Summary Checklist
+
+- [ ] 8b: Memory-only agent baseline completed
+- [ ] 8c: OM agent test completed  
+- [ ] 8d: Full history replay test completed
+- [ ] 8e: MastraCode integration test completed
+- [ ] 8f: Long conversation via local agent completed
 
 ## Observations to Report
 
@@ -324,4 +424,8 @@ For each test, note:
 | Multi-model | Whether context persists across providers |
 | Flood test | Success/failure counts, any buffering behavior |
 | Token explosion (30 prompts) | Token progression, cache behavior, any errors |
-| Local + Gateway | Gateway Logs token counts, thread state, any unusual behavior |
+| 8b: Memory-only baseline | Token progression, thread state |
+| 8c: Local OM + Gateway | Message count match, token jumps, errors |
+| 8d: Full history replay | How Gateway handles full history send |
+| 8e: MastraCode integration | Token progression, Gateway Logs |
+| 8f: Long conversation local | Behavior over 30+ messages |
