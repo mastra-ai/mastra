@@ -8,15 +8,13 @@ Set up or verify a Mastra project for smoke testing.
 
 One project can target multiple environments using separate config files:
 
-| Environment      | Config File                    | Platform API URL                       | Studio/Server Domain                    |
-| ---------------- | ------------------------------ | -------------------------------------- | --------------------------------------- |
-| Local Dev        | N/A (no deploy)                | N/A                                    | `localhost:4111`                        |
-| Local Platform   | `.mastra-project-local.json`   | `http://localhost:3010`                | `localhost:3010/studio/*`               |
-| Staging          | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai`   | `*.studio.staging.mastra.cloud`         |
-| Production       | `.mastra-project.json`         | `https://platform.mastra.ai`           | `*.studio.mastra.cloud`                 |
+| Environment | Config File                    | Platform API URL                       | Studio/Server Domain                    |
+| ----------- | ------------------------------ | -------------------------------------- | --------------------------------------- |
+| Local       | N/A (no deploy)                | N/A                                    | `localhost:4111`                        |
+| Staging     | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai`   | `*.studio.staging.mastra.cloud`         |
+| Production  | `.mastra-project.json`         | `https://platform.mastra.ai`           | `*.studio.mastra.cloud`                 |
 
-- **Local Dev** = Running your Mastra project with `pnpm dev` (no cloud deploy)
-- **Local Platform** = Deploying to a locally running Mastra platform (for platform development)
+- **Local** = Running your Mastra project with `pnpm dev` (no cloud deploy)
 - **Staging/Production** = Deploying to Mastra Cloud
 
 ### Setting Up Multi-Environment
@@ -35,14 +33,9 @@ export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
 pnpx mastra@latest auth login
 pnpx mastra@latest studio deploy -y
 pnpx mastra@latest server deploy -y
-
-# Deploy to local platform (for platform devs only)
-export MASTRA_PLATFORM_API_URL=http://localhost:3010
-pnpx mastra@latest auth login
-pnpx mastra@latest studio deploy --config .mastra-project-local.json -y
 ```
 
-Each deploy creates a separate project ID in its config file, so environments don't interfere.
+Each deploy creates a separate project ID in its config file, so staging and production don't interfere.
 
 **Note**: Always warn user before running `auth login` as it opens a browser.
 

@@ -12,11 +12,10 @@ Instructions specific to `--env staging` and `--env production` testing.
 
 Deploy to staging and production from the same project using separate config files:
 
-| Environment    | Config File                    | Platform API URL                     | Deploy URLs                             |
-| -------------- | ------------------------------ | ------------------------------------ | --------------------------------------- |
-| Production     | `.mastra-project.json`         | `https://platform.mastra.ai`         | `<project>.studio.mastra.cloud`         |
-| Staging        | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai` | `<project>.studio.staging.mastra.cloud` |
-| Local Platform | `.mastra-project-local.json`   | `http://localhost:3010`              | `localhost:3010/studio/*`               |
+| Environment | Config File                    | Platform API URL                     | Deploy URLs                             |
+| ----------- | ------------------------------ | ------------------------------------ | --------------------------------------- |
+| Production  | `.mastra-project.json`         | `https://platform.mastra.ai`         | `<project>.studio.mastra.cloud`         |
+| Staging     | `.mastra-project-staging.json` | `https://platform.staging.mastra.ai` | `<project>.studio.staging.mastra.cloud` |
 
 Each environment gets its own project ID, so they don't interfere.
 
@@ -30,9 +29,6 @@ export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai
 
 # For staging
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai
-
-# For local platform (platform devs only)
-export MASTRA_PLATFORM_API_URL=http://localhost:3010
 ```
 
 ## LLM API Key
@@ -108,16 +104,12 @@ pnpx mastra@latest studio deploy -y
 
 # Staging (specify config file)
 pnpx mastra@latest studio deploy --config .mastra-project-staging.json -y
-
-# Local platform
-pnpx mastra@latest studio deploy --config .mastra-project-local.json -y
 ```
 
 Wait for deployment. Note the URL from output:
 
 - Production: `https://<project>.studio.mastra.cloud`
 - Staging: `https://<project>.studio.staging.mastra.cloud`
-- Local: `http://localhost:3010/studio/<project>`
 
 **Verify**: Open URL, sign in, confirm Studio UI loads.
 
@@ -216,7 +208,6 @@ When testing browser agents in deployed environments:
 # === Environment ===
 export MASTRA_PLATFORM_API_URL=https://platform.mastra.ai          # production
 export MASTRA_PLATFORM_API_URL=https://platform.staging.mastra.ai  # staging
-export MASTRA_PLATFORM_API_URL=http://localhost:3010               # local platform
 
 # === Auth (warn user before login - opens browser!) ===
 pnpx mastra@latest auth login

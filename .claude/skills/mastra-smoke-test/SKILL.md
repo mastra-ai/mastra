@@ -65,12 +65,11 @@ smoke test --env production --existing-project ~/my-app # Uses .mastra-project.j
 
 One project can target all environments using separate config files:
 
-| Environment    | Config File                    | What Happens                              |
-| -------------- | ------------------------------ | ----------------------------------------- |
-| Local          | N/A                            | `pnpm dev` → localhost:4111               |
-| Local Platform | `.mastra-project-local.json`   | Deploys to localhost:3010 (platform devs) |
-| Staging        | `.mastra-project-staging.json` | Deploys to staging.mastra.cloud           |
-| Production     | `.mastra-project.json`         | Deploys to mastra.cloud                   |
+| Environment | Config File                    | What Happens                    |
+| ----------- | ------------------------------ | ------------------------------- |
+| Local       | N/A                            | `pnpm dev` → localhost:4111     |
+| Staging     | `.mastra-project-staging.json` | Deploys to staging.mastra.cloud |
+| Production  | `.mastra-project.json`         | Deploys to mastra.cloud         |
 
 See `references/tests/setup.md` for setup details.
 
