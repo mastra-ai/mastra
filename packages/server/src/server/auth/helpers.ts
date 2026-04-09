@@ -317,6 +317,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         mastra.getLogger()?.error('mapUserToResourceId failed', {
           error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
         });
+        return { action: 'error', status: 500, body: { error: 'Failed to map authenticated user to a resource ID' } };
       }
     }
 

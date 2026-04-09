@@ -183,10 +183,11 @@ export const mastra = new Mastra({
           })
           const requestContext = c.get('requestContext')
 
-          if (user) {
-            requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+          if (!user) {
+            return c.json({ error: 'Unauthorized' }, 401)
           }
 
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
           return next()
         },
       },
@@ -196,6 +197,7 @@ export const mastra = new Mastra({
 ```
 
 `server.middleware` runs before Mastra's per-route auth checks. When middleware needs the authenticated user, call `getAuthenticatedUser()` to resolve it from the configured auth provider without changing the default route auth flow.
+
 #### Using `MASTRA_THREAD_ID_KEY`
 
 You can also set `MASTRA_THREAD_ID_KEY` to override the client-provided thread ID:

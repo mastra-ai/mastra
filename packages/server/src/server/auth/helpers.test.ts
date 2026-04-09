@@ -614,7 +614,6 @@ describe('auth helpers', () => {
 
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
     });
-
     it('should not set resource ID when mapUserToResourceId returns null', async () => {
       const requestContext = createRequestContext();
 
@@ -683,8 +682,7 @@ describe('auth helpers', () => {
       expect(result.action).toBe('error');
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
-
-    it('should continue authentication when mapUserToResourceId throws', async () => {
+    it('should reject the request when mapUserToResourceId throws', async () => {
       const requestContext = createRequestContext();
 
       const result = await coreAuthMiddleware({
@@ -700,8 +698,11 @@ describe('auth helpers', () => {
         requestContext,
       });
 
-      expect(result.action).toBe('next');
-      expect(requestContext.get('user')).toEqual({ id: 'user-123' });
+      expect(result).toEqual({
+        action: 'error',
+        status: 500,
+        body: { error: 'Failed to map authenticated user to a resource ID' },
+      });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
   });

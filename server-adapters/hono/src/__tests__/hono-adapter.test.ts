@@ -733,7 +733,6 @@ describe('Hono Server Adapter', () => {
     it('should strip mastra__resourceId from client-provided requestContext in body', async () => {
       const mastra = new Mastra({});
       const app = new Hono();
-
       const adapter = new MastraServer({ app, mastra });
 
       const testRoute: ServerRoute<any, any, any> = {
@@ -797,6 +796,7 @@ describe('Hono Server Adapter', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             requestContext: {
+              mastra__resourceId: 'injected-victim-id',
               mastra__threadId: 'injected-thread-id',
               myKey: 'safe-value',
             },
@@ -813,7 +813,6 @@ describe('Hono Server Adapter', () => {
     it('should strip reserved keys from client-provided requestContext in GET query params', async () => {
       const mastra = new Mastra({});
       const app = new Hono();
-
       const adapter = new MastraServer({ app, mastra });
 
       const testRoute: ServerRoute<any, any, any> = {

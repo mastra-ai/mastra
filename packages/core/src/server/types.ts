@@ -57,7 +57,7 @@ export type MastraAuthConfig<TUser = unknown> = {
    * Maps the authenticated user to a resource ID for memory/thread scoping.
    * When provided, the returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context
    * after successful authentication, enabling per-user memory isolation.
-   */
+  */
   mapUserToResourceId?: (user: TUser) => string | undefined | null;
 
   /**
