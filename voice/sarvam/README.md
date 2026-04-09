@@ -23,16 +23,16 @@ import { SarvamVoice } from '@mastra/voice-sarvam';
 
 const voice = new SarvamVoice({
   speechModel: {
-    model: 'bulbul:v1',
+    model: 'bulbul:v3',
     apiKey: process.env.SARVAM_API_KEY!,
     language: 'en-IN',
   },
   listeningModel: {
     apiKey: process.env.SARVAM_API_KEY!,
-    model: 'saarika:v2',
-    languageCode: 'unknown', // By default only works with saarika:v2
+    model: 'saarika:v2.5',
+    languageCode: 'unknown',
   },
-  speaker: 'meera',
+  speaker: 'shubh',
 });
 
 // Create an agent with voice capabilities
