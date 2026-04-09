@@ -18,9 +18,13 @@ type MockSkillSource = SkillSource & {
 // Mock Skill Source
 // =============================================================================
 
-function createMockFilesystem(files: Record<string, string | Buffer> = {}): MockSkillSource {
+function createMockFilesystem(
+  files: Record<string, string | Buffer> = {},
+  options?: { realpaths?: Record<string, string> },
+): MockSkillSource {
   const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
   const directories = new Set<string>();
+  const realpaths = options?.realpaths ?? {};
 
   // Initialize directories from file paths
   for (const path of Object.keys(files)) {
@@ -132,6 +136,7 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
       }
       throw new Error(`Path not found: ${path}`);
     }),
+    realpath: vi.fn(async (path: string) => realpaths[path] ?? path),
   };
 }
 
@@ -1137,6 +1142,7 @@ Instructions for the new skill.`;
           }
           throw new Error(`Path not found: ${path}`);
         }),
+        realpath: vi.fn(async (path: string) => path),
         // NOTE: No writeFile, mkdir, rmdir - this is a read-only source
       };
     }
@@ -1457,6 +1463,30 @@ Instructions for the new skill.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should de-duplicate same-named local skills that resolve to the same canonical path', async () => {
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+      });
+
+      const winner = await skills.get('test-skill');
+      expect(winner?.path).toBe('linked-skills/test-skill');
+      expect(winner?.instructions).toContain('This is the test skill instructions.');
     });
 
     it('should error when same-named skills share the same source type (e.g., two local skills)', async () => {
