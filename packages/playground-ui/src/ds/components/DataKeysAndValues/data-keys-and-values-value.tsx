@@ -7,7 +7,5 @@ export interface DataKeysAndValuesValueProps {
 }
 
 export function DataKeysAndValuesValue({ className, children }: DataKeysAndValuesValueProps) {
-  return (
-    <dd className={cn(dataKeysAndValuesValueStyles, 'truncate', className)}>{children}</dd>
-  );
+  return <dd className={cn(dataKeysAndValuesValueStyles, 'truncate', className)}>{children}</dd>;
 }
