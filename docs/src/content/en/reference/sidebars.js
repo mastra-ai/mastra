@@ -179,7 +179,6 @@ const sidebars = {
       type: 'category',
       label: 'Editor',
       collapsed: true,
-      customProps: { tags: ['new'] },
       items: [
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
@@ -265,6 +264,12 @@ const sidebars = {
           customProps: { tags: ['alpha'] },
         },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Platform',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
     },
     {
       type: 'category',
