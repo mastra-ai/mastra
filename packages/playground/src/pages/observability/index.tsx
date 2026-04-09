@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
 import {
   EntityListPageLayout,
@@ -14,8 +13,8 @@ import {
   getToNextEntryFn,
   getToPreviousEntryFn,
   groupTracesByThread,
-  useAgents,
-  useWorkflows,
+  ROOT_ENTITY_TYPE_OPTIONS,
+  useEntityNames,
   useScorers,
   useTags,
   useEnvironments,
@@ -36,11 +35,7 @@ export default function Observability() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
-    value: 'all',
-    label: 'All',
-    type: 'all' as const,
-  });
+  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(
     () => new Date(Date.now() - 24 * 60 * 60 * 1000),
   );
@@ -53,10 +48,12 @@ export default function Observability() {
   const [selectedMetadata, setSelectedMetadata] = useState<Record<string, string>>({});
   const [datePreset, setDatePreset] = useState<TraceDatePreset>('last-24h');
   const [contextFilters, setContextFilters] = useState<Record<string, string>>({});
-  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
   const { data: availableTags = [] } = useTags();
+  const { data: discoveredEntityNames = [] } = useEntityNames({
+    entityType: selectedEntityOption?.entityType,
+    rootOnly: true,
+  });
   const { data: discoveredEnvironments = [] } = useEnvironments();
   const { data: discoveredServiceNames = [] } = useServiceNames();
 
@@ -82,9 +79,8 @@ export default function Observability() {
     isError: isTracesError,
   } = useTraces({
     filters: {
-      ...(selectedEntityOption?.type !== 'all' && {
-        entityId: selectedEntityOption?.value,
-        entityType: selectedEntityOption?.type,
+      ...(selectedEntityOption && {
+        entityType: selectedEntityOption.entityType,
       }),
       ...(selectedDateFrom && {
         startedAt: {
@@ -199,11 +195,18 @@ export default function Observability() {
         changed = true;
       }
     }
-    if (!changed) return prevContextResultRef.current;
+    const entityNames = new Set<string>([
+      ...allTraces
+        .map(trace => trace.entityName)
+        .filter((value): value is string => typeof value === 'string' && value.trim()),
+      ...discoveredEntityNames,
+    ]);
+    if (!changed && entityNames.size === 0) return prevContextResultRef.current;
     const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    result['entityName'] = Array.from(entityNames).sort();
     prevContextResultRef.current = result;
     return result;
-  }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
+  }, [allTraces, discoveredEntityNames, discoveredEnvironments, discoveredServiceNames]);
 
   useEffect(() => {
     if (traceId) {
@@ -223,41 +226,21 @@ export default function Observability() {
     }
   }, [dialogIsOpen, selectedTraceId, traceId]);
 
-  const agentOptions: EntityOptions[] = useMemo(
-    () =>
-      (Object.entries(agents) || []).map(([_, value]) => ({
-        value: value.id,
-        label: value.name,
-        type: EntityType.AGENT,
-      })),
-    [agents],
-  );
-
-  const workflowOptions: EntityOptions[] = useMemo(
-    () =>
-      (Object.entries(workflows || {}) || []).map(([, value]) => ({
-        value: value.name,
-        label: value.name,
-        type: EntityType.WORKFLOW_RUN,
-      })),
-    [workflows],
-  );
-
-  const entityOptions: EntityOptions[] = useMemo(
-    () => [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOptions, ...workflowOptions],
-    [agentOptions, workflowOptions],
-  );
+  const entityOptions: EntityOptions[] = useMemo(() => [...ROOT_ENTITY_TYPE_OPTIONS], []);
 
   // Sync URL entity to state
   const entityName = searchParams.get('entity');
-  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
-  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+  const matchedEntityOption = entityOptions.find(option => option.entityType === entityName);
+  if (matchedEntityOption?.entityType !== selectedEntityOption?.entityType) {
     setSelectedEntityOption(matchedEntityOption);
+  } else if (!matchedEntityOption && selectedEntityOption) {
+    setSelectedEntityOption(undefined);
   }
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all', traceId: '' });
+    setSearchParams({});
+    setSelectedEntityOption(undefined);
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
@@ -283,7 +266,12 @@ export default function Observability() {
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    if (option?.value) setSearchParams({ entity: option.value });
+    setSelectedEntityOption(option);
+    if (option) {
+      setSearchParams({ entity: option.entityType });
+    } else {
+      setSearchParams({});
+    }
   };
 
   const handleTraceClick = (id: string) => {
@@ -381,7 +369,7 @@ export default function Observability() {
   }
 
   const filtersApplied =
-    selectedEntityOption?.value !== 'all' ||
+    !!selectedEntityOption ||
     selectedDateFrom ||
     selectedDateTo ||
     searchQuery.trim() ||
@@ -434,7 +422,7 @@ export default function Observability() {
             onDateChange={handleDataChange}
             selectedDateFrom={selectedDateFrom}
             selectedDateTo={selectedDateTo}
-            isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+            isLoading={isTracesLoading}
             groupByThread={groupByThread}
             onGroupByThreadChange={setGroupByThread}
             searchQuery={searchQuery}

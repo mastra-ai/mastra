@@ -12,6 +12,29 @@ describe('rag-ingestion helpers', () => {
       expect(observabilityContext).toBeDefined();
       expect(observabilityContext.tracingContext).toBeDefined();
     });
+
+    it('forces rag_ingestion as the entity type for root ingestion spans', () => {
+      const span = {} as any;
+      const startSpan = vi.fn(() => span);
+      const mastra = {
+        observability: {
+          getSelectedInstance: () => ({
+            startSpan,
+          }),
+        },
+      } as any;
+
+      const result = startRagIngestion({ mastra, name: 'test ingestion' });
+
+      expect(startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'rag_ingestion',
+          entityType: 'rag_ingestion',
+        }),
+      );
+      expect(result.span).toBe(span);
+      expect(result.observabilityContext.tracingContext.currentSpan).toBe(span);
+    });
   });
 
   describe('withRagIngestion', () => {

@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@mastra/core/observability';
 import type { ReactNode } from 'react';
 
 export type UISpan = {
@@ -22,10 +22,26 @@ export type UISpanStyle = {
 
 // -- Trace filtering types ----------------------------------------------------
 
-export type EntityOptions =
-  | { value: string; label: string; type: EntityType.AGENT }
-  | { value: string; label: string; type: EntityType.WORKFLOW_RUN }
-  | { value: string; label: string; type: 'all' };
+export type EntityOptions = { label: string; entityType: EntityType };
+
+export const ROOT_ENTITY_TYPES = {
+  AGENT: EntityType.AGENT,
+  WORKFLOW: EntityType.WORKFLOW_RUN,
+  SCORER: EntityType.SCORER,
+  INGEST: EntityType.RAG_INGESTION,
+} as const;
+
+export const ROOT_ENTITY_TYPE_OPTIONS = [
+  { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },
+  { label: 'Workflow', entityType: ROOT_ENTITY_TYPES.WORKFLOW },
+  { label: 'Scorer', entityType: ROOT_ENTITY_TYPES.SCORER },
+  { label: 'Ingest', entityType: ROOT_ENTITY_TYPES.INGEST },
+] as const satisfies readonly EntityOptions[];
+
+export const PROMOTED_METADATA_FILTER_FIELDS = {
+  targetTraceId: { label: 'Target Trace ID', group: 'Correlation' },
+  targetSpanId: { label: 'Target Span ID', group: 'Correlation' },
+} as const;
 
 export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
@@ -43,12 +59,12 @@ export const CONTEXT_FIELD_IDS = [
   'threadId',
   'requestId',
   'experimentId',
-  'spanType',
   'entityName',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
   'rootEntityType',
   'rootEntityId',
-  'rootEntityName',
 ] as const;
+
+export const METADATA_FILTER_EXCLUDED_KEYS = [...CONTEXT_FIELD_IDS, ...Object.keys(PROMOTED_METADATA_FILTER_FIELDS)] as const;

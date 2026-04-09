@@ -1,4 +1,3 @@
-import type { EntityType } from '@mastra/core/observability';
 import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import { isValid, parse } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
@@ -11,42 +10,15 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { Searchbar } from '@/ds/components/Searchbar/searchbar';
 import { Switch } from '@/ds/components/Switch/switch';
+import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+import { CONTEXT_FIELD_IDS, METADATA_FILTER_EXCLUDED_KEYS, PROMOTED_METADATA_FILTER_FIELDS } from '@/domains/traces/types';
 import { cn } from '@/lib/utils';
 
-// UI-specific entity options that map to API EntityType values
-// Using the enum values (lowercase strings) for the type field
-export type EntityOptions =
-  | { value: string; label: string; type: EntityType.AGENT }
-  | { value: string; label: string; type: EntityType.WORKFLOW_RUN }
-  | { value: string; label: string; type: 'all' };
+export type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+export { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
+export { ROOT_ENTITY_TYPE_OPTIONS, ROOT_ENTITY_TYPES } from '@/domains/traces/types';
 
 export type MetadataFilter = { key: string; value: string };
-
-export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
-
-/** Canonical list of context field IDs used for trace filtering and value extraction */
-export const CONTEXT_FIELD_IDS = [
-  'environment',
-  'serviceName',
-  'source',
-  'scope',
-  'userId',
-  'organizationId',
-  'resourceId',
-  'runId',
-  'sessionId',
-  'threadId',
-  'requestId',
-  'experimentId',
-  'spanType',
-  'entityName',
-  'parentEntityType',
-  'parentEntityId',
-  'parentEntityName',
-  'rootEntityType',
-  'rootEntityId',
-  'rootEntityName',
-] as const;
 
 /** Label and group metadata for each context field, keyed by field ID */
 const CONTEXT_FIELD_META: Record<string, { label: string; group: string }> = {
@@ -62,14 +34,12 @@ const CONTEXT_FIELD_META: Record<string, { label: string; group: string }> = {
   threadId: { label: 'Thread ID', group: 'Correlation' },
   requestId: { label: 'Request ID', group: 'Correlation' },
   experimentId: { label: 'Experiment ID', group: 'Experimentation' },
-  spanType: { label: 'Span Type', group: 'Span' },
-  entityName: { label: 'Entity Name', group: 'Entity' },
+  entityName: { label: 'Root Entity Name', group: 'Entity' },
   parentEntityType: { label: 'Parent Entity Type', group: 'Entity' },
   parentEntityId: { label: 'Parent Entity ID', group: 'Entity' },
   parentEntityName: { label: 'Parent Entity Name', group: 'Entity' },
   rootEntityType: { label: 'Root Entity Type', group: 'Entity' },
   rootEntityId: { label: 'Root Entity ID', group: 'Entity' },
-  rootEntityName: { label: 'Root Entity Name', group: 'Entity' },
 };
 
 /** All string-valued filter fields from tracesFilterSchema (beyond entity/status/tags/metadata) */
@@ -77,6 +47,9 @@ const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] 
   id,
   ...CONTEXT_FIELD_META[id],
 }));
+
+const promotedMetadataEntries = Object.entries(PROMOTED_METADATA_FILTER_FIELDS);
+const metadataExcludedKeys = new Set<string>(METADATA_FILTER_EXCLUDED_KEYS);
 
 const DATE_PRESETS: { value: TraceDatePreset; label: string; ms?: number }[] = [
   { value: 'all', label: 'All' },
@@ -150,7 +123,7 @@ function SubMenuSearch({
 type TracesToolsProps = {
   selectedEntity?: EntityOptions;
   entityOptions?: EntityOptions[];
-  onEntityChange: (val: EntityOptions) => void;
+  onEntityChange: (val?: EntityOptions) => void;
   selectedDateFrom?: Date | undefined;
   selectedDateTo?: Date | undefined;
   onReset?: () => void;
@@ -258,38 +231,49 @@ export function TracesTools({
     setCustomRangeOpen(false);
   };
 
-  const metadataCount = Object.keys(selectedMetadata ?? {}).length;
+  const metadataCount = Object.keys(selectedMetadata ?? {}).filter(key => !metadataExcludedKeys.has(key)).length;
+  const promotedMetadataCount = Object.keys(selectedMetadata ?? {}).filter(key => key in PROMOTED_METADATA_FILTER_FIELDS).length;
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedEntity && selectedEntity.value !== 'all') count++;
+    if (selectedEntity) count++;
     if (errorOnly) count++;
     if ((selectedTags ?? []).length > 0) count++;
     if (metadataCount > 0) count++;
+    if (promotedMetadataCount > 0) count += promotedMetadataCount;
     if (contextFilters) {
       count += Object.values(contextFilters).filter(v => v.trim()).length;
     }
     return count;
-  }, [selectedEntity, errorOnly, selectedTags, metadataCount, contextFilters]);
+  }, [selectedEntity, errorOnly, selectedTags, metadataCount, promotedMetadataCount, contextFilters]);
 
   const contextFilterGroups = useMemo(() => {
-    const groups: Record<string, { id: string; label: string }[]> = {};
+    const groups: Record<string, { id: string; label: string; source: 'context' | 'metadata' }[]> = {};
     for (const cat of CONTEXT_FILTER_CATEGORIES) {
       if (!groups[cat.group]) groups[cat.group] = [];
-      groups[cat.group].push({ id: cat.id, label: cat.label });
+      groups[cat.group].push({ id: cat.id, label: cat.label, source: 'context' });
+    }
+    for (const [id, meta] of promotedMetadataEntries) {
+      const values = availableMetadata?.[id] ?? [];
+      if (values.length === 0) continue;
+      if (!groups[meta.group]) groups[meta.group] = [];
+      groups[meta.group].push({ id, label: meta.label, source: 'metadata' });
     }
     return groups;
-  }, []);
+  }, [availableMetadata]);
 
-  const metadataKeys = useMemo(() => Object.keys(availableMetadata ?? {}).sort(), [availableMetadata]);
+  const metadataKeys = useMemo(
+    () => Object.keys(availableMetadata ?? {}).filter(key => !metadataExcludedKeys.has(key)).sort(),
+    [availableMetadata],
+  );
 
   const filterCategories = useMemo(() => {
     const q = filterSearch.toLowerCase();
     const categories = [
       { id: 'status', label: 'Status' },
-      { id: 'entity-type', label: 'Entity Type' },
+      { id: 'entity-type', label: 'Root Entity Type' },
       { id: 'tags', label: 'Tags' },
-      { id: 'metadata', label: 'Metadata' },
+      ...(metadataKeys.length > 0 ? [{ id: 'metadata', label: 'Metadata' }] : []),
       ...Object.keys(contextFilterGroups).map(group => ({ id: `ctx-${group}`, label: group })),
     ];
     if (!q) return categories;
@@ -472,19 +456,23 @@ export function TracesTools({
             {filterCategories.some(c => c.id === 'entity-type') && entityOptions && (
               <DropdownMenu.Sub onOpenChange={resetSubSearch(setEntitySearch)}>
                 <DropdownMenu.SubTrigger>
-                  Entity Type
-                  {selectedEntity && selectedEntity.value !== 'all' && (
-                    <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>
-                  )}
+                  Root Entity Type
+                  {selectedEntity && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent>
                   {entityOptions.length >= SUBMENU_SEARCH_THRESHOLD && (
-                    <SubMenuSearch value={entitySearch} onChange={setEntitySearch} label="Search entity types" />
+                    <SubMenuSearch value={entitySearch} onChange={setEntitySearch} label="Search root entity types" />
+                  )}
+                  {selectedEntity && (
+                    <>
+                      <DropdownMenu.Item onSelect={() => onEntityChange(undefined)}>Clear filter</DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                    </>
                   )}
                   <DropdownMenu.RadioGroup
-                    value={selectedEntity?.value ?? 'all'}
+                    value={selectedEntity?.entityType}
                     onValueChange={val => {
-                      const entity = entityOptions.find(e => e.value === val);
+                      const entity = entityOptions.find(e => e.entityType === val);
                       if (entity) onEntityChange(entity);
                     }}
                   >
@@ -493,7 +481,7 @@ export function TracesTools({
                         option => !entitySearch || option.label.toLowerCase().includes(entitySearch.toLowerCase()),
                       )
                       .map(option => (
-                        <DropdownMenu.RadioItem key={option.value} value={option.value}>
+                        <DropdownMenu.RadioItem key={option.entityType} value={option.entityType}>
                           {option.label}
                         </DropdownMenu.RadioItem>
                       ))}
@@ -615,7 +603,7 @@ export function TracesTools({
             )}
 
             {/* Context filter groups */}
-            {onContextFiltersChange &&
+            {(onContextFiltersChange || onMetadataChange) &&
               Object.entries(contextFilterGroups).map(([group, fields]) => {
                 if (!filterCategories.some(c => c.id === `ctx-${group}`)) return null;
                 const q = filterSearch.toLowerCase();
@@ -623,9 +611,15 @@ export function TracesTools({
                   ? fields.filter(f => f.label.toLowerCase().includes(q) || group.toLowerCase().includes(q))
                   : fields;
                 // Only show fields that have available values
-                const fieldsWithValues = visibleFields.filter(f => (availableContextValues?.[f.id] ?? []).length > 0);
+                const fieldsWithValues = visibleFields.filter(f =>
+                  f.source === 'context'
+                    ? (availableContextValues?.[f.id] ?? []).length > 0
+                    : (availableMetadata?.[f.id] ?? []).length > 0,
+                );
                 if (fieldsWithValues.length === 0) return null;
-                const activeInGroup = fieldsWithValues.filter(f => contextFilters?.[f.id]?.trim()).length;
+                const activeInGroup = fieldsWithValues.filter(f =>
+                  f.source === 'context' ? contextFilters?.[f.id]?.trim() : selectedMetadata?.[f.id],
+                ).length;
                 return (
                   <DropdownMenu.Sub key={group} onOpenChange={resetSubSearch(setContextFieldSearch)}>
                     <DropdownMenu.SubTrigger>
@@ -648,8 +642,12 @@ export function TracesTools({
                             !contextFieldSearch || field.label.toLowerCase().includes(contextFieldSearch.toLowerCase()),
                         )
                         .map(field => {
-                          const values = availableContextValues?.[field.id] ?? [];
-                          const selectedValue = contextFilters?.[field.id];
+                          const values =
+                            field.source === 'context'
+                              ? (availableContextValues?.[field.id] ?? [])
+                              : (availableMetadata?.[field.id] ?? []);
+                          const selectedValue =
+                            field.source === 'context' ? contextFilters?.[field.id] : selectedMetadata?.[field.id];
                           return (
                             <DropdownMenu.Sub key={field.id} onOpenChange={resetSubSearch(setSubValueSearch)}>
                               <DropdownMenu.SubTrigger>
@@ -668,9 +666,15 @@ export function TracesTools({
                                 <DropdownMenu.CheckboxItem
                                   checked={!selectedValue}
                                   onCheckedChange={() => {
-                                    const next = { ...contextFilters };
+                                    if (field.source === 'context') {
+                                      const next = { ...contextFilters };
+                                      delete next[field.id];
+                                      onContextFiltersChange?.(next);
+                                      return;
+                                    }
+                                    const next = { ...selectedMetadata };
                                     delete next[field.id];
-                                    onContextFiltersChange(next);
+                                    onMetadataChange?.(next);
                                   }}
                                   onSelect={e => e.preventDefault()}
                                 >
@@ -687,13 +691,23 @@ export function TracesTools({
                                       key={value}
                                       checked={selectedValue === value}
                                       onCheckedChange={checked => {
-                                        const next = { ...contextFilters };
+                                        if (field.source === 'context') {
+                                          const next = { ...contextFilters };
+                                          if (checked) {
+                                            next[field.id] = value;
+                                          } else {
+                                            delete next[field.id];
+                                          }
+                                          onContextFiltersChange?.(next);
+                                          return;
+                                        }
+                                        const next = { ...selectedMetadata };
                                         if (checked) {
                                           next[field.id] = value;
                                         } else {
                                           delete next[field.id];
                                         }
-                                        onContextFiltersChange(next);
+                                        onMetadataChange?.(next);
                                       }}
                                       onSelect={e => e.preventDefault()}
                                     >

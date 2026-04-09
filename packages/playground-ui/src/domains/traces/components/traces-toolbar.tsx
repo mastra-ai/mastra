@@ -2,7 +2,7 @@ import { XIcon } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
 
 import type { EntityOptions, TraceDatePreset } from '../types';
-import { CONTEXT_FIELD_IDS } from '../types';
+import { CONTEXT_FIELD_IDS, METADATA_FILTER_EXCLUDED_KEYS, PROMOTED_METADATA_FILTER_FIELDS } from '../types';
 import { Button } from '@/ds/components/Button/Button';
 import type { SelectDataFilterCategory, SelectDataFilterState } from '@/ds/components/DataFilter';
 import { SelectDataFilter } from '@/ds/components/DataFilter';
@@ -25,20 +25,21 @@ const CONTEXT_FIELD_META: Record<string, { label: string; group: string }> = {
   threadId: { label: 'Thread ID', group: 'Correlation' },
   requestId: { label: 'Request ID', group: 'Correlation' },
   experimentId: { label: 'Experiment ID', group: 'Experimentation' },
-  spanType: { label: 'Span Type', group: 'Span' },
-  entityName: { label: 'Entity Name', group: 'Entity' },
+  entityName: { label: 'Root Entity Name', group: 'Entity' },
   parentEntityType: { label: 'Parent Entity Type', group: 'Entity' },
   parentEntityId: { label: 'Parent Entity ID', group: 'Entity' },
   parentEntityName: { label: 'Parent Entity Name', group: 'Entity' },
   rootEntityType: { label: 'Root Entity Type', group: 'Entity' },
   rootEntityId: { label: 'Root Entity ID', group: 'Entity' },
-  rootEntityName: { label: 'Root Entity Name', group: 'Entity' },
 };
+
+const promotedMetadataEntries = Object.entries(PROMOTED_METADATA_FILTER_FIELDS);
+const metadataExcludedKeys = new Set<string>(METADATA_FILTER_EXCLUDED_KEYS);
 
 type TracesToolbarProps = {
   selectedEntity?: EntityOptions;
   entityOptions?: EntityOptions[];
-  onEntityChange: (val: EntityOptions) => void;
+  onEntityChange: (val?: EntityOptions) => void;
   selectedDateFrom?: Date | undefined;
   selectedDateTo?: Date | undefined;
   onReset?: () => void;
@@ -105,8 +106,8 @@ export function TracesToolbar({
     if (entityOptions) {
       cats.push({
         id: 'entity-type',
-        label: 'Entity Type',
-        values: entityOptions.map(o => ({ value: o.value, label: o.label })),
+        label: 'Root Entity Type',
+        values: entityOptions.map(o => ({ value: o.entityType, label: o.label })),
         mode: 'single',
       });
     }
@@ -122,6 +123,7 @@ export function TracesToolbar({
 
     if (onMetadataChange) {
       for (const key of Object.keys(availableMetadata ?? {}).sort()) {
+        if (metadataExcludedKeys.has(key)) continue;
         const values = availableMetadata?.[key] ?? [];
         if (values.length === 0) continue;
         cats.push({
@@ -150,6 +152,20 @@ export function TracesToolbar({
       }
     }
 
+    if (onMetadataChange) {
+      for (const [fieldId, meta] of promotedMetadataEntries) {
+        const values = availableMetadata?.[fieldId] ?? [];
+        if (values.length === 0) continue;
+        cats.push({
+          id: `meta-promoted:${fieldId}`,
+          label: meta.label,
+          group: meta.group,
+          values: values.map(v => ({ value: v, label: v })),
+          mode: 'single',
+        });
+      }
+    }
+
     return cats;
   }, [
     onErrorOnlyChange,
@@ -169,8 +185,8 @@ export function TracesToolbar({
       state['status'] = ['error'];
     }
 
-    if (selectedEntity && selectedEntity.value !== 'all') {
-      state['entity-type'] = [selectedEntity.value];
+    if (selectedEntity) {
+      state['entity-type'] = [selectedEntity.entityType];
     }
 
     if ((selectedTags ?? []).length > 0) {
@@ -179,7 +195,11 @@ export function TracesToolbar({
 
     if (selectedMetadata) {
       for (const [key, value] of Object.entries(selectedMetadata)) {
-        state[`meta:${key}`] = [value];
+        if (key in PROMOTED_METADATA_FILTER_FIELDS) {
+          state[`meta-promoted:${key}`] = [value];
+        } else {
+          state[`meta:${key}`] = [value];
+        }
       }
     }
 
@@ -205,13 +225,12 @@ export function TracesToolbar({
 
       // Entity
       const nextEntityVal = (next['entity-type'] ?? [])[0];
-      const currentEntityVal = selectedEntity?.value ?? 'all';
-      if ((nextEntityVal ?? 'all') !== currentEntityVal) {
-        const entity = entityOptions?.find(e => e.value === (nextEntityVal ?? 'all'));
+      const currentEntityVal = selectedEntity?.entityType;
+      if (nextEntityVal !== currentEntityVal) {
+        const entity = entityOptions?.find(e => e.entityType === nextEntityVal);
         if (entity) onEntityChange(entity);
         else if (!nextEntityVal) {
-          const allEntity = entityOptions?.find(e => e.value === 'all');
-          if (allEntity) onEntityChange(allEntity);
+          onEntityChange(undefined);
         }
       }
 
@@ -226,6 +245,9 @@ export function TracesToolbar({
       for (const [key, values] of Object.entries(next)) {
         if (key.startsWith('meta:') && values.length > 0) {
           nextMeta[key.slice(5)] = values[0];
+        }
+        if (key.startsWith('meta-promoted:') && values.length > 0) {
+          nextMeta[key.slice(14)] = values[0];
         }
       }
       if (JSON.stringify(nextMeta) !== JSON.stringify(selectedMetadata ?? {})) {

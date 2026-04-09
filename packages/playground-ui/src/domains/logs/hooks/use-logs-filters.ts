@@ -9,13 +9,6 @@ const LEVEL_LABELS: Record<LogLevel, string> = {
   fatal: 'FATAL',
 };
 
-const ENTITY_TYPE_LABELS: Record<string, string> = {
-  AGENT: 'Agent',
-  WORKFLOW: 'Workflow',
-  TOOL: 'Tool',
-  SYSTEM: 'System',
-};
-
 type Comparator = 'is' | 'is not';
 
 export type FilterGroup = { id: string; field: string; comparator: Comparator; values: string[] };
@@ -25,10 +18,6 @@ function getLogFilterValue(log: LogRecord, field: string): string {
   switch (field) {
     case 'Level':
       return LEVEL_LABELS[log.level];
-    case 'Entity type':
-      return ENTITY_TYPE_LABELS[log.entityType ?? ''] ?? log.entityType ?? '';
-    case 'Entity name':
-      return log.entityName ?? '';
     default:
       return '';
   }
@@ -42,12 +31,6 @@ export function useLogsFilters(logs: LogRecord[]) {
     const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean))).sort();
     return [
       { field: 'Level', plural: 'levels', values: unique(logs.map(l => LEVEL_LABELS[l.level])) },
-      {
-        field: 'Entity type',
-        plural: 'types',
-        values: unique(logs.map(l => ENTITY_TYPE_LABELS[l.entityType ?? ''] ?? l.entityType ?? '')),
-      },
-      { field: 'Entity name', plural: 'names', values: unique(logs.map(l => l.entityName ?? '')) },
     ];
   }, [logs]);
 
