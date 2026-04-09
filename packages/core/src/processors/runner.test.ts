@@ -2266,11 +2266,21 @@ describe('ProcessorRunner', () => {
 
       expect(result).toEqual({ retry: true });
 
-      // Verify a <continue> message was appended
+      // Verify a system reminder continue message was appended
       const messages = messageList.get.all.db();
       const lastMessage = messages[messages.length - 1]!;
       expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content.parts).toEqual([{ type: 'text', text: '<continue>' }]);
+      expect(lastMessage.content.parts).toEqual([
+        expect.objectContaining({
+          type: 'text',
+          text: '<system-reminder>continue</system-reminder>',
+        }),
+      ]);
+      expect(lastMessage.content.metadata).toEqual({
+        systemReminder: {
+          type: 'anthropic-prefill-processor-retry',
+        },
+      });
     });
   });
 });

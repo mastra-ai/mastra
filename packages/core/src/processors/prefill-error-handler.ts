@@ -29,7 +29,7 @@ function isPrefillError(error: unknown): boolean {
  *
  * When an LLM API call fails because the conversation ends with an assistant
  * message (which some Anthropic models interpret as pre-filling), this processor
- * appends a `<continue>` user message and signals a retry.
+ * appends a `continue` system reminder message and signals a retry.
  *
  * This is a reactive complement to {@link TrailingAssistantGuard}, which
  * proactively prevents the error only for the structured output case.
@@ -58,7 +58,7 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
           parts: [
             {
               type: 'text' as const,
-              text: '<system-reminder>&lt;continue&gt;</system-reminder>',
+              text: '<system-reminder>continue</system-reminder>',
             },
           ],
           metadata: {

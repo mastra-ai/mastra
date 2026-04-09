@@ -9,7 +9,7 @@ packages:
 
 The `PrefillErrorHandler` is an **error processor** that handles the Anthropic "assistant message prefill" error. This error occurs when a conversation ends with an assistant message and the model doesn't support prefilling assistant responses.
 
-When the error is detected, the processor appends a hidden `<system-reminder>&lt;continue&gt;</system-reminder>` user message to the conversation and signals a retry. The reminder is persisted with `metadata.systemReminder = { type: 'anthropic-prefill-processor-retry' }`, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
+When the error is detected, the processor appends a hidden `<system-reminder>continue</system-reminder>` user message to the conversation and signals a retry. The reminder is persisted with `metadata.systemReminder = { type: 'anthropic-prefill-processor-retry' }`, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
 
 This processor is **auto-injected** — you don't need to configure it. It runs automatically when an LLM API call fails with the prefill error.
 
@@ -17,7 +17,7 @@ This processor is **auto-injected** — you don't need to configure it. It runs 
 
 1. The LLM API call fails with a message containing "assistant message prefill"
 1. `PrefillErrorHandler` checks that this is the first retry attempt
-1. It appends a hidden `<system-reminder>&lt;continue&gt;</system-reminder>` user message to the `messageList`
+1. It appends a hidden `<system-reminder>continue</system-reminder>` user message to the `messageList`
 1. It returns `{ retry: true }` to signal the LLM call should be retried with the modified messages
 
 The processor now reacts to the API rejection itself instead of re-checking whether the conversation currently ends with an assistant message. This makes it resilient to cases where the provider rejects the request for prefill semantics even if the trailing message shape has already been transformed upstream.

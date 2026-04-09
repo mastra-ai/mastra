@@ -46,7 +46,7 @@ describe('toAISdkFormat', () => {
           role: 'user',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: '<system-reminder>&lt;continue&gt;</system-reminder>' }],
+            parts: [{ type: 'text', text: '<system-reminder>continue</system-reminder>' }],
             metadata: {
               systemReminder: {
                 type: 'anthropic-prefill-processor-retry',
@@ -105,7 +105,7 @@ describe('toAISdkFormat', () => {
           role: 'user',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: '<system-reminder>&lt;continue&gt;</system-reminder>' }],
+            parts: [{ type: 'text', text: '<system-reminder>continue</system-reminder>' }],
             metadata: {
               systemReminder: {
                 type: 'anthropic-prefill-processor-retry',

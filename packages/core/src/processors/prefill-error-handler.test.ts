@@ -70,7 +70,7 @@ describe('PrefillErrorHandler', () => {
     expect(result).toEqual({ retry: true });
   });
 
-  it('should append a <continue> user message to messageList', () => {
+  it('should append a system reminder continue message to messageList', () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs();
     const messageCountBefore = args.messageList.get.all.db().length;
@@ -82,7 +82,17 @@ describe('PrefillErrorHandler', () => {
 
     const lastMessage = messagesAfter[messagesAfter.length - 1]!;
     expect(lastMessage.role).toBe('user');
-    expect(lastMessage.content.parts).toEqual([{ type: 'text', text: '<continue>' }]);
+    expect(lastMessage.content.parts).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: '<system-reminder>continue</system-reminder>',
+      }),
+    ]);
+    expect(lastMessage.content.metadata).toEqual({
+      systemReminder: {
+        type: 'anthropic-prefill-processor-retry',
+      },
+    });
   });
 
   it('should return undefined for non-prefill errors', () => {
@@ -124,7 +134,7 @@ describe('PrefillErrorHandler', () => {
     const result = handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
-    // Should have appended a <continue> user message
+    // Should have appended a system reminder continue message
     const allMessages = messageList.get.all.db();
     expect(allMessages[allMessages.length - 1]?.role).toBe('user');
   });

@@ -11,7 +11,7 @@ import { Agent } from '../agent';
  * Simulates the Anthropic "assistant message prefill" error:
  * - Pre-populates a conversation thread that ends with an assistant message
  * - The mock model throws the prefill error on the first call
- * - The PrefillErrorHandler (auto-injected) appends a <continue> user message and signals retry
+ * - The PrefillErrorHandler (auto-injected) appends a system reminder continue message and signals retry
  * - On retry, the model succeeds
  *
  * Related: https://github.com/mastra-ai/mastra/issues/13969
@@ -94,11 +94,11 @@ function createPrefillErrorModel(responseText: string) {
   return { model, getCallCount: () => callCount, getReceivedPrompts: () => receivedPrompts };
 }
 
-const ANTHROPIC_PREFILL_RETRY_REMINDER = '<system-reminder>&lt;continue&gt;</system-reminder>';
+const ANTHROPIC_PREFILL_RETRY_REMINDER = '<system-reminder>continue</system-reminder>';
 
 describe('PrefillErrorHandler Recovery', () => {
   describe('generate()', () => {
-    it('should recover from prefill error by appending <continue> and retrying', async () => {
+    it('should recover from prefill error by appending a system reminder continue message and retrying', async () => {
       const mockMemory = new MockMemory();
       const threadId = randomUUID();
       const resourceId = randomUUID();
@@ -148,7 +148,7 @@ describe('PrefillErrorHandler Recovery', () => {
 
       // The conversation in memory ends with an assistant message.
       // On the first call, the model will throw the prefill error.
-      // PrefillErrorHandler should catch it, append <continue>, and retry.
+      // PrefillErrorHandler should catch it, append the system reminder, and retry.
       const result = await agent.generate('Continue the conversation', {
         memory: {
           thread: threadId,
@@ -244,7 +244,7 @@ describe('PrefillErrorHandler Recovery', () => {
   });
 
   describe('stream()', () => {
-    it('should recover from prefill error by appending <continue> and retrying', async () => {
+    it('should recover from prefill error by appending a system reminder continue message and retrying', async () => {
       const mockMemory = new MockMemory();
       const threadId = randomUUID();
       const resourceId = randomUUID();
