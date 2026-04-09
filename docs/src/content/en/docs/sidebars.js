@@ -685,6 +685,11 @@ const sidebars = {
           id: 'mastra-platform/overview',
           label: 'Overview',
         },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
+        },
       ],
     },
     {

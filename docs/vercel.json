@@ -704,6 +704,21 @@
       "source": "/docs/mastra-cloud/overview",
       "destination": "/docs/mastra-platform/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/deployment",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/observability",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
     }
   ]
 }

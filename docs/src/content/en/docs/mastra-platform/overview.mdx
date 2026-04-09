@@ -1,6 +1,6 @@
 ---
 title: "Overview | Mastra platform"
-description: The Mastra platform, with Studio and Server, is the easiest way to get your Agents online and collect and share observability data.
+description: The Mastra platform, with Studio and Server, is the easiest way to get your agents online and collect and share observability data.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -31,23 +31,11 @@ Before you begin, ensure you have Node.js 22.13.0 or later installed.
   </StepItem>
 
   <StepItem>
-    Authenticate with your Mastra account:
-
-    ```bash
-    mastra auth login
-    ```
-  </StepItem>
-
-  <StepItem>
     Deploy Studio with a single command:
 
     ```bash
     mastra studio deploy
     ```
-
-    This builds your project (compiling `src/mastra/` into `.mastra/output`), packages it as an artifact ZIP, uploads it, and deploys it to a cloud sandbox.
-
-    If this is your first deploy, the CLI will prompt you to create a new project or select an existing one. The `.mastra-project.json` file is written automatically.
 
     On a successful deploy, the CLI will output the URL of your deployed Studio instance.
   </StepItem>
@@ -58,8 +46,6 @@ Before you begin, ensure you have Node.js 22.13.0 or later installed.
     ```bash
     mastra server deploy
     ```
-
-    This builds your project, uploads the artifact, builds a Docker image, and deploys it to Railway.
 
     On a successful deploy, the CLI will output the URL of your deployed Server instance.
   </StepItem>
@@ -83,4 +69,6 @@ Your Mastra application is built from three building blocks:
 
 Develop your project locally with [`mastra dev`](/reference/cli/mastra#mastra-dev) and open [Studio](/docs/studio/overview) to test your agents, workflows, and tools in a visual environment.
 
-Once you're ready to deploy your application to production, use [`mastra studio deploy`]() and [`mastra server deploy`]() to push your application to the cloud.
+Once you're ready to deploy your application to production, use [`mastra studio deploy`](/reference/cli/mastra#mastra-studio-deploy) and [`mastra server deploy`](/reference/cli/mastra#mastra-server-deploy) to push your application to the cloud.
+
+Follow the [Studio deployment guide](/docs/studio/deployment#mastra-platform) and [Server deployment guide](/guides/deployment/mastra-platform) for step-by-step instructions.

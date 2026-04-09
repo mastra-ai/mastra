@@ -266,6 +266,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Mastra Platform',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [
