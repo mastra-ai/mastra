@@ -502,49 +502,36 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     headless = headlessChoice === 'Yes';
   }
 
-  // Step 5: Advanced options (profile, executablePath, etc.)
+  // Step 5: Launch mode (bundled, custom executable, or CDP)
   let profile = browser.profile;
   let executablePath = browser.executablePath;
   let storageState = browser.agentBrowser?.storageState;
   let cdpUrl = browser.cdpUrl;
 
-  // Only show advanced options for local browsers (not Browserbase)
+  // Only show launch mode options for local browsers (not Browserbase)
   if (!isBrowserbase) {
-    const advancedChoice = await askInline(ctx, 'Configure advanced options?', [
-      { label: 'No', description: 'Use defaults (recommended)' },
-      { label: 'Custom browser', description: 'Set executable path and/or profile directory' },
-      { label: 'Connect to running', description: 'Connect via CDP URL to an already-running browser' },
+    const launchMode = await askInline(ctx, 'How do you want to launch the browser?', [
+      { label: 'Bundled browser', description: 'Use built-in Chromium (recommended)' },
+      { label: 'Custom executable', description: 'Use Chrome, Brave, Edge, etc.' },
+      { label: 'Connect via CDP', description: 'Connect to an already-running browser' },
     ]);
 
-    if (!advancedChoice) {
+    if (!launchMode) {
       ctx.showInfo('Browser setup cancelled.');
       return;
     }
 
-    if (advancedChoice === 'Custom browser') {
-      // Clear cdpUrl when using custom browser (they're mutually exclusive)
+    if (launchMode === 'Custom executable') {
+      // Clear cdpUrl when using custom browser (mutually exclusive)
       cdpUrl = undefined;
 
-      // Ask for executable path
-      const execPath = await askText(ctx, 'Browser executable path (press Enter to skip):', executablePath);
-      if (execPath !== null) {
-        executablePath = execPath.replace(/^~/, process.env.HOME || '~');
+      const execPath = await askText(ctx, 'Browser executable path:', executablePath);
+      if (execPath === null) {
+        ctx.showInfo('Browser setup cancelled.');
+        return;
       }
-
-      // Ask for profile directory
-      const profilePath = await askText(ctx, 'Browser profile directory (press Enter to skip):', profile);
-      if (profilePath !== null) {
-        profile = profilePath.replace(/^~/, process.env.HOME || '~');
-      }
-
-      // For agent-browser, also ask about storage state
-      if (provider === 'agent-browser') {
-        const storagePath = await askText(ctx, 'Playwright storage state file (press Enter to skip):', storageState);
-        if (storagePath !== null) {
-          storageState = storagePath.replace(/^~/, process.env.HOME || '~');
-        }
-      }
-    } else if (advancedChoice === 'Connect to running') {
+      executablePath = execPath.replace(/^~/, process.env.HOME || '~');
+    } else if (launchMode === 'Connect via CDP') {
       const cdpUrlInput = await askText(ctx, 'CDP WebSocket URL (e.g., ws://localhost:9222):', cdpUrl);
       if (cdpUrlInput === null) {
         ctx.showInfo('Browser setup cancelled.');
@@ -554,6 +541,34 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       // Clear profile/executable when using CDP (they don't apply)
       profile = undefined;
       executablePath = undefined;
+    } else {
+      // Bundled browser - clear custom paths
+      cdpUrl = undefined;
+      executablePath = undefined;
+    }
+
+    // Step 6: Profile option (only for bundled or custom executable, not CDP)
+    if (launchMode !== 'Connect via CDP') {
+      const useProfile = await askInline(ctx, 'Use a browser profile?', [
+        { label: 'No', description: 'Fresh session each time' },
+        { label: 'Yes', description: 'Persist logins, cookies, extensions' },
+      ]);
+
+      if (!useProfile) {
+        ctx.showInfo('Browser setup cancelled.');
+        return;
+      }
+
+      if (useProfile === 'Yes') {
+        const profilePath = await askText(ctx, 'Profile directory path:', profile || '~/.mastracode/browser-profile');
+        if (profilePath === null) {
+          ctx.showInfo('Browser setup cancelled.');
+          return;
+        }
+        profile = profilePath.replace(/^~/, process.env.HOME || '~');
+      } else {
+        profile = undefined;
+      }
     }
   }
 
