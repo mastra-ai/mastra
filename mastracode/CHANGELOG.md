@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.13.0
+
+### Minor Changes
+
+- Added --thread, --title, and --clone-thread CLI options to headless mode for thread control. The most recent thread is now automatically resumed by default, and --continue is deprecated. ([#14962](https://github.com/mastra-ai/mastra/pull/14962))
+
+### Patch Changes
+
+- Fixed task list leaking across threads when switching conversations. Tasks from the previous thread no longer appear in the new thread. ([#15192](https://github.com/mastra-ai/mastra/pull/15192))
+
+- Added collapsible output for shell passthrough (! commands). Output now defaults to 20 lines with Ctrl+E to expand/collapse, matching the existing tool call output behavior. ([#15092](https://github.com/mastra-ai/mastra/pull/15092))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+
 ## 0.13.0-alpha.2
 
 ### Patch Changes
