@@ -307,5 +307,66 @@ describe('MastraModelOutput', () => {
       expect((await output.steps).at(-1)?.providerMetadata).toEqual(providerMetadata);
       expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
     });
+
+    it('should merge args from real tool-call into synthetic tool-call when synthetic args are empty', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        // Simulate streaming start (creates synthetic later)
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+            toolName: 'my-tool',
+          },
+        },
+
+        // No delta → synthetic will have empty args {}
+
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+          },
+        },
+
+        // Real tool-call arrives with actual args
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+            toolName: 'my-tool',
+            args: { query: 'SELECT 1' } as any,
+          },
+        },
+
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+
+      expect(toolCalls.length).toBeGreaterThan(0);
+      expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
+    });
   });
 });
