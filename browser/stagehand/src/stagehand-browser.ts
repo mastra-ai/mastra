@@ -24,6 +24,7 @@ import type { ActInput, ExtractInput, ObserveInput, NavigateInput, TabsInput } f
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
+import { patchProfileExitType } from './utils';
 
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
@@ -340,6 +341,21 @@ export class StagehandBrowser extends MastraBrowser {
 
     // Reset thread state
     this.setCurrentThread(undefined);
+
+    // Stagehand uses chrome-launcher which sends SIGKILL, racing with Chrome's
+    // Preferences flush. Patch exit_type so the next launch doesn't show
+    // the "Chrome didn't shut down correctly" dialog.
+    this.patchExitType();
+  }
+
+  override handleBrowserDisconnected(): void {
+    super.handleBrowserDisconnected();
+    this.patchExitType();
+  }
+
+  private patchExitType(): void {
+    if (!this.config.profile) return;
+    patchProfileExitType(this.config.profile, this.logger);
   }
 
   /**
