@@ -6800,6 +6800,9 @@ importers:
 
   workspaces/azure:
     dependencies:
+      '@azure/identity':
+        specifier: ^4.0.0
+        version: 4.13.0
       '@azure/storage-blob':
         specifier: ^12.26.0
         version: 12.31.0
