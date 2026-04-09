@@ -221,6 +221,7 @@ async function processOutputStream<OUTPUT = undefined>({
       runState.setState({
         isReasoning: false,
         reasoningBuffers: new Map(),
+        providerOptions: undefined,
       });
     }
 
