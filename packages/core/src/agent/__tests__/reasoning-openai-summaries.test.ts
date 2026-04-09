@@ -117,16 +117,13 @@ describe('OpenAI reasoning summary streaming', () => {
     expect(reasoningParts).toHaveLength(2);
     expect(textParts).toHaveLength(1);
 
-    const firstDetail = reasoningParts[0].details[0];
-    const secondDetail = reasoningParts[1].details[0];
+    const detailTexts = reasoningParts
+      .map(part => part.details[0])
+      .filter(detail => detail.type === 'text')
+      .map(detail => detail.text)
+      .sort();
 
-    expect(firstDetail.type).toBe('text');
-    expect(secondDetail.type).toBe('text');
-
-    if (firstDetail.type === 'text' && secondDetail.type === 'text') {
-      expect(firstDetail.text).toBe('First summary.');
-      expect(secondDetail.text).toBe('Second summary.');
-    }
+    expect(detailTexts).toEqual(['First summary.', 'Second summary.']);
   });
 
   it('stores the earlier summary even when its end arrives after the next summary has started', async () => {
@@ -180,15 +177,78 @@ describe('OpenAI reasoning summary streaming', () => {
 
     expect(reasoningParts).toHaveLength(2);
 
-    const firstDetail = reasoningParts[0].details[0];
-    const secondDetail = reasoningParts[1].details[0];
+    const detailTexts = reasoningParts
+      .map(part => part.details[0])
+      .filter(detail => detail.type === 'text')
+      .map(detail => detail.text)
+      .sort();
 
-    expect(firstDetail.type).toBe('text');
-    expect(secondDetail.type).toBe('text');
+    expect(detailTexts).toEqual(['First summary.', 'Second summary.']);
+  });
 
-    if (firstDetail.type === 'text' && secondDetail.type === 'text') {
-      expect(firstDetail.text).toBe('First summary.');
-      expect(secondDetail.text).toBe('Second summary.');
-    }
+  it('keeps distinct reasoning buffers when deltas interleave after another summary starts', async () => {
+    const agent = new Agent({
+      id: 'openai-reasoning-summaries-interleaved-deltas-test',
+      name: 'OpenAI Reasoning Summaries Interleaved Deltas Test',
+      instructions: 'You are a helpful assistant.',
+      model: createOpenAISummaryStreamingModel([
+        ...getBaseChunks(),
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:0',
+          delta: 'First ',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:1',
+          delta: 'Second summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:0',
+          delta: 'summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        ...getEndChunks(),
+      ]),
+    });
+
+    const response = await agent.stream('Explain your answer.');
+    await response.consumeStream();
+
+    const assistantMessages = response.messageList.get.all.db().filter(m => m.role === 'assistant');
+    const reasoningParts = assistantMessages.flatMap(m => m.content.parts).filter(p => p.type === 'reasoning');
+
+    expect(reasoningParts).toHaveLength(2);
+
+    const detailTexts = reasoningParts
+      .map(part => part.details[0])
+      .filter(detail => detail.type === 'text')
+      .map(detail => detail.text)
+      .sort();
+
+    expect(detailTexts).toEqual(['First summary.', 'Second summary.']);
   });
 });
