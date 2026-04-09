@@ -63,11 +63,7 @@ function askInline(
 /**
  * Helper to show an inline text input and return the answer.
  */
-function askText(
-  ctx: SlashCommandContext,
-  question: string,
-  defaultValue?: string,
-): Promise<string | null> {
+function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
   return new Promise(resolve => {
     const questionComponent = new AskQuestionInlineComponent(
       {
@@ -425,43 +421,30 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     if (advancedChoice === 'Custom browser') {
+      // Clear cdpUrl when using custom browser (they're mutually exclusive)
+      cdpUrl = undefined;
+
       // Ask for executable path
-      const execPath = await askText(
-        ctx,
-        'Browser executable path (press Enter to skip):',
-        executablePath,
-      );
+      const execPath = await askText(ctx, 'Browser executable path (press Enter to skip):', executablePath);
       if (execPath !== null) {
         executablePath = execPath.replace(/^~/, process.env.HOME || '~');
       }
 
       // Ask for profile directory
-      const profilePath = await askText(
-        ctx,
-        'Browser profile directory (press Enter to skip):',
-        profile,
-      );
+      const profilePath = await askText(ctx, 'Browser profile directory (press Enter to skip):', profile);
       if (profilePath !== null) {
         profile = profilePath.replace(/^~/, process.env.HOME || '~');
       }
 
       // For agent-browser, also ask about storage state
       if (provider === 'agent-browser') {
-        const storagePath = await askText(
-          ctx,
-          'Playwright storage state file (press Enter to skip):',
-          storageState,
-        );
+        const storagePath = await askText(ctx, 'Playwright storage state file (press Enter to skip):', storageState);
         if (storagePath !== null) {
           storageState = storagePath.replace(/^~/, process.env.HOME || '~');
         }
       }
     } else if (advancedChoice === 'Connect to running') {
-      const cdpUrlInput = await askText(
-        ctx,
-        'CDP WebSocket URL (e.g., ws://localhost:9222):',
-        cdpUrl,
-      );
+      const cdpUrlInput = await askText(ctx, 'CDP WebSocket URL (e.g., ws://localhost:9222):', cdpUrl);
       if (cdpUrlInput === null) {
         ctx.showInfo('Browser setup cancelled.');
         return;
