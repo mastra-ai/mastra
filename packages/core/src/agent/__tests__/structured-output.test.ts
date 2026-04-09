@@ -1,5 +1,3 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
@@ -38,24 +36,43 @@ class StructuredOutputTestGateway extends MastraModelGateway {
     return process.env.TEST_API_KEY || 'test-key';
   }
 
-  async resolveLanguageModel({
-    modelId,
-    providerId,
-    apiKey,
-    headers,
-  }: {
+  async resolveLanguageModel(_args: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
-    return createOpenAICompatible({
-      name: providerId,
-      apiKey,
-      baseURL: this.buildUrl(`${providerId}/${modelId}`),
-      headers,
-      supportsStructuredOutputs: true,
-    }).chatModel(modelId);
+  }): Promise<MockLanguageModelV2> {
+    return new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          { type: 'text', text: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }) },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'structuring-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }),
+          },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
   }
 }
 
@@ -535,7 +552,11 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           },
         });
 
-        expect(result.tripwire?.reason).not.toContain('Could not find config for provider structured-test');
+        expect(result.tripwire).toBeUndefined();
+        expect(result.object).toEqual({
+          summary: 'There are 3 files in the directory.',
+          filesFound: 3,
+        });
       });
 
       it('should surface separate structuring model errors from the processor', async () => {
