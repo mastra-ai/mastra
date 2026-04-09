@@ -206,10 +206,6 @@ async function processOutputStream<OUTPUT = undefined>({
       // subsequent turns that require reasoning_content echo-back.
       // See: https://github.com/mastra-ai/mastra/issues/13635
       for (const buffer of runState.state.reasoningBuffers.values()) {
-        if (!buffer.deltas.length) {
-          continue;
-        }
-
         flushReasoningBuffer({
           buffer,
           messageId,
