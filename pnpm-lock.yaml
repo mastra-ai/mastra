@@ -2984,8 +2984,8 @@ importers:
         specifier: ^8.18.0
         version: 8.18.0
       chat:
-        specifier: ^4.23.0
-        version: 4.23.0
+        specifier: ^4.24.0
+        version: 4.24.0
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
@@ -16858,8 +16858,8 @@ packages:
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
 
-  chat@4.23.0:
-    resolution: {integrity: sha512-Gmw8yyDrrH9Vxs+TfxF7FoTENrCzJV4T0FiAh7APGcQPhMMYAhrpq66PKj8azhkUSEyaen8ujbneogoJWiY8vg==}
+  chat@4.24.0:
+    resolution: {integrity: sha512-0TxglwtGRMGlqERuHVZZ27Z4YBeZH3oRXCqHZYuI41L7xcSHF5C3wEHTMdVqHp3p8ZKQcKYQPOwYWvaeFVa4+g==}
 
   check-error@2.1.1:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
@@ -38424,7 +38424,7 @@ snapshots:
 
   chardet@2.1.1: {}
 
-  chat@4.23.0:
+  chat@4.24.0:
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
