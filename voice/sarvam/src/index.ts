@@ -85,14 +85,17 @@ export class SarvamVoice extends MastraVoice {
       speaker,
     });
 
-    this.apiKey = speechModel?.apiKey || defaultSpeechModel.apiKey;
+    this.apiKey = speechModel?.apiKey || listeningModel?.apiKey || defaultSpeechModel.apiKey;
     if (!this.apiKey) {
       throw new Error('SARVAM_API_KEY must be set');
     }
     this.model = speechModel?.model || defaultSpeechModel.model;
     this.language = speechModel?.language || defaultSpeechModel.language;
     this.properties = speechModel?.properties || {};
-    this.speaker = speaker || 'shubh';
+    // bulbul:v2 and bulbul:v3 have non-overlapping speaker catalogs, so the
+    // default speaker depends on the selected TTS model.
+    const defaultSpeaker: SarvamVoiceId = this.model === 'bulbul:v2' ? 'anushka' : 'shubh';
+    this.speaker = speaker || defaultSpeaker;
   }
 
   private async makeRequest(endpoint: string, payload: any) {

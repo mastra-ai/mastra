@@ -1,5 +1,5 @@
 ---
-'@mastra/voice-sarvam': minor
+'@mastra/voice-sarvam': major
 ---
 
 Added support for Sarvam's current TTS and STT models. Previously the package only supported the now-deprecated bulbul:v1 and saarika:v1/v2/flash models, which Sarvam has retired.
