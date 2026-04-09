@@ -427,7 +427,7 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/observability",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
