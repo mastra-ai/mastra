@@ -399,6 +399,100 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
     });
 
     if (version === 'v2' || version === 'v3') {
+      it('should surface separate structuring model errors from the processor', async () => {
+        const primaryModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV3({
+                doGenerate: async () => ({
+                  finishReason: 'stop' as const,
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  stream: convertArrayToReadableStreamV3([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
+                    },
+                  ]),
+                }),
+              });
+
+        const structuringError = new Error('No recording found for gpt-5.4');
+        const structuringModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              })
+            : new MockLanguageModelV3({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              });
+
+        const agent = new Agent({
+          id: `structured-output-separate-model-error-${version}`,
+          name: 'Structured Output Separate Model Error',
+          instructions: 'You are a helpful assistant.',
+          model: primaryModel,
+        });
+
+        const result = await agent.generate('Summarize: there are 3 files in the directory.', {
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string(),
+              filesFound: z.number(),
+            }),
+            model: structuringModel,
+          },
+        });
+
+        expect(result.object).toBeUndefined();
+        expect(result.tripwire?.reason).toBe(
+          '[StructuredOutputProcessor] Structured output processing failed: [StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        );
+      });
+
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
         let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
         if (version === 'v2') {
