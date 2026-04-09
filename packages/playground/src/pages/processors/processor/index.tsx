@@ -12,13 +12,39 @@ import {
   useProcessor,
   Skeleton,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {
   const { processorId } = useParams();
   const { data: processor, isLoading, error } = useProcessor(processorId!);
+
+  // 401 check - session expired
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="h-full w-full overflow-y-hidden">
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/processors`}>
+              <Icon>
+                <ProcessorIcon />
+              </Icon>
+              Processors
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {processorId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </div>
+    );
+  }
 
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {

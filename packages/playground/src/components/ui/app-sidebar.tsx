@@ -207,6 +207,7 @@ declare global {
 const TAB_DETAIL_PREFIX: Record<string, string> = {
   scorers: '/evaluation/scorers',
   datasets: '/evaluation/datasets',
+  experiments: '/evaluation/experiments',
 };
 
 function getIsLinkActive(link: SidebarLink, pathname: string, search: string): boolean {

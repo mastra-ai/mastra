@@ -226,6 +226,11 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
+  includeSystemReminders: z.preprocess(val => {
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    return val;
+  }, z.boolean().optional()),
 });
 
 /**
@@ -564,6 +569,10 @@ export const getObservationalMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).optional(),
 });
 
 /**

@@ -11,7 +11,9 @@ import {
   ExperimentPageContent,
   ExperimentPageHeader,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { Database } from 'lucide-react';
 import { useParams, Link } from 'react-router';
@@ -48,6 +50,16 @@ function DatasetExperimentPage() {
       <MainContentLayout>
         <div className="flex items-center justify-center h-full">
           <Spinner />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (experimentError && is401UnauthorizedError(experimentError)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
         </div>
       </MainContentLayout>
     );

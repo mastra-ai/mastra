@@ -367,6 +367,25 @@ export class Agent<
   }
 
   /**
+   * Sets or updates the browser instance for this agent.
+   * This allows hot-swapping browser configuration without recreating the agent.
+   * Browser tools will be automatically updated on the next execution.
+   *
+   * @param browser - The new browser instance, or undefined to disable browser tools
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.#browser = browser;
+  }
+
+  /**
+   * Returns true if this agent was configured with its own browser instance.
+   * Used by Harness to avoid overwriting agent-level browser configuration.
+   */
+  hasOwnBrowser(): boolean {
+    return Boolean(this.#browser);
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */
@@ -2178,7 +2197,10 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
-    const workspaceTools = createWorkspaceTools(workspace);
+    const workspaceTools = await createWorkspaceTools(workspace, {
+      requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+      workspace,
+    });
 
     if (Object.keys(workspaceTools).length > 0) {
       this.logger.debug('Adding workspace tools', { agent: this.name, tools: Object.keys(workspaceTools), runId });
@@ -3013,6 +3035,19 @@ export class Agent<
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
 
+            // Save and clear reserved thread/resource keys so they don't override the
+            // sub-agent's isolated memory config. These keys take precedence over the
+            // memory option in generate/stream, so leaving them would cause the
+            // sub-agent to write to the parent's thread instead of its own.
+            const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+            const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+            if (savedThreadIdKey !== undefined) {
+              requestContext.delete(MASTRA_THREAD_ID_KEY);
+            }
+            if (savedResourceIdKey !== undefined) {
+              requestContext.delete(MASTRA_RESOURCE_ID_KEY);
+            }
+
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
@@ -3114,6 +3149,13 @@ export class Agent<
                           error: memoryError,
                         });
                       }
+                    }
+
+                    if (savedThreadIdKey !== undefined) {
+                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                    }
+                    if (savedResourceIdKey !== undefined) {
+                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
                     }
 
                     return {
@@ -3291,6 +3333,12 @@ export class Agent<
                 }
 
                 if (generateResult.finishReason === 'suspended') {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(generateResult.suspendPayload, {
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
@@ -3432,6 +3480,12 @@ export class Agent<
                 }
 
                 if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  if (savedThreadIdKey !== undefined) {
+                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                  }
+                  if (savedResourceIdKey !== undefined) {
+                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                  }
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
@@ -3546,6 +3600,12 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+              }
 
               return result;
             } catch (err) {
@@ -3619,11 +3679,16 @@ export class Agent<
                 }
               }
 
-              // Wrap error in MastraError
               // Restore even on error so the parent's retry/fallback logic
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
+              }
+              if (savedThreadIdKey !== undefined) {
+                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+              }
+              if (savedResourceIdKey !== undefined) {
+                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
               }
 
               const mastraError = new MastraError(
@@ -4735,6 +4800,8 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
+      threadId,
+      resourceId,
       ...observabilityContext,
     });
 

@@ -121,6 +121,9 @@ export function setupKeyboardShortcuts(
     for (const reminder of state.allSystemReminderComponents) {
       reminder.setExpanded(state.toolOutputExpanded);
     }
+    for (const shell of state.allShellComponents) {
+      shell.setExpanded(state.toolOutputExpanded);
+    }
     state.ui.requestRender();
   });
 
@@ -293,6 +296,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'browser', description: 'Configure browser automation' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'exit', description: 'Exit the TUI' },

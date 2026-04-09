@@ -13,7 +13,9 @@ import {
   useWorkspaceSkillReference,
   useWorkspaceFile,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Bot, Folder, Wand2 } from 'lucide-react';
@@ -124,6 +126,18 @@ export default function WorkspaceSkillDetailPage() {
         <Header>{renderBreadcrumb('Loading...')}</Header>
         <div className="grid place-items-center h-full">
           <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  // 401 check - session expired
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <Header>{renderBreadcrumb('Session Expired')}</Header>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
         </div>
       </MainContentLayout>
     );
