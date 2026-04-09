@@ -112,11 +112,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async list(): Promise<SkillMetadata[]> {
     await this.#ensureInitialized();
-    // Return all candidates (including same-named skills from different sources)
-    // so the disambiguation UI and LLM can see every skill and use the path to pick one.
+
     const results: SkillMetadata[] = [];
     for (const candidates of this.#skills.values()) {
-      for (const skill of candidates) {
+      const canonicalCandidates = await this.#dedupeCanonicalCandidates(candidates);
+      for (const skill of canonicalCandidates) {
         results.push({
           name: skill.name,
           path: skill.path,
@@ -185,6 +185,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
   }
 
+  async #dedupeCanonicalCandidates(candidates: InternalSkill[]): Promise<InternalSkill[]> {
+    const canonicalGroups = new Map<string, InternalSkill[]>();
+    for (const candidate of candidates) {
+      const canonicalPath = await this.#getCanonicalSkillPath(candidate.path);
+      const group = canonicalGroups.get(canonicalPath) ?? [];
+      group.push(candidate);
+      canonicalGroups.set(canonicalPath, group);
+    }
+
+    return [...canonicalGroups.values()].map(group => [...group].sort((a, b) => a.path.localeCompare(b.path))[0]!);
+  }
+
   /**
    * Pick the winning skill from an array of same-named candidates.
    * When there's only one candidate, returns it directly (no warning).
@@ -198,17 +210,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0]!;
 
-    const canonicalGroups = new Map<string, InternalSkill[]>();
-    for (const candidate of candidates) {
-      const canonicalPath = await this.#getCanonicalSkillPath(candidate.path);
-      const group = canonicalGroups.get(canonicalPath) ?? [];
-      group.push(candidate);
-      canonicalGroups.set(canonicalPath, group);
-    }
-
-    const deduped = [...canonicalGroups.values()].map(
-      group => [...group].sort((a, b) => a.path.localeCompare(b.path))[0]!,
-    );
+    const deduped = await this.#dedupeCanonicalCandidates(candidates);
 
     if (deduped.length === 1) return deduped[0]!;
 

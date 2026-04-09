@@ -576,9 +576,42 @@ Line 3 conclusion`;
         skills: ['.claude/skills', '.agents/skills'],
       });
 
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'mastra', path: '.agents/skills/mastra' },
+      ]);
       await expect(workspace.skills!.get('mastra')).resolves.toMatchObject({
         name: 'mastra',
         path: expect.stringMatching(/\/mastra$/),
+      });
+    });
+
+    it('should list a skill through an allowed symlink root that points outside the workspace', async () => {
+      const externalSkillRoot = path.join(tempDir, '..', 'external-skill-root');
+      await fs.mkdir(path.join(externalSkillRoot, 'firewatch'), { recursive: true });
+      await fs.writeFile(
+        path.join(externalSkillRoot, 'firewatch', 'SKILL.md'),
+        skillContent('firewatch', 'Query GitHub PR activity using Firewatch'),
+      );
+      await fs.mkdir(path.join(tempDir, '.mastracode', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(externalSkillRoot, 'firewatch'),
+        path.join(tempDir, '.mastracode', 'skills', 'firewatch'),
+      );
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [path.join(tempDir, '.mastracode', 'skills')],
+        }),
+        skills: ['.mastracode/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'firewatch', path: '.mastracode/skills/firewatch' },
+      ]);
+      await expect(workspace.skills!.get('firewatch')).resolves.toMatchObject({
+        name: 'firewatch',
+        path: '.mastracode/skills/firewatch',
       });
     });
 

@@ -1484,6 +1484,10 @@ Instructions for the new skill.`;
         skills: ['skills', 'linked-skills'],
       });
 
+      const listed = await skills.list();
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.path).toBe('linked-skills/test-skill');
+
       const winner = await skills.get('test-skill');
       expect(winner?.path).toBe('linked-skills/test-skill');
       expect(winner?.instructions).toContain('This is the test skill instructions.');
@@ -1508,7 +1512,7 @@ Shadow instructions.`;
         skills: ['skills', 'custom-skills'],
       });
 
-      // list() returns all candidates (both visible for disambiguation UI)
+      // list() returns canonical skills only; ambiguous same-source duplicates still require path-based get()
       const result = await skills.list();
       expect(result).toHaveLength(2);
       const paths = result.map(s => s.path).sort();
@@ -1546,7 +1550,7 @@ External instructions.`;
         skills: ['node_modules/@company/skills', 'skills'],
       });
 
-      // list() returns all candidates (both visible for disambiguation)
+      // list() returns canonical skills only; distinct source types still both appear
       const result = await skills.list();
       expect(result).toHaveLength(2);
       const paths = result.map(s => s.path).sort();

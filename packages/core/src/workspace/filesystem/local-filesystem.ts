@@ -313,6 +313,10 @@ export class LocalFilesystem extends MastraFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
+    if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
+      return;
+    }
+
     // Resolve symlinks for the target path. If it doesn't exist,
     // there are no symlinks to escape through — nothing to check.
     let targetReal: string;
@@ -743,6 +747,15 @@ export class LocalFilesystem extends MastraFilesystem {
       ...result,
       path: this.toRelativePath(absolutePath),
     };
+  }
+
+  async realpath(inputPath: string): Promise<string> {
+    await this.ensureReady();
+    const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
+
+    const canonicalPath = await fs.realpath(absolutePath);
+    return this.toRelativePath(canonicalPath);
   }
 
   /**
