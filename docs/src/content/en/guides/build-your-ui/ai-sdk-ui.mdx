@@ -524,7 +524,7 @@ The tool part type follows the pattern `tool-{toolKey}`, where `toolKey` is the 
 
 ### Rendering workflow data
 
-When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the step that just completed or suspended. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
+When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the step that just changed. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
 
 <Tabs>
   <TabItem value="backend" label="Backend">
