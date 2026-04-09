@@ -175,24 +175,17 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    const trimmedValue = value.trim();
-    const clearValue = trimmedValue.toLowerCase() === 'clear';
-    const expandedValue = clearValue ? undefined : trimmedValue.replace(/^~/, process.env.HOME || '~');
+    const expandedValue = value.trim().replace(/^~/, process.env.HOME || '~');
 
     switch (key) {
       case 'profile':
         settings.browser.profile = expandedValue;
         // Auto-set preserveUserDataDir for Stagehand when profile is configured
-        if (expandedValue) {
-          settings.browser.stagehand = {
-            ...settings.browser.stagehand,
-            env: settings.browser.stagehand?.env ?? 'LOCAL',
-            preserveUserDataDir: true,
-          };
-        } else if (settings.browser.stagehand) {
-          // Clear preserveUserDataDir when profile is cleared
-          delete settings.browser.stagehand.preserveUserDataDir;
-        }
+        settings.browser.stagehand = {
+          ...settings.browser.stagehand,
+          env: settings.browser.stagehand?.env ?? 'LOCAL',
+          preserveUserDataDir: true,
+        };
         break;
       case 'executablepath':
         settings.browser.executablePath = expandedValue;
@@ -213,12 +206,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     saveSettings(settings);
-
-    if (clearValue) {
-      ctx.showInfo(`Cleared ${args[1]}. Run /browser on to apply.`);
-    } else {
-      ctx.showInfo(`Set ${args[1]} = ${expandedValue}\nRun /browser on to apply.`);
-    }
+    ctx.showInfo(`Set ${args[1]} = ${expandedValue}\nRun /browser on to apply.`);
     return;
   }
 
@@ -318,6 +306,119 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     } catch (err) {
       ctx.showError(`Failed to enable browser: ${err instanceof Error ? err.message : String(err)}`);
     }
+    return;
+  }
+
+  // /browser clear [field] - reset all or specific setting
+  if (arg === 'clear') {
+    const field = args[1]?.toLowerCase();
+
+    if (!field) {
+      // Clear all - reset to defaults
+      settings.browser = {
+        enabled: false,
+        provider: 'stagehand',
+        headless: true,
+        viewport: { width: 1280, height: 720 },
+      };
+      saveSettings(settings);
+      applyBrowserToAgents(ctx, undefined);
+      ctx.showInfo('Browser settings reset to defaults.');
+      return;
+    }
+
+    // Clear specific field
+    switch (field) {
+      case 'profile':
+        delete settings.browser.profile;
+        if (settings.browser.stagehand) {
+          delete settings.browser.stagehand.preserveUserDataDir;
+        }
+        break;
+      case 'executablepath':
+        delete settings.browser.executablePath;
+        break;
+      case 'storagestate':
+        if (settings.browser.agentBrowser) {
+          delete settings.browser.agentBrowser.storageState;
+        }
+        break;
+      case 'cdpurl':
+        delete settings.browser.cdpUrl;
+        break;
+      default:
+        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl`);
+        return;
+    }
+
+    saveSettings(settings);
+    ctx.showInfo(`Cleared ${field}. Run /browser on to apply.`);
+    return;
+  }
+
+  // /browser export storageState <path> - export current session's storage state
+  if (arg === 'export') {
+    const what = args[1]?.toLowerCase();
+    const exportPath = args.slice(2).join(' ').trim();
+
+    if (what !== 'storagestate' && what !== 'storage-state') {
+      ctx.showError('Usage: /browser export storageState <path>');
+      return;
+    }
+
+    if (!exportPath) {
+      ctx.showError('Missing path. Usage: /browser export storageState <path>');
+      return;
+    }
+
+    if (browser.provider !== 'agent-browser') {
+      ctx.showError('export storageState is only supported by agent-browser provider.');
+      return;
+    }
+
+    // Get browser instance from the current mode's agent
+    const currentMode = ctx.harness.getCurrentMode();
+    const agent =
+      typeof currentMode.agent === 'function' ? currentMode.agent(ctx.state.harness.getState()) : currentMode.agent;
+    const browserInstance = agent.browser;
+
+    if (!browserInstance) {
+      ctx.showError('Browser not enabled. Run /browser on first.');
+      return;
+    }
+
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    if (!(browserInstance instanceof AgentBrowser)) {
+      ctx.showError('Current browser instance does not support exporting storage state.');
+      return;
+    }
+
+    const expandedPath = exportPath.replace(/^~/, process.env.HOME || '~');
+
+    try {
+      await browserInstance.exportStorageState(expandedPath);
+      ctx.showInfo(`Storage state exported to: ${expandedPath}`);
+    } catch (error) {
+      ctx.showError(`Failed to export storage state: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
+  // /browser help, --help, -h, or unrecognized command
+  if (arg && !['set', 'status', 'on', 'off', 'enable', 'disable', 'export'].includes(arg)) {
+    const help = [
+      'usage: /browser <command> [options]',
+      '',
+      '  (no command)   Interactive setup wizard',
+      '  on, enable     Enable browser with current settings',
+      '  off, disable   Disable browser',
+      '  status         Show current configuration',
+      '  clear          Reset all settings to defaults',
+      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl',
+      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl',
+      '  export storageState <path>  Export session cookies/localStorage (agent-browser)',
+    ];
+    ctx.showInfo(help.join('\n'));
     return;
   }
 

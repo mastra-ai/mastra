@@ -551,6 +551,22 @@ export class AgentBrowser extends MastraBrowser {
     }
   }
 
+  /**
+   * Export the current browser session's storage state (cookies, localStorage) to a JSON file.
+   * This can later be loaded via the `storageState` config option to restore the session.
+   *
+   * @param path - File path to save the storage state JSON
+   * @param threadId - Optional thread ID (defaults to current thread)
+   */
+  async exportStorageState(path: string, threadId?: string): Promise<void> {
+    const manager = await this.getManagerForThread(threadId);
+    const context = manager.getContext();
+    if (!context) {
+      throw new Error('Browser context not available');
+    }
+    await context.storageState({ path });
+  }
+
   // ---------------------------------------------------------------------------
   // 1. browser_goto - Navigate to URL
   // ---------------------------------------------------------------------------
