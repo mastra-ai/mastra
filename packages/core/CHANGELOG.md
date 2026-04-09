@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.24.1-alpha.1
+
+### Patch Changes
+
+- Fixed subagent writing observations to the parent agent's memory thread. When a parent agent spawns a subagent via `createSubagentTool`, the subagent now receives its own isolated request context with `threadId` and `resourceId` cleared, preventing it from corrupting the parent's observation history. ([#15103](https://github.com/mastra-ai/mastra/pull/15103))
+
 ## 1.24.1-alpha.0
 
 ### Patch Changes

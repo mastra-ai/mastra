@@ -1,5 +1,13 @@
 # @mastra/koa
 
+## 1.4.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1-alpha.1
+  - @mastra/server@1.24.1-alpha.1
+
 ## 1.4.8-alpha.0
 
 ### Patch Changes
