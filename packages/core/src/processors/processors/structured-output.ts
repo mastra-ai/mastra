@@ -141,7 +141,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
+          this.handleError('Structuring failed', chunk.payload.error, abort);
 
           if (this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
@@ -266,20 +266,29 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: string, abort: (reason?: string) => never): void {
-    const message = `[StructuredOutputProcessor] ${context}: ${error}`;
+  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+    const errorMessage = this.getErrorMessage(error);
+    const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
-        this.logger?.error(message);
+        this.logger?.error(message, error);
         abort(message);
         break;
       case 'warn':
-        this.logger?.warn(message);
+        this.logger?.warn(message, error);
         break;
       case 'fallback':
-        this.logger?.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`, error);
         break;
     }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
   }
 }
