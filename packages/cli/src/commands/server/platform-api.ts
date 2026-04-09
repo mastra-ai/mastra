@@ -159,6 +159,44 @@ export async function pollServerDeploy(
   }
 }
 
+/* ------------------------------------------------------------------ */
+/*  Environment variables                                              */
+/* ------------------------------------------------------------------ */
+
+export async function getServerProjectEnv(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<Record<string, string>> {
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.GET('/v1/server/projects/{id}/env', {
+    params: { path: { id: projectId } },
+  });
+
+  if (error) {
+    throwApiError('Failed to fetch environment variables', response.status);
+  }
+
+  return data.envVars;
+}
+
+export async function updateServerProjectEnv(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envVars: Record<string, string>,
+): Promise<void> {
+  const client = createApiClient(token, orgId);
+  const { error, response } = await client.PUT('/v1/server/projects/{id}/env', {
+    params: { path: { id: projectId } },
+    body: { envVars },
+  });
+
+  if (error) {
+    throwApiError('Failed to update environment variables', response.status);
+  }
+}
+
 /**
  * Poll the server deploy logs endpoint and print new log lines.
  * Server deploys don't have SSE streaming — we poll the JSON endpoint.
