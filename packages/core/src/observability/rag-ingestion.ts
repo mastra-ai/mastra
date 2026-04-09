@@ -70,7 +70,7 @@ export interface StartRagIngestionResult {
  *   attributes: { vectorStore: 'pgvector', indexName: 'docs' },
  * });
  * try {
- *   const chunks = await doc.chunk({ observabilityContext });
+ *   const chunks = await doc.chunk({}, { observabilityContext });
  *   // ...
  *   span?.end({ output: { chunkCount: chunks.length } });
  * } catch (err) {
@@ -107,13 +107,16 @@ export function startRagIngestion(options: StartRagIngestionOptions): StartRagIn
  *     attributes: { vectorStore: 'pgvector', indexName: 'docs' },
  *   },
  *   async (observabilityContext) => {
- *     const chunks = await doc.chunk({ observabilityContext });
- *     const { embeddings } = await embed(chunks, { observabilityContext });
- *     await vectorStore.upsert({
- *       indexName: 'docs',
- *       vectors: embeddings,
+ *     const chunks = await doc.chunk({}, { observabilityContext });
+ *     const { embeddings } = await embedForIngestion({
+ *       model,
+ *       values: chunks.map(c => c.getText()),
  *       observabilityContext,
  *     });
+ *     await vectorStore.upsertWithTracing(
+ *       { indexName: 'docs', vectors: embeddings },
+ *       { observabilityContext },
+ *     );
  *     return { chunkCount: chunks.length };
  *   },
  * );

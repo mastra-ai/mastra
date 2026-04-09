@@ -17,6 +17,8 @@ import type {
 } from '@internal/ai-v6';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { ObservabilityContext } from '../observability';
+import { SpanType } from '../observability';
 import type { VectorFilter } from './filter';
 import type {
   CreateIndexParams,
@@ -142,6 +144,41 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
    * ```
    */
   abstract deleteVectors(params: DeleteVectorsParams<Filter>): Promise<void>;
+
+  /**
+   * Traced wrapper around `upsert()`. Emits a `RAG_VECTOR_OPERATION` child
+   * span with `operation: 'upsert'` when an `observabilityContext` is provided.
+   * Falls back to a plain `upsert()` call when observability is absent.
+   */
+  async upsertWithTracing(
+    params: UpsertVectorParams,
+    options?: { observabilityContext?: ObservabilityContext },
+  ): Promise<string[]> {
+    const parentSpan = options?.observabilityContext?.tracingContext?.currentSpan;
+
+    const upsertSpan = parentSpan?.createChildSpan({
+      type: SpanType.RAG_VECTOR_OPERATION,
+      name: 'rag vector: upsert',
+      input: { indexName: params.indexName, vectorCount: params.vectors.length },
+      attributes: {
+        operation: 'upsert',
+        store: this.id,
+        indexName: params.indexName,
+        dimensions: params.vectors[0]?.length,
+      },
+    });
+
+    try {
+      const ids = await this.upsert(params);
+      upsertSpan?.end({
+        output: { vectorCount: ids.length },
+      });
+      return ids;
+    } catch (err) {
+      upsertSpan?.error({ error: err as Error, endSpan: true });
+      throw err;
+    }
+  }
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;
