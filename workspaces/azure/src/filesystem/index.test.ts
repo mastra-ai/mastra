@@ -237,6 +237,82 @@ describe('AzureBlobFilesystem', () => {
     });
   });
 
+  describe('ReadOnly Enforcement', () => {
+    it('throws PermissionError on writeFile when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.writeFile('/test.txt', 'content')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on appendFile when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.appendFile('/test.txt', 'content')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on deleteFile when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.deleteFile('/test.txt')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on copyFile when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.copyFile('/src.txt', '/dest.txt')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on moveFile when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.moveFile('/src.txt', '/dest.txt')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on mkdir when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.mkdir('/new-dir')).rejects.toThrow(/read-only/);
+    });
+
+    it('throws PermissionError on rmdir when readOnly', async () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      await expect(fs.rmdir('/dir')).rejects.toThrow(/read-only/);
+    });
+
+    it('does not throw on read operations when readOnly', () => {
+      const fs = new AzureBlobFilesystem({
+        container: 'test',
+        connectionString: 'fake',
+        readOnly: true,
+      });
+      // Constructor and sync accessors should not throw
+      expect(fs.readOnly).toBe(true);
+      expect(fs.getInfo().readOnly).toBe(true);
+    });
+  });
+
   describe('Prefix Handling', () => {
     it('normalizes prefix - removes leading slashes', () => {
       const fs = new AzureBlobFilesystem({ container: 'test', prefix: '/foo/bar' });
@@ -459,6 +535,25 @@ describe('AzureBlobFilesystem SDK Operations', () => {
 
       expect(mockBlockBlobClient.upload).toHaveBeenCalled();
     });
+
+    it('preserves binary bytes when appending Buffer to Buffer', async () => {
+      // Non-UTF-8 bytes that would be corrupted by string decoding (e.g., 0xFF, 0xFE, 0x00)
+      const existing = Buffer.from([0xff, 0xfe, 0x00, 0x01]);
+      const toAppend = Buffer.from([0x80, 0x81, 0x82]);
+      const expected = Buffer.concat([existing, toAppend]);
+
+      mockBlockBlobClient.download.mockResolvedValueOnce({
+        readableStreamBody: createReadableStream(existing),
+      });
+      mockBlockBlobClient.upload.mockResolvedValueOnce({});
+
+      await fs.appendFile('/binary.bin', toAppend);
+
+      const uploadCall = mockBlockBlobClient.upload.mock.calls[0]!;
+      const uploadedBuffer = uploadCall[0] as Buffer;
+      expect(Buffer.isBuffer(uploadedBuffer)).toBe(true);
+      expect(uploadedBuffer.equals(expected)).toBe(true);
+    });
   });
 
   describe('deleteFile()', () => {
@@ -484,7 +579,7 @@ describe('AzureBlobFilesystem SDK Operations', () => {
       await expect(fs.deleteFile('/missing.txt')).rejects.toThrow(/missing\.txt/);
     });
 
-    it('swallows errors with force option', async () => {
+    it('silently succeeds on 404 when force is true', async () => {
       mockContainerClient.listBlobsFlat.mockReturnValueOnce({
         next: vi.fn().mockResolvedValue({ done: true }),
       });
@@ -492,6 +587,16 @@ describe('AzureBlobFilesystem SDK Operations', () => {
       mockBlobClient.delete.mockRejectedValueOnce(error);
 
       await expect(fs.deleteFile('/missing.txt', { force: true })).resolves.not.toThrow();
+    });
+
+    it('still throws non-404 errors even when force is true', async () => {
+      mockContainerClient.listBlobsFlat.mockReturnValueOnce({
+        next: vi.fn().mockResolvedValue({ done: true }),
+      });
+      const error = Object.assign(new Error('Forbidden'), { statusCode: 403 });
+      mockBlobClient.delete.mockRejectedValueOnce(error);
+
+      await expect(fs.deleteFile('/forbidden.txt', { force: true })).rejects.toThrow('Forbidden');
     });
   });
 

@@ -18,4 +18,4 @@ services:
     environment:
       AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;'
     command: >
-      bash -c "az storage container create --name test-container --connection-string \"$$AZURE_STORAGE_CONNECTION_STRING\" 2>/dev/null || true"
+      bash -c "az storage container create --name test-container --connection-string \"$$AZURE_STORAGE_CONNECTION_STRING\""

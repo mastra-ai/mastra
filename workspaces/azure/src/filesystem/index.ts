@@ -26,7 +26,7 @@ import type {
   ProviderStatus,
   MastraFilesystemOptions,
 } from '@mastra/core/workspace';
-import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
+import { MastraFilesystem, FileNotFoundError, FileExistsError, PermissionError } from '@mastra/core/workspace';
 
 /**
  * Azure Blob mount configuration.
@@ -37,7 +37,11 @@ export interface AzureBlobMountConfig extends FilesystemMountConfig {
   container: string;
   accountName?: string;
   accountKey?: string;
+  sasToken?: string;
   connectionString?: string;
+  useDefaultCredential?: boolean;
+  endpoint?: string;
+  readOnly?: boolean;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -209,6 +213,21 @@ export class AzureBlobFilesystem extends MastraFilesystem {
       if (this.accountKey) {
         config.accountKey = this.accountKey;
       }
+      if (this.sasToken) {
+        config.sasToken = this.sasToken;
+      }
+    }
+
+    if (this.useDefaultCredential) {
+      config.useDefaultCredential = true;
+    }
+
+    if (this.endpoint) {
+      config.endpoint = this.endpoint;
+    }
+
+    if (this.readOnly) {
+      config.readOnly = true;
     }
 
     return config;
@@ -296,6 +315,12 @@ export class AzureBlobFilesystem extends MastraFilesystem {
     return error;
   }
 
+  private assertWritable(path: string, operation: string): void {
+    if (this.readOnly) {
+      throw new PermissionError(path, `${operation} (filesystem is read-only)`);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // File Operations
   // ---------------------------------------------------------------------------
@@ -321,6 +346,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    this.assertWritable(path, 'write');
     const containerClient = await this.getReadyContainer();
 
     if (options?.overwrite === false && (await this.exists(path))) {
@@ -337,22 +363,25 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   }
 
   async appendFile(path: string, content: FileContent): Promise<void> {
-    let existing = '';
+    this.assertWritable(path, 'append');
+    let existing: Buffer = Buffer.alloc(0);
     try {
-      existing = (await this.readFile(path, { encoding: 'utf-8' })) as string;
+      const read = await this.readFile(path);
+      existing = Buffer.isBuffer(read) ? read : Buffer.from(read);
     } catch (error) {
       if (error instanceof FileNotFoundError) {
-        // File doesn't exist, start fresh
+        // File doesn't exist, start fresh with empty buffer
       } else {
         throw error;
       }
     }
 
-    const appendContent = typeof content === 'string' ? content : Buffer.from(content).toString('utf-8');
-    await this.writeFile(path, existing + appendContent);
+    const appendBuffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+    await this.writeFile(path, Buffer.concat([existing, appendBuffer]));
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable(path, 'delete');
     const isDir = await this.isDirectory(path);
     if (isDir) {
       await this.rmdir(path, { recursive: true, force: options?.force });
@@ -365,8 +394,8 @@ export class AzureBlobFilesystem extends MastraFilesystem {
     try {
       await blobClient.delete();
     } catch (error: unknown) {
-      if (options?.force) return;
       if (isNotFoundError(error)) {
+        if (options?.force) return;
         throw new FileNotFoundError(path);
       }
       throw this.handleError(error);
@@ -374,6 +403,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable(dest, 'copy');
     if (options?.overwrite === false && (await this.exists(dest))) {
       throw new FileExistsError(dest);
     }
@@ -393,6 +423,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable(dest, 'move');
     await this.copyFile(src, dest, options);
     await this.deleteFile(src, { force: true });
   }
@@ -401,12 +432,14 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   // Directory Operations
   // ---------------------------------------------------------------------------
 
-  async mkdir(_path: string, _options?: { recursive?: boolean }): Promise<void> {
+  async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
+    this.assertWritable(path, 'mkdir');
     // Azure Blob Storage doesn't have real directories - they're just key prefixes.
     // No-op, directories are created implicitly when files are written.
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable(path, 'rmdir');
     const containerClient = await this.getReadyContainer();
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
