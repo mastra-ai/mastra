@@ -1,9 +1,9 @@
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
