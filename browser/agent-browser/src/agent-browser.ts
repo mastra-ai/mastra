@@ -33,6 +33,7 @@ import type {
 import { AgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
+import { getBrowserPid } from './utils';
 
 /**
  * AgentBrowser - Browser automation using agent-browser (vercel-labs/agent-browser)
@@ -50,6 +51,12 @@ export class AgentBrowser extends MastraBrowser {
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
+
+  /** Browser PID for shared scope (used for orphan process cleanup) */
+  private sharedBrowserPid: number | undefined;
+
+  /** Browser PIDs for thread scope (used for orphan process cleanup) */
+  private threadBrowserPids = new Map<string, number>();
 
   constructor(config: BrowserConfig = {}) {
     super(config);
@@ -184,19 +191,19 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
-      // Capture the Chrome process PID while the browser is alive.
+      // Capture the Chrome process PID via CDP while the browser is alive.
       // On manual close the main process dies but child processes (GPU, renderer,
       // network, storage, crashpad) can linger as orphans. We need the PID to
       // kill the whole process group during cleanup.
-      // Playwright's Browser type doesn't expose process(), but the runtime
-      // object does when the browser was launched (not connected via CDP).
-      const browserPid = (manager.getBrowser() as any)?.process?.()?.pid as number | undefined;
+      void getBrowserPid(manager).then(pid => {
+        if (pid) this.sharedBrowserPid = pid;
+      });
 
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        killProcessGroup(browserPid, this.logger);
+        killProcessGroup(this.sharedBrowserPid, this.logger);
         this.handleBrowserDisconnected();
       };
 
@@ -322,13 +329,18 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
     try {
-      const browserPid = (manager.getBrowser() as any)?.process?.()?.pid as number | undefined;
+      // Capture the Chrome process PID via CDP while the browser is alive.
+      void getBrowserPid(manager).then(pid => {
+        if (pid) this.threadBrowserPids.set(threadId, pid);
+      });
 
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        killProcessGroup(browserPid, this.logger);
+        const pid = this.threadBrowserPids.get(threadId);
+        killProcessGroup(pid, this.logger);
+        this.threadBrowserPids.delete(threadId);
         this.handleThreadBrowserDisconnected(threadId);
       };
 

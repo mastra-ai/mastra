@@ -4,7 +4,6 @@
  * Exports config matrix and test generators that each provider imports.
  * Cross-provider tests live in the shared _test-utils package.
  */
-import { execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +28,8 @@ export interface BrowserFactory {
   create(config: { profile?: string; scope: 'shared' | 'thread'; headless: boolean }): MastraBrowser;
   /** Navigate to a URL */
   navigate(browser: MastraBrowser, url: string, threadId?: string): Promise<void>;
+  /** Get the browser process PID (after ensureReady) */
+  getPid(browser: MastraBrowser, threadId?: string): Promise<number | undefined>;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,16 +71,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function countAllChromeProcesses(): number {
+/**
+ * Check if a process is still running by PID.
+ */
+function isProcessRunning(pid: number): boolean {
   try {
-    const out = execSync('ps aux | grep -cE "[C]hrom|[c]hrome-headless"', {
-      encoding: 'utf-8',
-      timeout: 5000,
-    }).trim();
-    return parseInt(out, 10) || 0;
+    // kill with signal 0 checks if process exists without killing it
+    process.kill(pid, 0);
+    return true;
   } catch {
-    return 0;
+    return false;
   }
+}
+
+/**
+ * Wait for a process to exit, with timeout.
+ */
+async function waitForProcessExit(pid: number, timeoutMs = 5000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (!isProcessRunning(pid)) {
+      return true;
+    }
+    await sleep(100);
+  }
+  return !isProcessRunning(pid);
 }
 
 function hasLockFiles(profilePath: string): boolean {
@@ -97,20 +113,7 @@ function getExitType(profilePath: string): string | undefined {
   }
 }
 
-function findChromePidByProfile(profileDir: string): number | undefined {
-  try {
-    const escaped = profileDir.replace(/\//g, '\\/');
-    const out = execSync(
-      `ps aux | grep -E "[C]hrom|[c]hrome-headless" | grep "${escaped}" | grep -v "helper" | head -1 | awk '{print $2}'`,
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim();
-    return out ? parseInt(out, 10) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function killMainChromeProcess(pid: number): void {
+function killProcess(pid: number): void {
   try {
     process.kill(pid, 'SIGTERM');
   } catch {
@@ -143,11 +146,10 @@ export function createProviderTests(factory: BrowserFactory) {
 
     for (const config of configs) {
       describe(configLabel(config), () => {
-        it('programmatic close — no orphans, cleans up', async () => {
+        it('programmatic close — process exits, cleans up', async () => {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
 
           try {
-            const before = countAllChromeProcesses();
             const browser = factory.create({
               profile: profileDir,
               scope: config.scope,
@@ -160,7 +162,11 @@ export function createProviderTests(factory: BrowserFactory) {
 
             await browser.ensureReady();
             await factory.navigate(browser, TEST_URL, config.scope === 'thread' ? THREAD_ID : undefined);
-            expect(countAllChromeProcesses()).toBeGreaterThan(before);
+
+            // Get the PID we spawned
+            const pid = await factory.getPid(browser, config.scope === 'thread' ? THREAD_ID : undefined);
+            expect(pid).toBeDefined();
+            expect(isProcessRunning(pid!)).toBe(true);
 
             // Close
             if (config.scope === 'thread') {
@@ -168,10 +174,12 @@ export function createProviderTests(factory: BrowserFactory) {
             } else {
               await browser.close();
             }
-            await sleep(1000);
 
-            // Verify cleanup
-            expect(countAllChromeProcesses()).toBe(before);
+            // Verify our process exited
+            const exited = await waitForProcessExit(pid!, 5000);
+            expect(exited).toBe(true);
+
+            // Verify profile cleanup
             if (profileDir) {
               expect(hasLockFiles(profileDir)).toBe(false);
               const exitType = getExitType(profileDir);
@@ -193,11 +201,10 @@ export function createProviderTests(factory: BrowserFactory) {
           }
         }, 30_000);
 
-        it('manual close — no orphans, cleans up', async () => {
+        it('manual close — process exits, cleans up', async () => {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
 
           try {
-            const before = countAllChromeProcesses();
             const browser = factory.create({
               profile: profileDir,
               scope: config.scope,
@@ -211,28 +218,30 @@ export function createProviderTests(factory: BrowserFactory) {
             await browser.ensureReady();
             await factory.navigate(browser, TEST_URL, config.scope === 'thread' ? THREAD_ID : undefined);
 
-            // Find and kill Chrome process
-            // For no-profile, we can't find by profile dir, so skip the kill test
-            if (profileDir) {
-              const pid = findChromePidByProfile(profileDir);
-              expect(pid).toBeDefined();
-              killMainChromeProcess(pid!);
-              await sleep(3000);
+            // Get the PID we spawned
+            const pid = await factory.getPid(browser, config.scope === 'thread' ? THREAD_ID : undefined);
+            expect(pid).toBeDefined();
+            expect(isProcessRunning(pid!)).toBe(true);
 
-              // Verify cleanup
-              expect(countAllChromeProcesses()).toBe(before);
+            // Kill the process externally (simulates user closing browser window)
+            killProcess(pid!);
+
+            // Verify our process exited
+            const exited = await waitForProcessExit(pid!, 5000);
+            expect(exited).toBe(true);
+
+            // Verify profile cleanup
+            if (profileDir) {
+              // Give disconnect handler time to clean up
+              await sleep(1000);
               expect(hasLockFiles(profileDir)).toBe(false);
               const exitType = getExitType(profileDir);
               if (exitType !== undefined) {
                 expect(exitType).toBe('Normal');
               }
-            } else {
-              // No profile — just close normally, we can't test manual kill
-              await browser.close();
-              await sleep(1000);
-              expect(countAllChromeProcesses()).toBe(before);
             }
 
+            // Clean up browser state
             try {
               await browser.close();
             } catch {}
@@ -290,24 +299,30 @@ export function createCrossProviderTests(factoryA: BrowserFactory, factoryB: Bro
             const a1 = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
             await a1.ensureReady();
             await factoryA.navigate(a1, TEST_URL);
+            const pidA1 = await factoryA.getPid(a1);
+            expect(pidA1).toBeDefined();
             await a1.close();
-            await sleep(1000);
+            await waitForProcessExit(pidA1!, 5000);
             expect(hasLockFiles(profileDir)).toBe(false);
 
             // B
             const b = factoryB.create({ profile: profileDir, scope: 'shared', headless: combo.bHeadless });
             await b.ensureReady();
             await factoryB.navigate(b, TEST_URL);
+            const pidB = await factoryB.getPid(b);
+            expect(pidB).toBeDefined();
             await b.close();
-            await sleep(1000);
+            await waitForProcessExit(pidB!, 5000);
             expect(hasLockFiles(profileDir)).toBe(false);
 
             // A again
             const a2 = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
             await a2.ensureReady();
             await factoryA.navigate(a2, TEST_URL);
+            const pidA2 = await factoryA.getPid(a2);
+            expect(pidA2).toBeDefined();
             await a2.close();
-            await sleep(1000);
+            await waitForProcessExit(pidA2!, 5000);
             expect(hasLockFiles(profileDir)).toBe(false);
           } finally {
             rmSync(profileDir, { recursive: true, force: true });
@@ -322,10 +337,11 @@ export function createCrossProviderTests(factoryA: BrowserFactory, factoryB: Bro
             const a = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
             await a.ensureReady();
             await factoryA.navigate(a, TEST_URL);
-            const pid = findChromePidByProfile(profileDir);
-            expect(pid).toBeDefined();
-            killMainChromeProcess(pid!);
-            await sleep(3000);
+            const pidA = await factoryA.getPid(a);
+            expect(pidA).toBeDefined();
+            killProcess(pidA!);
+            await waitForProcessExit(pidA!, 5000);
+            await sleep(1000); // Let disconnect handler clean up
             expect(hasLockFiles(profileDir)).toBe(false);
             try {
               await a.close();
@@ -335,8 +351,10 @@ export function createCrossProviderTests(factoryA: BrowserFactory, factoryB: Bro
             const b = factoryB.create({ profile: profileDir, scope: 'shared', headless: combo.bHeadless });
             await b.ensureReady();
             await factoryB.navigate(b, TEST_URL);
+            const pidB = await factoryB.getPid(b);
+            expect(pidB).toBeDefined();
             await b.close();
-            await sleep(1000);
+            await waitForProcessExit(pidB!, 5000);
             expect(hasLockFiles(profileDir)).toBe(false);
           } finally {
             rmSync(profileDir, { recursive: true, force: true });
