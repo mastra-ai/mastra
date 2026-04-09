@@ -1493,7 +1493,7 @@ Instructions for the new skill.`;
       expect(winner?.instructions).toContain('This is the test skill instructions.');
     });
 
-    it('should error when same-named skills share the same source type (e.g., two local skills)', async () => {
+    it('should de-duplicate canonical aliases in list() while preserving distinct local skills', async () => {
       const shadowSkillMd = `---
 name: test-skill
 description: Shadow copy of the test skill
@@ -1502,28 +1502,35 @@ license: MIT
 
 Shadow instructions.`;
 
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
-      });
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+            'custom-skills/test-skill': '/real/custom-skills/test-skill',
+          },
+        },
+      );
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['skills', 'custom-skills'],
+        skills: ['skills', 'linked-skills', 'custom-skills'],
       });
 
-      // list() returns canonical skills only; ambiguous same-source duplicates still require path-based get()
       const result = await skills.list();
       expect(result).toHaveLength(2);
       const paths = result.map(s => s.path).sort();
-      expect(paths).toEqual(['custom-skills/test-skill', 'skills/test-skill']);
+      expect(paths).toEqual(['custom-skills/test-skill', 'linked-skills/test-skill']);
 
-      // get() by name throws because both are local (source-type tie can't resolve)
       await expect(skills.get('test-skill')).rejects.toThrow(
         'Cannot resolve skill "test-skill": multiple local skills found',
       );
 
-      // get() by exact path (escape hatch) still works for each specific skill
       const specific = await skills.get('skills/test-skill');
       expect(specific?.instructions).toContain('This is the test skill instructions.');
 

@@ -569,7 +569,6 @@ Line 3 conclusion`;
 
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        allowedPaths: ['/Users/tylerbarnes/.claude/skills', '/Users/tylerbarnes/.agents/skills'],
       });
       const workspace = new Workspace({
         filesystem,
