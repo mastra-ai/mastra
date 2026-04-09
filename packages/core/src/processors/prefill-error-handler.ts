@@ -2,7 +2,16 @@ import { randomUUID } from 'node:crypto';
 
 import { APICallError } from '@internal/ai-sdk-v5';
 
+import type { DataChunkType } from '../stream/types';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
+
+type SystemReminderChunk = DataChunkType & {
+  type: 'data-system-reminder';
+  data: {
+    message: string;
+    reminderType: string;
+  };
+};
 
 const PREFILL_ERROR_PATTERN = /does not support assistant message prefill/i;
 
@@ -42,11 +51,29 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
   readonly id = 'prefill-error-handler' as const;
   readonly name = 'Prefill Error Handler';
 
-  processAPIError({ error, messageList, retryCount }: ProcessAPIErrorArgs): ProcessAPIErrorResult | void {
+  async processAPIError({
+    error,
+    messageList,
+    retryCount,
+    writer,
+  }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     // Only handle on first attempt — if it fails again after our fix, don't loop
     if (retryCount > 0) return;
 
     if (!isPrefillError(error)) return;
+
+    // Emit an ephemeral stream chunk so live UIs can show the retry is happening
+    if (writer) {
+      const chunk: SystemReminderChunk = {
+        type: 'data-system-reminder',
+        data: {
+          message: 'Retrying after Anthropic prefill error',
+          reminderType: 'anthropic-prefill-processor-retry',
+        },
+        transient: true,
+      };
+      await writer.custom(chunk);
+    }
 
     // Append a user message to break the trailing assistant pattern
     messageList.add(

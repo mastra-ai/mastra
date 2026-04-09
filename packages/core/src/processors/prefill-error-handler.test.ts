@@ -61,21 +61,21 @@ function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIError
 }
 
 describe('PrefillErrorHandler', () => {
-  it('should return { retry: true } for prefill errors with trailing assistant message', () => {
+  it('should return { retry: true } for prefill errors with trailing assistant message', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs();
 
-    const result = handler.processAPIError(args);
+    const result = await handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
   });
 
-  it('should append a system reminder continue message to messageList', () => {
+  it('should append a system reminder continue message to messageList', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs();
     const messageCountBefore = args.messageList.get.all.db().length;
 
-    handler.processAPIError(args);
+    await handler.processAPIError(args);
 
     const messagesAfter = args.messageList.get.all.db();
     expect(messagesAfter.length).toBe(messageCountBefore + 1);
@@ -95,34 +95,34 @@ describe('PrefillErrorHandler', () => {
     });
   });
 
-  it('should return undefined for non-prefill errors', () => {
+  it('should return undefined for non-prefill errors', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ error: createOtherError() });
 
-    const result = handler.processAPIError(args);
+    const result = await handler.processAPIError(args);
 
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined for plain Error objects', () => {
+  it('should return undefined for plain Error objects', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ error: new Error('Something else went wrong') });
 
-    const result = handler.processAPIError(args);
+    const result = await handler.processAPIError(args);
 
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined when retryCount > 0', () => {
+  it('should return undefined when retryCount > 0', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ retryCount: 1 });
 
-    const result = handler.processAPIError(args);
+    const result = await handler.processAPIError(args);
 
     expect(result).toBeUndefined();
   });
 
-  it('should still retry even when last message is not from assistant', () => {
+  it('should still retry even when last message is not from assistant', async () => {
     const handler = new PrefillErrorHandler();
     const messageList = new MessageList({ threadId: 'test-thread' });
     messageList.add([createMessage('hello', 'user')], 'input');
@@ -131,7 +131,7 @@ describe('PrefillErrorHandler', () => {
       messages: messageList.get.all.db(),
     });
 
-    const result = handler.processAPIError(args);
+    const result = await handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
     // Should have appended a system reminder continue message
@@ -139,12 +139,12 @@ describe('PrefillErrorHandler', () => {
     expect(allMessages[allMessages.length - 1]?.role).toBe('user');
   });
 
-  it('should not modify messageList when error is not a prefill error', () => {
+  it('should not modify messageList when error is not a prefill error', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ error: createOtherError() });
     const messageCountBefore = args.messageList.get.all.db().length;
 
-    handler.processAPIError(args);
+    await handler.processAPIError(args);
 
     expect(args.messageList.get.all.db().length).toBe(messageCountBefore);
   });
