@@ -423,6 +423,36 @@ describe('AgentsMDInjector', () => {
     ]);
   });
 
+  it('does not inject duplicate reminder when a legacy metadata reminder already exists for the same path', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-legacy-duplicate-path';
+    messageList.push(
+      createUserMessage('legacy reminder payload', {
+        dynamicAgentsMdReminder: {
+          path: '/repo/AGENTS.md',
+          type: 'dynamic-agents-md',
+        },
+      }),
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: path => String(path) !== '/repo/src/index.ts',
+      readFile: () => 'Project guidance from AGENTS',
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' }, 'view', toolCallId)]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+    expect(messageList.get.all.db().filter(message => message.role === 'user')).toHaveLength(1);
+  });
+
   it('injects a new reminder when the path differs', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-different-path';
