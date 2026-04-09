@@ -40,6 +40,13 @@ export class MessageStateManager {
         this.memoryMessagesPersisted.add(message);
         break;
       case 'response':
+        // If this message was previously loaded from memory and is now being
+        // promoted (e.g. step-2 text merged into a step-1 memory-tagged message),
+        // remove it from memoryMessages so that get.response.db() can find it
+        // and turn.end() re-persists the merged content correctly.
+        if (this.memoryMessages.has(message)) {
+          this.memoryMessages.delete(message);
+        }
         this.newResponseMessages.add(message);
         this.newResponseMessagesPersisted.add(message);
         // Handle case where a client-side tool response was added as user input
