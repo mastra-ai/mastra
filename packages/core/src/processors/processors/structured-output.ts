@@ -172,11 +172,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         controller.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError(
-        'Structured output processing failed',
-        error instanceof Error ? error.message : 'Unknown error',
-        abort,
-      );
+      this.handleError('Structured output processing failed', error, abort);
     }
   }
 
