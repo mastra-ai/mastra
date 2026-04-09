@@ -70,30 +70,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'editor/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'editor/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'editor/prompts',
-          label: 'Prompts',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Agents',
       items: [
         {
@@ -254,6 +230,30 @@ const sidebars = {
           type: 'doc',
           id: 'workflows/error-handling',
           label: 'Error Handling',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Editor',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'editor/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'editor/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'editor/prompts',
+          label: 'Prompts',
         },
       ],
     },
