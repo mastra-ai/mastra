@@ -71,27 +71,23 @@ export function getCurrentToken(): string | null {
  * Used by both createApiClient (openapi-fetch) and raw fetch calls.
  */
 async function authenticatedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
-  // openapi-fetch passes a single Request object (no init). If the first
-  // fetch() returns 401 we need to retry, but the original Request's body
-  // will already be consumed. Clone it up front so the retry can use the clone.
-  const clonedRequest = input instanceof Request ? input.clone() : null;
-
-  // Prime _currentToken from the request headers so the 401-retry path works
-  // even when callers use platformFetch() directly instead of createApiClient().
-  if (!_currentToken) {
-    const authHeader =
-      (input instanceof Request ? input.headers.get('Authorization') : null) ??
-      (init?.headers instanceof Headers
-        ? init.headers.get('Authorization')
-        : typeof init?.headers === 'object' && init.headers && !Array.isArray(init.headers)
-          ? (init.headers as Record<string, string>)['Authorization']
-          : null);
-    if (authHeader?.startsWith('Bearer ')) {
-      _currentToken = authHeader.slice(7);
-    }
+  // Extract URL from Request objects so we can safely retry without "already used" errors.
+  let url: string | URL;
+  let effectiveInit: RequestInit | undefined;
+  if (input instanceof Request) {
+    url = input.url;
+    effectiveInit = {
+      method: input.method,
+      headers: Object.fromEntries(input.headers.entries()),
+      body: init?.body ?? (input.body ? await input.arrayBuffer() : undefined),
+      ...init,
+    };
+  } else {
+    url = input;
+    effectiveInit = init;
   }
 
-  const response = await fetch(input, init);
+  const response = await fetch(url, effectiveInit);
 
   if (response.status !== 401 || !_currentToken) {
     return response;
@@ -125,17 +121,13 @@ async function authenticatedFetch(input: string | URL | Request, init?: RequestI
     return response;
   }
 
-  // Retry with the refreshed token.
-  if (clonedRequest) {
-    // Rebuild from the clone so headers + body are intact.
-    const retryHeaders = new Headers(clonedRequest.headers);
-    retryHeaders.set('Authorization', `Bearer ${newToken}`);
-    return fetch(new Request(clonedRequest, { headers: retryHeaders }));
-  }
-
-  const retryHeaders = new Headers(init?.headers);
+  // Retry the request with the new token
+  const retryInit = { ...effectiveInit };
+  const retryHeaders = new Headers(retryInit.headers);
   retryHeaders.set('Authorization', `Bearer ${newToken}`);
-  return fetch(input, { ...init, headers: retryHeaders });
+  retryInit.headers = retryHeaders;
+
+  return fetch(url, retryInit);
 }
 
 /**

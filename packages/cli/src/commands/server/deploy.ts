@@ -8,7 +8,10 @@ import archiver from 'archiver';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { parseEnvFile } from '../studio/deploy.js';
+import { createProject, uploadDeploy, pollDeploy } from '../studio/platform-api.js';
+import { loadProjectConfig, saveProjectConfig, detectEnvFile } from '../studio/project-config.js';
+import type { ServerConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
@@ -64,22 +67,38 @@ async function zipOutput(projectDir: string): Promise<string> {
   });
 }
 
-export function parseEnvFile(content: string): Record<string, string> {
-  const vars: Record<string, string> = {};
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIdx = trimmed.indexOf('=');
-    if (eqIdx === -1) continue;
-    let key = trimmed.slice(0, eqIdx).trim();
-    if (key.startsWith('export ')) key = key.slice(7).trim();
-    let value = trimmed.slice(eqIdx + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (key) vars[key] = value;
+function runStudioBuild(projectDir: string): void {
+  const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
+  p.log.step('Running mastra build --studio...');
+  try {
+    execSync(`"${localMastra}" build --studio`, {
+      cwd: projectDir,
+      stdio: 'inherit',
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+  } catch {
+    throw new Error('mastra build --studio failed');
   }
-  return vars;
+  console.info('');
+}
+
+async function zipStudioOutput(projectDir: string): Promise<string> {
+  const outputDir = join(projectDir, '.mastra', 'output');
+  const tmpDir = join(tmpdir(), 'mastra-deploy');
+  await mkdir(tmpDir, { recursive: true });
+  const zipPath = join(tmpDir, `studio-deploy-${Date.now()}.zip`);
+
+  return new Promise((resolvePromise, reject) => {
+    const output = createWriteStream(zipPath);
+    const archive = archiver('zip', { zlib: { level: 6 } });
+
+    output.on('close', () => resolvePromise(zipPath));
+    archive.on('error', reject);
+
+    archive.pipe(output);
+    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: 'output' });
+    void archive.finalize();
+  });
 }
 
 async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
@@ -332,7 +351,80 @@ export async function serverDeployAction(
   const finalStatus = await pollServerDeploy(deployResult.id, token, orgId);
 
   if (finalStatus.status === 'running') {
-    p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);
+    p.outro(`Server deploy succeeded! ${finalStatus.instanceUrl}`);
+
+    if (!isHeadless && finalStatus.instanceUrl) {
+      const deployStudio = await p.confirm({
+        message: 'Would you like to deploy a studio for this server?',
+      });
+
+      if (!p.isCancel(deployStudio) && deployStudio) {
+        const serverUrl = new URL(finalStatus.instanceUrl);
+        const serverConfig: ServerConfig = {
+          host: serverUrl.hostname,
+          port: serverUrl.port ? Number(serverUrl.port) : serverUrl.protocol === 'https:' ? 443 : 80,
+          protocol: serverUrl.protocol.replace(':', ''),
+          apiPrefix: '/api',
+        };
+
+        // 1. Build studio
+        runStudioBuild(targetDir);
+
+        const s2 = p.spinner();
+
+        // 2. Zip studio output
+        s2.start('Zipping studio artifact...');
+        const studioZipPath = await zipStudioOutput(targetDir);
+        s2.stop('Studio artifact ready');
+
+        // 3. Read env vars (auto-detect)
+        const envFile = await detectEnvFile(targetDir);
+        let envVars: Record<string, string> = {};
+        if (envFile) {
+          const content = await readFile(join(targetDir, envFile), 'utf-8');
+          envVars = parseEnvFile(content);
+        }
+
+        // 4. Create studio project (same org, same name → matching slug)
+        s2.start('Creating studio project...');
+        const studioProject = await createProject(token, orgId, projectName);
+        s2.stop(`Studio project: ${studioProject.name}`);
+
+        // 5. Upload + poll
+        s2.start('Uploading studio...');
+        const studioZip = await readFile(studioZipPath);
+        const studioResult = await uploadDeploy(token, orgId, studioProject.id, studioZip, {
+          projectName: studioProject.name,
+          envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+          server: serverConfig,
+        });
+        s2.stop(`Studio deploy accepted: ${studioResult.id}`);
+        await rm(studioZipPath, { force: true });
+
+        p.log.step('Streaming studio deploy logs...');
+        const studioStatus = await pollDeploy(studioResult.id, token, orgId);
+
+        if (studioStatus.status === 'running') {
+          p.outro(`Studio deploy succeeded! ${studioStatus.instanceUrl}`);
+        } else {
+          p.log.error(`Studio deploy failed: ${studioStatus.error}`);
+        }
+
+        // 6. Save .mastra-prod.json for future re-deploys
+        await saveProjectConfig(
+          targetDir,
+          {
+            projectId: studioProject.id,
+            projectName: studioProject.name,
+            organizationId: orgId,
+            server: serverConfig,
+            ...(envFile && { envFile }),
+          },
+          '.mastra-prod.json',
+        );
+        p.log.success('Saved .mastra-prod.json (for future: mastra studio deploy -c .mastra-prod.json)');
+      }
+    }
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);
