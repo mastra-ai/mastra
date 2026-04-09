@@ -18,6 +18,7 @@ export type ProviderModelsMap = {
     'gemma3:12b',
     'gemma3:27b',
     'gemma3:4b',
+    'gemma4:31b',
     'glm-4.6',
     'glm-4.7',
     'glm-5',
@@ -2425,10 +2426,12 @@ export type ProviderModelsMap = {
     'hf:moonshotai/Kimi-K2-Thinking',
     'hf:moonshotai/Kimi-K2.5',
     'hf:nvidia/Kimi-K2.5-NVFP4',
+    'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.6',
     'hf:zai-org/GLM-4.7',
     'hf:zai-org/GLM-4.7-Flash',
+    'hf:zai-org/GLM-5',
   ];
   readonly llmgateway: readonly [
     'auto',
