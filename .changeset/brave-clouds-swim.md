@@ -2,23 +2,27 @@
 'mastracode': minor
 ---
 
-Added comprehensive `/browser` subcommands and browser profile support.
+Added `/browser set` command and browser profile support.
 
-**New commands:**
+**New `/browser set` command:**
 
-- `/browser set <key> <value>` - Configure browser settings (profile, executablePath, storageState, cdpUrl, headless, viewport, timeout, provider, env, apiKey, projectId)
-- `/browser clear` - Reset browser config to defaults
-- `/browser reset` - Close and reopen browser with current settings
-- `/browser url` / `/browser title` / `/browser info` - Show current page info
-- `/browser snapshot` - Show accessibility tree
-- `/browser screenshot [path]` - Take screenshot
-- `/browser go <url>` / `/browser back` / `/browser forward` / `/browser refresh` / `/browser close` - Navigation
-- `/browser tabs` / `/browser tab <index>` / `/browser newtab [url]` / `/browser closetab` - Tab management
-- `/browser observe` / `/browser extract` / `/browser act` - Stagehand AI commands
-- `/browser click <ref>` / `/browser type <ref> <text>` - AgentBrowser element commands
+- `/browser set profile <path>` - Set browser profile directory
+- `/browser set executablePath <path>` - Set custom browser executable
+- `/browser set storageState <path>` - Set Playwright storage state file (agent-browser only)
+- `/browser set cdpUrl <url>` - Set CDP WebSocket URL
+- `/browser set <key> clear` - Remove a setting
 
-**Browser profile support:**
+**Browser settings updates:**
 
-- Added `profile` and `executablePath` to browser settings
-- Auto-creates profile directory if it doesn't exist
-- Shows cdpUrl in `/browser status` output
+- Added `profile` and `executablePath` to `BrowserSettings` interface
+- Added `AgentBrowserSettings` interface with `storageState` option
+- Added `preserveUserDataDir` to `StagehandSettings` interface
+- Updated `parseBrowserSettings()` to handle new fields
+- Updated `createBrowserFromSettings()` to pass new options to browser providers
+
+**Status display improvements:**
+
+- Shows `profile` path when configured
+- Shows `executablePath` when configured  
+- Shows `storageState` when configured (agent-browser)
+- Shows `cdpUrl` when configured
