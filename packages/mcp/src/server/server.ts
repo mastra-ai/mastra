@@ -1406,9 +1406,24 @@ export class MCPServer extends MCPServerBase {
         const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
 
         await transport.handleRequest(req, res, body);
+      } else if (sessionId) {
+        // Session ID provided but not found (e.g. server restarted, session expired).
+        // Per MCP spec: server MUST respond with 404 so the client knows to re-initialize.
+        this.logger.warn('Session ID not found, returning 404', { sessionId, method: req.method });
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Session not found',
+            },
+            id: null,
+          }),
+        );
       } else {
-        // No session ID or session ID not found
-        this.logger.debug('No existing session found', { method: req.method });
+        // No session ID provided
+        this.logger.debug('No session ID provided', { method: req.method });
 
         // Only allow new sessions via POST initialize request
         if (req.method === 'POST') {

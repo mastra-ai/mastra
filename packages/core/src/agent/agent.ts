@@ -367,6 +367,25 @@ export class Agent<
   }
 
   /**
+   * Sets or updates the browser instance for this agent.
+   * This allows hot-swapping browser configuration without recreating the agent.
+   * Browser tools will be automatically updated on the next execution.
+   *
+   * @param browser - The new browser instance, or undefined to disable browser tools
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.#browser = browser;
+  }
+
+  /**
+   * Returns true if this agent was configured with its own browser instance.
+   * Used by Harness to avoid overwriting agent-level browser configuration.
+   */
+  hasOwnBrowser(): boolean {
+    return Boolean(this.#browser);
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */
@@ -4788,6 +4807,8 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
+      threadId,
+      resourceId,
       ...observabilityContext,
     });
 

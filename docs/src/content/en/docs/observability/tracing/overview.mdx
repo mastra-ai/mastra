@@ -672,6 +672,50 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Normalizing data formats
 - Enriching spans with business context
 
+## Span filtering
+
+Span filtering lets you reduce noise and per-span costs before data reaches your observability platform. Configure it per observability instance, so different exporters or environments can keep different levels of detail.
+
+- Use `excludeSpanTypes` to drop entire categories of spans with minimal configuration.
+- Use `spanFilter` when you need custom logic based on the exported span data.
+
+The following example demonstrates how to combine both options in a single config:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SpanType } from '@mastra/core/observability'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+        spanFilter: span => {
+          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+            return false
+          }
+
+          return true
+        },
+      },
+    },
+  }),
+})
+```
+
+Filtering happens at export time in this order:
+
+1. Internal spans are dropped unless `includeInternalSpans` is `true`.
+1. `excludeSpanTypes` removes matching span types.
+1. `spanOutputProcessors` transform the remaining spans.
+1. `spanFilter` decides whether to keep the final exported span.
+
+If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
+
 ### Custom Span Formatters
 
 Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
@@ -1107,6 +1151,7 @@ Mastra automatically creates spans for:
 - [Tracing Classes](/reference/observability/tracing/instances) - Core classes and methods
 - [Span Interfaces](/reference/observability/tracing/spans) - Span types and lifecycle
 - [Type Definitions](/reference/observability/tracing/interfaces) - Complete interface reference
+- [Span filtering](/reference/observability/tracing/span-filtering) - Filtering behavior, span types, and examples
 
 ### Exporters
 

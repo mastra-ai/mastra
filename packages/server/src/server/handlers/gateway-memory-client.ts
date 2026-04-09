@@ -190,11 +190,14 @@ export class GatewayMemoryClient {
 
   async getObservationHistory(
     threadId: string,
-    params: { resourceId?: string; limit?: number },
+    params: { resourceId?: string; limit?: number; from?: Date; to?: Date; offset?: number },
   ): Promise<{ records: GatewayOMRecord[] }> {
     const query = new URLSearchParams();
     if (params.resourceId) query.set('resourceId', params.resourceId);
     if (params.limit != null) query.set('limit', String(params.limit));
+    if (params.from) query.set('from', params.from.toISOString());
+    if (params.to) query.set('to', params.to.toISOString());
+    if (params.offset != null) query.set('offset', String(params.offset));
     const qs = query.toString();
     try {
       return await this.request(`${this.threadPath(threadId)}/observations/history${qs ? '?' + qs : ''}`);

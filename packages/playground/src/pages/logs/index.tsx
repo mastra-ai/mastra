@@ -6,6 +6,10 @@ import {
   isValidLogsDatePreset,
   useLogsFilters,
   EntityListPageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { LogsIcon } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
@@ -100,6 +104,44 @@ export default function Logs() {
     updateFilterGroups,
     filteredLogs,
   } = useLogsFilters(logs as LogRecord[]);
+
+  if (logsError && is401UnauthorizedError(logsError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <LogsIcon /> Logs
+              </MainHeader.Title>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
+
+  if (logsError && is403ForbiddenError(logsError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <LogsIcon /> Logs
+              </MainHeader.Title>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="logs" />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <EntityListPageLayout className="max-w-none">
