@@ -479,6 +479,51 @@ describe('WorkspaceSkillsImpl', () => {
       const results = await skills.search('test', { topK: 2 });
       expect(results.length).toBeLessThanOrEqual(2);
     });
+
+    it('should de-duplicate canonical aliases in search results', async () => {
+      const searchEngine = createMockSearchEngine();
+      const canonicalSkillMd = `---
+name: test-skill
+description: API design skill
+---
+
+# API Design
+
+Use this skill to design REST APIs.
+
+## Tools
+
+This skill helps with endpoint design and API patterns.`;
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': canonicalSkillMd,
+          'skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+          'linked-skills/test-skill/SKILL.md': canonicalSkillMd,
+          'linked-skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+        searchEngine,
+      });
+
+      await skills.list();
+
+      const results = await skills.search('API', { topK: 2 });
+      expect(results).toHaveLength(2);
+      expect(results).toEqual([
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'SKILL.md' }),
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'references/doc.md' }),
+      ]);
+    });
   });
 
   describe('getReference()', () => {

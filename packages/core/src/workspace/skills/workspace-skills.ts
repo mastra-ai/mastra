@@ -389,8 +389,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const { topK = 5, minScore, skillNames, includeReferences = true, mode } = options;
 
-    // Get more results than needed to filter by skillNames/includeReferences
-    const expandedTopK = skillNames ? topK * 3 : topK;
+    // Ask the search engine for enough rows to survive post-search filtering and
+    // canonical alias de-duplication before applying the final topK.
+    const totalIndexedDocuments = [...this.#skills.values()].reduce(
+      (count, candidates) =>
+        count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+      0,
+    );
+    const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
 
     // Delegate to SearchEngine
     const searchResults = await this.#searchEngine.search(query, {
@@ -400,6 +406,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
 
     const results: SkillSearchResult[] = [];
+    const seenCanonicalSources = new Set<string>();
 
     for (const result of searchResults) {
       const skillPath = result.metadata?.skillPath as string;
@@ -407,9 +414,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
       if (!skillPath || !source) continue;
 
-      // Map path back to skill name for filtering and results
-      const skill = this.#resolveByPath(skillPath);
-      if (!skill) continue;
+      // Map path back to the canonical skill winner for filtering and results.
+      const matchedSkill = this.#resolveByPath(skillPath);
+      if (!matchedSkill) continue;
+
+      const skill = (await this.#resolveByName(matchedSkill.name)) ?? matchedSkill;
 
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
@@ -420,6 +429,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (!includeReferences && source !== 'SKILL.md') {
         continue;
       }
+
+      const canonicalSourceKey = `${skill.path}:${source}`;
+      if (seenCanonicalSources.has(canonicalSourceKey)) {
+        continue;
+      }
+      seenCanonicalSources.add(canonicalSourceKey);
 
       results.push({
         skillName: skill.name,
