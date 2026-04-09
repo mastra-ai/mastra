@@ -1,6 +1,6 @@
 services:
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
     ports:
       - '10000:10000'
     command: azurite-blob --blobHost 0.0.0.0 --blobPort 10000
@@ -11,7 +11,7 @@ services:
       retries: 5
 
   azurite-setup:
-    image: mcr.microsoft.com/azure-cli:latest
+    image: mcr.microsoft.com/azure-cli:2.85.0
     depends_on:
       azurite:
         condition: service_healthy
