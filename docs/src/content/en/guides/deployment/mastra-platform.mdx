@@ -50,6 +50,7 @@ npm install -g mastra
 
     :::note
     Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
+    Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
     :::
 
     See the [CLI reference](/reference/cli/mastra#mastra-server-deploy) for the full list of flags and CI/CD usage.
