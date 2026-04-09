@@ -8,8 +8,11 @@ import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
+
+import { runHeadless } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -352,5 +355,165 @@ describe('headless mode — event-driven auto-resolution', () => {
           part.message === instructionContents,
       ),
     ).toBe(true);
+  });
+});
+
+describe('headless mode — thread control', () => {
+  it('resumes a thread by ID with --thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Resumed!') }),
+    });
+
+    await harness.init();
+    const thread = await harness.createThread({ title: 'target-thread' });
+    const updatedAtBefore = thread.updatedAt.getTime();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: thread.id,
+    });
+
+    expect(exitCode).toBe(0);
+
+    // Verify the targeted thread was actually used (updatedAt advanced)
+    const threads = await harness.listThreads();
+    const targeted = threads.find(t => t.id === thread.id);
+    expect(targeted).toBeDefined();
+    expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
+  });
+
+  it('resumes a thread by title with --thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Found by title!') }),
+    });
+
+    await harness.init();
+    const thread = await harness.createThread({ title: 'my-feature' });
+    const updatedAtBefore = thread.updatedAt.getTime();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'my-feature',
+    });
+
+    expect(exitCode).toBe(0);
+
+    // Verify the titled thread was actually used
+    const threads = await harness.listThreads();
+    const targeted = threads.find(t => t.id === thread.id);
+    expect(targeted).toBeDefined();
+    expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
+  });
+
+  it('returns exit code 1 for unknown thread', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Should not reach') }),
+    });
+
+    await harness.init();
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'nonexistent-thread',
+    });
+
+    expect(exitCode).toBe(1);
+  });
+
+  it('renames thread with --title', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Titled!') }),
+    });
+
+    await harness.init();
+    await harness.createThread({ title: 'original-title' });
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: true,
+      cloneThread: false,
+      title: 'my-new-title',
+    });
+
+    expect(exitCode).toBe(0);
+
+    const threads = await harness.listThreads();
+    const titled = threads.find(t => t.title === 'my-new-title');
+    expect(titled).toBeDefined();
+  });
+
+  it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: createTextStream('Cloned!') }) }) as any,
+      tools: {},
+    });
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-clone-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+
+    const storage = new LibSQLStore({
+      id: 'test-store',
+      url: `file:${storePath}`,
+    });
+
+    const memory = new Memory({ storage });
+
+    const harness = new Harness({
+      id: 'test-harness',
+      storage,
+      memory,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: true } as any,
+    });
+
+    await harness.init();
+    const sourceThread = await harness.createThread({ title: 'source-thread' });
+
+    const events: any[] = [];
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: any) => {
+      try {
+        events.push(JSON.parse(chunk.toString()));
+      } catch {
+        // Non-JSON output (debug logs, etc.) — ignore
+      }
+      return true;
+    }) as any;
+
+    try {
+      const exitCode = await runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'json',
+        continue_: false,
+        cloneThread: true,
+        thread: 'source-thread',
+      });
+
+      expect(exitCode).toBe(0);
+
+      const cloneEvent = events.find(e => e.type === 'thread_cloned');
+      expect(cloneEvent).toBeDefined();
+      expect(cloneEvent.threadId).toBeTypeOf('string');
+      expect(cloneEvent.threadId.length).toBeGreaterThan(0);
+
+      // Cloned thread should have a different ID than source
+      expect(cloneEvent.threadId).not.toBe(sourceThread.id);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
   });
 });
