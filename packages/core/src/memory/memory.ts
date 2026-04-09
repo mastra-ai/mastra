@@ -104,29 +104,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function hasSystemReminderText(message: MastraDBMessage): boolean {
-  const parts = isRecord(message.content) ? message.content.parts : undefined;
-  if (!Array.isArray(parts)) {
-    return false;
-  }
-
-  return parts.some(
-    part =>
-      isRecord(part) && part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),
-  );
-}
-
 export function isSystemReminderMessage(message: MastraDBMessage): boolean {
   if (message.role !== 'user' || !isRecord(message.content)) {
     return false;
   }
 
   const metadata = message.content.metadata;
-  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
-    return true;
-  }
-
-  return hasSystemReminderText(message);
+  return isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata);
 }
 
 export function filterSystemReminderMessages(
