@@ -14,9 +14,10 @@ import {
   MainHeader,
   SelectFieldBlock,
   useEvaluationDatasets,
+  ButtonWithTooltip,
 } from '@mastra/playground-ui';
 import type { EvaluationTab } from '@mastra/playground-ui';
-import { BeakerIcon, DatabaseIcon, FlaskConicalIcon, Plus, TestTubeDiagonalIcon, XIcon } from 'lucide-react';
+import { BeakerIcon, BookIcon, DatabaseIcon, FlaskConicalIcon, Plus, TestTubeDiagonalIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -90,6 +91,49 @@ export default function Evaluation() {
               {headerIcon} {headerLabel}
             </MainHeader.Title>
           </MainHeader.Column>
+          <MainHeader.Column>
+            {activeTab === 'datasets' && (
+              <ButtonsGroup>
+                <ButtonWithTooltip
+                  as="a"
+                  href="https://mastra.ai/en/docs/evals/datasets/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Datasets documentation"
+                  tooltipContent="Go to Datasets documentation"
+                >
+                  <BookIcon />
+                </ButtonWithTooltip>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="size-4" /> Create Dataset
+                </Button>
+              </ButtonsGroup>
+            )}
+            {activeTab === 'scorers' && (
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/evals/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Scorers documentation"
+                tooltipContent="Go to Scorers documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            )}
+            {activeTab === 'experiments' && (
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Experiments documentation"
+                tooltipContent="Go to Experiments documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            )}
+          </MainHeader.Column>
         </MainHeader>
 
         {activeTab === 'scorers' && (
@@ -115,49 +159,44 @@ export default function Evaluation() {
         )}
 
         {activeTab === 'datasets' && (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <ListSearch label="Search datasets" placeholder="Filter by dataset name" onSearch={setDatasetsSearch} />
-              <ButtonsGroup>
+          <div className="flex flex-wrap items-center  gap-2">
+            <ListSearch label="Search datasets" placeholder="Filter by dataset name" onSearch={setDatasetsSearch} />
+            <ButtonsGroup>
+              <SelectFieldBlock
+                label="Target"
+                labelIsHidden
+                name="filter-target"
+                options={[...EVALUATION_DATASET_TARGET_OPTIONS]}
+                value={datasetsTargetFilter}
+                onValueChange={setDatasetsTargetFilter}
+                className="whitespace-nowrap"
+              />
+              <SelectFieldBlock
+                label="Experiments"
+                labelIsHidden
+                name="filter-experiments"
+                options={[...EVALUATION_DATASET_EXPERIMENT_OPTIONS]}
+                value={datasetsExperimentFilter}
+                onValueChange={setDatasetsExperimentFilter}
+                className="whitespace-nowrap"
+              />
+              {datasetTagOptions.length > 1 && (
                 <SelectFieldBlock
-                  label="Target"
+                  label="Tags"
                   labelIsHidden
-                  name="filter-target"
-                  options={[...EVALUATION_DATASET_TARGET_OPTIONS]}
-                  value={datasetsTargetFilter}
-                  onValueChange={setDatasetsTargetFilter}
+                  name="filter-tags"
+                  options={datasetTagOptions}
+                  value={datasetsTagFilter}
+                  onValueChange={setDatasetsTagFilter}
                   className="whitespace-nowrap"
                 />
-                <SelectFieldBlock
-                  label="Experiments"
-                  labelIsHidden
-                  name="filter-experiments"
-                  options={[...EVALUATION_DATASET_EXPERIMENT_OPTIONS]}
-                  value={datasetsExperimentFilter}
-                  onValueChange={setDatasetsExperimentFilter}
-                  className="whitespace-nowrap"
-                />
-                {datasetTagOptions.length > 1 && (
-                  <SelectFieldBlock
-                    label="Tags"
-                    labelIsHidden
-                    name="filter-tags"
-                    options={datasetTagOptions}
-                    value={datasetsTagFilter}
-                    onValueChange={setDatasetsTagFilter}
-                    className="whitespace-nowrap"
-                  />
-                )}
-                {hasDatasetFilters && (
-                  <Button onClick={resetDatasetFilters} size="sm" variant="light">
-                    <XIcon className="size-3" /> Reset
-                  </Button>
-                )}
-              </ButtonsGroup>
-            </div>
-            <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="size-4" /> Create Dataset
-            </Button>
+              )}
+              {hasDatasetFilters && (
+                <Button onClick={resetDatasetFilters} size="sm" variant="light">
+                  <XIcon className="size-3" /> Reset
+                </Button>
+              )}
+            </ButtonsGroup>
           </div>
         )}
 
@@ -197,7 +236,7 @@ export default function Evaluation() {
         )}
       </EntityListPageLayout.Top>
 
-      <div className="overflow-y-auto px-4 pt-2">
+      <div className="overflow-y-auto pt-2">
         <EvaluationDashboard
           activeTab={activeTab}
           scorerSearch={scorersSearch}

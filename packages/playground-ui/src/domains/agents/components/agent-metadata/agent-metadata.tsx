@@ -11,6 +11,7 @@ import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from
 import { AgentMetadataModelList } from './agent-metadata-model-list';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useMemory } from '@/domains/memory/hooks';
 import { useScorers } from '@/domains/scores';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
@@ -64,6 +65,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const codemirrorTheme = useCodemirrorTheme();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -227,6 +229,24 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
           theme={codemirrorTheme}
         />
+        {!isCmsLoading && !isCmsAvailable && (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Read-only</AlertTitle>
+            <AlertDescription as="p">
+              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+              project. See the{' '}
+              <a
+                href="https://mastra.ai/docs/editor/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
     </AgentMetadataWrapper>
   );

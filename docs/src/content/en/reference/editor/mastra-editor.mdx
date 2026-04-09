@@ -1,0 +1,396 @@
+---
+title: "Reference: MastraEditor class | Editor"
+description: "Documentation for the MastraEditor class, the entry point for configuring the Mastra agent editor."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# MastraEditor class
+
+The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
+
+See the [Editor overview](/docs/editor/overview) for an introduction to what the editor does.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/providers/composio'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your agents */
+  },
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'logger',
+    type: 'Logger',
+    description: 'Logger instance. Falls back to the Mastra instance logger if not set.',
+    isOptional: true,
+  },
+  {
+    name: 'toolProviders',
+    type: 'Record<string, ToolProvider>',
+    description:
+      'Integration tool providers keyed by ID (for example, Composio or Arcade). Lets agents use third-party tools added through the editor.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'processorProviders',
+    type: 'Record<string, ProcessorProvider>',
+    description:
+      'Processor providers for configurable input/output processing (for example, moderation or token limiting). Built-in providers are always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'filesystems',
+    type: 'Record<string, FilesystemProvider>',
+    description:
+      'Filesystem providers for file access (for example, S3 or GCS). A local filesystem provider is always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'sandboxes',
+    type: 'Record<string, SandboxProvider>',
+    description:
+      'Sandbox providers for code execution (for example, E2B). A local sandbox provider is always included.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'blobStores',
+    type: 'Record<string, BlobStoreProvider>',
+    description:
+      'Blob storage providers for binary data (for example, S3). Falls back to the Mastra storage blob store if no provider is specified.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+]}
+/>
+
+## Namespaces
+
+The editor exposes namespaces for managing different entity types. Access them from any Mastra instance with `mastra.getEditor()` and call the CRUD methods directly in application code, or rely on the Mastra server routes that use them under the hood.
+
+All namespaces extend a shared CRUD base class, so they expose the same `create`, `getById`, `update`, `delete`, `list`, `listResolved`, and `clearCache` methods. The namespace-specific property tables below also document any additional methods.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'EditorAgentNamespace',
+    description:
+      'CRUD operations and version management for stored agents. Handles applying stored overrides to code-defined agents.',
+    properties: [
+      {
+        type: 'EditorAgentNamespace',
+        parameters: [
+          {
+            name: 'create',
+            type: '(input: StorageCreateAgentInput) => Promise<Agent>',
+            description:
+              'Create a new stored agent and return a hydrated Agent instance. Accepts an id, authorId, metadata, and the initial snapshot (name, description, instructions, model, tools, memory, and so on).',
+          },
+          {
+            name: 'getById',
+            type: '(id: string, options?: GetByIdOptions) => Promise<Agent | null>',
+            description:
+              'Return a hydrated Agent instance for a stored agent. Pass options with versionId, versionNumber, or status ("draft" | "published" | "archived") to target a specific version. Default version requests are cached.',
+          },
+          {
+            name: 'update',
+            type: '(input: StorageUpdateAgentInput) => Promise<Agent>',
+            description:
+              'Partially update a stored agent. Creates a new draft version with the provided snapshot fields (instructions, tools, memory, and so on) and invalidates the cache. Set memory to null to disable memory.',
+          },
+          {
+            name: 'delete',
+            type: '(id: string) => Promise<void>',
+            description: 'Delete a stored agent and remove it from the Mastra runtime registry.',
+          },
+          {
+            name: 'list',
+            type: '(args?: StorageListAgentsInput) => Promise<StorageListAgentsOutput>',
+            description:
+              'List stored agents with optional pagination, orderBy, authorId, and metadata filters. Returns raw stored snapshots.',
+          },
+          {
+            name: 'listResolved',
+            type: '(args?: StorageListAgentsInput) => Promise<StorageListAgentsResolvedOutput>',
+            description: 'Same as list, but returns fully resolved configurations with references dereferenced.',
+          },
+          {
+            name: 'applyStoredOverrides',
+            type: '(agent: Agent, options?: { versionId?: string; status?: "draft" | "published" }) => Promise<Agent>',
+            description:
+              'Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). Called internally by mastra.getAgent() — you rarely call it directly.',
+          },
+          {
+            name: 'clone',
+            type: '(agent: Agent, options: { newId: string; newName?: string; metadata?: Record<string, unknown>; authorId?: string; requestContext?: RequestContext; }) => Promise<Agent>',
+            description: 'Create a new stored agent by cloning an existing agent.',
+          },
+          {
+            name: 'clearCache',
+            type: '(agentId?: string) => void',
+            description: 'Clear the in-memory cache for one agent or all agents. Called automatically after mutations.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'prompt',
+    type: 'EditorPromptNamespace',
+    description:
+      'CRUD operations for prompt blocks. Includes a preview method for resolving instruction blocks with draft content.',
+    properties: [
+      {
+        type: 'EditorPromptNamespace',
+        parameters: [
+          {
+            name: 'create',
+            type: '(input: StorageCreatePromptBlockInput) => Promise<StorageResolvedPromptBlockType>',
+            description:
+              'Create a new stored prompt block. Accepts an id, authorId, metadata, and the initial snapshot (name, description, content, rules, requestContextSchema).',
+          },
+          {
+            name: 'getById',
+            type: '(id: string, options?: GetByIdOptions) => Promise<StorageResolvedPromptBlockType | null>',
+            description: 'Return a resolved prompt block. Pass options to target a specific version or status.',
+          },
+          {
+            name: 'update',
+            type: '(input: StorageUpdatePromptBlockInput) => Promise<StorageResolvedPromptBlockType>',
+            description:
+              'Partially update a stored prompt block. Creates a new draft version with the provided snapshot fields.',
+          },
+          {
+            name: 'delete',
+            type: '(id: string) => Promise<void>',
+            description: 'Delete a stored prompt block and remove it from the Mastra runtime registry.',
+          },
+          {
+            name: 'list',
+            type: '(args?: StorageListPromptBlocksInput) => Promise<StorageListPromptBlocksOutput>',
+            description:
+              'List stored prompt blocks with optional pagination, orderBy, authorId, metadata, and status filters.',
+          },
+          {
+            name: 'listResolved',
+            type: '(args?: StorageListPromptBlocksInput) => Promise<StorageListPromptBlocksResolvedOutput>',
+            description: 'Same as list, but returns fully resolved prompt block content.',
+          },
+          {
+            name: 'preview',
+            type: '(blocks: AgentInstructionBlock[], context: Record<string, unknown>) => Promise<string>',
+            description:
+              'Resolve an array of instruction blocks against a context, rendering template variables and evaluating display conditions. Includes draft content for referenced prompt blocks.',
+          },
+          {
+            name: 'clearCache',
+            type: '(id?: string) => void',
+            description: 'Clear the in-memory cache for one prompt block or all prompt blocks.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'mcp',
+    type: 'EditorMCPNamespace',
+    description: 'CRUD operations for stored MCP client configurations.',
+    properties: [
+      {
+        type: 'EditorMCPNamespace',
+        parameters: [
+          {
+            name: 'create',
+            type: '(input: StorageCreateMCPClientInput) => Promise<MCPClient>',
+            description:
+              'Create a new stored MCP client. Accepts an id, authorId, metadata, and the initial snapshot (servers, tool filtering).',
+          },
+          {
+            name: 'getById',
+            type: '(id: string, options?: GetByIdOptions) => Promise<MCPClient | null>',
+            description: 'Return a hydrated MCPClient instance for a stored MCP client.',
+          },
+          {
+            name: 'update',
+            type: '(input: StorageUpdateMCPClientInput) => Promise<MCPClient>',
+            description: 'Partially update a stored MCP client and invalidate the cache.',
+          },
+          {
+            name: 'delete',
+            type: '(id: string) => Promise<void>',
+            description: 'Delete a stored MCP client and remove it from the Mastra runtime registry.',
+          },
+          {
+            name: 'list',
+            type: '(args?: StorageListMCPClientsInput) => Promise<StorageListMCPClientsOutput>',
+            description: 'List stored MCP clients with optional pagination and filters.',
+          },
+          {
+            name: 'listResolved',
+            type: '(args?: StorageListMCPClientsInput) => Promise<StorageListMCPClientsResolvedOutput>',
+            description: 'Same as list, but returns fully resolved MCP client configurations.',
+          },
+          {
+            name: 'clearCache',
+            type: '(id?: string) => void',
+            description: 'Clear the in-memory cache for one MCP client or all MCP clients.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'mcpServer',
+    type: 'EditorMCPServerNamespace',
+    description: 'CRUD operations for MCP server configurations.',
+    properties: [
+      {
+        type: 'EditorMCPServerNamespace',
+        parameters: [
+          {
+            name: 'create',
+            type: '(input: StorageCreateMCPServerInput) => Promise<MCPServerBase>',
+            description: 'Create a new stored MCP server configuration and return a hydrated server instance.',
+          },
+          {
+            name: 'getById',
+            type: '(id: string, options?: GetByIdOptions) => Promise<MCPServerBase | null>',
+            description: 'Return a hydrated MCP server for a given id.',
+          },
+          {
+            name: 'update',
+            type: '(input: StorageUpdateMCPServerInput) => Promise<MCPServerBase>',
+            description: 'Partially update a stored MCP server configuration.',
+          },
+          {
+            name: 'delete',
+            type: '(id: string) => Promise<void>',
+            description: 'Delete a stored MCP server configuration.',
+          },
+          {
+            name: 'list',
+            type: '(args?: StorageListMCPServersInput) => Promise<StorageListMCPServersOutput>',
+            description: 'List stored MCP server configurations.',
+          },
+          {
+            name: 'listResolved',
+            type: '(args?: StorageListMCPServersInput) => Promise<StorageListMCPServersResolvedOutput>',
+            description: 'Same as list, but returns fully resolved server configurations.',
+          },
+          {
+            name: 'clearCache',
+            type: '(id?: string) => void',
+            description: 'Clear the in-memory cache for one MCP server or all MCP servers.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'scorer',
+    type: 'EditorScorerNamespace',
+    description: 'CRUD operations for scorer configurations.',
+    properties: [
+      {
+        type: 'EditorScorerNamespace',
+        parameters: [
+          {
+            name: 'create',
+            type: '(input: StorageCreateScorerInput) => Promise<MastraScorer>',
+            description: 'Create a new stored scorer and return a hydrated MastraScorer instance.',
+          },
+          {
+            name: 'getById',
+            type: '(id: string, options?: GetByIdOptions) => Promise<MastraScorer | null>',
+            description: 'Return a hydrated scorer for a given id.',
+          },
+          {
+            name: 'update',
+            type: '(input: StorageUpdateScorerInput) => Promise<MastraScorer>',
+            description: 'Partially update a stored scorer.',
+          },
+          {
+            name: 'delete',
+            type: '(id: string) => Promise<void>',
+            description: 'Delete a stored scorer and remove it from the Mastra runtime registry.',
+          },
+          {
+            name: 'list',
+            type: '(args?: StorageListScorersInput) => Promise<StorageListScorersOutput>',
+            description: 'List stored scorers with optional pagination and filters.',
+          },
+          {
+            name: 'listResolved',
+            type: '(args?: StorageListScorersInput) => Promise<StorageListScorersResolvedOutput>',
+            description: 'Same as list, but returns fully resolved scorer configurations.',
+          },
+          {
+            name: 'clearCache',
+            type: '(id?: string) => void',
+            description: 'Clear the in-memory cache for one scorer or all scorers.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Methods
+
+### Provider access
+
+#### `getToolProvider(id)`
+
+Returns a registered tool provider by its ID.
+
+```typescript
+const composio = mastra.getEditor()?.getToolProvider('composio')
+```
+
+#### `getToolProviders()`
+
+Returns all registered tool providers as a `Record<string, ToolProvider>`.
+
+#### `getProcessorProvider(id)`
+
+Returns a registered processor provider by its ID.
+
+#### `getProcessorProviders()`
+
+Returns all registered processor providers.
+
+#### `getFilesystemProviders()`
+
+Returns all registered filesystem providers.
+
+#### `getSandboxProviders()`
+
+Returns all registered sandbox providers.
+
+#### `getBlobStoreProviders()`
+
+Returns all registered blob store providers.
