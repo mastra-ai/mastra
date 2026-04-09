@@ -244,11 +244,17 @@ describe('StructuredOutputProcessor', () => {
     });
 
     it('should enqueue fallback value with fallback strategy', async () => {
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+      };
       const fallbackProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
         errorStrategy: 'fallback',
         fallbackValue: { color: 'default', intensity: 'medium' },
+        logger: mockLogger as any,
       });
 
       const { controller, enqueuedChunks } = createMockController();
@@ -266,13 +272,14 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
+      const upstreamError = { message: 'Structuring failed' };
       const mockStream = {
         fullStream: convertArrayToReadableStream([
           {
             runId: 'test-run',
             from: ChunkFrom.AGENT,
             type: 'error',
-            payload: { error: new Error('Structuring failed') },
+            payload: { error: upstreamError },
           },
         ]),
       };
@@ -287,6 +294,10 @@ describe('StructuredOutputProcessor', () => {
         retryCount: 0,
       });
 
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Structuring failed (using fallback)',
+        upstreamError,
+      );
       expect(enqueuedChunks).toHaveLength(1);
       expect(enqueuedChunks[0].type).toBe('object-result');
       expect(enqueuedChunks[0].object).toEqual({ color: 'default', intensity: 'medium' });
@@ -322,13 +333,14 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
+      const upstreamError = { message: 'Structuring failed' };
       const mockStream = {
         fullStream: convertArrayToReadableStream([
           {
             runId: 'test-run',
             from: ChunkFrom.AGENT,
             type: 'error',
-            payload: { error: new Error('Structuring failed') },
+            payload: { error: upstreamError },
           },
         ]),
       };
@@ -343,7 +355,10 @@ describe('StructuredOutputProcessor', () => {
         retryCount: 0,
       });
 
-      expect(mockLogger.warn).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Structuring failed',
+        upstreamError,
+      );
       expect(abort).not.toHaveBeenCalled();
     });
 
