@@ -134,6 +134,7 @@ This creates a separate deployment with a stable API URL, environment variable m
 
 :::note
 Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically on first deploy. After that, manage env vars through the [web dashboard](https://projects.mastra.ai).
+Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
 :::
 
 ## Set up CI (optional)
