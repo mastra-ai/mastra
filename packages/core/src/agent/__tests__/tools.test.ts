@@ -1422,6 +1422,18 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     expect(result.data?.prompt).toBe('real prompt');
   });
 
+  it('should not emit anyOf with null in JSON Schema for optional fields (Gemini compat)', () => {
+    const jsonSchema = z.toJSONSchema(agentInputSchema);
+    const properties = jsonSchema.properties as Record<string, Record<string, unknown>>;
+    const optionalFields = ['threadId', 'resourceId', 'instructions', 'maxSteps'];
+
+    for (const field of optionalFields) {
+      const prop = properties[field];
+      expect(prop, `${field} should exist in schema properties`).toBeDefined();
+      expect(prop).not.toHaveProperty('anyOf', expect.arrayContaining([expect.objectContaining({ type: 'null' })]));
+    }
+  });
+
   it('sub-agent tool is created with correct schema', async () => {
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => ({
