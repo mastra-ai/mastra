@@ -75,7 +75,7 @@ function buildItems(providers: ProviderInfo[]): SelectItem[] {
 
 export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<void> {
   const models = await ctx.state.harness.listAvailableModels();
-  const providers = getProviderList(ctx, models);
+  let providers = getProviderList(ctx, models);
 
   if (providers.length === 0) {
     ctx.showInfo('No model providers found.');
@@ -149,10 +149,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored') {
             ctx.authStorage?.remove(`apikey:${info.provider}`);
-            if (info.envVar) {
-              delete process.env[info.envVar];
-            }
-            info.source = 'none';
+            providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();
             return;
@@ -165,10 +162,16 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     };
 
     const rebuildList = () => {
+      const selectedIdx = Math.max(
+        0,
+        providers.findIndex(p => p.provider === currentSelection),
+      );
       container.clear();
       container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
       container.addChild(new Spacer(1));
       selectList = buildSelectList();
+      selectList.setSelectedIndex(selectedIdx);
+      currentSelection = providers[selectedIdx]?.provider ?? providers[0]!.provider;
       container.addChild(selectList);
       container.addChild(new Spacer(1));
       container.addChild(detailText);
@@ -186,7 +189,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           ctx.state.ui.hideOverlay();
           ctx.authStorage?.setStoredApiKey(info.provider, key, info.envVar);
           ctx.showInfo(`API key saved for ${info.provider}`);
-          info.source = 'stored';
+          providers = getProviderList(ctx, models);
           rebuildList();
         },
         onCancel: () => {
