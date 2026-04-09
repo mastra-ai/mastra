@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { dataKeysAndValuesValueStyles } from './shared';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -17,6 +17,7 @@ export function DataKeysAndValuesValueWithCopyBtn({
   copyValue,
 }: DataKeysAndValuesValueWithCopyBtnProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
     text: copyValue,
     copyMessage: 'Copied!',
@@ -25,8 +26,11 @@ export function DataKeysAndValuesValueWithCopyBtn({
   const handleCopy = () => {
     originalHandleCopy();
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
+
+  useEffect(() => () => clearTimeout(copyTimeoutRef.current), []);
 
   return (
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
