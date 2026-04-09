@@ -194,7 +194,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       canonicalGroups.set(canonicalPath, group);
     }
 
-    return [...canonicalGroups.values()].map(group => [...group].sort((a, b) => a.path.localeCompare(b.path))[0]!);
+    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+    return [...canonicalGroups.values()].map(
+      group =>
+        [...group].sort((a, b) => {
+          const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+          const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+          if (aPri !== bPri) return aPri - bPri;
+          return a.path.localeCompare(b.path);
+        })[0]!,
+    );
   }
 
   /**

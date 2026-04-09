@@ -1574,6 +1574,40 @@ External instructions.`;
       expect(external?.instructions).toContain('External instructions.');
     });
 
+    it('should keep the higher-priority source when canonical aliases collapse into one listed skill', async () => {
+      const externalSkillMd = `---
+name: test-skill
+description: External copy of the test skill
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem(
+        {
+          'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'node_modules/@company/skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['node_modules/@company/skills', 'linked-skills'],
+      });
+
+      await expect(skills.list()).resolves.toMatchObject([{ path: 'linked-skills/test-skill' }]);
+      await expect(skills.get('test-skill')).resolves.toMatchObject({
+        path: 'linked-skills/test-skill',
+        source: { type: 'local' },
+      });
+    });
+
     it('should emit a warning when tie-breaking resolves same-named skills across source types', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
