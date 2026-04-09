@@ -562,6 +562,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (!routes || routes.length === 0) return;
 
+    this.validateCustomApiRoutes(routes);
+
     for (const route of routes) {
       const handler =
         'handler' in route && route.handler

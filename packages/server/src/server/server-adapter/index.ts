@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
@@ -460,6 +461,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   abstract getParams(route: ServerRoute, request: TRequest): Promise<ParsedRequestParams>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
+  abstract registerCustomApiRoutes(): Promise<void>;
   abstract registerContextMiddleware(): void;
   abstract registerAuthMiddleware(): void;
   abstract registerHttpLoggingMiddleware(): void;
@@ -504,15 +506,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
-   * Override in adapters to register custom API routes defined via registerApiRoute().
-   * Called by init() between registerAuthMiddleware() and registerRoutes().
-   */
-  async registerCustomApiRoutes(): Promise<void> {
-    // Default no-op. Adapters override this to register custom routes
-    // using their framework-specific middleware.
-  }
-
-  /**
    * Creates an internal Hono sub-app with all custom API routes registered.
    * Stores the handler on this instance for use by handleCustomRouteRequest().
    * Returns true if custom routes were found and registered.
@@ -520,6 +513,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected async buildCustomRouteHandler(): Promise<boolean> {
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (!routes || routes.length === 0) return false;
+
+    this.validateCustomApiRoutes(routes);
 
     const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
     const mastra = this.mastra;
@@ -772,5 +767,44 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       status: 400,
       body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
     };
+  }
+
+  protected validateCustomApiRoutes(routes: ApiRoute[]): void {
+    if (!this.prefix) {
+      // No prefix: Mastra routes live at root. Build a set of reserved first path segments
+      // from SERVER_ROUTES (e.g. "/agents", "/logs", "/memory") and reject any custom
+      // route whose first segment collides.
+      const reservedSegments = new Set(
+        SERVER_ROUTES.map(r => {
+          const segment = r.path.split('/').filter(Boolean)[0];
+          return segment ? `/${segment}` : '/';
+        }),
+      );
+
+      for (const route of routes) {
+        const firstSegment = route.path.split('/').filter(Boolean)[0];
+        const segment = firstSegment ? `/${firstSegment}` : '/';
+        if (reservedSegments.has(segment)) {
+          throw new MastraError({
+            id: 'MASTRA_SERVER_API_PATH_RESERVED',
+            text: `Custom route path "${route.path}" conflicts with the reserved internal Mastra API path "${segment}".`,
+            domain: ErrorDomain.MASTRA_SERVER,
+            category: ErrorCategory.USER,
+          });
+        }
+      }
+      return;
+    }
+
+    for (const route of routes) {
+      if (route.path.startsWith(this.prefix + '/') || route.path === this.prefix) {
+        throw new MastraError({
+          id: 'MASTRA_SERVER_API_PATH_RESERVED',
+          text: `Custom route path "${route.path}" starts with "${this.prefix}", which is reserved for internal Mastra API routes.`,
+          domain: ErrorDomain.MASTRA_SERVER,
+          category: ErrorCategory.USER,
+        });
+      }
+    }
   }
 }

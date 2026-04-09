@@ -48,15 +48,6 @@ describe('registerApiRoute', () => {
     expect(route.requiresAuth).toBe(false);
   });
 
-  it('should throw if path starts with /api', () => {
-    expect(() => {
-      registerApiRoute('/api/test', {
-        method: 'GET',
-        handler: mockHandler,
-      } as any);
-    }).toThrow(/Path must not start with "\/api", it's reserved for internal API routes/);
-  });
-
   it('should throw if method is missing', () => {
     expect(() => {
       registerApiRoute('/test', {
