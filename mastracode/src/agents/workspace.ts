@@ -36,41 +36,42 @@ const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
 
 const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
-// Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
-// returns false for symlinks. Tools like `npx skills add` install skills as
-// symlinks, so we need to resolve them. For each symlinked skill directory,
-// we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
+const skillDirectoryCandidates = [
+  mastraCodeLocalSkillsPath,
+  claudeLocalSkillsPath,
+  agentSkillsLocalPath,
+  mastraCodeGlobalSkillsPath,
+  claudeGlobalSkillsPath,
+  agentSkillsGlobalPath,
+];
+
+function collectAllowedSkillPaths(skillsDirs: string[]): string[] {
   const paths: string[] = [];
   const seen = new Set<string>();
 
   for (const skillsDir of skillsDirs) {
     if (!fs.existsSync(skillsDir)) continue;
 
-    // Always add the directory itself
     const resolved = fs.realpathSync(skillsDir);
     if (!seen.has(resolved)) {
       seen.add(resolved);
       paths.push(skillsDir);
     }
 
-    // Check for symlinked skill subdirectories and add their real parents
     try {
       const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isSymbolicLink()) {
-          const linkPath = path.join(skillsDir, entry.name);
-          const realPath = fs.realpathSync(linkPath);
-          const stat = fs.statSync(realPath);
-          if (stat.isDirectory()) {
-            // Add the real parent directory as a skill path
-            // so Mastra discovers it as a regular directory
-            const realParent = path.dirname(realPath);
-            if (!seen.has(realParent)) {
-              seen.add(realParent);
-              paths.push(realParent);
-            }
-          }
+        if (!entry.isSymbolicLink()) continue;
+
+        const linkPath = path.join(skillsDir, entry.name);
+        const realPath = fs.realpathSync(linkPath);
+        const stat = fs.statSync(realPath);
+        if (!stat.isDirectory()) continue;
+
+        const realParent = path.dirname(realPath);
+        if (!seen.has(realParent)) {
+          seen.add(realParent);
+          paths.push(realParent);
         }
       }
     } catch {
@@ -81,14 +82,8 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
   return paths;
 }
 
-export const skillPaths = collectSkillPaths([
-  mastraCodeLocalSkillsPath,
-  claudeLocalSkillsPath,
-  agentSkillsLocalPath,
-  mastraCodeGlobalSkillsPath,
-  claudeGlobalSkillsPath,
-  agentSkillsGlobalPath,
-]);
+export const skillPaths = skillDirectoryCandidates;
+export const allowedSkillPaths = collectAllowedSkillPaths(skillDirectoryCandidates);
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
@@ -119,7 +114,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const projectPath = path.resolve(rawProjectPath);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [...allowedSkillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {
