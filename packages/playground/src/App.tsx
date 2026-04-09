@@ -27,8 +27,10 @@ import {
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
+  createFetchWithRefresh,
 } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -63,13 +65,13 @@ import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import Observability from './pages/observability';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
@@ -82,6 +84,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -138,6 +141,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
     `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/evaluation/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -211,7 +215,7 @@ const routes = [
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
       { path: '/observability-overview', element: <ObservabilityOverview /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/observability', element: <Traces /> },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
@@ -297,6 +301,7 @@ const routes = [
               element: <DatasetItemVersionsComparePage />,
             },
             { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/evaluation/experiments/:experimentId', element: <ExperimentPage /> },
             { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
             { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
@@ -313,6 +318,12 @@ function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
+  // Create a stable fetch function that auto-refreshes on 401
+  const customFetch = useMemo(
+    () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
+    [baseUrl, apiPrefix],
+  );
+
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
@@ -326,7 +337,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>

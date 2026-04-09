@@ -526,7 +526,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   description: 'Returns the current observational memory record and optional history for a resource/thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
+  handler: async ({ mastra, agentId, resourceId, threadId, from, to, offset, limit, requestContext }) => {
     try {
       // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
@@ -534,13 +534,16 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
+      const historyLimit = limit ?? 5;
+      const historyOptions = { from, to, offset };
+
       // Gateway OM: proxy to gateway API
       if (await isGatewayAgentAsync(agent)) {
         const gwClient = getGatewayClient();
         if (gwClient && resourceId && threadId) {
           const [recordResult, historyResult] = await Promise.all([
             gwClient.getObservationRecord(threadId, resourceId),
-            gwClient.getObservationHistory(threadId, { resourceId, limit: 5 }),
+            gwClient.getObservationHistory(threadId, { resourceId, limit: historyLimit, from, to, offset }),
           ]);
           return {
             record: recordResult.record ? toLocalOMRecord(recordResult.record) : null,
@@ -585,8 +588,13 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       // Get current record
       const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
 
-      // Get history (last 5 generations)
-      const history = await memoryStore.getObservationalMemoryHistory(omThreadId, effectiveResourceId, 5);
+      // Get history
+      const history = await memoryStore.getObservationalMemoryHistory(
+        omThreadId,
+        effectiveResourceId,
+        historyLimit,
+        historyOptions,
+      );
 
       return {
         record: record ?? null,
@@ -863,6 +871,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     orderBy,
     include,
     filter,
+    includeSystemReminders,
     requestContext,
   }: any) => {
     try {
@@ -920,6 +929,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           orderBy,
           include,
           filter,
+          includeSystemReminders,
         });
         return result;
       }

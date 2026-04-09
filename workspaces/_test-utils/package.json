@@ -1,6 +1,6 @@
 {
   "name": "@internal/workspace-test-utils",
-  "version": "0.0.22",
+  "version": "0.0.26",
   "description": "Test utilities for workspace providers (filesystems and sandboxes)",
   "type": "module",
   "main": "src/index.ts",

@@ -450,6 +450,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         warnings: payload.payload?.stepResult?.warnings,
         steps: bufferedSteps.get(payload.runId!)!.steps,
         status: 'finished',
+        response: {
+          ...bufferedSteps.get(payload.runId!).response,
+          ...(payload.payload.response || {}),
+        },
       });
       hasChanged = true;
       break;
@@ -553,7 +557,11 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
-          messages: stepRun.response.messages || [],
+          ...((payload.payload as any).response || {}),
+          messages:
+            ((payload.payload as any).response?.messages as typeof stepRun.response.messages) ??
+            stepRun.response.messages ??
+            [],
         },
       };
 

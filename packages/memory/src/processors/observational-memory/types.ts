@@ -873,9 +873,15 @@ export interface ResolvedReflectionConfig {
   instruction?: string;
 }
 
+export interface ObserveHookUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export interface ObserveHooks {
   onObservationStart?: () => void;
-  onObservationEnd?: () => void;
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
   onReflectionStart?: () => void;
-  onReflectionEnd?: () => void;
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
 }

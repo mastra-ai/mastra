@@ -22,6 +22,35 @@ import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/cor
 import { extractUsageMetrics } from './usage';
 
 /**
+ * Extract messages from the raw AI SDK request metadata for use as span input.
+ * Parses request.body and returns `messages` (OpenAI/Anthropic) or `contents` (Gemini).
+ * Falls back to the original request object when body is missing or unparseable.
+ */
+function extractStepInput(request: StepStartPayload['request'] | undefined): unknown {
+  if (!request) return undefined;
+
+  const { body } = request;
+  if (body == null) return request;
+
+  try {
+    const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+
+    // OpenAI / Anthropic / most providers
+    if (Array.isArray(parsed?.messages)) return parsed.messages;
+
+    // Google / Gemini
+    if (Array.isArray(parsed?.contents)) return parsed.contents;
+
+    // Unrecognized structure — return the full parsed body so exporters at
+    // least get the object rather than the stringified HTTP request wrapper
+    return parsed;
+  } catch {
+    // body was not valid JSON — return as-is
+    return request;
+  }
+}
+
+/**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
  *
  * Should be instantiated once per MODEL_GENERATION span and shared across
@@ -109,7 +138,7 @@ export class ModelSpanTracker {
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
-      input: payload?.request,
+      input: extractStepInput(payload?.request),
     });
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
@@ -126,7 +155,7 @@ export class ModelSpanTracker {
 
     // Update span with request/warnings from the step-start chunk
     this.#currentStepSpan.update({
-      input: payload.request,
+      input: extractStepInput(payload.request),
       attributes: {
         ...(payload.messageId ? { messageId: payload.messageId } : {}),
         ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),

@@ -21,6 +21,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
   '@mastra/evals': link:../../packages/evals
+  '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
 
 importers:
@@ -51,6 +52,9 @@ importers:
       '@mastra/auth-okta':
         specifier: link:../../auth/okta
         version: link:../../auth/okta
+      '@mastra/auth-studio':
+        specifier: link:../../auth/studio
+        version: link:../../auth/studio
       '@mastra/auth-workos':
         specifier: link:../../auth/workos
         version: link:../../auth/workos

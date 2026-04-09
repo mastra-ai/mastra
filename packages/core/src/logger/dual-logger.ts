@@ -1,6 +1,6 @@
 import type { MastraError } from '../error';
-import { getCurrentSpan } from '../observability/context-storage';
 import type { LoggerContext } from '../observability/types/logging';
+import { resolveCurrentSpan } from '../observability/utils';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';
@@ -111,7 +111,7 @@ export class DualLogger implements IMastraLogger {
    */
   #resolveLoggerVNext(): LoggerContext | undefined {
     // Check for a span in async context (set by executeWithContext)
-    const span = getCurrentSpan();
+    const span = resolveCurrentSpan();
     if (span) {
       const correlated = span.observabilityInstance?.getLoggerContext?.(span);
       if (correlated) return correlated;
