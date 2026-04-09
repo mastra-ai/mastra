@@ -37,10 +37,7 @@ const TEST_HTML = 'data:text/html,<h1>Test</h1>';
  */
 function countAllChromeProcesses(): number {
   try {
-    const out = execSync(
-      'ps aux | grep -cE "[C]hrom|[c]hrome-headless"',
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim();
+    const out = execSync('ps aux | grep -cE "[C]hrom|[c]hrome-headless"', { encoding: 'utf-8', timeout: 5000 }).trim();
     return parseInt(out, 10) || 0;
   } catch {
     return 0;
@@ -119,7 +116,9 @@ try {
   await probe.ensureReady();
   await probe.close();
 } catch (error) {
-  try { await probe.close(); } catch {}
+  try {
+    await probe.close();
+  } catch {}
   const msg = error instanceof Error ? error.message : String(error);
   if (
     msg.includes("Executable doesn't exist") ||
@@ -256,7 +255,9 @@ describe.skipIf(!canLaunchBrowser)('Browser profile lifecycle', () => {
       }
 
       // Clean up the browser object (should be a no-op since Chrome is gone)
-      try { await browser.close(); } catch {}
+      try {
+        await browser.close();
+      } catch {}
     }, 30_000);
 
     it('AgentBrowser with profile — cleans up lock files', async () => {
@@ -284,7 +285,9 @@ describe.skipIf(!canLaunchBrowser)('Browser profile lifecycle', () => {
       }
 
       // Clean up the browser object
-      try { await browser.close(); } catch {}
+      try {
+        await browser.close();
+      } catch {}
     }, 30_000);
   });
 
@@ -350,7 +353,9 @@ describe.skipIf(!canLaunchBrowser)('Browser profile lifecycle', () => {
       killMainChromeProcess(shPid!);
       await sleep(3000);
       expect(hasLockFiles(profileDir)).toBe(false);
-      try { await sh.close(); } catch {}
+      try {
+        await sh.close();
+      } catch {}
 
       // AgentBrowser: should launch fine with the same profile
       const ab = new AgentBrowser({
