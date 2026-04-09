@@ -154,7 +154,10 @@ export class InternalMastraMCPClient extends MastraBase {
     const hasRoots = this._roots.length > 0 || !!capabilities.roots;
     const clientCapabilities = {
       ...capabilities,
-      elicitation: {},
+      // Merge elicitation capabilities instead of overwriting
+      elicitation: {
+        ...(capabilities.elicitation ?? {}),
+      },
       // Auto-enable roots capability if roots are provided
       ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
     };

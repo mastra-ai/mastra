@@ -1596,6 +1596,58 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     await client.disconnect().catch(() => {});
   });
 
+  it('should preserve custom elicitation capability fields', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list', 'application/vnd.mastra.form+json'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-capability-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      elicitation: customElicitationCapabilities,
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should preserve custom elicitation fields while auto-enabling roots capability', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-with-roots-test-client',
+      server: {
+        url: testServer.baseUrl,
+        roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      roots: { listChanged: true },
+      elicitation: customElicitationCapabilities,
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
   it('should handle roots/list requests from server per MCP spec', async () => {
     /**
      * Per MCP Roots spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
