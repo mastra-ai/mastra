@@ -48,5 +48,3 @@ export function getStagehandChromePid(stagehand: Stagehand): number | undefined 
     return undefined;
   }
 }
-
-

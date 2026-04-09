@@ -103,4 +103,3 @@ describe('getStagehandChromePid', () => {
     expect(getStagehandChromePid({} as any)).toBeUndefined();
   });
 });
-
