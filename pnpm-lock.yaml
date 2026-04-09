@@ -504,6 +504,9 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
     devDependencies:
+      '@internal/browser-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -547,6 +550,9 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)
     devDependencies:
+      '@internal/browser-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
