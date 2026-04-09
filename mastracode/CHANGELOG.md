@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.13.0-alpha.2
+
+### Patch Changes
+
+- Fixed task list leaking across threads when switching conversations. Tasks from the previous thread no longer appear in the new thread. ([#15192](https://github.com/mastra-ai/mastra/pull/15192))
+
+- Updated dependencies [[`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1-alpha.1
+
 ## 0.13.0-alpha.1
 
 ### Minor Changes
