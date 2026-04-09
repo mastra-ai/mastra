@@ -140,9 +140,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           // applyStoredOverrides will NOT apply these fields for code agent overrides.
           name: values.name,
           model: values.model,
-          // Only send editable fields: instructions, tools, and variables (requestContextSchema)
+          // Only send editable fields: instructions, tools, integrationTools, and variables (requestContextSchema)
           instructions: mapInstructionBlocksToApi(values.instructionBlocks),
           tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
+          integrationTools: transformIntegrationToolsForApi(values.integrationTools),
           mcpClients: mcpClientsParam,
           requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
         };

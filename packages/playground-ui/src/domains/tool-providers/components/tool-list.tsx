@@ -59,6 +59,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                   onKeyDown={
                     onToggle
                       ? e => {
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
                             onToggle(toolId, tool.description || '');

@@ -23,6 +23,7 @@ import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
+import type { ShellStreamComponent } from './components/shell-output.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
 import type { SystemReminderComponent } from './components/system-reminder.js';
@@ -111,6 +112,8 @@ export interface TUIState {
   allSlashCommandComponents: SlashCommandComponent[];
   /** Track inline system reminders for expand/collapse */
   allSystemReminderComponents: SystemReminderComponent[];
+  /** Track shell passthrough components for expand/collapse */
+  allShellComponents: ShellStreamComponent[];
   /** Track active subagent tasks */
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
@@ -232,6 +235,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    allShellComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,

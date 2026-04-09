@@ -978,6 +978,28 @@ describe('CloudExporter', () => {
       await derivedExporter.shutdown();
     });
 
+    it('should derive project-scoped signal endpoints from a base endpoint when projectId is configured', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://collector.example.com',
+        projectId: 'project-workos',
+      });
+
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/projects/project-workos/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
     it('should derive sibling signal endpoints from an explicit traces endpoint override', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,
@@ -1012,6 +1034,41 @@ describe('CloudExporter', () => {
       await derivedExporter.shutdown();
     });
 
+    it('should derive project-scoped sibling signal endpoints from an origin-only traces endpoint override', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://fallback.example.com',
+        tracesEndpoint: 'https://collector.example.com',
+        projectId: 'project-workos',
+      });
+
+      await derivedExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/projects/project-workos/ai/spans/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/projects/project-workos/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
     it('should prefer explicit per-signal endpoint overrides over derived traces siblings', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,
@@ -1022,6 +1079,41 @@ describe('CloudExporter', () => {
       await derivedExporter.onLogEvent(getMockLogEvent());
       await derivedExporter.flush();
 
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://logs.example.com/custom/logs/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
+    it('should leave explicit full publish URLs unchanged when projectId is configured', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        projectId: 'project-workos',
+        tracesEndpoint: 'https://collector.example.com/custom/spans/publish',
+        logsEndpoint: 'https://logs.example.com/custom/logs/publish',
+      });
+
+      await derivedExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+      await derivedExporter.onLogEvent(getMockLogEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://collector.example.com/custom/spans/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
         'https://logs.example.com/custom/logs/publish',
         expect.objectContaining({
@@ -1047,6 +1139,144 @@ describe('CloudExporter', () => {
 
         expect(mockFetchWithRetry).toHaveBeenCalledWith(
           'https://collector.example.com/env/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should derive project-scoped signal endpoints from MASTRA_PROJECT_ID', async () => {
+      vi.stubEnv('MASTRA_PROJECT_ID', 'project-from-env');
+
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://collector.example.com',
+      });
+
+      try {
+        await derivedExporter.onScoreEvent(getMockScoreEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://collector.example.com/projects/project-from-env/ai/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should prefer config projectId over MASTRA_PROJECT_ID', async () => {
+      vi.stubEnv('MASTRA_PROJECT_ID', 'project-from-env');
+
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://collector.example.com',
+        projectId: 'project-from-config',
+      });
+
+      try {
+        await derivedExporter.onFeedbackEvent(getMockFeedbackEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://collector.example.com/projects/project-from-config/ai/feedback/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should treat an empty MASTRA_PROJECT_ID as unset', async () => {
+      vi.stubEnv('MASTRA_PROJECT_ID', '');
+
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://collector.example.com',
+      });
+
+      try {
+        await derivedExporter.onMetricEvent(getMockMetricEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://collector.example.com/ai/metrics/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should reject an empty config projectId', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: 'sk_org_api_key',
+            endpoint: 'https://collector.example.com',
+            projectId: '',
+          }),
+      ).toThrowError('CloudExporter projectId must only contain letters, numbers, hyphens, and underscores.');
+    });
+
+    it('should reject a config projectId that contains whitespace', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: 'sk_org_api_key',
+            endpoint: 'https://collector.example.com',
+            projectId: 'project 123',
+          }),
+      ).toThrowError('CloudExporter projectId must only contain letters, numbers, hyphens, and underscores.');
+    });
+
+    it('should reject a config projectId with special characters', () => {
+      expect(
+        () =>
+          new CloudExporter({
+            accessToken: 'sk_org_api_key',
+            endpoint: 'https://collector.example.com',
+            projectId: 'project/123',
+          }),
+      ).toThrowError('CloudExporter projectId must only contain letters, numbers, hyphens, and underscores.');
+    });
+
+    it('should treat an invalid MASTRA_PROJECT_ID as unset', async () => {
+      vi.stubEnv('MASTRA_PROJECT_ID', 'has spaces');
+
+      const derivedExporter = new CloudExporter({
+        accessToken: 'sk_org_api_key',
+        endpoint: 'https://collector.example.com',
+      });
+
+      try {
+        await derivedExporter.onMetricEvent(getMockMetricEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://collector.example.com/ai/metrics/publish',
           expect.objectContaining({
             method: 'POST',
             body: expect.any(String),
