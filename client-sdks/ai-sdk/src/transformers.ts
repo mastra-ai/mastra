@@ -442,21 +442,32 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'finish':
+    case 'finish': {
+      const finishData = bufferedSteps.get(payload.runId!);
+      const finishPayload = payload.payload as any;
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
+        ...finishData,
         finishReason: payload.payload.stepResult.reason,
         usage: payload.payload?.output?.usage,
         warnings: payload.payload?.stepResult?.warnings,
-        steps: bufferedSteps.get(payload.runId!)!.steps,
+        steps: finishData!.steps,
         status: 'finished',
         response: {
-          ...bufferedSteps.get(payload.runId!).response,
+          ...finishData?.response,
           ...(payload.payload.response || {}),
+          // The finish payload (LLMIterationData) has no `response` field, so
+          // response?.messages is always undefined. Fall back to messages.nonUser
+          // which carries the accumulated model-format response messages.
+          messages:
+            finishPayload.response?.messages ??
+            finishPayload.messages?.nonUser ??
+            finishData?.response?.messages ??
+            [],
         },
       });
       hasChanged = true;
       break;
+    }
     case 'text-delta': {
       const prevData = bufferedSteps.get(payload.runId!)!;
       bufferedSteps.set(payload.runId!, {
@@ -560,6 +571,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
           ...((payload.payload as any).response || {}),
           messages:
             ((payload.payload as any).response?.messages as typeof stepRun.response.messages) ??
+            ((payload.payload as any).messages?.nonUser as typeof stepRun.response.messages) ??
             stepRun.response.messages ??
             [],
         },
