@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DataKeysAndValues } from './data-keys-and-values';
 import type { DataKeysAndValuesProps } from './data-keys-and-values-root';
+import { forwardRef } from 'react';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { LinkComponentProvider } from '@/lib/framework';
+import type { LinkComponentProps } from '@/lib/framework';
 
 const meta: Meta<typeof DataKeysAndValues> = {
   title: 'Elements/DataKeysAndValues',
@@ -114,6 +118,98 @@ export const TruncatedValues: Story = {
       <DataKeysAndValues.Value>abc123def456ghi789jkl012mno345pqr678stu901vwx234</DataKeysAndValues.Value>
       <DataKeysAndValues.Key>Span ID</DataKeysAndValues.Key>
       <DataKeysAndValues.Value>span-001-very-long-identifier-that-should-truncate</DataKeysAndValues.Value>
+    </DataKeysAndValues>
+  ),
+};
+
+const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
+  <a ref={ref} href={href} {...props}>
+    {children}
+  </a>
+));
+
+export const ValueLink: Story = {
+  decorators: [
+    Story => (
+      <LinkComponentProvider Link={StoryLink} navigate={() => {}} paths={{} as never}>
+        <Story />
+      </LinkComponentProvider>
+    ),
+  ],
+  render: () => (
+    <DataKeysAndValues>
+      <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent">my-agent</DataKeysAndValues.ValueLink>
+      <DataKeysAndValues.Key>Workflow</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueLink href="/workflows/data-pipeline">data-pipeline</DataKeysAndValues.ValueLink>
+    </DataKeysAndValues>
+  ),
+};
+
+export const ValueWithTooltip: Story = {
+  decorators: [
+    Story => (
+      <TooltipProvider>
+        <div>
+          <Story />
+        </div>
+      </TooltipProvider>
+    ),
+  ],
+  render: () => (
+    <DataKeysAndValues>
+      <DataKeysAndValues.Key>Trace ID</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithTooltip tooltip="abc123def456ghi789jkl012mno345pqr678stu901vwx234">
+        abc123def456ghi7...
+      </DataKeysAndValues.ValueWithTooltip>
+      <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithTooltip tooltip="Completed successfully with no errors">
+        Completed
+      </DataKeysAndValues.ValueWithTooltip>
+    </DataKeysAndValues>
+  ),
+};
+
+export const ValueWithCopyBtn: Story = {
+  decorators: [
+    Story => (
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
+    ),
+  ],
+  render: () => (
+    <DataKeysAndValues>
+      <DataKeysAndValues.Key>Trace ID</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithCopyBtn copyValue="abc123def456">abc123def456</DataKeysAndValues.ValueWithCopyBtn>
+      <DataKeysAndValues.Key>Span ID</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithCopyBtn copyValue="span-001-xyz">span-001-xyz</DataKeysAndValues.ValueWithCopyBtn>
+    </DataKeysAndValues>
+  ),
+};
+
+export const MixedValueTypes: Story = {
+  decorators: [
+    Story => (
+      <LinkComponentProvider Link={StoryLink} navigate={() => {}} paths={{} as never}>
+        <TooltipProvider>
+          <Story />
+        </TooltipProvider>
+      </LinkComponentProvider>
+    ),
+  ],
+  render: () => (
+    <DataKeysAndValues>
+      <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value>Running</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent">my-agent</DataKeysAndValues.ValueLink>
+      <DataKeysAndValues.Key>Trace ID</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithCopyBtn copyValue="abc123def456">abc123def456</DataKeysAndValues.ValueWithCopyBtn>
+      <DataKeysAndValues.Key>Description</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithTooltip tooltip="A very long description that gets truncated in the UI">
+        A very long description that gets truncated in the UI
+      </DataKeysAndValues.ValueWithTooltip>
     </DataKeysAndValues>
   ),
 };
