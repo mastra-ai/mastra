@@ -585,16 +585,16 @@ Line 3 conclusion`;
     });
 
     it('should list a skill through an allowed symlink root that points outside the workspace', async () => {
-      const externalSkillRoot = path.join(tempDir, '..', 'external-skill-root');
-      await fs.mkdir(path.join(externalSkillRoot, 'firewatch'), { recursive: true });
+      const externalSkillRoot = await fs.mkdtemp(path.join(tempDir, 'external-skill-root-'));
+      await fs.mkdir(path.join(externalSkillRoot, 'linked-tool'), { recursive: true });
       await fs.writeFile(
-        path.join(externalSkillRoot, 'firewatch', 'SKILL.md'),
-        skillContent('firewatch', 'Query GitHub PR activity using Firewatch'),
+        path.join(externalSkillRoot, 'linked-tool', 'SKILL.md'),
+        skillContent('linked-tool', 'Query GitHub PR activity from a linked skill'),
       );
       await fs.mkdir(path.join(tempDir, '.mastracode', 'skills'), { recursive: true });
       await fs.symlink(
-        path.join(externalSkillRoot, 'firewatch'),
-        path.join(tempDir, '.mastracode', 'skills', 'firewatch'),
+        path.join(externalSkillRoot, 'linked-tool'),
+        path.join(tempDir, '.mastracode', 'skills', 'linked-tool'),
       );
 
       const workspace = new Workspace({
@@ -606,11 +606,11 @@ Line 3 conclusion`;
       });
 
       await expect(workspace.skills!.list()).resolves.toMatchObject([
-        { name: 'firewatch', path: '.mastracode/skills/firewatch' },
+        { name: 'linked-tool', path: '.mastracode/skills/linked-tool' },
       ]);
-      await expect(workspace.skills!.get('firewatch')).resolves.toMatchObject({
-        name: 'firewatch',
-        path: '.mastracode/skills/firewatch',
+      await expect(workspace.skills!.get('linked-tool')).resolves.toMatchObject({
+        name: 'linked-tool',
+        path: '.mastracode/skills/linked-tool',
       });
     });
 
