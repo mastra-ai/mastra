@@ -107,7 +107,29 @@ export const mastra = new Mastra({
 })
 ```
 
+Set `serviceName` in code on the observability config, not on `CloudExporter` itself. In the example above, the value is `configs.production.serviceName`.
+
+For example:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability, CloudExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: 'api-server',
+        exporters: [new CloudExporter()],
+      },
+    },
+  }),
+})
+```
+
 Use a stable `serviceName` value. In Studio, traces can be filtered by **Deployments → Service Name**, so a consistent name makes traces easier to find.
+
+Visit [Observability configuration reference](/reference/observability/tracing/configuration) for the full observability config shape.
 
 If you prefer, rely entirely on environment variables:
 
