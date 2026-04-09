@@ -185,6 +185,64 @@ describe('StructuredOutputProcessor', () => {
       );
     });
 
+    it('should surface plain object error messages', async () => {
+      const upstreamError = { message: 'Schema failed' };
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+      };
+
+      const loggingProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        logger: mockLogger as any,
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: upstreamError },
+          },
+        ]),
+      };
+
+      vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await expect(
+        loggingProcessor.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort,
+          retryCount: 0,
+        }),
+      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Schema failed');
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Schema failed',
+        upstreamError,
+      );
+    });
+
     it('should enqueue fallback value with fallback strategy', async () => {
       const fallbackProcessor = new StructuredOutputProcessor({
         schema: testSchema,
