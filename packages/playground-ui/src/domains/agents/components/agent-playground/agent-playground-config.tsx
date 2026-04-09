@@ -497,7 +497,7 @@ function ReadOnlyConfigWithDiff({
 
   return (
     <>
-      <CollapsibleSection title="System Prompt" icon={<Cpu />} defaultOpen badge={instructionsBadge}>
+      <CollapsibleSection title="System Prompt" icon={<Cpu />} badge={instructionsBadge}>
         {instructionsDiff ? (
           <InstructionsDiffView
             previousBlocks={instructionsDiff.previousValue}
@@ -585,7 +585,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="System Prompt" icon={<Cpu />} defaultOpen>
+            <CollapsibleSection title="System Prompt" icon={<Cpu />}>
               <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}

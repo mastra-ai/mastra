@@ -18,9 +18,11 @@ export type ProviderModelsMap = {
     'gemma3:12b',
     'gemma3:27b',
     'gemma3:4b',
+    'gemma4:31b',
     'glm-4.6',
     'glm-4.7',
     'glm-5',
+    'glm-5.1',
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
@@ -409,6 +411,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flashx',
     'glm-5',
     'glm-5-turbo',
+    'glm-5.1',
     'glm-5v-turbo',
   ];
   readonly xai: readonly [
@@ -471,6 +474,7 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-lite',
     'google/gemini-3.1-pro',
     'google/gemini-deep-research',
+    'google/gemma-4-31b',
     'google/imagen-3',
     'google/imagen-3-fast',
     'google/imagen-4',
@@ -579,6 +583,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3.1-pro',
     'glm-5',
+    'glm-5.1',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -598,7 +603,6 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
-    'qwen3.6-plus-free',
   ];
   readonly berget: readonly [
     'BAAI/bge-reranker-v2-m3',
@@ -622,6 +626,7 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
     'glm-4.7-flashx',
     'glm-5',
+    'glm-5.1',
     'glm-5v-turbo',
   ];
   readonly nvidia: readonly [
@@ -908,6 +913,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-TEE',
     'zai-org/GLM-5-TEE',
     'zai-org/GLM-5-Turbo',
+    'zai-org/GLM-5.1-TEE',
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
@@ -1029,13 +1035,12 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast',
   ];
   readonly friendli: readonly [
-    'MiniMaxAI/MiniMax-M2.1',
     'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
-    'zai-org/GLM-4.7',
     'zai-org/GLM-5',
+    'zai-org/GLM-5.1',
   ];
   readonly '302ai': readonly [
     'MiniMax-M1',
@@ -1218,6 +1223,7 @@ export type ProviderModelsMap = {
     'nova-pro-v1',
     'qwen3-32b',
     'qwen3-coder-480b-a35b-instruct',
+    'qwen3-coder-next',
     'qwen3-next-80b-a3b-thinking',
   ];
   readonly 'siliconflow-cn': readonly [
@@ -1713,7 +1719,9 @@ export type ProviderModelsMap = {
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
     'google/gemma-4-26b-a4b-it',
+    'google/gemma-4-26b-a4b-it:free',
     'google/gemma-4-31b-it',
+    'google/gemma-4-31b-it:free',
     'inception/mercury',
     'inception/mercury-2',
     'inception/mercury-coder',
@@ -1804,7 +1812,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-plus-02-15',
-    'qwen/qwen3.6-plus:free',
+    'qwen/qwen3.6-plus',
     'sourceful/riverflow-v2-fast-preview',
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
@@ -1833,6 +1841,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
     'z-ai/glm-5-turbo',
+    'z-ai/glm-5.1',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -1920,6 +1929,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flashx',
     'z-ai/glm-5',
     'z-ai/glm-5-turbo',
+    'z-ai/glm-5.1',
     'z-ai/glm-5v-turbo',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
@@ -2126,8 +2136,9 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
+    'zai-org/GLM-5.1',
   ];
-  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash'];
+  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
     'anthropic/claude-sonnet-4',
@@ -2415,10 +2426,12 @@ export type ProviderModelsMap = {
     'hf:moonshotai/Kimi-K2-Thinking',
     'hf:moonshotai/Kimi-K2.5',
     'hf:nvidia/Kimi-K2.5-NVFP4',
+    'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.6',
     'hf:zai-org/GLM-4.7',
     'hf:zai-org/GLM-4.7-Flash',
+    'hf:zai-org/GLM-5',
   ];
   readonly llmgateway: readonly [
     'auto',
@@ -2735,6 +2748,13 @@ export type ProviderModelsMap = {
     'qwen3.5-plus',
     'qwen3.6-plus',
     'qwq-plus',
+  ];
+  readonly mixlayer: readonly [
+    'qwen/qwen3.5-122b-a10b',
+    'qwen/qwen3.5-27b',
+    'qwen/qwen3.5-35b-a3b',
+    'qwen/qwen3.5-397b-a17b',
+    'qwen/qwen3.5-9b',
   ];
   readonly mistral: readonly [
     'codestral-latest',
@@ -3414,47 +3434,12 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
   ];
   readonly 'cloudflare-workers-ai': readonly [
-    '@cf/ai4bharat/indictrans2-en-indic-1B',
-    '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
-    '@cf/baai/bge-base-en-v1.5',
-    '@cf/baai/bge-large-en-v1.5',
-    '@cf/baai/bge-m3',
-    '@cf/baai/bge-reranker-base',
-    '@cf/baai/bge-small-en-v1.5',
-    '@cf/deepgram/aura-2-en',
-    '@cf/deepgram/aura-2-es',
-    '@cf/deepgram/nova-3',
-    '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
-    '@cf/facebook/bart-large-cnn',
-    '@cf/google/gemma-3-12b-it',
-    '@cf/huggingface/distilbert-sst-2-int8',
-    '@cf/ibm-granite/granite-4.0-h-micro',
-    '@cf/meta/llama-2-7b-chat-fp16',
-    '@cf/meta/llama-3-8b-instruct',
-    '@cf/meta/llama-3-8b-instruct-awq',
-    '@cf/meta/llama-3.1-8b-instruct',
-    '@cf/meta/llama-3.1-8b-instruct-awq',
-    '@cf/meta/llama-3.1-8b-instruct-fp8',
-    '@cf/meta/llama-3.2-11b-vision-instruct',
-    '@cf/meta/llama-3.2-1b-instruct',
-    '@cf/meta/llama-3.2-3b-instruct',
-    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/google/gemma-4-26b-a4b-it',
     '@cf/meta/llama-4-scout-17b-16e-instruct',
-    '@cf/meta/llama-guard-3-8b',
-    '@cf/meta/m2m100-1.2b',
-    '@cf/mistral/mistral-7b-instruct-v0.1',
-    '@cf/mistralai/mistral-small-3.1-24b-instruct',
     '@cf/moonshotai/kimi-k2.5',
-    '@cf/myshell-ai/melotts',
     '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
-    '@cf/pfnet/plamo-embedding-1b',
-    '@cf/pipecat-ai/smart-turn-v2',
-    '@cf/qwen/qwen2.5-coder-32b-instruct',
-    '@cf/qwen/qwen3-30b-a3b-fp8',
-    '@cf/qwen/qwen3-embedding-0.6b',
-    '@cf/qwen/qwq-32b',
     '@cf/zai-org/glm-4.7-flash',
   ];
   readonly siliconflow: readonly [
@@ -3574,6 +3559,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/glm-4p5-air',
     'accounts/fireworks/models/glm-4p7',
     'accounts/fireworks/models/glm-5',
+    'accounts/fireworks/models/glm-5p1',
     'accounts/fireworks/models/gpt-oss-120b',
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
@@ -3581,10 +3567,12 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/kimi-k2p5',
     'accounts/fireworks/models/minimax-m2p1',
     'accounts/fireworks/models/minimax-m2p5',
+    'accounts/fireworks/models/qwen3p6-plus',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
   readonly 'opencode-go': readonly [
     'glm-5',
+    'glm-5.1',
     'kimi-k2.5',
     'mimo-v2-omni',
     'mimo-v2-pro',

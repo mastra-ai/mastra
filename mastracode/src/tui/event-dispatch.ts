@@ -135,14 +135,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
+      // Clear tasks — they are ephemeral per-thread and should not leak
+      // from the previous thread's global harness state.
       if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
+        state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
+      state.taskWriteInsertIndex = -1;
       break;
     }
 

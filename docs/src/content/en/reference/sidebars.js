@@ -57,6 +57,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
         { type: 'doc', id: 'ai-sdk/handle-workflow-stream', label: 'handleWorkflowStream()' },
         { type: 'doc', id: 'ai-sdk/network-route', label: 'networkRoute()' },
+        { type: 'doc', id: 'ai-sdk/to-ai-sdk-messages', label: 'toAISdkMessages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-stream', label: 'toAISdkStream()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
@@ -136,6 +137,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
+        { type: 'doc', id: 'core/getEditor', label: '.getEditor()' },
         { type: 'doc', id: 'core/getGateway', label: '.getGateway()' },
         { type: 'doc', id: 'core/getGatewayById', label: '.getGatewayById()' },
         { type: 'doc', id: 'core/getLogger', label: '.getLogger()' },
@@ -171,6 +173,16 @@ const sidebars = {
         { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Editor',
+      collapsed: true,
+      customProps: { tags: ['new'] },
+      items: [
+        { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
+        { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
       ],
     },
     {
@@ -283,7 +295,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
-          items: [{ type: 'doc', id: 'observability/metrics/automatic-metrics', label: 'Automatic Metrics' }],
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/automatic-metrics',
+              label: 'Automatic Metrics',
+            },
+          ],
         },
         {
           type: 'category',
@@ -292,6 +310,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
+            { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
               type: 'category',

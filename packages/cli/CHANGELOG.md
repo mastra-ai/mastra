@@ -1,5 +1,95 @@
 # mastra
 
+## 1.5.0
+
+### Minor Changes
+
+- Added `mastra server env` CLI commands for managing environment variables on deployed servers. New subcommands: `list`, `set`, `unset`, and `import` allow pushing env vars to production without using the UI. ([#15159](https://github.com/mastra-ai/mastra/pull/15159))
+
+### Patch Changes
+
+- Added documentation links to Evaluation page header for datasets, scorers, and experiments tabs. Moved Create Dataset button to header and simplified toolbar layout. ([#15180](https://github.com/mastra-ai/mastra/pull/15180))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
+- Added 401 and 403 error handling to the Logs page for session expired and permission denied states ([#15178](https://github.com/mastra-ai/mastra/pull/15178))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+  - @mastra/deployer@1.24.1
+
+## 1.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1-alpha.1
+  - @mastra/deployer@1.24.1-alpha.1
+
+## 1.5.0-alpha.1
+
+### Minor Changes
+
+- Added `mastra server env` CLI commands for managing environment variables on deployed servers. New subcommands: `list`, `set`, `unset`, and `import` allow pushing env vars to production without using the UI. ([#15159](https://github.com/mastra-ai/mastra/pull/15159))
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+  - @mastra/deployer@1.24.1-alpha.0
+
+## 1.4.2-alpha.0
+
+### Patch Changes
+
+- Added documentation links to Evaluation page header for datasets, scorers, and experiments tabs. Moved Create Dataset button to header and simplified toolbar layout. ([#15180](https://github.com/mastra-ai/mastra/pull/15180))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
+- Added 401 and 403 error handling to the Logs page for session expired and permission denied states ([#15178](https://github.com/mastra-ai/mastra/pull/15178))
+
+## 1.4.1
+
+### Patch Changes
+
+- Filtered confusing internal server logs (like 'Mastra API running on http://0.0.0.0:3000') from 'mastra studio deploy' output ([#15146](https://github.com/mastra-ai/mastra/pull/15146))
+
+- Upload Studio assets to R2 during snapshot, prerelease, and stable publishes so each published CLI version has matching hosted Studio files. ([#15153](https://github.com/mastra-ai/mastra/pull/15153))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`2c4d99c`](https://github.com/mastra-ai/mastra/commit/2c4d99c619ef5029e1203022f48f3186c6084850), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+  - @mastra/loggers@1.1.1
+  - @mastra/deployer@1.24.0
+
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Filtered confusing internal server logs (like 'Mastra API running on http://0.0.0.0:3000') from 'mastra studio deploy' output ([#15146](https://github.com/mastra-ai/mastra/pull/15146))
+
+- Upload Studio assets to R2 during snapshot, prerelease, and stable publishes so each published CLI version has matching hosted Studio files. ([#15153](https://github.com/mastra-ai/mastra/pull/15153))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`2c4d99c`](https://github.com/mastra-ai/mastra/commit/2c4d99c619ef5029e1203022f48f3186c6084850), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+  - @mastra/loggers@1.1.1-alpha.0
+  - @mastra/deployer@1.24.0-alpha.1
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+  - @mastra/deployer@1.23.1-alpha.0
+
 ## 1.4.0
 
 ### Minor Changes

@@ -128,6 +128,47 @@ describe('Responses Resource', () => {
     );
   });
 
+  it('allows create requests without a model override', async () => {
+    mockJsonResponse({
+      id: 'resp_123',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'openai/gpt-5',
+      status: 'completed',
+      output: [
+        {
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello from Mastra' }],
+        },
+      ],
+      usage: null,
+      instructions: null,
+      previous_response_id: null,
+      store: false,
+    });
+
+    const response = await client.responses.create({
+      agent_id: 'support-agent',
+      input: 'Summarize this ticket',
+    });
+
+    expect(response.model).toBe('openai/gpt-5');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/responses',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining(clientOptions.headers),
+        body: JSON.stringify({
+          agent_id: 'support-agent',
+          input: 'Summarize this ticket',
+        }),
+      }),
+    );
+  });
+
   it('passes providerOptions through in create requests', async () => {
     mockJsonResponse({
       id: 'resp_123',
