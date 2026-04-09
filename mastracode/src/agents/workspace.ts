@@ -1,4 +1,4 @@
-import fs, { existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,7 +36,7 @@ const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
 
 const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
-const skillDirectoryCandidates = [
+export const skillPaths = [
   mastraCodeLocalSkillsPath,
   claudeLocalSkillsPath,
   agentSkillsLocalPath,
@@ -45,45 +45,7 @@ const skillDirectoryCandidates = [
   agentSkillsGlobalPath,
 ];
 
-function collectAllowedSkillPaths(skillsDirs: string[]): string[] {
-  const paths: string[] = [];
-  const seen = new Set<string>();
-
-  for (const skillsDir of skillsDirs) {
-    if (!fs.existsSync(skillsDir)) continue;
-
-    const resolved = fs.realpathSync(skillsDir);
-    if (!seen.has(resolved)) {
-      seen.add(resolved);
-      paths.push(skillsDir);
-    }
-
-    try {
-      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isSymbolicLink()) continue;
-
-        const linkPath = path.join(skillsDir, entry.name);
-        const realPath = fs.realpathSync(linkPath);
-        const stat = fs.statSync(realPath);
-        if (!stat.isDirectory()) continue;
-
-        const realParent = path.dirname(realPath);
-        if (!seen.has(realParent)) {
-          seen.add(realParent);
-          paths.push(realParent);
-        }
-      }
-    } catch {
-      // Ignore errors during symlink resolution
-    }
-  }
-
-  return paths;
-}
-
-export const skillPaths = skillDirectoryCandidates;
-export const allowedSkillPaths = collectAllowedSkillPaths(skillDirectoryCandidates);
+export const allowedSkillPaths = skillPaths;
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 

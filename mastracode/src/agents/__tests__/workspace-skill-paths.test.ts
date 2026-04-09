@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { skillPaths } from '../workspace.js';
+import { allowedSkillPaths, skillPaths } from '../workspace.js';
 
 describe('workspace skill path definitions', () => {
   const cwd = process.cwd();
@@ -20,7 +20,11 @@ describe('workspace skill path definitions', () => {
     expect(skillPaths).toEqual(expectedSkillPaths);
   });
 
-  it('wires discovery paths separately from allowed paths', async () => {
+  it('uses the same skill directories for allowed paths', () => {
+    expect(allowedSkillPaths).toBe(skillPaths);
+  });
+
+  it('wires the base skill directories into workspace discovery and allowed paths', async () => {
     const fs = await import('node:fs');
     const source = fs.readFileSync(path.join(cwd, 'src/agents/workspace.ts'), 'utf-8');
 
