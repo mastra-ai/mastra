@@ -555,6 +555,33 @@ Line 3 conclusion`;
       expect(skills1).toBe(skills2);
     });
 
+    it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
+      await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, '.agents', 'skills', 'mastra', 'SKILL.md'),
+        skillContent('mastra', 'helping with Mastra development'),
+      );
+      await fs.mkdir(path.join(tempDir, '.claude', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(tempDir, '.agents', 'skills', 'mastra'),
+        path.join(tempDir, '.claude', 'skills', 'mastra'),
+      );
+
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+        allowedPaths: ['/Users/tylerbarnes/.claude/skills', '/Users/tylerbarnes/.agents/skills'],
+      });
+      const workspace = new Workspace({
+        filesystem,
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+
+      await expect(workspace.skills!.get('mastra')).resolves.toMatchObject({
+        name: 'mastra',
+        path: expect.stringMatching(/\/mastra$/),
+      });
+    });
+
     // =========================================================================
     // Skills + search interaction (regression tests for shared SearchEngine)
     // =========================================================================
