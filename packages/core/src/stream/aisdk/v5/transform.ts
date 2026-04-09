@@ -220,20 +220,27 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       let toolCallInput: Record<string, any> | undefined = undefined;
 
       if (value.input) {
-        const sanitized = sanitizeToolCallInput(value.input);
-        if (sanitized) {
-          try {
-            toolCallInput = JSON.parse(sanitized);
-          } catch {
-            // JSON.parse failed — attempt to repair common LLM JSON errors
-            const repaired = tryRepairJson(sanitized);
-            if (repaired) {
-              toolCallInput = repaired;
-            } else {
-              console.error('Error converting tool call input to JSON', {
-                input: value.input,
-              });
-              toolCallInput = undefined;
+        // Some AI SDKs (e.g., AWS Bedrock) pass tool arguments as already-parsed objects.
+        // If input is already an object, use it directly and bypass all string sanitization.
+        if (typeof value.input === 'object') {
+          toolCallInput = value.input;
+        } else {
+          // Input is a string — sanitize and parse it
+          const sanitized = sanitizeToolCallInput(value.input);
+          if (sanitized) {
+            try {
+              toolCallInput = JSON.parse(sanitized);
+            } catch {
+              // JSON.parse failed — attempt to repair common LLM JSON errors
+              const repaired = tryRepairJson(sanitized);
+              if (repaired) {
+                toolCallInput = repaired;
+              } else {
+                console.error('Error converting tool call input to JSON', {
+                  input: value.input,
+                });
+                toolCallInput = undefined;
+              }
             }
           }
         }
