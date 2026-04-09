@@ -129,6 +129,12 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
       path: '/agents?apiKey=valid',
     });
     expect(enabledResponse.status).toBe(200);
+
+    const repeatedApiKeyResponse = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/agents?apiKey=valid&apiKey=ignored',
+    });
+    expect(repeatedApiKeyResponse.status).toBe(200);
   });
 
   it('should rate limit requests when enabled', async () => {

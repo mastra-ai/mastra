@@ -180,8 +180,17 @@ export class AuthService {
     }
 
     // Optional backward-compatibility path for legacy integrations.
-    if (this.options.auth?.allowQueryApiKey && request.query.apiKey) {
-      return request.query.apiKey as string;
+    if (this.options.auth?.allowQueryApiKey) {
+      const apiKey = request.query.apiKey;
+      if (typeof apiKey === 'string') {
+        return apiKey;
+      }
+      if (Array.isArray(apiKey)) {
+        const firstApiKey = apiKey.find((value): value is string => typeof value === 'string');
+        if (firstApiKey) {
+          return firstApiKey;
+        }
+      }
     }
 
     return undefined;
