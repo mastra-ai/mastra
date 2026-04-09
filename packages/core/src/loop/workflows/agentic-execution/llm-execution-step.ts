@@ -197,6 +197,7 @@ async function processOutputStream<OUTPUT = undefined>({
       runState.setState({
         isReasoning: false,
         reasoningDeltas: [],
+        currentReasoningId: undefined,
       });
     }
 
@@ -297,9 +298,35 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-start': {
+        if (
+          runState.state.isReasoning &&
+          runState.state.currentReasoningId &&
+          runState.state.currentReasoningId !== chunk.payload.id
+        ) {
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                  providerMetadata: runState.state.providerOptions,
+                },
+              ],
+              ...buildResponseModelMetadata(runState),
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+        }
+
         runState.setState({
           isReasoning: true,
           reasoningDeltas: [],
+          currentReasoningId: chunk.payload.id,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
 
@@ -330,10 +357,13 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-delta': {
-        const reasoningDeltasFromState = runState.state.reasoningDeltas;
+        const shouldResetReasoning =
+          !runState.state.isReasoning || runState.state.currentReasoningId !== chunk.payload.id;
+        const reasoningDeltasFromState = shouldResetReasoning ? [] : runState.state.reasoningDeltas;
         reasoningDeltasFromState.push(chunk.payload.text);
         runState.setState({
           isReasoning: true,
+          currentReasoningId: chunk.payload.id,
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
@@ -347,6 +377,11 @@ async function processOutputStream<OUTPUT = undefined>({
         // This only affects OpenAI-compatible providers; the native OpenAI Responses API
         // sends reasoning-end in order, so the item_reference fix (#9005) is unaffected.
         if (!runState.state.isReasoning) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
+        if (runState.state.currentReasoningId && runState.state.currentReasoningId !== chunk.payload.id) {
           safeEnqueue(controller, chunk);
           break;
         }
@@ -377,6 +412,7 @@ async function processOutputStream<OUTPUT = undefined>({
         // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
           isReasoning: false,
+          currentReasoningId: undefined,
           reasoningDeltas: [],
           providerOptions: undefined,
         });

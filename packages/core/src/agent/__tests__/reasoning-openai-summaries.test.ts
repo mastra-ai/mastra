@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
-function createOpenAISummaryStreamingModel() {
+function createOpenAISummaryStreamingModel(stream: any[]) {
   return new MockLanguageModelV2({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -29,57 +29,38 @@ function createOpenAISummaryStreamingModel() {
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        {
-          type: 'response-metadata',
-          id: 'response-1',
-          modelId: 'mock-openai-summaries-model',
-          timestamp: new Date(0),
-        },
-        {
-          type: 'reasoning-start',
-          id: 'rs_1:0',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        {
-          type: 'reasoning-delta',
-          id: 'rs_1:0',
-          delta: 'First summary.',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        {
-          type: 'reasoning-start',
-          id: 'rs_1:1',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        {
-          type: 'reasoning-delta',
-          id: 'rs_1:1',
-          delta: 'Second summary.',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        {
-          type: 'reasoning-end',
-          id: 'rs_1:0',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        {
-          type: 'reasoning-end',
-          id: 'rs_1:1',
-          providerMetadata: { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } },
-        },
-        { type: 'text-start', id: 'msg_1' },
-        { type: 'text-delta', id: 'msg_1', delta: 'Final answer.' },
-        { type: 'text-end', id: 'msg_1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      ]),
+      stream: convertArrayToReadableStream(stream),
     }),
   });
+}
+
+function getBaseChunks() {
+  return [
+    { type: 'stream-start', warnings: [] },
+    {
+      type: 'response-metadata',
+      id: 'response-1',
+      modelId: 'mock-openai-summaries-model',
+      timestamp: new Date(0),
+    },
+  ];
+}
+
+function getSummaryProviderMetadata() {
+  return { openai: { itemId: 'rs_1', reasoningEncryptedContent: 'enc-1' } };
+}
+
+function getEndChunks() {
+  return [
+    { type: 'text-start', id: 'msg_1' },
+    { type: 'text-delta', id: 'msg_1', delta: 'Final answer.' },
+    { type: 'text-end', id: 'msg_1' },
+    {
+      type: 'finish',
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    },
+  ];
 }
 
 describe('OpenAI reasoning summary streaming', () => {
@@ -88,7 +69,42 @@ describe('OpenAI reasoning summary streaming', () => {
       id: 'openai-reasoning-summaries-test',
       name: 'OpenAI Reasoning Summaries Test',
       instructions: 'You are a helpful assistant.',
-      model: createOpenAISummaryStreamingModel(),
+      model: createOpenAISummaryStreamingModel([
+        ...getBaseChunks(),
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:0',
+          delta: 'First summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:1',
+          delta: 'Second summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        ...getEndChunks(),
+      ]),
     });
 
     const response = await agent.stream('Explain your answer.');
@@ -100,6 +116,69 @@ describe('OpenAI reasoning summary streaming', () => {
 
     expect(reasoningParts).toHaveLength(2);
     expect(textParts).toHaveLength(1);
+
+    const firstDetail = reasoningParts[0].details[0];
+    const secondDetail = reasoningParts[1].details[0];
+
+    expect(firstDetail.type).toBe('text');
+    expect(secondDetail.type).toBe('text');
+
+    if (firstDetail.type === 'text' && secondDetail.type === 'text') {
+      expect(firstDetail.text).toBe('First summary.');
+      expect(secondDetail.text).toBe('Second summary.');
+    }
+  });
+
+  it('stores the earlier summary even when its end arrives after the next summary has started', async () => {
+    const agent = new Agent({
+      id: 'openai-reasoning-summaries-out-of-order-end-test',
+      name: 'OpenAI Reasoning Summaries Out Of Order End Test',
+      instructions: 'You are a helpful assistant.',
+      model: createOpenAISummaryStreamingModel([
+        ...getBaseChunks(),
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:0',
+          delta: 'First summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-start',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-delta',
+          id: 'rs_1:1',
+          delta: 'Second summary.',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:1',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        {
+          type: 'reasoning-end',
+          id: 'rs_1:0',
+          providerMetadata: getSummaryProviderMetadata(),
+        },
+        ...getEndChunks(),
+      ]),
+    });
+
+    const response = await agent.stream('Explain your answer.');
+    await response.consumeStream();
+
+    const assistantMessages = response.messageList.get.all.db().filter(m => m.role === 'assistant');
+    const reasoningParts = assistantMessages.flatMap(m => m.content.parts).filter(p => p.type === 'reasoning');
+
+    expect(reasoningParts).toHaveLength(2);
 
     const firstDetail = reasoningParts[0].details[0];
     const secondDetail = reasoningParts[1].details[0];
