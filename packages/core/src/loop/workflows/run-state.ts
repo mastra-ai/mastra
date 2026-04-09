@@ -1,6 +1,11 @@
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { StreamInternal } from '../types';
 
+type ReasoningBuffer = {
+  deltas: string[];
+  providerMetadata: Record<string, any> | undefined;
+};
+
 type State = {
   stepResult: Record<string, any> | undefined;
   responseMetadata: Record<string, any> | undefined;
@@ -13,7 +18,7 @@ type State = {
   hasErrored: boolean;
   apiError: unknown | undefined;
   deferredErrorChunk: any | undefined;
-  reasoningDeltas: string[];
+  reasoningBuffers: Map<string, ReasoningBuffer>;
   textDeltas: string[];
   isReasoning: boolean;
   isStreaming: boolean;
@@ -44,7 +49,7 @@ export class AgenticRunState {
       hasErrored: false,
       apiError: undefined,
       deferredErrorChunk: undefined,
-      reasoningDeltas: [],
+      reasoningBuffers: new Map(),
       textDeltas: [],
       stepResult: undefined,
     };

@@ -4579,6 +4579,7 @@ export class Agent<
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),
       generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => randomUUID()),
+      mastra: this.#mastra,
       _agentNetworkAppend:
         '_agentNetworkAppend' in this
           ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
