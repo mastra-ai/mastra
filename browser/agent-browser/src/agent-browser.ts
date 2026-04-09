@@ -184,10 +184,19 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
+      // Capture the Chrome process PID while the browser is alive.
+      // On manual close the main process dies but child processes (GPU, renderer,
+      // network, storage, crashpad) can linger as orphans. We need the PID to
+      // kill the whole process group during cleanup.
+      // Playwright's Browser type doesn't expose process(), but the runtime
+      // object does when the browser was launched (not connected via CDP).
+      const browserPid = (manager.getBrowser() as any)?.process?.()?.pid as number | undefined;
+
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
+        this.killOrphanedProcesses(browserPid);
         this.handleBrowserDisconnected();
       };
 
@@ -209,6 +218,24 @@ export class AgentBrowser extends MastraBrowser {
       }
     } catch {
       // Ignore errors setting up close listener
+    }
+  }
+
+  /**
+   * Kill orphaned Chrome child processes after manual/external close.
+   *
+   * When the user closes the browser window, the main Chrome process exits but
+   * child processes (GPU, renderer, network, storage, crashpad) can survive as
+   * orphans. We kill the entire process group via `process.kill(-pid)` — the
+   * same technique chrome-launcher uses.
+   */
+  private killOrphanedProcesses(pid: number | undefined): void {
+    if (!pid) return;
+    try {
+      // Negative PID = kill the entire process group
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Process group may already be gone — that's fine
     }
   }
 
@@ -313,10 +340,13 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
     try {
+      const browserPid = (manager.getBrowser() as any)?.process?.()?.pid as number | undefined;
+
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
+        this.killOrphanedProcesses(browserPid);
         this.handleThreadBrowserDisconnected(threadId);
       };
 

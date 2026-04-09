@@ -21,6 +21,9 @@
  * Both extend this base class and implement `getTools()` to return their tools.
  */
 
+import { existsSync, unlinkSync, lstatSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import { isProcessorWorkflow } from '../processors/index';
@@ -38,6 +41,61 @@ export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from '.
 
 // Alias for internal use
 type ScreencastOptions = ScreencastOptionsType;
+
+// =============================================================================
+// Profile Lock File Cleanup
+// =============================================================================
+
+/**
+ * Lock files that Chrome/Chromium creates in the profile directory.
+ * These can become stale if the browser doesn't shut down cleanly.
+ */
+const CHROME_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'chrome.pid', 'RunningChromeVersion'];
+
+/**
+ * Clean up stale Chrome lock files from a profile directory.
+ *
+ * Chrome creates lock files (SingletonLock, SingletonSocket, etc.) to prevent
+ * multiple instances from using the same profile. If the browser crashes or
+ * doesn't shut down cleanly, these files can remain and block future launches.
+ *
+ * This function removes these lock files, allowing the profile to be reused.
+ * It's safe to call even if the files don't exist.
+ *
+ * @param profilePath - Path to the Chrome profile directory
+ * @param logger - Optional logger for debug output
+ */
+export function cleanupProfileLockFiles(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (!profilePath || !existsSync(profilePath)) {
+    return;
+  }
+
+  try {
+    const entries = readdirSync(profilePath);
+    for (const entry of entries) {
+      if (CHROME_LOCK_FILES.includes(entry)) {
+        const fullPath = join(profilePath, entry);
+        try {
+          const stat = lstatSync(fullPath);
+          // Remove both regular files and symlinks
+          if (stat.isFile() || stat.isSymbolicLink()) {
+            unlinkSync(fullPath);
+            logger?.debug?.(`Removed stale lock file: ${fullPath}`);
+          }
+        } catch (err) {
+          // File may have been removed between readdir and unlink, ignore
+          logger?.warn?.(`Failed to remove lock file ${fullPath}: ${err}`);
+        }
+      }
+    }
+  } catch (err) {
+    // Profile directory may not be readable, ignore
+    logger?.warn?.(`Failed to clean up profile lock files in ${profilePath}: ${err}`);
+  }
+}
 
 // =============================================================================
 // Status & Lifecycle Types
@@ -582,6 +640,11 @@ export abstract class MastraBrowser extends MastraBase {
         throw err;
       } finally {
         this._closePromise = undefined;
+        // Clean up any stale lock files in the profile directory
+        // This ensures the profile can be reused even after unclean shutdowns
+        if (this.config.profile) {
+          cleanupProfileLockFiles(this.config.profile, this.logger);
+        }
       }
     })();
 
@@ -773,6 +836,12 @@ export abstract class MastraBrowser extends MastraBase {
         this.logger.debug?.('Browser was externally closed, status set to closed');
         this.notifyBrowserClosed();
       }
+    }
+
+    // Clean up stale lock files in the profile directory
+    // This is especially important for external/manual close which may leave locks behind
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
     }
   }
 
@@ -1146,6 +1215,10 @@ export abstract class MastraBrowser extends MastraBase {
     await this.threadManager.destroySession(threadId);
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
+    // Clean up any stale lock files in the profile directory
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
+    }
   }
 
   /**
@@ -1163,6 +1236,10 @@ export abstract class MastraBrowser extends MastraBase {
     this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
     // Notify only the callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
+    // Clean up any stale lock files in the profile directory
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
+    }
   }
 
   /**
