@@ -979,47 +979,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
-        if (isSupportedLanguageModel(currentStep.model)) {
-          modelResult = executeWithContextSync({
-            span: modelSpanTracker?.getTracingContext()?.currentSpan,
-            fn: () =>
-              execute({
-                runId,
-                model: currentStep.model,
-                providerOptions: currentStep.providerOptions,
-                inputMessages,
-                tools: currentStep.tools,
-                toolChoice: currentStep.toolChoice,
-                activeTools: currentStep.activeTools as string[] | undefined,
-                options,
-                // Per-model maxRetries takes precedence over global modelSettings.maxRetries
-                // This ensures p-retry uses the correct retry count for each model in the fallback chain
-                modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
-                includeRawChunks,
-                structuredOutput: currentStep.structuredOutput,
-                // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
-                // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
-                headers: (() => {
-                  const memoryHeaders: Record<string, string> = {};
-                  if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
-                  if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
-                  const merged = {
-                    ...memoryHeaders,
-                    ...modelHeaders,
-                    ...currentStep.modelSettings?.headers,
-                  };
-                  return Object.keys(merged).length > 0 ? merged : undefined;
-                })(),
-                methodType,
-                generateId: _internal?.generateId,
-                onResult: ({
-                  warnings: warningsFromStream,
-                  request: requestFromStream,
-                  rawResponse: rawResponseFromStream,
-                }) => {
-                  warnings = warningsFromStream;
-                  request = requestFromStream || {};
-                  rawResponse = rawResponseFromStream;
+          if (isSupportedLanguageModel(currentStep.model)) {
+            modelResult = executeWithContextSync({
+              span: modelSpanTracker?.getTracingContext()?.currentSpan,
+              fn: () =>
+                execute({
+                  runId,
+                  model: currentStep.model,
+                  providerOptions: currentStep.providerOptions,
+                  inputMessages,
+                  tools: currentStep.tools,
+                  toolChoice: currentStep.toolChoice,
+                  activeTools: currentStep.activeTools as string[] | undefined,
+                  options,
+                  // Per-model maxRetries takes precedence over global modelSettings.maxRetries
+                  // This ensures p-retry uses the correct retry count for each model in the fallback chain
+                  modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
+                  includeRawChunks,
+                  structuredOutput: currentStep.structuredOutput,
+                  // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
+                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                  headers: (() => {
+                    const memoryHeaders: Record<string, string> = {};
+                    if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
+                    if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                    const merged = {
+                      ...memoryHeaders,
+                      ...modelHeaders,
+                      ...currentStep.modelSettings?.headers,
+                    };
+                    return Object.keys(merged).length > 0 ? merged : undefined;
+                  })(),
+                  methodType,
+                  generateId: _internal?.generateId,
+                  onResult: ({
+                    warnings: warningsFromStream,
+                    request: requestFromStream,
+                    rawResponse: rawResponseFromStream,
+                  }) => {
+                    warnings = warningsFromStream;
+                    request = requestFromStream || {};
+                    rawResponse = rawResponseFromStream;
 
                     safeEnqueue(controller, {
                       runId,
