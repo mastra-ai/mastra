@@ -17,6 +17,21 @@ This is useful when building custom streaming endpoints outside Mastra's provide
 
 `toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'` in the options object.
 
+## Structured output in UI streams
+
+When the source agent stream includes a final structured output object, `toAISdkStream()` emits it as a custom AI SDK UI data part:
+
+```json
+{
+  "type": "data-structured-output",
+  "data": {
+    "object": {}
+  }
+}
+```
+
+The `object` field contains your full structured output value. This maps Mastra's final structured output chunk into the AI SDK UI stream. Partial structured output chunks are not emitted.
+
 ## Usage example
 
 Next.js App Router example:
