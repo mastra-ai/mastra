@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 22.1.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15085](https://github.com/mastra-ai/mastra/pull/15085))
+  - Updated dependency [`@assistant-ui/react@^0.12.22` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.22) (from `^0.12.21`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+
+- Added ValueLink, ValueWithTooltip, and ValueWithCopyBtn variants to DataKeysAndValues component ([#15208](https://github.com/mastra-ai/mastra/pull/15208))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`30a189b`](https://github.com/mastra-ai/mastra/commit/30a189bdd92c4f875a2a6e5d8498ee7fa547bde6), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+  - @mastra/ai-sdk@1.3.4-alpha.0
+  - @mastra/client-js@1.13.4-alpha.0
+  - @mastra/react@0.2.26-alpha.0
+
 ## 22.1.1
 
 ### Patch Changes
