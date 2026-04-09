@@ -25,7 +25,12 @@ export interface BrowserFactory {
   /** Human-readable name (e.g. "Stagehand", "AgentBrowser") */
   name: string;
   /** Create a browser instance with the given config */
-  create(config: { profile?: string; scope: 'shared' | 'thread'; headless: boolean }): MastraBrowser;
+  create(config: {
+    profile?: string;
+    scope: 'shared' | 'thread';
+    headless: boolean;
+    executablePath?: string;
+  }): MastraBrowser;
   /** Navigate to a URL */
   navigate(browser: MastraBrowser, url: string, threadId?: string): Promise<void>;
   /** Get the browser process PID (after ensureReady) */
@@ -69,6 +74,45 @@ const CHROME_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Find system Chrome executable path.
+ * Returns undefined if not found.
+ */
+export function getSystemChromePath(): string | undefined {
+  const paths: string[] = [];
+
+  if (process.platform === 'darwin') {
+    paths.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    );
+  } else if (process.platform === 'linux') {
+    paths.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+    );
+  } else if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || '';
+    const programFiles = process.env['PROGRAMFILES'] || 'C:\\Program Files';
+    const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+    paths.push(
+      `${localAppData}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${programFiles}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${programFilesX86}\\Google\\Chrome\\Application\\chrome.exe`,
+    );
+  }
+
+  for (const p of paths) {
+    if (existsSync(p)) {
+      return p;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -277,90 +321,251 @@ const ALL_HEADLESS_COMBOS: HeadlessCombo[] = [
  * Generate cross-provider switching tests.
  * Tests that profiles can be shared between providers.
  * Tests all headless mode combinations.
+ *
+ * Two variants:
+ * 1. Default Chrome (each provider uses its default)
+ * 2. Same Chrome (both use system Chrome via executablePath)
  */
 export function createCrossProviderTests(factoryA: BrowserFactory, factoryB: BrowserFactory) {
   const includeHeaded = process.env.BROWSER_TEST_HEADED === '1';
+  const systemChrome = getSystemChromePath();
 
   // Filter combos based on env
   const activeCombos = ALL_HEADLESS_COMBOS.filter(
     c => (c.aHeadless && c.bHeadless) || includeHeaded,
   );
 
+  // Two variants: default Chrome and same Chrome (executablePath)
+  const variants: Array<{ label: string; executablePath?: string }> = [
+    { label: 'default Chrome' },
+  ];
+  if (systemChrome) {
+    variants.push({ label: 'same Chrome (executablePath)', executablePath: systemChrome });
+  }
+
   describe(`Cross-provider: ${factoryA.name} ↔ ${factoryB.name}`, () => {
     afterEach(() => sleep(500));
 
-    for (const combo of activeCombos) {
-      describe(combo.label, () => {
-        it('A → B → A with shared profile', async () => {
-          const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
+    for (const variant of variants) {
+      describe(variant.label, () => {
+        for (const combo of activeCombos) {
+          describe(combo.label, () => {
+            it('A → B → A with shared profile', async () => {
+              const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
 
-          try {
-            // A
-            const a1 = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
-            await a1.ensureReady();
-            await factoryA.navigate(a1, TEST_URL);
-            const pidA1 = await factoryA.getPid(a1);
-            expect(pidA1).toBeDefined();
-            await a1.close();
-            await waitForProcessExit(pidA1!, 5000);
-            expect(hasLockFiles(profileDir)).toBe(false);
+              try {
+                // A
+                const a1 = factoryA.create({
+                  profile: profileDir,
+                  scope: 'shared',
+                  headless: combo.aHeadless,
+                  executablePath: variant.executablePath,
+                });
+                await a1.ensureReady();
+                await factoryA.navigate(a1, TEST_URL);
+                const pidA1 = await factoryA.getPid(a1);
+                expect(pidA1).toBeDefined();
+                await a1.close();
+                await waitForProcessExit(pidA1!, 5000);
+                expect(hasLockFiles(profileDir)).toBe(false);
 
-            // B
-            const b = factoryB.create({ profile: profileDir, scope: 'shared', headless: combo.bHeadless });
-            await b.ensureReady();
-            await factoryB.navigate(b, TEST_URL);
-            const pidB = await factoryB.getPid(b);
-            expect(pidB).toBeDefined();
-            await b.close();
-            await waitForProcessExit(pidB!, 5000);
-            expect(hasLockFiles(profileDir)).toBe(false);
+                // B
+                const b = factoryB.create({
+                  profile: profileDir,
+                  scope: 'shared',
+                  headless: combo.bHeadless,
+                  executablePath: variant.executablePath,
+                });
+                await b.ensureReady();
+                await factoryB.navigate(b, TEST_URL);
+                const pidB = await factoryB.getPid(b);
+                expect(pidB).toBeDefined();
+                await b.close();
+                await waitForProcessExit(pidB!, 5000);
+                expect(hasLockFiles(profileDir)).toBe(false);
 
-            // A again
-            const a2 = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
-            await a2.ensureReady();
-            await factoryA.navigate(a2, TEST_URL);
-            const pidA2 = await factoryA.getPid(a2);
-            expect(pidA2).toBeDefined();
-            await a2.close();
-            await waitForProcessExit(pidA2!, 5000);
-            expect(hasLockFiles(profileDir)).toBe(false);
-          } finally {
-            rmSync(profileDir, { recursive: true, force: true });
-          }
-        }, 90_000);
+                // A again
+                const a2 = factoryA.create({
+                  profile: profileDir,
+                  scope: 'shared',
+                  headless: combo.aHeadless,
+                  executablePath: variant.executablePath,
+                });
+                await a2.ensureReady();
+                await factoryA.navigate(a2, TEST_URL);
+                const pidA2 = await factoryA.getPid(a2);
+                expect(pidA2).toBeDefined();
+                await a2.close();
+                await waitForProcessExit(pidA2!, 5000);
+                expect(hasLockFiles(profileDir)).toBe(false);
+              } finally {
+                rmSync(profileDir, { recursive: true, force: true });
+              }
+            }, 90_000);
 
-        it('manual close A → programmatic B', async () => {
-          const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
+            it('manual close A → programmatic B', async () => {
+              const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
 
-          try {
-            // A — manual close
-            const a = factoryA.create({ profile: profileDir, scope: 'shared', headless: combo.aHeadless });
-            await a.ensureReady();
-            await factoryA.navigate(a, TEST_URL);
-            const pidA = await factoryA.getPid(a);
-            expect(pidA).toBeDefined();
-            killProcess(pidA!);
-            await waitForProcessExit(pidA!, 5000);
-            await sleep(1000); // Let disconnect handler clean up
-            expect(hasLockFiles(profileDir)).toBe(false);
-            try {
-              await a.close();
-            } catch {}
+              try {
+                // A — manual close
+                const a = factoryA.create({
+                  profile: profileDir,
+                  scope: 'shared',
+                  headless: combo.aHeadless,
+                  executablePath: variant.executablePath,
+                });
+                await a.ensureReady();
+                await factoryA.navigate(a, TEST_URL);
+                const pidA = await factoryA.getPid(a);
+                expect(pidA).toBeDefined();
+                killProcess(pidA!);
+                await waitForProcessExit(pidA!, 5000);
+                await sleep(1000); // Let disconnect handler clean up
+                expect(hasLockFiles(profileDir)).toBe(false);
+                try {
+                  await a.close();
+                } catch {}
 
-            // B — should launch fine
-            const b = factoryB.create({ profile: profileDir, scope: 'shared', headless: combo.bHeadless });
-            await b.ensureReady();
-            await factoryB.navigate(b, TEST_URL);
-            const pidB = await factoryB.getPid(b);
-            expect(pidB).toBeDefined();
-            await b.close();
-            await waitForProcessExit(pidB!, 5000);
-            expect(hasLockFiles(profileDir)).toBe(false);
-          } finally {
-            rmSync(profileDir, { recursive: true, force: true });
-          }
-        }, 60_000);
+                // B — should launch fine
+                const b = factoryB.create({
+                  profile: profileDir,
+                  scope: 'shared',
+                  headless: combo.bHeadless,
+                  executablePath: variant.executablePath,
+                });
+                await b.ensureReady();
+                await factoryB.navigate(b, TEST_URL);
+                const pidB = await factoryB.getPid(b);
+                expect(pidB).toBeDefined();
+                await b.close();
+                await waitForProcessExit(pidB!, 5000);
+                expect(hasLockFiles(profileDir)).toBe(false);
+              } finally {
+                rmSync(profileDir, { recursive: true, force: true });
+              }
+            }, 60_000);
+          });
+        }
       });
     }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Same-Provider Headless↔Headed Switching Tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate tests for switching between headless and headed modes
+ * with the same profile within a single provider.
+ */
+export function createHeadlessSwitchingTests(factory: BrowserFactory) {
+  const includeHeaded = process.env.BROWSER_TEST_HEADED === '1';
+  if (!includeHeaded) {
+    // These tests require headed mode
+    describe.skip(`${factory.name}: headless↔headed switching (set BROWSER_TEST_HEADED=1)`, () => {
+      it.skip('skipped', () => {});
+    });
+    return;
+  }
+
+  describe(`${factory.name}: headless↔headed switching`, () => {
+    afterEach(() => sleep(500));
+
+    it('headless → headed → headless with profile', async () => {
+      const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
+
+      try {
+        // Headless
+        const b1 = factory.create({ profile: profileDir, scope: 'shared', headless: true });
+        await b1.ensureReady();
+        await factory.navigate(b1, TEST_URL);
+        const pid1 = await factory.getPid(b1);
+        expect(pid1).toBeDefined();
+        await b1.close();
+        await waitForProcessExit(pid1!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+
+        // Headed
+        const b2 = factory.create({ profile: profileDir, scope: 'shared', headless: false });
+        await b2.ensureReady();
+        await factory.navigate(b2, TEST_URL);
+        const pid2 = await factory.getPid(b2);
+        expect(pid2).toBeDefined();
+        await b2.close();
+        await waitForProcessExit(pid2!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+
+        // Headless again
+        const b3 = factory.create({ profile: profileDir, scope: 'shared', headless: true });
+        await b3.ensureReady();
+        await factory.navigate(b3, TEST_URL);
+        const pid3 = await factory.getPid(b3);
+        expect(pid3).toBeDefined();
+        await b3.close();
+        await waitForProcessExit(pid3!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+      } finally {
+        rmSync(profileDir, { recursive: true, force: true });
+      }
+    }, 90_000);
+
+    it('headed → headless → headed with profile', async () => {
+      const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
+
+      try {
+        // Headed
+        const b1 = factory.create({ profile: profileDir, scope: 'shared', headless: false });
+        await b1.ensureReady();
+        await factory.navigate(b1, TEST_URL);
+        const pid1 = await factory.getPid(b1);
+        expect(pid1).toBeDefined();
+        await b1.close();
+        await waitForProcessExit(pid1!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+
+        // Headless
+        const b2 = factory.create({ profile: profileDir, scope: 'shared', headless: true });
+        await b2.ensureReady();
+        await factory.navigate(b2, TEST_URL);
+        const pid2 = await factory.getPid(b2);
+        expect(pid2).toBeDefined();
+        await b2.close();
+        await waitForProcessExit(pid2!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+
+        // Headed again
+        const b3 = factory.create({ profile: profileDir, scope: 'shared', headless: false });
+        await b3.ensureReady();
+        await factory.navigate(b3, TEST_URL);
+        const pid3 = await factory.getPid(b3);
+        expect(pid3).toBeDefined();
+        await b3.close();
+        await waitForProcessExit(pid3!, 5000);
+        expect(hasLockFiles(profileDir)).toBe(false);
+      } finally {
+        rmSync(profileDir, { recursive: true, force: true });
+      }
+    }, 90_000);
+
+    it('headless → headed without profile (temp)', async () => {
+      // Headless
+      const b1 = factory.create({ scope: 'shared', headless: true });
+      await b1.ensureReady();
+      await factory.navigate(b1, TEST_URL);
+      const pid1 = await factory.getPid(b1);
+      expect(pid1).toBeDefined();
+      await b1.close();
+      await waitForProcessExit(pid1!, 5000);
+
+      // Headed (fresh temp profile)
+      const b2 = factory.create({ scope: 'shared', headless: false });
+      await b2.ensureReady();
+      await factory.navigate(b2, TEST_URL);
+      const pid2 = await factory.getPid(b2);
+      expect(pid2).toBeDefined();
+      await b2.close();
+      await waitForProcessExit(pid2!, 5000);
+    }, 60_000);
   });
 }

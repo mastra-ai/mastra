@@ -10,7 +10,8 @@ import { getStagehandChromePid } from '../utils';
 
 const stagehandFactory: BrowserFactory = {
   name: 'Stagehand',
-  create: ({ profile, scope, headless }) => new StagehandBrowser({ headless, scope, profile }),
+  create: ({ profile, scope, headless, executablePath }) =>
+    new StagehandBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {
     const result = await (browser as StagehandBrowser).navigate({ url }, threadId);
     if ('error' in result) throw new Error(`Navigate failed: ${result.error}`);

@@ -47,7 +47,8 @@ async function getAgentBrowserPid(browser: AgentBrowser, threadId?: string): Pro
 
 const agentBrowserFactory: BrowserFactory = {
   name: 'AgentBrowser',
-  create: ({ profile, scope, headless }) => new AgentBrowser({ headless, scope, profile }),
+  create: ({ profile, scope, headless, executablePath }) =>
+    new AgentBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {
     const result = await (browser as AgentBrowser).goto({ url }, threadId);
     if ('error' in result) throw new Error(`Goto failed: ${result.error}`);

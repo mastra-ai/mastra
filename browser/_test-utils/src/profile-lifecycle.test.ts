@@ -9,7 +9,7 @@
 import { AgentBrowser } from '@mastra/agent-browser';
 import { getStagehandChromePid, StagehandBrowser } from '@mastra/stagehand';
 
-import { createCrossProviderTests, type BrowserFactory } from './factory';
+import { createCrossProviderTests, createHeadlessSwitchingTests, type BrowserFactory } from './factory';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,7 +58,8 @@ async function getAgentBrowserPid(browser: AgentBrowser, threadId?: string): Pro
 
 const stagehandFactory: BrowserFactory = {
   name: 'Stagehand',
-  create: ({ profile, scope, headless }) => new StagehandBrowser({ headless, scope, profile }),
+  create: ({ profile, scope, headless, executablePath }) =>
+    new StagehandBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {
     const result = await (browser as StagehandBrowser).navigate({ url }, threadId);
     if ('error' in result) throw new Error(`Navigate failed: ${result.error}`);
@@ -77,7 +78,8 @@ const stagehandFactory: BrowserFactory = {
 
 const agentBrowserFactory: BrowserFactory = {
   name: 'AgentBrowser',
-  create: ({ profile, scope, headless }) => new AgentBrowser({ headless, scope, profile }),
+  create: ({ profile, scope, headless, executablePath }) =>
+    new AgentBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {
     const result = await (browser as AgentBrowser).goto({ url }, threadId);
     if ('error' in result) throw new Error(`Goto failed: ${result.error}`);
@@ -116,11 +118,13 @@ try {
 // ---------------------------------------------------------------------------
 
 if (canLaunchBrowser) {
-  // Stagehand ↔ AgentBrowser
+  // Cross-provider tests (Stagehand ↔ AgentBrowser)
   createCrossProviderTests(stagehandFactory, agentBrowserFactory);
-
-  // AgentBrowser ↔ Stagehand (reverse order)
   createCrossProviderTests(agentBrowserFactory, stagehandFactory);
+
+  // Same-provider headless↔headed switching tests
+  createHeadlessSwitchingTests(stagehandFactory);
+  createHeadlessSwitchingTests(agentBrowserFactory);
 } else {
   console.warn('⚠ Skipping browser profile lifecycle tests — cannot launch Chromium');
 }
