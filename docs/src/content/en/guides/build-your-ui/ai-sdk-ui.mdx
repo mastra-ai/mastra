@@ -605,12 +605,13 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   <TabItem value="frontend" label="Frontend">
     Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that just changed, also read `data-workflow-step` parts.
 
-    ```typescript title="src/components/workflow-chat.tsx" {3,5,45-47}
+    ```typescript title="src/components/workflow-chat.tsx" {3,5,6,48-50}
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
-    import type { WorkflowDataPart } from '@mastra/ai-sdk'
+    import type { WorkflowDataPart, WorkflowStepDataPart } from '@mastra/ai-sdk'
 
     type WorkflowData = WorkflowDataPart['data']
+    type WorkflowStepData = WorkflowStepDataPart['data']
     type StepStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting'
 
     function StepIndicator({
@@ -669,6 +670,17 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
                         />
                       ))}
                     </div>
+                  )
+                }
+                if (part.type === 'data-workflow-step') {
+                  const stepData = part.data as WorkflowStepData
+                  return (
+                    <StepIndicator
+                      key={index}
+                      name={stepData.step.name}
+                      status={stepData.step.status}
+                      output={stepData.step.output}
+                    />
                   )
                 }
                 return null
