@@ -29,7 +29,7 @@ describe('workspace skill path definitions', () => {
     const source = fs.readFileSync(path.join(cwd, 'src/agents/workspace.ts'), 'utf-8');
 
     expect(source).toContain('const allowedPaths = [...allowedSkillPaths');
-    expect(source).toContain("...(skillPaths.length > 0 ? { skills: skillPaths } : {}),");
+    expect(source).toContain('...(skillPaths.length > 0 ? { skills: skillPaths } : {}),');
   });
 
   it('exposes well-formed absolute skill paths', () => {
