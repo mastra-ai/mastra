@@ -336,3 +336,176 @@ describe('dev command - inspect flag behavior', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Signal handling & orphan-process fixes (issue #15021)
+// ---------------------------------------------------------------------------
+
+describe('dev command - signal handling & orphan-process prevention', () => {
+  let execaMock: any;
+  let mockChildProcess: Partial<ChildProcess>;
+  let exitListeners: Record<string, Function[]>;
+  let processListeners: Record<string, Function[]>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    exitListeners = {};
+    processListeners = {};
+
+    mockChildProcess = {
+      pid: 99999,
+      exitCode: null,
+      killed: false,
+      stdout: { on: vi.fn() } as any,
+      stderr: { on: vi.fn() } as any,
+      on: vi.fn((event: string, handler: Function) => {
+        exitListeners[event] = exitListeners[event] || [];
+        exitListeners[event].push(handler);
+        if (event === 'message') {
+          setTimeout(() => handler({ type: 'server-ready' }), 10);
+        }
+        return mockChildProcess as ChildProcess;
+      }),
+      once: vi.fn((event: string, handler: Function) => {
+        exitListeners[event] = exitListeners[event] || [];
+        exitListeners[event].push(handler);
+        return mockChildProcess as ChildProcess;
+      }),
+      kill: vi.fn((signal?: NodeJS.Signals | number) => {
+        // Simulate the child dying shortly after kill()
+        setTimeout(() => {
+          (mockChildProcess as any).exitCode = signal === 'SIGKILL' ? 137 : 0;
+          (mockChildProcess as any).killed = true;
+          exitListeners['exit']?.forEach(h => h(0));
+        }, 20);
+        return true;
+      }),
+    };
+
+    vi.spyOn(process, 'on').mockImplementation((event: string | symbol, handler: (...args: any[]) => void) => {
+      const key = String(event);
+      processListeners[key] = processListeners[key] || [];
+      processListeners[key].push(handler);
+      return process;
+    });
+
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(mockChildProcess as any);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('registers SIGHUP handler to prevent orphan on terminal close', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // SIGHUP must be registered — without it, closing a terminal orphans the child
+    expect(processListeners['SIGHUP']).toBeDefined();
+    expect(processListeners['SIGHUP']!.length).toBeGreaterThan(0);
+  });
+
+  it('registers SIGINT handler', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    expect(processListeners['SIGINT']).toBeDefined();
+    expect(processListeners['SIGINT']!.length).toBeGreaterThan(0);
+  });
+
+  it('registers SIGTERM handler', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    expect(processListeners['SIGTERM']).toBeDefined();
+    expect(processListeners['SIGTERM']!.length).toBeGreaterThan(0);
+  });
+
+  it('kills the child process when SIGINT fires', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    // Fire SIGINT
+    const sigintHandler = processListeners['SIGINT']?.[0];
+    expect(sigintHandler).toBeDefined();
+
+    // Call the handler — handleShutdown should kill the child
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    await (sigintHandler as Function)();
+
+    expect(mockChildProcess.kill).toHaveBeenCalled();
+    exitSpy.mockRestore();
+  });
+
+  it('kills the child when SIGHUP fires (terminal close scenario)', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    const sighupHandler = processListeners['SIGHUP']?.[0];
+    expect(sighupHandler).toBeDefined();
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    await (sighupHandler as Function)();
+
+    expect(mockChildProcess.kill).toHaveBeenCalled();
+    exitSpy.mockRestore();
+  });
+});
