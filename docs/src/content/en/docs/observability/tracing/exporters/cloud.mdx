@@ -15,14 +15,23 @@ The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and 
 
 1. **Mastra Cloud Account**: Sign up at [cloud.mastra.ai](https://cloud.mastra.ai)
 1. **Mastra Cloud Project**: Create a project in Mastra Cloud. Traces are scoped per project, so even if you only want observability, you need a project to act as the destination for your traces.
-1. **Access Token**: Generate in your project's sidebar under **Project Settings → Access Tokens**
+1. **Authentication**: Use either a project-scoped access token or an organization API key. Generate both from Mastra Cloud.
 1. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ```
 
+If you authenticate with an organization API key, also set the destination project ID:
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=sk_xxxxxxxxxxxxxxxx
+MASTRA_PROJECT_ID=project_123
+```
+
 ### Basic Setup
+
+Project-scoped access tokens work without any extra routing configuration:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -41,6 +50,19 @@ export const mastra = new Mastra({
   }),
 })
 ```
+
+### Organization API keys
+
+Organization API keys are scoped to the whole org, so the exporter needs a project ID (letters, numbers, hyphens, underscores only) to generate project-scoped collector routes.
+
+```typescript title="src/mastra/index.ts"
+new CloudExporter({
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+  projectId: process.env.MASTRA_PROJECT_ID,
+})
+```
+
+When `projectId` is set, base endpoints resolve to `/projects/:projectId/ai/{signal}/publish`. Without it, the exporter keeps using `/ai/{signal}/publish`.
 
 ### Recommended Configuration
 
@@ -78,6 +100,10 @@ new CloudExporter({
   // Optional - defaults to env var
   accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
 
+  // Optional - required for organization API keys or any project-scoped collector route
+  // Letters, numbers, hyphens, and underscores only
+  projectId: process.env.MASTRA_PROJECT_ID,
+
   // Optional - for self-hosted Mastra Cloud
   endpoint: 'https://cloud.your-domain.com',
 
@@ -104,7 +130,7 @@ new CloudExporter({
    - Error status
 
 :::note
-Traces are scoped to the project that issued the access token. To view traces, make sure you're viewing the same project you generated the token from.
+If you use a project-scoped token, view the project that issued the token. If you use an organization API key, view the project named in `MASTRA_PROJECT_ID` or `projectId`.
 :::
 
 ### Features

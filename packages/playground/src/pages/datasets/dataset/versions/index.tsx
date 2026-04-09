@@ -15,7 +15,9 @@ import {
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -53,6 +55,16 @@ function DatasetCompareVersionsPage() {
   // Lookup maps to resolve each item's version in A and B
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

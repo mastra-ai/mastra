@@ -7,6 +7,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
+import type { z } from 'zod';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
@@ -18,16 +19,22 @@ import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 // We support multiple skill locations for compatibility:
 // 1. Project-local: .mastracode/skills (project-specific mastracode skills)
 // 2. Project-local: .claude/skills (Claude Code compatible skills)
-// 3. Global: ~/.mastracode/skills (user-wide mastracode skills)
-// 4. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 3. Project-local: .agents/skills (Agent Skills spec compatible)
+// 4. Global: ~/.mastracode/skills (user-wide mastracode skills)
+// 5. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
 
 const mastraCodeLocalSkillsPath = path.join(process.cwd(), '.mastracode', 'skills');
 
 const claudeLocalSkillsPath = path.join(process.cwd(), '.claude', 'skills');
 
+const agentSkillsLocalPath = path.join(process.cwd(), '.agents', 'skills');
+
 const mastraCodeGlobalSkillsPath = path.join(os.homedir(), '.mastracode', 'skills');
 
 const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
+
+const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
 // Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
 // returns false for symlinks. Tools like `npx skills add` install skills as
@@ -77,8 +84,10 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
 export const skillPaths = collectSkillPaths([
   mastraCodeLocalSkillsPath,
   claudeLocalSkillsPath,
+  agentSkillsLocalPath,
   mastraCodeGlobalSkillsPath,
   claudeGlobalSkillsPath,
+  agentSkillsGlobalPath,
 ]);
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
@@ -95,9 +104,11 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
+type MastraCodeState = z.infer<typeof stateSchema>;
+
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
-  const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
-  const state = ctx?.getState?.();
+  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  const state = ctx?.getState();
   const modeId = ctx?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 

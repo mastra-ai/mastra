@@ -25,7 +25,7 @@ import {
   getOrCreateSpan,
   resolveObservabilityContext,
 } from '../observability';
-import { executeWithContext } from '../observability/context-storage';
+import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';

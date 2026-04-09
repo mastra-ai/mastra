@@ -82,7 +82,7 @@ export class MemoryThread extends BaseResource {
       requestContext?: RequestContext | Record<string, any>;
     } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    const { page, perPage, orderBy, filter, include, resourceId, requestContext } = params;
+    const { page, perPage, orderBy, filter, include, resourceId, requestContext, includeSystemReminders } = params;
     const queryParams: Record<string, string> = {};
 
     if (this.agentId) queryParams.agentId = this.agentId;
@@ -92,6 +92,7 @@ export class MemoryThread extends BaseResource {
     if (orderBy) queryParams.orderBy = JSON.stringify(orderBy);
     if (filter) queryParams.filter = JSON.stringify(filter);
     if (include) queryParams.include = JSON.stringify(include);
+    if (includeSystemReminders !== undefined) queryParams.includeSystemReminders = String(includeSystemReminders);
 
     const query = new URLSearchParams(queryParams);
     const queryString = query.toString();

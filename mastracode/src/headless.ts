@@ -15,6 +15,10 @@ export interface HeadlessArgs {
   timeout?: number;
   format: 'default' | 'json';
   continue_: boolean;
+  thread?: string;
+  title?: string;
+  cloneThread: boolean;
+  resourceId?: string;
 }
 
 /** Returns true if argv contains --prompt or -p, indicating headless mode. */
@@ -25,6 +29,10 @@ export function hasHeadlessFlag(argv: string[]): boolean {
 const headlessOptions = {
   prompt: { type: 'string', short: 'p' },
   continue: { type: 'boolean', short: 'c', default: false },
+  thread: { type: 'string', short: 't' },
+  title: { type: 'string' },
+  'clone-thread': { type: 'boolean', default: false },
+  'resource-id': { type: 'string' },
   timeout: { type: 'string' }, // parsed to number after validation
   format: { type: 'string', default: 'default' },
   help: { type: 'boolean', short: 'h', default: false },
@@ -55,12 +63,24 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   }
 
   const prompt = typeof values.prompt === 'string' ? values.prompt : positionals[0];
+  const thread = typeof values.thread === 'string' ? values.thread : undefined;
+  const title = typeof values.title === 'string' ? values.title : undefined;
+  const cloneThread = Boolean(values['clone-thread']);
+  const resourceId = typeof values['resource-id'] === 'string' ? values['resource-id'] : undefined;
+
+  if (values.continue && thread) {
+    throw new Error('--continue and --thread cannot be used together');
+  }
 
   return {
     prompt,
     timeout,
     format: format as 'default' | 'json',
     continue_: Boolean(values.continue),
+    thread,
+    title,
+    cloneThread,
+    resourceId,
   };
 }
 
@@ -74,10 +94,19 @@ export function printHeadlessUsage(): void {
 Usage: mastracode --prompt <text> [options]
 
 Headless (non-interactive) mode options:
-  --prompt, -p <text>   The task to execute (required, or pipe via stdin)
-  --continue, -c        Resume the most recent thread instead of creating a new one
-  --timeout <seconds>   Exit with code 2 if not complete within timeout
-  --format <type>       Output format: "default" or "json" (default: "default")
+  --prompt, -p <text>     The task to execute (required, or pipe via stdin)
+  --continue, -c          Resume the most recent thread instead of creating a new one
+  --thread, -t <id|title> Resume a specific thread by ID or title
+  --title <title>         Set or rename the thread title
+  --clone-thread          Clone the current thread before running (work on a copy)
+  --resource-id <id>      Set the resource ID for thread scoping
+  --timeout <seconds>     Exit with code 2 if not complete within timeout
+  --format <type>         Output format: "default" or "json" (default: "default")
+
+Thread behavior:
+  By default, a new thread is created for each run.
+  Use --continue to resume the most recent thread, or --thread to target a specific one.
+  Use --clone-thread to branch off a copy before running.
 
 Exit codes:
   0  Agent completed successfully
@@ -88,7 +117,11 @@ Examples:
   mastracode --prompt "Fix the bug in auth.ts"
   mastracode --prompt "Add tests" --timeout 300
   mastracode -c --prompt "Continue where you left off"
+  mastracode -t "feature-auth" --prompt "Keep working on this"
+  mastracode --thread abc123 --clone-thread --prompt "Try a different approach"
+  mastracode --prompt "Refactor utils" --title "utils-refactor"
   mastracode --prompt "Refactor utils" --format json
+  mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
 Run without --prompt for the interactive TUI.
@@ -99,8 +132,8 @@ function resolveExitCode(reason?: string): number {
   return reason === 'error' || reason === 'aborted' ? 1 : 0;
 }
 
-function autoResolve(
-  harness: Harness,
+function autoResolve<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
@@ -173,13 +206,34 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
   }
 }
 
+/** Resolve a thread by ID or title. Tries exact ID match first, then title. */
+async function resolveThread(
+  harness: Harness,
+  threadIdOrTitle: string,
+): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
+  const threads = await harness.listThreads();
+
+  const byId = threads.find(t => t.id === threadIdOrTitle);
+  if (byId) return { threadId: byId.id, matchType: 'id' };
+
+  const byTitle = threads
+    .filter(t => t.title === threadIdOrTitle)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  if (byTitle.length > 0) return { threadId: byTitle[0]!.id, matchType: 'title' };
+
+  return { error: `No thread found matching "${threadIdOrTitle}"` };
+}
+
 /**
  * Run headless mode: subscribe to harness events with auto-approval,
  * optionally resume a thread, send the prompt, and wait for completion.
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
-export async function runHeadless(harness: Harness, args: HeadlessArgs & { prompt: string }): Promise<number> {
+export async function runHeadless<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
+  args: HeadlessArgs & { prompt: string },
+): Promise<number> {
   const emit =
     args.format === 'json'
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
@@ -224,14 +278,70 @@ export async function runHeadless(harness: Harness, args: HeadlessArgs & { promp
     });
   });
 
-  if (args.continue_) {
-    const threads = await harness.listThreads();
-    if (threads.length > 0) {
-      const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      await harness.switchThread({ threadId: sorted[0]!.id });
-      if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
-    } else if (!emit) {
-      process.stderr.write(`[info] No existing threads found, starting new thread\n`);
+  // --- Resource ID ---
+  if (args.resourceId) {
+    harness.setResourceId({ resourceId: args.resourceId });
+    if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
+  }
+
+  // --- Thread selection ---
+  try {
+    if (args.thread) {
+      const result = await resolveThread(harness, args.thread);
+      if ('error' in result) {
+        const msg = result.error;
+        if (emit) emit({ type: 'error', error: { message: msg } });
+        else process.stderr.write(`Error: ${msg}\n`);
+        if (timeoutId) clearTimeout(timeoutId);
+        return 1;
+      }
+      await harness.switchThread({ threadId: result.threadId });
+      if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
+    } else if (args.continue_) {
+      const threads = await harness.listThreads();
+      if (threads.length > 0) {
+        const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        await harness.switchThread({ threadId: sorted[0]!.id });
+        if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
+      } else if (!emit) {
+        process.stderr.write(`[info] No existing threads found, starting new thread\n`);
+      }
+    }
+    // else: no thread selection — sendMessage will auto-create a new thread
+  } catch (err) {
+    const msg = `Failed to select thread: ${(err as Error).message}`;
+    if (emit) emit({ type: 'error', error: { message: msg } });
+    else process.stderr.write(`Error: ${msg}\n`);
+    if (timeoutId) clearTimeout(timeoutId);
+    return 1;
+  }
+
+  // --- Clone ---
+  if (args.cloneThread) {
+    try {
+      const cloned = await harness.cloneThread();
+      if (emit) emit({ type: 'thread_cloned', threadId: cloned.id });
+      else process.stderr.write(`[cloned] thread ${cloned.id}\n`);
+    } catch (err) {
+      const msg = `Failed to clone thread: ${(err as Error).message}`;
+      if (emit) emit({ type: 'error', error: { message: msg } });
+      else process.stderr.write(`Error: ${msg}\n`);
+      if (timeoutId) clearTimeout(timeoutId);
+      return 1;
+    }
+  }
+
+  // --- Title ---
+  if (args.title) {
+    try {
+      await harness.renameThread({ title: args.title });
+      if (!emit) process.stderr.write(`[title] "${args.title}"\n`);
+    } catch (err) {
+      const msg = `Failed to set thread title: ${(err as Error).message}`;
+      if (emit) emit({ type: 'error', error: { message: msg } });
+      else process.stderr.write(`Error: ${msg}\n`);
+      if (timeoutId) clearTimeout(timeoutId);
+      return 1;
     }
   }
 

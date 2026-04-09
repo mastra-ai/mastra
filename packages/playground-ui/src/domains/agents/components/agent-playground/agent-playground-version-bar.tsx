@@ -35,6 +35,8 @@ interface AgentPlaygroundVersionBarProps {
   readOnly: boolean;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  /** Whether the user is viewing a previous (non-latest) version that can be published */
+  isViewingPreviousVersion?: boolean;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -60,6 +62,7 @@ export function AgentPlaygroundVersionBar({
   readOnly,
   onSaveDraft,
   onPublish,
+  isViewingPreviousVersion = false,
 }: AgentPlaygroundVersionBarProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
@@ -209,7 +212,11 @@ export function AgentPlaygroundVersionBar({
           variant="cta"
           size="md"
           onClick={onPublish}
-          disabled={readOnly || (!hasDraft && !isDirty) || isPublishing || isSavingDraft}
+          disabled={
+            isViewingPreviousVersion
+              ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
+              : readOnly || !hasDraft || isPublishing || isSavingDraft
+          }
         >
           {isPublishing ? (
             <>
@@ -221,7 +228,7 @@ export function AgentPlaygroundVersionBar({
               <Icon size="sm">
                 <Check />
               </Icon>
-              Publish
+              {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
             </>
           )}
         </Button>

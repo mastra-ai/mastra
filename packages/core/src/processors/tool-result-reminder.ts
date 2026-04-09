@@ -2,12 +2,21 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
 import type { DataChunkType } from '../stream/types';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
 const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
 const REMINDER_TYPE = 'dynamic-agents-md';
+const REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+type ReminderMessageMetadata = {
+  [REMINDER_METADATA_KEY]?: {
+    path?: string;
+    type?: string;
+  };
+};
 
 type SystemReminderChunk = DataChunkType & {
   type: 'data-system-reminder';
@@ -105,6 +114,68 @@ function getMessageText(message: MastraDBMessage): string {
     .filter((part): part is TextPartLike => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
     .map(part => part.text)
     .join('\n');
+}
+
+function decodeXmlEntities(value: string): string {
+  return value.replaceAll('&quot;', '"').replaceAll('&gt;', '>').replaceAll('&lt;', '<').replaceAll('&amp;', '&');
+}
+
+function extractReminderPath(messageText: string): string | undefined {
+  const startTagIndex = messageText.indexOf('<system-reminder');
+  if (startTagIndex === -1) {
+    return undefined;
+  }
+
+  const startTagEndIndex = messageText.indexOf('>', startTagIndex);
+  if (startTagEndIndex === -1) {
+    return undefined;
+  }
+
+  const startTag = messageText.slice(startTagIndex, startTagEndIndex + 1);
+  const pathMatch = startTag.match(/\bpath="([^"]+)"/);
+  if (!pathMatch?.[1]) {
+    return undefined;
+  }
+
+  return decodeXmlEntities(pathMatch[1]);
+}
+
+function getReminderMetadata(instructionPath: string): ReminderMessageMetadata {
+  return {
+    [REMINDER_METADATA_KEY]: {
+      path: instructionPath,
+      type: REMINDER_TYPE,
+    },
+  };
+}
+
+function extractReminderPathFromMetadata(message: MastraDBMessage): string | undefined {
+  const metadata = message.content.metadata;
+  if (!isRecord(metadata)) {
+    return undefined;
+  }
+
+  const reminderMetadata = metadata[REMINDER_METADATA_KEY];
+  if (!isRecord(reminderMetadata)) {
+    return undefined;
+  }
+
+  return typeof reminderMetadata.path === 'string' ? reminderMetadata.path : undefined;
+}
+
+function createReminderMessage(reminderMarkup: string, instructionPath: string): MastraDBMessage {
+  const content: MastraMessageContentV2 = {
+    format: 2,
+    parts: [{ type: 'text', text: reminderMarkup }],
+    metadata: getReminderMetadata(instructionPath),
+  };
+
+  return {
+    id: crypto.randomUUID(),
+    role: 'user',
+    content,
+    createdAt: new Date(),
+  };
 }
 
 function getReminderMarkup(reminderText: string, instructionPath: string): string {
@@ -241,7 +312,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       await args.writer.custom(chunk);
     }
 
-    messageList.add(reminderMarkup, 'user');
+    messageList.add(createReminderMessage(reminderMarkup, instructionPath), 'user');
     rotateResponseMessageId?.();
     return messageList;
   }
@@ -306,6 +377,27 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   }
 
   private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string): boolean {
-    return messages.some(message => message.role === 'user' && getMessageText(message).includes(reminderMarkup));
+    const reminderPath = extractReminderPath(reminderMarkup);
+
+    return messages.some(message => {
+      if (message.role !== 'user') {
+        return false;
+      }
+
+      if (reminderPath && extractReminderPathFromMetadata(message) === reminderPath) {
+        return true;
+      }
+
+      const messageText = getMessageText(message);
+      if (messageText.includes(reminderMarkup)) {
+        return true;
+      }
+
+      if (!reminderPath) {
+        return false;
+      }
+
+      return extractReminderPath(messageText) === reminderPath;
+    });
   }
 }

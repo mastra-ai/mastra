@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
@@ -64,6 +65,35 @@ export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/** Browser provider type. */
+export type BrowserProvider = 'stagehand' | 'agent-browser';
+
+/** Stagehand environment type. */
+export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
+
+/** Stagehand-specific browser settings. */
+export interface StagehandSettings {
+  env: StagehandEnv;
+  apiKey?: string;
+  projectId?: string;
+}
+
+/** Browser configuration persisted in global settings. */
+export interface BrowserSettings {
+  /** Whether browser automation is enabled. */
+  enabled: boolean;
+  /** Which browser provider to use. */
+  provider: BrowserProvider;
+  /** Whether to run headless (no visible browser window). */
+  headless: boolean;
+  /** Browser viewport dimensions. */
+  viewport?: { width: number; height: number };
+  /** CDP URL for connecting to an existing browser. */
+  cdpUrl?: string;
+  /** Stagehand-specific settings. */
+  stagehand?: StagehandSettings;
+}
 
 export interface GlobalSettings {
   // Onboarding tracking
@@ -125,6 +155,8 @@ export interface GlobalSettings {
   memoryGateway: { baseUrl?: string };
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
+  // Browser automation configuration
+  browser: BrowserSettings;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -163,6 +195,13 @@ const DEFAULTS: GlobalSettings = {
   updateDismissedVersion: null,
   memoryGateway: {},
   lsp: {},
+  browser: {
+    enabled: false,
+    provider: 'stagehand',
+    headless: false,
+    viewport: { width: 1280, height: 720 },
+    stagehand: { env: 'LOCAL' },
+  },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -250,6 +289,46 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
   return parsedProviders;
 }
 
+const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser']);
+const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
+
+/**
+ * Deep-merge and validate browser settings from JSON.
+ * Explicitly validates types to handle malformed settings.json gracefully.
+ */
+function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
+  const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
+  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const rawStagehand =
+    raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
+    provider:
+      typeof raw.provider === 'string' && BROWSER_PROVIDERS.has(raw.provider as BrowserProvider)
+        ? (raw.provider as BrowserProvider)
+        : DEFAULTS.browser.provider,
+    headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
+    cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    viewport: {
+      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
+      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
+    },
+    stagehand: {
+      env:
+        typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
+          ? (rawStagehand.env as StagehandEnv)
+          : DEFAULTS.browser.stagehand!.env,
+      ...(typeof rawStagehand.apiKey === 'string' && rawStagehand.apiKey.trim()
+        ? { apiKey: rawStagehand.apiKey.trim() }
+        : {}),
+      ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
+        ? { projectId: rawStagehand.projectId.trim() }
+        : {}),
+    },
+  };
+}
+
 /**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
@@ -291,6 +370,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        browser: parseBrowserSettings(raw.browser),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -408,6 +488,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      browser: parseBrowserSettings(raw.browser),
     };
 
     // Migrate legacy omModelId → omModelOverride
@@ -570,4 +651,38 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/**
+ * Create a browser instance from settings.
+ * Shared by startup (main.ts) and live reconfiguration (/browser command).
+ * Returns undefined if browser is disabled.
+ */
+export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+  if (!settings.enabled) {
+    return undefined;
+  }
+
+  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    return new StagehandBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
+      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+    });
+  } else if (provider === 'agent-browser') {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return new AgentBrowser({
+      headless,
+      viewport,
+      cdpUrl,
+    });
+  }
+
+  throw new Error(`Unsupported browser provider: ${provider}`);
 }

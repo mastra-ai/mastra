@@ -1,6 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
-import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -114,7 +113,7 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
+function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
   const anthropic = createAnthropic({ apiKey, headers });
   return wrapLanguageModel({
     model: anthropic(modelId),
@@ -125,7 +124,7 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: Mode
 /**
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
+function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
   const openai = createOpenAI({ apiKey, headers });
   return wrapLanguageModel({
     model: openai.responses(modelId),

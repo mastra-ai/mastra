@@ -1,4 +1,5 @@
 import type { GetAgentResponse, StoredAgentResponse } from '@mastra/client-js';
+import { parse as superjsonParse } from 'superjson';
 
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 
@@ -18,13 +19,15 @@ import {
  * loaded into the edit form for creating stored config overrides.
  */
 export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentDataSource {
-  // Parse requestContextSchema from stringified JSON to an object
+  // Parse requestContextSchema from stringified JSON to an object.
+  // Code agents serialize with superjson.stringify(), so we use superjsonParse
+  // to unwrap the {json: {...}} envelope. Stored agents provide a plain object.
   let requestContextSchema: unknown;
   if (agent.requestContextSchema) {
     try {
       requestContextSchema =
         typeof agent.requestContextSchema === 'string'
-          ? JSON.parse(agent.requestContextSchema)
+          ? superjsonParse(agent.requestContextSchema)
           : agent.requestContextSchema;
     } catch {
       // Invalid JSON — skip

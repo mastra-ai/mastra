@@ -29,6 +29,11 @@ class TestableMemory extends Memory {
   }
 }
 
+function getTextParts(message: MastraDBMessage): string[] {
+  const parts = Array.isArray(message.content.parts) ? message.content.parts : [];
+  return parts.filter(part => part.type === 'text').map(part => part.text);
+}
+
 describe('Memory', () => {
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
@@ -1838,6 +1843,92 @@ describe('Memory', () => {
       await memory.saveMessages({ messages });
     });
 
+    it('filters system reminder user messages from recall() by default', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-metadata',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+          {
+            id: 'msg-reminder-legacy',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+            },
+            createdAt: new Date('2024-01-01T10:07:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-metadata');
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-legacy');
+    });
+
+    it('includes system reminder user messages when includeSystemReminders is true', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-visible',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+        includeSystemReminders: true,
+      });
+
+      expect(result.messages.map(message => message.id)).toContain('msg-reminder-visible');
+      expect(getTextParts(result.messages.find(message => message.id === 'msg-reminder-visible')!)).toContain(
+        reminderMarkup,
+      );
+    });
+
     it('should return pagination metadata from recall()', async () => {
       const result = await memory.recall({
         threadId,
@@ -2148,6 +2239,175 @@ describe('Memory', () => {
           filter: { message_id: { $in: messageIds.slice(100, 150) } },
         });
       });
+    });
+  });
+
+  describe('Memory tracing', () => {
+    function createMockSpan() {
+      const childSpan = {
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+      const parentSpan = {
+        createChildSpan: vi.fn().mockReturnValue(childSpan),
+      };
+      return { parentSpan, childSpan };
+    }
+
+    function createTracedMemory() {
+      const store = new InMemoryStore();
+      const memory = new Memory({ storage: store });
+      return memory;
+    }
+
+    async function seedThread(memory: Memory, threadId: string, resourceId: string) {
+      await memory.createThread({ threadId, resourceId });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
+        },
+      ];
+      await memory.saveMessages({ messages });
+      return messages;
+    }
+
+    it('recall creates a span and ends it with message count on success', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await seedThread(memory, 'thread-1', 'resource-1');
+
+      const result = await memory.recall({
+        threadId: 'thread-1',
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.type).toBe('memory_operation');
+      expect(spanArgs.attributes.operationType).toBe('recall');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      const endArgs = childSpan.end.mock.calls[0][0];
+      expect(endArgs.output.success).toBe(true);
+      expect(endArgs.attributes.messageCount).toBe(result.messages.length);
+    });
+
+    it('recall records error on span when it fails', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      // Recall on a non-existent thread with resourceId triggers validation error
+      await expect(
+        memory.recall({
+          threadId: 'nonexistent',
+          resourceId: 'res-1',
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+        }),
+      ).rejects.toThrow();
+
+      expect(childSpan.error).toHaveBeenCalledTimes(1);
+      expect(childSpan.error.mock.calls[0][0].endSpan).toBe(true);
+    });
+
+    it('saveMessages creates a span and ends it with correct attributes', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await memory.createThread({ threadId: 'thread-2', resourceId: 'resource-2' });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-save-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId: 'thread-2',
+          resourceId: 'resource-2',
+          content: { format: 2, parts: [{ type: 'text', text: 'Test message' }] },
+        },
+      ];
+
+      await memory.saveMessages({
+        messages,
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('save');
+      expect(spanArgs.attributes.messageCount).toBe(1);
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+    });
+
+    it('deleteMessages creates a span and ends it with message count', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await seedThread(memory, 'thread-del', 'resource-del');
+
+      await memory.deleteMessages(['msg-1'], { tracingContext: { currentSpan: parentSpan as any } });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('delete');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+      expect(childSpan.end.mock.calls[0][0].attributes.messageCount).toBe(1);
+    });
+
+    it('updateWorkingMemory creates a span and ends it on success', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, scope: 'thread' } },
+      });
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await memory.createThread({ threadId: 'thread-wm', resourceId: 'resource-wm' });
+
+      await memory.updateWorkingMemory({
+        threadId: 'thread-wm',
+        workingMemory: 'updated memory content',
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('update');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+    });
+
+    it('updateWorkingMemory throws without creating a span when working memory is disabled', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await expect(
+        memory.updateWorkingMemory({
+          threadId: 'thread-fail',
+          workingMemory: 'data',
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+        }),
+      ).rejects.toThrow('Working memory is not enabled');
+
+      expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+      expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
 });
