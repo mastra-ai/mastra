@@ -61,6 +61,47 @@ function askInline(
 }
 
 /**
+ * Helper to show an inline text input and return the answer.
+ */
+function askText(
+  ctx: SlashCommandContext,
+  question: string,
+  defaultValue?: string,
+): Promise<string | null> {
+  return new Promise(resolve => {
+    const questionComponent = new AskQuestionInlineComponent(
+      {
+        question,
+        allowEmptyInput: true,
+        formatResult: answer => answer || '(empty)',
+        onSubmit: answer => {
+          ctx.state.activeInlineQuestion = undefined;
+          const trimmed = answer.trim();
+          resolve(trimmed.length > 0 ? trimmed : null);
+        },
+        onCancel: () => {
+          ctx.state.activeInlineQuestion = undefined;
+          resolve(null);
+        },
+      },
+      ctx.state.ui,
+    );
+
+    // Set default value if provided
+    if (defaultValue) {
+      (questionComponent as any).input?.setValue?.(defaultValue);
+    }
+
+    ctx.state.activeInlineQuestion = questionComponent;
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.chatContainer.addChild(questionComponent);
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.ui.requestRender();
+    ctx.state.chatContainer.invalidate();
+  });
+}
+
+/**
  * Apply browser settings to all mode agents and track the active settings.
  */
 function applyBrowserToAgents(
@@ -145,6 +186,17 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     switch (key) {
       case 'profile':
         settings.browser.profile = expandedValue;
+        // Auto-set preserveUserDataDir for Stagehand when profile is configured
+        if (expandedValue) {
+          settings.browser.stagehand = {
+            ...settings.browser.stagehand,
+            env: settings.browser.stagehand?.env ?? 'LOCAL',
+            preserveUserDataDir: true,
+          };
+        } else if (settings.browser.stagehand) {
+          // Clear preserveUserDataDir when profile is cleared
+          delete settings.browser.stagehand.preserveUserDataDir;
+        }
         break;
       case 'executablepath':
         settings.browser.executablePath = expandedValue;
@@ -353,19 +405,86 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     headless = headlessChoice === 'Yes';
   }
 
-  // Preserve existing advanced options (profile, executablePath, storageState)
-  // Users can set these via /browser set <key> <value>
-  const profile = browser.profile;
-  const executablePath = browser.executablePath;
-  const storageState = browser.agentBrowser?.storageState;
+  // Step 5: Advanced options (profile, executablePath, etc.)
+  let profile = browser.profile;
+  let executablePath = browser.executablePath;
+  let storageState = browser.agentBrowser?.storageState;
+  let cdpUrl = browser.cdpUrl;
+
+  // Only show advanced options for local browsers (not Browserbase)
+  if (!isBrowserbase) {
+    const advancedChoice = await askInline(ctx, 'Configure advanced options?', [
+      { label: 'No', description: 'Use defaults (recommended)' },
+      { label: 'Custom browser', description: 'Set executable path and/or profile directory' },
+      { label: 'Connect to running', description: 'Connect via CDP URL to an already-running browser' },
+    ]);
+
+    if (!advancedChoice) {
+      ctx.showInfo('Browser setup cancelled.');
+      return;
+    }
+
+    if (advancedChoice === 'Custom browser') {
+      // Ask for executable path
+      const execPath = await askText(
+        ctx,
+        'Browser executable path (press Enter to skip):',
+        executablePath,
+      );
+      if (execPath !== null) {
+        executablePath = execPath.replace(/^~/, process.env.HOME || '~');
+      }
+
+      // Ask for profile directory
+      const profilePath = await askText(
+        ctx,
+        'Browser profile directory (press Enter to skip):',
+        profile,
+      );
+      if (profilePath !== null) {
+        profile = profilePath.replace(/^~/, process.env.HOME || '~');
+      }
+
+      // For agent-browser, also ask about storage state
+      if (provider === 'agent-browser') {
+        const storagePath = await askText(
+          ctx,
+          'Playwright storage state file (press Enter to skip):',
+          storageState,
+        );
+        if (storagePath !== null) {
+          storageState = storagePath.replace(/^~/, process.env.HOME || '~');
+        }
+      }
+    } else if (advancedChoice === 'Connect to running') {
+      const cdpUrlInput = await askText(
+        ctx,
+        'CDP WebSocket URL (e.g., ws://localhost:9222):',
+        cdpUrl,
+      );
+      if (cdpUrlInput === null) {
+        ctx.showInfo('Browser setup cancelled.');
+        return;
+      }
+      cdpUrl = cdpUrlInput;
+      // Clear profile/executable when using CDP (they don't apply)
+      profile = undefined;
+      executablePath = undefined;
+    }
+  }
 
   // Build new browser settings
+  // Auto-set preserveUserDataDir when profile is configured for Stagehand
+  if (provider === 'stagehand' && profile && stagehandSettings) {
+    stagehandSettings.preserveUserDataDir = true;
+  }
+
   const nextBrowser: BrowserSettings = {
     enabled: true,
     provider,
     headless,
     viewport: browser.viewport ?? { width: 1280, height: 720 },
-    cdpUrl: browser.cdpUrl,
+    cdpUrl,
     profile,
     executablePath,
     stagehand: stagehandSettings,
@@ -396,6 +515,20 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   // Only show headless for local browsers
   if (!isBrowserbase) {
     summary.push(`  Headless: ${headless ? 'yes' : 'no'}`);
+  }
+
+  // Show advanced options if configured
+  if (cdpUrl) {
+    summary.push(`  CDP URL: ${cdpUrl}`);
+  }
+  if (executablePath) {
+    summary.push(`  Executable: ${executablePath}`);
+  }
+  if (profile) {
+    summary.push(`  Profile: ${profile}`);
+  }
+  if (storageState) {
+    summary.push(`  Storage State: ${storageState}`);
   }
 
   ctx.showInfo(summary.join('\n'));
