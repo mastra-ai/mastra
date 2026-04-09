@@ -163,6 +163,49 @@ export interface BrowserConfigBase {
    * Controls image format, quality, and dimensions.
    */
   screencast?: ScreencastOptions;
+
+  // ==========================================================================
+  // Profile & Authentication Options
+  // ==========================================================================
+
+  /**
+   * Path to a Chrome/Chromium user data directory (profile).
+   * When provided, the browser will use this profile's cookies, localStorage,
+   * extensions, and other session data.
+   *
+   * **Important:** Chrome only allows one process to access a profile at a time.
+   * If Chrome is already running with this profile, the browser will fail to launch.
+   * Either close Chrome first, or use a copy of the profile.
+   *
+   * @example
+   * ```ts
+   * // macOS Chrome default profile
+   * { profile: '/Users/you/Library/Application Support/Google/Chrome' }
+   *
+   * // Custom profile directory
+   * { profile: '/path/to/my-automation-profile' }
+   * ```
+   */
+  profile?: string;
+
+  /**
+   * Path to the browser executable to use.
+   * By default, Playwright/Stagehand use their bundled Chromium.
+   * Use this to launch a specific browser installation instead.
+   *
+   * @example
+   * ```ts
+   * // macOS Chrome
+   * { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }
+   *
+   * // Linux Chrome
+   * { executablePath: '/usr/bin/google-chrome' }
+   *
+   * // Windows Chrome
+   * { executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' }
+   * ```
+   */
+  executablePath?: string;
 }
 
 /**

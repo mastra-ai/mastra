@@ -18,10 +18,11 @@ const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
  * /browser command - Configure browser automation for agents.
  *
  * Usage:
- *   /browser          - Interactive setup wizard
- *   /browser status   - Show current browser configuration
- *   /browser on       - Enable browser with current settings
- *   /browser off      - Disable browser
+ *   /browser              - Interactive setup wizard
+ *   /browser status       - Show current browser configuration
+ *   /browser on           - Enable browser with current settings
+ *   /browser off          - Disable browser
+ *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl)
  */
 
 /**
@@ -104,6 +105,75 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   // Handle quick commands
   const arg = args[0]?.toLowerCase();
 
+  // /browser set <key> <value> - set a specific setting
+  if (arg === 'set') {
+    const key = args[1]?.toLowerCase();
+    const value = args.slice(2).join(' '); // Allow spaces in paths
+
+    if (!key) {
+      ctx.showInfo(
+        'Usage: /browser set <key> <value>\n\n' +
+          'Keys:\n' +
+          '  profile <path>       - Browser profile directory\n' +
+          '  executablePath <path> - Browser executable path\n' +
+          '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
+          '  cdpUrl <url>         - CDP WebSocket URL\n\n' +
+          'Use "clear" as value to remove a setting.\n\n' +
+          'Examples:\n' +
+          '  /browser set profile ~/.mastracode/browser-profile\n' +
+          '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n' +
+          '  /browser set profile clear',
+      );
+      return;
+    }
+
+    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl'];
+    if (!validKeys.includes(key)) {
+      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl`);
+      return;
+    }
+
+    if (!value) {
+      ctx.showError(`Missing value. Use: /browser set ${args[1]} <value>`);
+      return;
+    }
+
+    const trimmedValue = value.trim();
+    const clearValue = trimmedValue.toLowerCase() === 'clear';
+    const expandedValue = clearValue ? undefined : trimmedValue.replace(/^~/, process.env.HOME || '~');
+
+    switch (key) {
+      case 'profile':
+        settings.browser.profile = expandedValue;
+        break;
+      case 'executablepath':
+        settings.browser.executablePath = expandedValue;
+        break;
+      case 'storagestate':
+        if (browser.provider !== 'agent-browser') {
+          ctx.showError('storageState is only supported by agent-browser provider.');
+          return;
+        }
+        settings.browser.agentBrowser = {
+          ...settings.browser.agentBrowser,
+          storageState: expandedValue,
+        };
+        break;
+      case 'cdpurl':
+        settings.browser.cdpUrl = expandedValue;
+        break;
+    }
+
+    saveSettings(settings);
+
+    if (clearValue) {
+      ctx.showInfo(`Cleared ${args[1]}. Run /browser on to apply.`);
+    } else {
+      ctx.showInfo(`Set ${args[1]} = ${expandedValue}\nRun /browser on to apply.`);
+    }
+    return;
+  }
+
   if (arg === 'status') {
     // Get the active browser settings from harness state (what's actually running)
     const state = ctx.harness.getState() as any;
@@ -161,6 +231,18 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
+      }
+      if (browser.executablePath) {
+        lines.push(`  Executable: ${browser.executablePath}`);
+      }
+      if (browser.profile) {
+        lines.push(`  Profile: ${browser.profile}`);
+      }
+      if (browser.agentBrowser?.storageState) {
+        lines.push(`  Storage State: ${browser.agentBrowser.storageState}`);
+      }
+      if (browser.cdpUrl) {
+        lines.push(`  CDP URL: ${browser.cdpUrl}`);
       }
       ctx.showInfo(lines.join('\n'));
     }
@@ -271,6 +353,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     headless = headlessChoice === 'Yes';
   }
 
+  // Preserve existing advanced options (profile, executablePath, storageState)
+  // Users can set these via /browser set <key> <value>
+  const profile = browser.profile;
+  const executablePath = browser.executablePath;
+  const storageState = browser.agentBrowser?.storageState;
+
   // Build new browser settings
   const nextBrowser: BrowserSettings = {
     enabled: true,
@@ -278,7 +366,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     headless,
     viewport: browser.viewport ?? { width: 1280, height: 720 },
     cdpUrl: browser.cdpUrl,
+    profile,
+    executablePath,
     stagehand: stagehandSettings,
+    agentBrowser: storageState ? { storageState } : undefined,
   };
 
   // Apply browser to agents first, then persist on success

@@ -77,6 +77,14 @@ export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /** Whether to preserve the user data directory after the browser closes. */
+  preserveUserDataDir?: boolean;
+}
+
+/** AgentBrowser-specific browser settings. */
+export interface AgentBrowserSettings {
+  /** Path to a Playwright storage state file (JSON) containing cookies and localStorage. */
+  storageState?: string;
 }
 
 /** Browser configuration persisted in global settings. */
@@ -91,8 +99,14 @@ export interface BrowserSettings {
   viewport?: { width: number; height: number };
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
+  /** Path to a Chrome/Chromium user data directory (profile). */
+  profile?: string;
+  /** Path to the browser executable to use. */
+  executablePath?: string;
   /** Stagehand-specific settings. */
   stagehand?: StagehandSettings;
+  /** AgentBrowser-specific settings. */
+  agentBrowser?: AgentBrowserSettings;
 }
 
 export interface GlobalSettings {
@@ -301,6 +315,8 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const rawAgentBrowser =
+    raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
@@ -310,6 +326,9 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         : DEFAULTS.browser.provider,
     headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
     cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    executablePath:
+      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
     viewport: {
       width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
       height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
@@ -326,6 +345,10 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
     },
+    agentBrowser:
+      typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
+        ? { storageState: rawAgentBrowser.storageState.trim() }
+        : undefined,
   };
 }
 
@@ -663,7 +686,7 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     return undefined;
   }
 
-  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
@@ -671,9 +694,12 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       headless,
       viewport,
       cdpUrl,
+      profile,
+      executablePath,
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+      preserveUserDataDir: stagehand?.preserveUserDataDir,
     });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
@@ -681,6 +707,9 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       headless,
       viewport,
       cdpUrl,
+      profile,
+      executablePath,
+      storageState: agentBrowser?.storageState,
     });
   }
 

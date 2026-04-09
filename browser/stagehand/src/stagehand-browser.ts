@@ -7,6 +7,7 @@
  * Stagehand v3 is CDP-native and provides direct CDP access for screencast/input injection.
  */
 
+import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
 import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
@@ -120,6 +121,9 @@ export class StagehandBrowser extends MastraBrowser {
       cdpUrl?: string;
       headless?: boolean;
       viewport?: { width: number; height: number };
+      userDataDir?: string;
+      executablePath?: string;
+      preserveUserDataDir?: boolean;
     };
   }> {
     const config = this.stagehandConfig;
@@ -137,6 +141,9 @@ export class StagehandBrowser extends MastraBrowser {
         cdpUrl?: string;
         headless?: boolean;
         viewport?: { width: number; height: number };
+        userDataDir?: string;
+        executablePath?: string;
+        preserveUserDataDir?: boolean;
       };
     } = {
       env: config.env ?? 'LOCAL',
@@ -158,6 +165,11 @@ export class StagehandBrowser extends MastraBrowser {
       }
     }
 
+    // Ensure profile directory exists if specified (Stagehand doesn't create it)
+    if (config.profile && !existsSync(config.profile)) {
+      mkdirSync(config.profile, { recursive: true });
+    }
+
     // Handle CDP URL for local browser with custom endpoint
     // Stagehand requires a WebSocket URL, so resolve HTTP URLs to WebSocket URLs
     if (config.cdpUrl && config.env !== 'BROWSERBASE') {
@@ -167,11 +179,17 @@ export class StagehandBrowser extends MastraBrowser {
         cdpUrl: wsUrl,
         headless: config.headless,
         viewport: config.viewport,
+        userDataDir: config.profile,
+        executablePath: config.executablePath,
+        preserveUserDataDir: config.preserveUserDataDir,
       };
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
         headless: config.headless,
         viewport: config.viewport,
+        userDataDir: config.profile,
+        executablePath: config.executablePath,
+        preserveUserDataDir: config.preserveUserDataDir,
       };
     }
 
