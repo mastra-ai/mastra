@@ -534,7 +534,7 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   private isMessageArray(data: unknown): data is MastraMessage[] {
-    if (!Array.isArray(data) || data.length === 0) {
+    if (!Array.isArray(data)) {
       return false;
     }
 

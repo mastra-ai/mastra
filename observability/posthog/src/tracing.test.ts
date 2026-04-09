@@ -785,6 +785,19 @@ describe('PosthogExporter', () => {
         },
       ]);
     });
+
+    it('should handle empty messages array without stringifying', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: { messages: [] },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([]);
+    });
   });
 
   // --- Priority 4: Integration Scenarios ---
