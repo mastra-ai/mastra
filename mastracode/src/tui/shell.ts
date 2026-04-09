@@ -13,6 +13,10 @@ export async function handleShellPassthrough(state: TUIState, command: string): 
   }
 
   const component = new ShellStreamComponent(command);
+  if (state.toolOutputExpanded) {
+    component.setExpanded(true);
+  }
+  state.allShellComponents.push(component);
   state.chatContainer.addChild(component);
   state.ui.requestRender();
 

@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
-import type { HarnessEvent, TaskItem } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessThread, TaskItem } from '@mastra/core/harness';
 
 import { getCurrentGitBranch } from '../utils/project.js';
 import {
@@ -21,6 +21,7 @@ import {
   handleOMBufferingEnd,
   handleOMBufferingFailed,
   handleOMActivation,
+  handleOMThreadTitleUpdated,
   handleAskQuestion,
   handleSandboxAccessRequest,
   handlePlanApproval,
@@ -128,19 +129,26 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (freshBranch) {
         state.projectInfo.gitBranch = freshBranch;
       }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
+      // Update current thread title for status line display
+      const threads = await state.harness.listThreads();
+      const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
+      if (currentThread) {
+        state.currentThreadTitle = currentThread.title;
+      }
+      // Clear tasks — they are ephemeral per-thread and should not leak
+      // from the previous thread's global harness state.
       if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
+        state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
+      state.taskWriteInsertIndex = -1;
       break;
     }
 
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
+      // Update current thread title for status line display
+      state.currentThreadTitle = event.thread.title;
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
@@ -210,6 +218,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'om_activation':
       handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+      break;
+
+    case 'om_thread_title_updated':
+      state.currentThreadTitle = event.newTitle;
+      handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
+      ectx.updateStatusLine();
       break;
 
     case 'follow_up_queued': {

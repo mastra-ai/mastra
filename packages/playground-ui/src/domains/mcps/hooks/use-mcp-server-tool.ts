@@ -1,7 +1,7 @@
-import { usePlaygroundStore } from '@/store/playground-store';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useMCPServerTool = (serverId: string, toolId: string) => {
   const { requestContext } = usePlaygroundStore();

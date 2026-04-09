@@ -1,19 +1,19 @@
+import type { DatasetItem } from '@mastra/client-js';
+import { format } from 'date-fns/format';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { DatasetItem } from '@mastra/client-js';
-import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { Sections } from '@/ds/components/Sections';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Label } from '@/ds/components/Label';
+import { Sections } from '@/ds/components/Sections';
+import { SideDialog } from '@/ds/components/SideDialog';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Icon } from '@/ds/icons/Icon';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
-import { format } from 'date-fns/format';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;
@@ -38,7 +38,6 @@ export function ItemDetailDialog({
   onItemChange,
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
-  const { Link } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
@@ -46,6 +45,7 @@ export function ItemDetailDialog({
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
+  const [trajectoryValue, setTrajectoryValue] = useState('');
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -56,6 +56,7 @@ export function ItemDetailDialog({
       setInputValue(JSON.stringify(item.input, null, 2));
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
     }
@@ -113,6 +114,17 @@ export function ItemDetailDialog({
       }
     }
 
+    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
+    let parsedTrajectory: unknown | null = null;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -120,6 +132,7 @@ export function ItemDetailDialog({
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        expectedTrajectory: parsedTrajectory,
       });
 
       toast.success('Item updated successfully');
@@ -134,6 +147,7 @@ export function ItemDetailDialog({
     setInputValue(JSON.stringify(item.input, null, 2));
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setIsEditing(false);
   };
 
@@ -197,12 +211,14 @@ export function ItemDetailDialog({
             setGroundTruthValue={setGroundTruthValue}
             metadataValue={metadataValue}
             setMetadataValue={setMetadataValue}
+            trajectoryValue={trajectoryValue}
+            setTrajectoryValue={setTrajectoryValue}
             onSave={handleSave}
             onCancel={handleCancel}
             isSaving={updateItem.isPending}
           />
         ) : (
-          <ReadOnlyContent item={item} Link={Link} />
+          <ReadOnlyContent item={item} />
         )}
       </SideDialog.Content>
 
@@ -230,8 +246,9 @@ export function ItemDetailDialog({
 /**
  * Read-only view of the dataset item details
  */
-function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
+function ReadOnlyContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
 
   return (
     <>
@@ -262,7 +279,6 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
                 ]
               : []),
           ]}
-          LinkComponent={Link}
         />
 
         <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
@@ -273,6 +289,10 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
+        )}
+
+        {trajectoryDisplay && (
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
         )}
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
@@ -291,6 +311,8 @@ interface EditModeContentProps {
   setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  trajectoryValue: string;
+  setTrajectoryValue: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -303,6 +325,8 @@ function EditModeContent({
   setGroundTruthValue,
   metadataValue,
   setMetadataValue,
+  trajectoryValue,
+  setTrajectoryValue,
   onSave,
   onCancel,
   isSaving,
@@ -328,6 +352,16 @@ function EditModeContent({
             onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Expected Trajectory (JSON, optional)</Label>
+          <CodeEditor
+            value={trajectoryValue}
+            onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
           />
         </div>
 

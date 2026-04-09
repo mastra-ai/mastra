@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentSettingsProvider,
@@ -11,10 +12,11 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   MainContentLayout,
-  type AgentSettingsType,
+  BrowserToolCallsProvider,
+  BrowserSessionProvider,
 } from '@mastra/playground-ui';
+import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { SessionHeader } from '@/components/session-header';
@@ -42,7 +44,7 @@ function AgentSession() {
     if (!hasMemory) return;
     if (threadId) return;
 
-    navigate(`/agents/${agentId}/session/new`);
+    void navigate(`/agents/${agentId}/session/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -91,7 +93,7 @@ function AgentSession() {
     await refreshThreads();
 
     if (isNewThread) {
-      navigate(`/agents/${agentId}/session/${newThreadId}`);
+      void navigate(`/agents/${agentId}/session/${newThreadId}`);
     }
   };
 
@@ -100,30 +102,38 @@ function AgentSession() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider>
-                  <MainContentLayout>
-                    <SessionHeader />
-                    <div className="grid overflow-y-auto relative bg-surface1 h-full pt-6">
-                      <AgentChat
-                        key={actualThreadId}
-                        agentId={agentId!}
-                        agentName={agent?.name}
-                        modelVersion={agent?.modelVersion}
-                        threadId={actualThreadId}
-                        memory={hasMemory}
-                        refreshThreadList={handleRefreshThreadList}
-                        modelList={agent?.modelList}
-                        messageId={messageId}
-                        isNewThread={isNewThread}
-                        hideModelSwitcher
-                      />
-                    </div>
-                  </MainContentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
+            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+              <BrowserSessionProvider
+                key={`session-${agentId}-${actualThreadId}`}
+                agentId={agentId!}
+                threadId={actualThreadId}
+              >
+                <ThreadInputProvider>
+                  <ObservationalMemoryProvider>
+                    <ActivatedSkillsProvider>
+                      <MainContentLayout>
+                        <SessionHeader />
+                        <div className="grid overflow-y-auto relative bg-surface1 h-full pt-6">
+                          <AgentChat
+                            key={actualThreadId}
+                            agentId={agentId!}
+                            agentName={agent?.name}
+                            modelVersion={agent?.modelVersion}
+                            threadId={actualThreadId}
+                            memory={hasMemory}
+                            refreshThreadList={handleRefreshThreadList}
+                            modelList={agent?.modelList}
+                            messageId={messageId}
+                            isNewThread={isNewThread}
+                            hideModelSwitcher
+                          />
+                        </div>
+                      </MainContentLayout>
+                    </ActivatedSkillsProvider>
+                  </ObservationalMemoryProvider>
+                </ThreadInputProvider>
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
           </WorkingMemoryProvider>
         </SchemaRequestContextProvider>
       </AgentSettingsProvider>

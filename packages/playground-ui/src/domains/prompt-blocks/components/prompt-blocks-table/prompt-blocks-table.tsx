@@ -1,17 +1,16 @@
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { FileTextIcon } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { columns } from './columns';
+import type { PromptBlockTableData } from './types';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { Icon } from '@/ds/icons/Icon';
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-import { FileTextIcon } from 'lucide-react';
-
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
-import { PromptBlockTableData } from './types';
-import { useLinkComponent } from '@/lib/framework';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+
+import { useLinkComponent } from '@/lib/framework';
 
 export interface PromptBlocksTableProps {
   promptBlocks: PromptBlockTableData[];

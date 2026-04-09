@@ -1,17 +1,19 @@
+import { useToolkits } from '../hooks/use-toolkits';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
-import { useToolkits } from '../hooks/use-toolkits';
+export const SELECTED_TOOLKIT_SENTINEL = '__selected__';
 
 interface ToolkitListProps {
   providerId: string;
   selectedToolkit: string | undefined;
   onSelectToolkit: (toolkit: string | undefined) => void;
+  selectedCount?: number;
 }
 
-export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit }: ToolkitListProps) {
+export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, selectedCount = 0 }: ToolkitListProps) {
   const { data, isLoading } = useToolkits(providerId);
   const toolkits = data?.data ?? [];
 
@@ -40,6 +42,25 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit }: To
           )}
         >
           All
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
+          className={cn(
+            'text-left px-3 py-2 rounded-md text-ui-sm flex items-center justify-between gap-2',
+            transitions.colors,
+            selectedToolkit === SELECTED_TOOLKIT_SENTINEL
+              ? 'bg-surface4 text-neutral6 font-medium'
+              : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
+          )}
+        >
+          Selected
+          {selectedCount > 0 && (
+            <span className="text-ui-xs tabular-nums bg-surface3 rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+              {selectedCount}
+            </span>
+          )}
         </button>
 
         {toolkits.map(toolkit => (

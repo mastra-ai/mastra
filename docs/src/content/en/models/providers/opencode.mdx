@@ -190,6 +190,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.2
   },
   {
+    "model": "opencode/glm-5.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
     "model": "opencode/gpt-5",
     "imageInput": true,
     "audioInput": false,
@@ -382,18 +394,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "opencode/mimo-v2-flash-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/minimax-m2.5",
     "imageInput": false,
     "audioInput": false,
@@ -424,7 +424,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 204800,
     "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null

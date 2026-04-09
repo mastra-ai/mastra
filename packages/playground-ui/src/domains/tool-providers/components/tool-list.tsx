@@ -1,14 +1,13 @@
 import { useState } from 'react';
 
+import { useProviderTools } from '../hooks/use-provider-tools';
+import { Badge } from '@/ds/components/Badge';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { Badge } from '@/ds/components/Badge';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
-
-import { useProviderTools } from '../hooks/use-provider-tools';
 
 interface ToolListProps {
   providerId: string;
@@ -60,6 +59,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                   onKeyDown={
                     onToggle
                       ? e => {
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
                             onToggle(toolId, tool.description || '');

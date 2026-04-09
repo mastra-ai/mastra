@@ -1,26 +1,23 @@
-import { Slider } from '@/ds/components/Slider';
-
-import { Label } from '@/ds/components/Label';
-
 import { RefreshCw, Info } from 'lucide-react';
 
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-
-import { Entry } from '@/ds/components/Entry';
 import { useAgentSettings } from '../context/agent-context';
-import { Button } from '@/ds/components/Button/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Txt } from '@/ds/components/Txt/Txt';
 
-import { AgentAdvancedSettings } from './agent-advanced-settings';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { cn } from '@/lib/utils';
 import { useAgent } from '../hooks/use-agent';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
+import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { Button } from '@/ds/components/Button/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { Entry } from '@/ds/components/Entry';
+import { Label } from '@/ds/components/Label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Slider } from '@/ds/components/Slider';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/lib/utils';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -33,7 +30,7 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={!isNetworkAvailable} />
       <Label
-        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && '!text-neutral3 cursor-not-allowed')}
+        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -178,7 +175,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
         {hasSamplingRestriction &&
           (settings?.modelSettings?.temperature !== undefined || settings?.modelSettings?.topP !== undefined) && (
             <div className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2">
-              <Info className="w-3.5 h-3.5 flex-shrink-0" />
+              <Info className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {settings?.modelSettings?.temperature !== undefined
                   ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'

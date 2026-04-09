@@ -1,11 +1,5 @@
-import {
-  AnchorHTMLAttributes,
-  createContext,
-  forwardRef,
-  ForwardRefExoticComponent,
-  RefAttributes,
-  useContext,
-} from 'react';
+import type { AnchorHTMLAttributes, ForwardRefExoticComponent, RefAttributes } from 'react';
+import { createContext, forwardRef, useContext } from 'react';
 
 // Define the props type for your Link component
 export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
@@ -17,7 +11,7 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) => string;
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
 
@@ -41,10 +35,10 @@ type LinkComponentPaths = {
   cmsPromptBlockEditLink: (promptBlockId: string) => string;
 
   toolLink: (toolId: string) => string;
-  skillLink: (skillName: string, workspaceId?: string) => string;
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) => string;
   workspacesLink: () => string;
   workspaceLink: (workspaceId?: string) => string;
-  workspaceSkillLink: (skillName: string, workspaceId?: string) => string;
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) => string;
   processorsLink: () => string;
   processorLink: (processorId: string) => string;
 
@@ -55,6 +49,7 @@ type LinkComponentPaths = {
   datasetLink: (datasetId: string) => string;
   datasetItemLink: (datasetId: string, itemId: string) => string;
   datasetExperimentLink: (datasetId: string, experimentId: string) => string;
+  experimentLink: (experimentId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -98,6 +93,7 @@ const LinkComponentContext = createContext<{
     datasetLink: () => '',
     datasetItemLink: () => '',
     datasetExperimentLink: () => '',
+    experimentLink: () => '',
   },
 });
 

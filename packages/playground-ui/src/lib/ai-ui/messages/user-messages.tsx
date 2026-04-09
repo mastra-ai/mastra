@@ -1,12 +1,9 @@
-import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
+import { MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-
-import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 import { DatasetSaveAction } from './dataset-save-action';
-
+import { SystemReminderBadge } from './system-reminder-badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
@@ -48,7 +45,7 @@ export const UserMessage = () => {
       data-message-index={message?.index}
     >
       <DatasetSaveAction />
-      <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
+      <div className="max-w-[366px] break-words px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
           components={{
             File: p => {
@@ -69,6 +66,10 @@ export const UserMessage = () => {
               return <InMessageAttachment type="image" nameSlot="Unknown filename" src={p.image} />;
             },
             Text: p => {
+              if (p.text.trimStart().startsWith('<system-reminder')) {
+                return <SystemReminderBadge text={p.text} />;
+              }
+
               if (p.text.includes('<attachment name=')) {
                 return (
                   <InMessageAttachment

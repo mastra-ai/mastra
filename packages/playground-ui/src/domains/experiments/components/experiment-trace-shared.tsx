@@ -1,8 +1,8 @@
-import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { BrainIcon } from 'lucide-react';
-import { type ExperimentUISpanStyle } from '../types';
+import type { ExperimentUISpanStyle } from '../types';
+import { AgentIcon, FolderIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'other'];
+export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'workspace', 'other'];
 
 export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | null {
   const typePrefix = type?.toLowerCase().split('_')[0];
@@ -42,6 +42,13 @@ export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | n
       label: 'Tool',
       bgColor: 'bg-oklch(0.75 0.15 100 / 0.1)',
       typePrefix: 'tool',
+    },
+    workspace: {
+      icon: <FolderIcon />,
+      color: 'oklch(0.75 0.15 40)',
+      label: 'Workspace',
+      bgColor: 'bg-oklch(0.75 0.15 40 / 0.1)',
+      typePrefix: 'workspace',
     },
   };
 

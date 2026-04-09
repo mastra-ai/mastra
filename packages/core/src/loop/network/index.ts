@@ -1,5 +1,5 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
@@ -27,14 +27,14 @@ import { PRIMITIVE_TYPES } from '../types';
 
 /**
  * Convert a schema (PublicSchema) to JSON Schema.
- * Handles Zod v3/v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
+ * Handles Zod v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
  */
 function schemaToJsonSchema(schema: PublicSchema): unknown {
   if (isStandardSchemaWithJSON(schema)) {
     return standardSchemaToJSONSchema(schema);
   }
 
-  // Try to convert raw Zod schema (v3 or v4) to StandardSchema
+  // Try to convert raw Zod v4 schema to StandardSchema
   try {
     const standardSchema = toStandardSchema(schema);
     return standardSchemaToJSONSchema(standardSchema);
@@ -307,6 +307,7 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
+          observabilityContext,
         }),
       );
     }
@@ -322,6 +323,7 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
+          observabilityContext,
         }),
       );
     }
@@ -350,6 +352,7 @@ export async function prepareMemoryStep({
       const existingMessages = await memory.recall({
         threadId: thread.id,
         resourceId: thread.resourceId,
+        observabilityContext,
       });
       const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
       const isFirstUserMessage = existingUserMessages.length === 0;
@@ -393,7 +396,12 @@ export async function prepareMemoryStep({
  */
 async function saveMessagesWithProcessors(
   memory:
-    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | {
+        saveMessages: (params: {
+          messages: MastraDBMessage[];
+          observabilityContext?: Partial<ObservabilityContext>;
+        }) => Promise<{ messages: MastraDBMessage[] }>;
+      }
     | undefined,
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
@@ -403,8 +411,11 @@ async function saveMessagesWithProcessors(
 ): Promise<void> {
   if (!memory) return;
 
+  const { requestContext, ...observabilityContext } = context ?? {};
+  const resolved = resolveObservabilityContext(observabilityContext);
+
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages, observabilityContext: resolved });
     return;
   }
 
@@ -414,17 +425,11 @@ async function saveMessagesWithProcessors(
     messageList.add(msg, 'response');
   }
 
-  // Run output processors on the messages
-  const { requestContext, ...observabilityContext } = context ?? {};
-  await processorRunner.runOutputProcessors(
-    messageList,
-    resolveObservabilityContext(observabilityContext),
-    requestContext,
-  );
+  await processorRunner.runOutputProcessors(messageList, resolved, requestContext);
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages });
+  await memory.saveMessages({ messages: processedMessages, observabilityContext: resolved });
 }
 
 async function saveFinalResultIfProvided({
@@ -1708,6 +1713,7 @@ export async function createNetworkLoop({
           requestContext,
           mastra: agent.getMastraInstance(),
           agent: {
+            agentId: agent.id,
             resourceId: initData.threadResourceId || networkName,
             toolCallId,
             threadId: initData.threadId,

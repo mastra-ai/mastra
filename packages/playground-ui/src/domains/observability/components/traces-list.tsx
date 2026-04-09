@@ -1,11 +1,11 @@
-import { EntryList } from '@/ds/components/EntryList';
-import { getShortId } from '@/ds/components/Text';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { cn } from '@/lib/utils';
 import { format, isToday } from 'date-fns';
 import { ChevronRightIcon } from 'lucide-react';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
 import { getInputPreview } from '../utils/span-utils';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { EntryList } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
+import { cn } from '@/lib/utils';
 
 export const tracesListColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
@@ -25,6 +25,7 @@ type Trace = {
   entityName?: string | null;
   attributes?: Record<string, any> | null;
   input?: unknown;
+  startedAt?: Date | string | null;
   createdAt: Date | string;
   threadId?: string | null;
 };
@@ -44,14 +45,14 @@ type TracesListProps = {
 };
 
 function traceToEntry(trace: Trace, selectedTraceId?: string) {
-  const createdAtDate = new Date(trace.createdAt);
-  const isTodayDate = isToday(createdAtDate);
+  const displayDate = new Date(trace.startedAt ?? trace.createdAt);
+  const isTodayDate = isToday(displayDate);
 
   return {
     id: trace.traceId,
     shortId: getShortId(trace?.traceId) || 'n/a',
-    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-    time: format(createdAtDate, 'h:mm:ss aaa'),
+    date: isTodayDate ? 'Today' : format(displayDate, 'MMM dd'),
+    time: format(displayDate, 'h:mm:ss aaa'),
     name: trace?.name,
     input: getInputPreview(trace?.input),
     entityId: trace?.entityName || trace?.entityId || trace?.attributes?.agentId || trace?.attributes?.workflowId,

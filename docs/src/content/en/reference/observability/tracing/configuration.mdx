@@ -52,8 +52,11 @@ interface ObservabilityInstanceConfig {
   exporters?: ObservabilityExporter[]
   spanOutputProcessors?: SpanOutputProcessor[]
   includeInternalSpans?: boolean
+  excludeSpanTypes?: SpanType[]
+  spanFilter?: (span: AnyExportedSpan) => boolean
   requestContextKeys?: string[]
   serializationOptions?: SerializationOptions
+  logging?: { enabled?: boolean; level?: LogLevel }
 }
 ```
 
@@ -96,6 +99,20 @@ interface ObservabilityInstanceConfig {
     required: false,
   },
   {
+    name: 'excludeSpanTypes',
+    type: 'SpanType[]',
+    description:
+      'Span types to exclude from export. Useful for reducing noise and costs in per-span billing platforms. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
+    required: false,
+  },
+  {
+    name: 'spanFilter',
+    type: '(span: AnyExportedSpan) => boolean',
+    description:
+      'Filter function to control which spans are exported. Return true to keep, false to drop. Runs after excludeSpanTypes and spanOutputProcessors. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
+    required: false,
+  },
+  {
     name: 'requestContextKeys',
     type: 'string[]',
     description: 'RequestContext keys to extract as metadata (supports dot notation)',
@@ -132,6 +149,33 @@ interface ObservabilityInstanceConfig {
             name: 'maxObjectKeys',
             type: 'number',
             description: 'Maximum number of keys in objects (default: 50)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'logging',
+    type: '{ enabled?: boolean; level?: LogLevel }',
+    description:
+      'Controls log forwarding to observability storage. See [Logging to observability storage](/docs/observability/logging#logging-to-observability-storage) for details.',
+    required: false,
+    properties: [
+      {
+        type: '{ enabled?: boolean; level?: LogLevel }',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            description: 'Set to false to disable log forwarding to observability storage (default: true)',
+            isOptional: true,
+          },
+          {
+            name: 'level',
+            type: 'LogLevel',
+            description:
+              "Minimum log level to forward. One of 'debug', 'info', 'warn', 'error', 'fatal' (default: 'debug')",
             isOptional: true,
           },
         ],
@@ -279,3 +323,4 @@ Shuts down all observability instances and clears the registry.
 - [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
 - [LangSmith](/reference/observability/tracing/exporters/langsmith) - LangSmith integration
+- [Span filtering](/reference/observability/tracing/span-filtering) - Selectively exclude spans

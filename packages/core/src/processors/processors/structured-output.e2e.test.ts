@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 
 import { createTool } from '../../tools';

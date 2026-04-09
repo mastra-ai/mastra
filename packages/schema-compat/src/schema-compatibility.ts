@@ -658,8 +658,13 @@ export abstract class SchemaCompatLayer {
    * Uses 'input' io mode so that fields with defaults are optional (appropriate for tool parameters).
    */
   public toJSONSchema(zodSchema: ZodType): JSONSchema7 {
-    const target =
-      this.getSchemaTarget() === 'jsonSchema7' ? ('draft-07' as StandardJSONSchemaV1.Target) : this.getSchemaTarget();
+    const SCHEMA_TARGET_TO_STANDARD: Record<string, StandardJSONSchemaV1.Target> = {
+      jsonSchema7: 'draft-07',
+      'jsonSchema2019-09': 'draft-2020-12',
+      openApi3: 'openapi-3.0',
+    };
+    const schemaTarget = this.getSchemaTarget();
+    const target = (schemaTarget && SCHEMA_TARGET_TO_STANDARD[schemaTarget]) ?? schemaTarget;
     const standardSchema = toStandardSchema(zodSchema);
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target,

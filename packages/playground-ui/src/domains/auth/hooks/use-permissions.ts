@@ -22,8 +22,8 @@
  * ```
  */
 
-import { useAuthCapabilities } from './use-auth-capabilities';
 import { isAuthenticated } from '../types';
+import { useAuthCapabilities } from './use-auth-capabilities';
 
 /**
  * Permission matching logic.

@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import type { ZodError } from 'zod';
+import type { ZodError } from 'zod/v4';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -222,6 +222,23 @@ export type ServerConfig = {
    * @default 4_718_592 bytes (4.5 MB)
    */
   bodySizeLimit?: number;
+
+  /**
+   * MCP transport options applied to all MCP HTTP and SSE routes.
+   * Use this to enable stateless mode for serverless environments
+   * (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
+   */
+  mcpOptions?: {
+    /**
+     * Run MCP in stateless mode without session management
+     * @default false
+     */
+    serverless?: boolean;
+    /**
+     * Custom session ID generator function
+     */
+    sessionIdGenerator?: () => string;
+  };
 
   /**
    * Authentication configuration for the server.

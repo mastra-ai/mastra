@@ -1,13 +1,11 @@
 import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { Input } from '@/ds/components/Input';
+import { CopyButton } from '@/ds/components/CopyButton';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +16,12 @@ import {
   DialogFooter,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;
@@ -34,6 +35,8 @@ interface AgentPlaygroundVersionBarProps {
   readOnly: boolean;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  /** Whether the user is viewing a previous (non-latest) version that can be published */
+  isViewingPreviousVersion?: boolean;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -59,6 +62,7 @@ export function AgentPlaygroundVersionBar({
   readOnly,
   onSaveDraft,
   onPublish,
+  isViewingPreviousVersion = false,
 }: AgentPlaygroundVersionBarProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
@@ -128,12 +132,14 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+
         <HoverPopover>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
             >
               <Icon size="sm">
                 <Info />
@@ -206,7 +212,11 @@ export function AgentPlaygroundVersionBar({
           variant="cta"
           size="md"
           onClick={onPublish}
-          disabled={readOnly || (!hasDraft && !isDirty) || isPublishing || isSavingDraft}
+          disabled={
+            isViewingPreviousVersion
+              ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
+              : readOnly || !hasDraft || isPublishing || isSavingDraft
+          }
         >
           {isPublishing ? (
             <>
@@ -218,7 +228,7 @@ export function AgentPlaygroundVersionBar({
               <Icon size="sm">
                 <Check />
               </Icon>
-              Publish
+              {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
             </>
           )}
         </Button>
@@ -241,7 +251,7 @@ export function AgentPlaygroundVersionBar({
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
-                      handleSaveWithMessage();
+                      void handleSaveWithMessage();
                     }
                   }}
                   disabled={isSavingDraft}

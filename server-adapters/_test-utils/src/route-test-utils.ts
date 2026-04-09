@@ -67,6 +67,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('skill')) return 'test-skill';
   if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
   if (field.includes('thread')) return 'test-thread';
+  if (field === 'conversationid') return 'test-thread';
   if (field.includes('resource')) return 'test-resource';
   if (field.includes('run')) return 'test-run';
   if (field.includes('step')) return 'test-step';
@@ -78,8 +79,9 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('vector')) return 'test-vector';
   if (field.includes('index')) return 'test-index';
   if (field.includes('message')) return 'test-message';
+  if (field === 'responseid') return 'test-response';
   if (field.includes('transport')) return 'test-transport';
-  if (field.includes('model')) return 'gpt-4o';
+  if (field.includes('model')) return 'openai/gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
   if (field.includes('provider')) return 'test-provider';
@@ -260,7 +262,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         // Special case: workflow routes need inputData field even when optional
         // because _run.start() expects { inputData?, ... } structure, not just {}
         // Without this, z.object({}).safeParse(undefined) fails with "Required" error
-        if (key === 'inputData') {
+        if (key === 'inputData' || key === 'agent_id') {
           const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
           const innerType = fieldDef.innerType;
           obj[key] = generateValidDataFromSchema(innerType, key);
@@ -346,6 +348,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
+  if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
+  if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
   // For stored scorer version routes, use the stored scorer ID to match test context
@@ -395,6 +399,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
   if (route.path.includes(':itemId')) params.itemId = 'test-item';
   if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':resultId')) params.resultId = 'test-result';
   if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
 
   // Tool provider route params

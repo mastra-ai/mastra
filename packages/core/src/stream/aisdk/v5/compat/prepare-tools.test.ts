@@ -1,6 +1,6 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 
@@ -340,6 +340,24 @@ describe('prepareToolsAndToolChoice', () => {
         activeTools: undefined,
       });
 
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
+      // Regression test: workflow tools injected via listWorkflowTools() were still
+      // being serialized in the HTTP request even when toolChoice was set to none.
+      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+      const workflowTool = createTool({
+        id: 'workflow-tool',
+        description: 'A workflow tool injected by listWorkflowTools()',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { workflowTool },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
     });

@@ -16,7 +16,7 @@ declare global {
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
-    MASTRA_THEME_TOGGLE?: string;
+    MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
 
@@ -27,8 +27,10 @@ import {
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
+  createFetchWithRefresh,
 } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -36,7 +38,9 @@ import { Link } from './lib/framework';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
+import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
@@ -53,7 +57,6 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
-import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
@@ -61,14 +64,19 @@ import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import Evaluation from './pages/evaluation';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
+import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
-import Observability from './pages/observability';
+import Metrics from './pages/metrics';
+import ObservabilityOverview from './pages/observability-overview';
+import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
-import Scorers from './pages/scorers';
+import Resources from './pages/resources';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
@@ -76,6 +84,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -90,9 +99,9 @@ import Tools from '@/pages/tools';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
-      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -103,7 +112,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
+  scorerLink: (scorerId: string) => `/evaluation/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
@@ -113,21 +122,26 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetLink: (datasetId: string) => `/evaluation/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
+    `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/evaluation/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -195,9 +209,14 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
-      { path: '/scorers', element: <Scorers /> },
-      { path: '/scorers/:scorerId', element: <Scorer /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/logs', element: <Logs /> },
+      { path: '/primitives', element: <Primitives /> },
+      { path: '/evaluation', element: <Evaluation /> },
+      { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
+      { path: '/metrics', element: <Metrics /> },
+      { path: '/observability-overview', element: <ObservabilityOverview /> },
+      { path: '/observability', element: <Traces /> },
+      { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
         path: '/cms/agents/create',
@@ -229,7 +248,13 @@ const routes = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
-          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+          ...(isExperimentalFeatures
+            ? [
+                { path: 'editor', element: <AgentPlayground /> },
+                { path: 'evaluate', element: <AgentEvaluate /> },
+                { path: 'review', element: <AgentReview /> },
+              ]
+            : []),
           { path: 'traces', element: <AgentTraces /> },
         ],
       },
@@ -269,14 +294,17 @@ const routes = [
 
       ...(isExperimentalFeatures
         ? [
-            { path: '/datasets', element: <Datasets /> },
-            { path: '/datasets/:datasetId', element: <DatasetPage /> },
-            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
-            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
-            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
-            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+            { path: '/evaluation/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/evaluation/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            {
+              path: '/evaluation/datasets/:datasetId/items/:itemId/versions',
+              element: <DatasetItemVersionsComparePage />,
+            },
+            { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/evaluation/experiments/:experimentId', element: <ExperimentPage /> },
+            { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
+            { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
+            { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
           ]
         : []),
 
@@ -289,6 +317,12 @@ const routes = [
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
+
+  // Create a stable fetch function that auto-refreshes on 401
+  const customFetch = useMemo(
+    () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
+    [baseUrl, apiPrefix],
+  );
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -303,7 +337,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
@@ -318,12 +352,11 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

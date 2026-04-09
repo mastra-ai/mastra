@@ -5,6 +5,9 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
+  BrowserToolCallsProvider,
+  BrowserSessionProvider,
+  BrowserViewPanel,
   useAgent,
   useMemory,
   useThreads,
@@ -14,7 +17,9 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -84,6 +89,15 @@ function Agent() {
     };
   }, [agent]);
 
+  // 401 check - session expired, needs re-authentication
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
+
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
     return (
@@ -120,39 +134,48 @@ function Agent() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                  <AgentLayout
-                    agentId={agentId!}
-                    leftSlot={
-                      hasMemory && (
-                        <AgentSidebar
+            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+              <BrowserSessionProvider
+                key={`session-${agentId}-${actualThreadId}`}
+                agentId={agentId!}
+                threadId={actualThreadId!}
+              >
+                <ThreadInputProvider>
+                  <ObservationalMemoryProvider>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <AgentLayout
+                        agentId={agentId!}
+                        leftSlot={
+                          hasMemory && (
+                            <AgentSidebar
+                              agentId={agentId!}
+                              threadId={actualThreadId!}
+                              threads={threads || []}
+                              isLoading={isThreadsLoading}
+                            />
+                          )
+                        }
+                        browserOverlay={<BrowserViewPanel />}
+                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                      >
+                        <AgentChat
+                          key={actualThreadId!}
                           agentId={agentId!}
+                          agentName={agent?.name}
+                          modelVersion={agent?.modelVersion}
                           threadId={actualThreadId!}
-                          threads={threads || []}
-                          isLoading={isThreadsLoading}
+                          memory={hasMemory}
+                          refreshThreadList={handleRefreshThreadList}
+                          modelList={agent?.modelList}
+                          messageId={messageId}
+                          isNewThread={isNewThread}
                         />
-                      )
-                    }
-                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                  >
-                    <AgentChat
-                      key={actualThreadId!}
-                      agentId={agentId!}
-                      agentName={agent?.name}
-                      modelVersion={agent?.modelVersion}
-                      threadId={actualThreadId!}
-                      memory={hasMemory}
-                      refreshThreadList={handleRefreshThreadList}
-                      modelList={agent?.modelList}
-                      messageId={messageId}
-                      isNewThread={isNewThread}
-                    />
-                  </AgentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
+                      </AgentLayout>
+                    </ActivatedSkillsProvider>
+                  </ObservationalMemoryProvider>
+                </ThreadInputProvider>
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
           </WorkingMemoryProvider>
         </SchemaRequestContextProvider>
       </AgentSettingsProvider>

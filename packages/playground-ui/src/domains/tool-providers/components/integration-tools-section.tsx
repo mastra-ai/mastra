@@ -1,15 +1,14 @@
-import { useState } from 'react';
 import { Plug } from 'lucide-react';
-
-import { Section } from '@/ds/components/Section';
-import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { useMemo, useState } from 'react';
 
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { Badge } from '@/ds/components/Badge';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { stringToColor } from '@/lib/colors';
-import { Badge } from '@/ds/components/Badge';
 
 interface Provider {
   id: string;
@@ -27,6 +26,18 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
   const providers = data?.providers ?? [];
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
+  const toolCountsByProvider = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!selectedToolIds) return counts;
+    for (const key of Object.keys(selectedToolIds)) {
+      const sep = key.indexOf(':');
+      if (sep === -1) continue;
+      const providerId = key.slice(0, sep);
+      counts[providerId] = (counts[providerId] ?? 0) + 1;
+    }
+    return counts;
+  }, [selectedToolIds]);
+
   if (isLoading || providers.length === 0) {
     return null;
   }
@@ -42,6 +53,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
           {providers.map(provider => {
             const bg = stringToColor(provider.name);
             const text = stringToColor(provider.name, 25);
+            const count = toolCountsByProvider[provider.id] ?? 0;
 
             return (
               <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
@@ -57,7 +69,12 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
                   {provider.description && <EntityDescription>{provider.description}</EntityDescription>}
                 </EntityContent>
 
-                <div className="flex items-center">
+                <div className="flex items-center gap-2">
+                  {count > 0 && (
+                    <Badge variant="default">
+                      {count} {count === 1 ? 'tool' : 'tools'}
+                    </Badge>
+                  )}
                   <Badge variant="success">Available</Badge>
                 </div>
               </Entity>

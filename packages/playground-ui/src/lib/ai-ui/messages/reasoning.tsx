@@ -1,9 +1,9 @@
+import type { ReasoningMessagePart } from '@assistant-ui/react';
+import { BrainIcon, ChevronUpIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { ReasoningMessagePart } from '@assistant-ui/react';
-import { BrainIcon, ChevronUpIcon } from 'lucide-react';
-import { useState } from 'react';
 
 export const Reasoning = ({ text }: ReasoningMessagePart) => {
   const [isCollapsed, setIsCollapsed] = useState(false);

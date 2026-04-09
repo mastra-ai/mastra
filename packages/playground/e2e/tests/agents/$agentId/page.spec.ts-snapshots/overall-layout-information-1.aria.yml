@@ -9,6 +9,5 @@
             - img
         - listitem:
             - combobox:
-                - img
                 - text: Weather Agent
                 - img

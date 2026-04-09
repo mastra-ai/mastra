@@ -1,20 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { DatasetItemsList } from './dataset-items-list';
-import { DatasetItemsToolbar } from './dataset-items-toolbar';
-import { DatasetItemPanel } from './dataset-item-panel';
-import { DatasetVersionsPanel } from './dataset-versions-panel';
-import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { AlertTriangleIcon, ArrowRightToLineIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
-import { toast } from '@/lib/toast';
-import { cn } from '@/index';
+import { DatasetItemPanel } from './dataset-item-panel';
+import { DatasetItemsList } from './dataset-items-list';
+import { DatasetItemsToolbar } from './dataset-items-toolbar';
+import { DatasetVersionsPanel } from './dataset-versions-panel';
 import { Columns, Column } from '@/ds/components/Columns';
 import { Notice } from '@/ds/components/Notice';
+import { cn } from '@/index';
+import { toast } from '@/lib/toast';
 
 type SelectionMode =
   | 'idle'
@@ -163,6 +163,7 @@ export function DatasetItems({
     { name: 'id', label: 'ID', size: '5rem' },
     { name: 'input', label: 'Input', size: '1fr' },
     ...(!featuredItem ? [{ name: 'groundTruth', label: 'Ground Truth', size: '1fr' }] : []),
+    ...(!featuredItem ? [{ name: 'trajectory', label: 'Trajectory', size: '6rem' }] : []),
     { name: 'date', label: 'Created', size: '10rem' },
   ];
 

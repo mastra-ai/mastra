@@ -1,16 +1,18 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns, DatasetTableColumn } from './columns';
-import { useLinkComponent } from '@/lib/framework';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { EmptyDatasetsTable } from '../empty-datasets-table';
+import type { DatasetTableColumn } from './columns';
+import { columns } from './columns';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface DatasetsTableProps {
   datasets: DatasetRecord[];

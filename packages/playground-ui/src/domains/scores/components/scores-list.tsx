@@ -1,14 +1,11 @@
-import { ClientScoreRowData } from '@mastra/client-js';
-import { EntryList } from '@/ds/components/EntryList';
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { format, isToday } from 'date-fns';
+import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
+import { EntityList } from '@/ds/components/EntityList';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
-export const scoresListColumns = [
-  { name: 'date', label: 'Date', size: '4.5rem' },
-  { name: 'time', label: 'Time', size: '6.5rem' },
-  { name: 'input', label: 'Input', size: '1fr' },
-  { name: 'entityId', label: 'Entity', size: '10rem' },
-  { name: 'score', label: 'Score', size: '3rem' },
-];
+const gridColumns = '4.5rem 6.5rem 1fr 10rem 3rem';
 
 type ScoresListProps = {
   selectedScoreId?: string;
@@ -50,59 +47,125 @@ export function ScoresList({
     }
   };
 
+  if (errorMsg) {
+    return (
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          <EntityList.TopCell>Date</EntityList.TopCell>
+          <EntityList.TopCell>Time</EntityList.TopCell>
+          <EntityList.TopCell>Input</EntityList.TopCell>
+          <EntityList.TopCell>Entity</EntityList.TopCell>
+          <EntityList.TopCell>Score</EntityList.TopCell>
+        </EntityList.Top>
+        <EntityList.NoMatch message={errorMsg} />
+      </EntityList>
+    );
+  }
+
+  if (scores.length === 0) {
+    return (
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          <EntityList.TopCell>Date</EntityList.TopCell>
+          <EntityList.TopCell>Time</EntityList.TopCell>
+          <EntityList.TopCell>Input</EntityList.TopCell>
+          <EntityList.TopCell>Entity</EntityList.TopCell>
+          <EntityList.TopCell>Score</EntityList.TopCell>
+        </EntityList.Top>
+        <EntityList.NoMatch message="No scores for this scorer yet" />
+      </EntityList>
+    );
+  }
+
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={scoresListColumns} />
-        {errorMsg ? (
-          <EntryList.Message message={errorMsg} type="error" />
-        ) : (
-          <>
-            {scores.length > 0 ? (
-              <EntryList.Entries>
-                {scores.map(score => {
-                  const createdAtDate = new Date(score.createdAt);
-                  const isTodayDate = isToday(createdAtDate);
+    <div className="grid gap-4">
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          <EntityList.TopCell>Date</EntityList.TopCell>
+          <EntityList.TopCell>Time</EntityList.TopCell>
+          <EntityList.TopCell>Input</EntityList.TopCell>
+          <EntityList.TopCell>Entity</EntityList.TopCell>
+          <EntityList.TopCell>Score</EntityList.TopCell>
+        </EntityList.Top>
 
-                  const entry = {
-                    id: score.id,
-                    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-                    time: format(createdAtDate, 'h:mm:ss aaa'),
-                    input: JSON.stringify(score?.input),
-                    entityId: score.entityId,
-                    score: score.score,
-                  };
+        <EntityList.Rows>
+          {scores.map(score => {
+            const createdAtDate = new Date(score.createdAt);
+            const isTodayDate = isToday(createdAtDate);
 
-                  return (
-                    <EntryList.Entry
-                      key={entry.id}
-                      entry={entry}
-                      isSelected={selectedScoreId === score.id}
-                      columns={scoresListColumns}
-                      onClick={onScoreClick}
-                    >
-                      {scoresListColumns.map((col, index) => {
-                        const key = `${index}-${score.id}`;
-                        return (
-                          <EntryList.EntryText key={key}>{entry?.[col.name as keyof typeof entry]}</EntryList.EntryText>
-                        );
-                      })}
-                    </EntryList.Entry>
-                  );
-                })}
-              </EntryList.Entries>
-            ) : (
-              <EntryList.Message message="No scores for this scorer yet" />
-            )}
-          </>
-        )}
-      </EntryList.Trim>
-      <EntryList.Pagination
+            return (
+              <EntityList.Row
+                key={score.id}
+                onClick={onScoreClick ? () => onScoreClick(score.id) : undefined}
+                selected={selectedScoreId === score.id}
+              >
+                <EntityList.TextCell>{isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd')}</EntityList.TextCell>
+                <EntityList.TextCell>{format(createdAtDate, 'h:mm:ss aaa')}</EntityList.TextCell>
+                <EntityList.TextCell>
+                  <span className="truncate block">{JSON.stringify(score?.input)}</span>
+                </EntityList.TextCell>
+                <EntityList.TextCell>
+                  <span className="truncate block">{score.entityId}</span>
+                </EntityList.TextCell>
+                <EntityList.TextCell>
+                  <span className="font-mono">{score.score}</span>
+                </EntityList.TextCell>
+              </EntityList.Row>
+            );
+          })}
+        </EntityList.Rows>
+      </EntityList>
+
+      <ScoresListPagination
         currentPage={pagination?.page || 0}
+        hasMore={scoresHasMore}
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
-        hasMore={scoresHasMore}
       />
-    </EntryList>
+    </div>
+  );
+}
+
+function ScoresListPagination({
+  currentPage,
+  hasMore,
+  onNextPage,
+  onPrevPage,
+}: {
+  currentPage?: number;
+  hasMore?: boolean;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
+}) {
+  const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
+
+  if (!showNavigation) return null;
+
+  return (
+    <div className={cn('flex pt-2 items-center justify-center text-neutral3 text-ui-md gap-8')}>
+      <Txt variant="ui-md">
+        Page <b>{currentPage ? currentPage + 1 : '1'}</b>
+      </Txt>
+      <div
+        className={cn(
+          'flex gap-4',
+          '[&>button]:flex [&>button]:items-center [&>button]:gap-2 [&>button]:text-neutral4 [&>button:hover]:text-neutral5 [&>button]:transition-colors [&>button]:border [&>button]:border-border1 [&>button]:p-1 [&>button]:px-2 [&>button]:rounded-md',
+          '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3',
+        )}
+      >
+        {typeof currentPage === 'number' && currentPage > 0 && (
+          <button onClick={onPrevPage}>
+            <ArrowLeftIcon />
+            Previous
+          </button>
+        )}
+        {hasMore && (
+          <button onClick={onNextPage}>
+            Next
+            <ArrowRightIcon />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

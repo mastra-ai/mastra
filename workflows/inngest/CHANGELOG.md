@@ -1,5 +1,36 @@
 # @mastra/inngest
 
+## 1.2.1
+
+### Patch Changes
+
+- Add `entityName` to workflow span creation in the Inngest workflow engine, parallel to the core fix in #14949. Without this, workflows created via `init(inngest).createWorkflow({...})` show up as "unknown" in the metrics dashboard's workflow trace volume tab even when they have an explicit `id`. ([#15182](https://github.com/mastra-ai/mastra/pull/15182))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Add `entityName` to workflow span creation in the Inngest workflow engine, parallel to the core fix in #14949. Without this, workflows created via `init(inngest).createWorkflow({...})` show up as "unknown" in the metrics dashboard's workflow trace volume tab even when they have an explicit `id`. ([#15182](https://github.com/mastra-ai/mastra/pull/15182))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+
+## 1.2.0
+
+### Minor Changes
+
+- Fixed excessive OTel trace pollution from internal polling fetch calls. When using APM tools like Sentry or Datadog, the polling loop in `getRunOutput()` would generate hundreds of identical GET spans per workflow run, inflating observability costs and making traces harder to read. Polling fetch calls are now wrapped with `suppressTracing()` to eliminate this noise while preserving all user-facing spans. ([#14088](https://github.com/mastra-ai/mastra/pull/14088))
+
+  Closes #13892
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+
 ## 1.2.0-alpha.0
 
 ### Minor Changes

@@ -55,7 +55,7 @@ export async function studio(
     try {
       requestContextPresetsJson = await loadAndValidatePresets(options.requestContextPresets);
     } catch (error: any) {
-      logger.error(`Failed to load request context presets: ${error.message}`);
+      logger.error('Failed to load request context presets', { error: error.message });
       process.exit(1);
     }
   }
@@ -64,7 +64,7 @@ export async function studio(
     const distPath = join(__dirname, 'studio');
 
     if (!existsSync(distPath)) {
-      logger.error(`Studio distribution not found at ${distPath}.`);
+      logger.error('Studio distribution not found', { distPath });
       process.exit(1);
     }
 
@@ -75,7 +75,7 @@ export async function studio(
     const server = createServer(distPath, options, requestContextPresetsJson);
 
     server.listen(port, () => {
-      logger.info(`Mastra Studio running on http://localhost:${port}`);
+      logger.info('Mastra Studio running', { url: `http://localhost:${port}` });
     });
 
     process.on('SIGINT', () => {
@@ -90,7 +90,7 @@ export async function studio(
       });
     });
   } catch (error: any) {
-    logger.error(`Failed to start Mastra Studio: ${error.message}`);
+    logger.error('Failed to start Mastra Studio', { error: error.message });
     process.exit(1);
   }
 }
@@ -100,7 +100,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const basePath = normalizeBasePath(process.env.MASTRA_STUDIO_BASE_PATH ?? '');
 
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
-  const themeToggle = process.env.MASTRA_THEME_TOGGLE?.toLowerCase() === 'true' ? 'true' : 'false';
+  const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
@@ -115,7 +115,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
-    .replaceAll('%%MASTRA_THEME_TOGGLE%%', themeToggle);
+    .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI);
 
   // Pre-compress the HTML shell since it's served for every non-asset request
   const compressedHtml = gzipSync(Buffer.from(html));

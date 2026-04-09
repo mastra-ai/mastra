@@ -25,7 +25,9 @@ import {
   useWorkspaceFile,
   isWorkspaceNotSupportedError,
   is403ForbiddenError,
+  is401UnauthorizedError,
   PermissionDenied,
+  SessionExpired,
   // Skills.sh
   AddSkillDialog,
   useInstallSkill,
@@ -70,6 +72,9 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Check if 401 unauthorized (session expired)
+  const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
 
   // Check if 403 forbidden (permission denied)
   const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
@@ -296,6 +301,39 @@ export default function Workspace() {
   const canSearchFiles = hasFilesystem && (canBM25 || canVector);
   const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
   const hasSearchCapability = canSearchFiles || canSearchSkills;
+
+  // If session expired (401 error)
+  if (isSessionExpired) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // If permission denied (403 error)
   if (isPermissionDenied) {
@@ -598,9 +636,11 @@ export default function Workspace() {
               onViewFileResult={id => {
                 updateSearchParams({ file: id, tab: 'files' });
               }}
-              onViewSkillResult={skillName => {
+              onViewSkillResult={(skillName, skillPath) => {
                 if (effectiveWorkspaceId) {
-                  void navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
+                  void navigate(
+                    `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
+                  );
                 }
               }}
             />
@@ -742,7 +782,7 @@ function WorkspaceSearchPanel({
   canVector: boolean;
   showInitWarning: boolean;
   onViewFileResult: (id: string) => void;
-  onViewSkillResult: (skillName: string) => void;
+  onViewSkillResult: (skillName: string, skillPath: string) => void;
 }) {
   const searchWorkspace = useSearchWorkspace();
   const searchSkills = useSearchWorkspaceSkills();
@@ -789,7 +829,7 @@ function WorkspaceSearchPanel({
             onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
             results={searchSkills.data?.results ?? []}
             isSearching={searchSkills.isPending}
-            onResultClick={result => onViewSkillResult(result.skillName)}
+            onResultClick={result => onViewSkillResult(result.skillName, result.skillPath)}
           />
         </div>
       )}

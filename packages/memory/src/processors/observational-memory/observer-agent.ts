@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import { stripEphemeralAnchorIds } from './anchor-ids';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -270,7 +271,21 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
 /**
  * Base output format for Observer (without patterns section)
  */
-export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
+export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
+
+export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
+  const threadTitleSection = includeThreadTitle
+    ? `
+<thread-title>
+A short, noun-phrase title for this conversation (2-5 words). Examples:
+- "Auth bug fix" — not "Fixing the auth bug"
+- "Dark mode toggle" — not "User wants dark mode toggle added"
+- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
+Only update when the topic meaningfully changes.
+</thread-title>`
+    : '';
+
+  return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
@@ -308,7 +323,8 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>`;
+</suggested-response>${threadTitleSection}`;
+}
 
 /**
  * The guidelines for the Observer.
@@ -337,10 +353,23 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildObserverSystemPrompt(multiThread: boolean = false, instruction?: string): string {
-  // Use condensed output format when condensed prompt is enabled
-  // Otherwise, use the base output format
-  const outputFormat = OBSERVER_OUTPUT_FORMAT_BASE;
+export function buildObserverSystemPrompt(
+  multiThread: boolean = false,
+  instruction?: string,
+  includeThreadTitle: boolean = false,
+): string {
+  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const multiThreadTitleInstruction = includeThreadTitle
+    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
+    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const multiThreadTitleExample = includeThreadTitle
+    ? `
+<thread-title>Feature X implementation</thread-title>`
+    : '';
+  const multiThreadSecondTitleExample = includeThreadTitle
+    ? `
+<thread-title>Deployment setup</thread-title>`
+    : '';
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -356,7 +385,7 @@ Process each thread separately and output observations for each thread.
 
 === OUTPUT FORMAT ===
 
-Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
+Your output MUST use XML tags to structure the response.${multiThreadTitleInstruction}
 
 Use this observation format inside each thread block:
 
@@ -376,7 +405,7 @@ What the agent is currently working on in this thread
 
 <suggested-response>
 Hint for the agent's next message in this thread
-</suggested-response>
+</suggested-response>${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
@@ -389,7 +418,7 @@ Current task for this thread
 
 <suggested-response>
 Suggested response for this thread
-</suggested-response>
+</suggested-response>${multiThreadSecondTitleExample}
 </thread>
 </observations>
 
@@ -451,6 +480,9 @@ export interface ObserverResult {
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
 
+  /** The suggested thread title (short/concise, for thread metadata) */
+  threadTitle?: string;
+
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
 
@@ -501,14 +533,31 @@ type ObserverInputAttachmentPart =
       experimental_providerMetadata?: unknown;
     };
 
+interface ObserverFormattedLine {
+  date: string;
+  time: string;
+  title: string;
+  body: string;
+}
+
 interface ObserverFormattedMessage {
-  text: string;
+  lines: ObserverFormattedLine[];
   attachments: ObserverInputAttachmentPart[];
 }
 
 interface ObserverAttachmentCounter {
   nextImageId: number;
   nextFileId: number;
+}
+
+interface ObserverFormattingContext {
+  previousDate?: string;
+  previousTime?: string;
+}
+
+interface ObserverFormattedOutput {
+  text: string;
+  context: ObserverFormattingContext;
 }
 
 const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
@@ -525,12 +574,17 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverDate(createdAt?: Date): string {
   return createdAt
-    ? new Date(createdAt).toLocaleString('en-US', {
-        year: 'numeric',
+    ? `${createdAt.toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
+      })} ${createdAt.getDate()} ${createdAt.getFullYear()}`
+    : '';
+}
+
+function formatObserverTime(createdAt?: Date): string {
+  return createdAt
+    ? createdAt.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -639,6 +693,56 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
+  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
+  return `${title}${timeLabel}: ${body}`;
+}
+
+function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
+  if (createdAt instanceof Date) {
+    // Invalid Date objects still satisfy `instanceof Date`, so reject them explicitly.
+    if (Number.isNaN(createdAt.getTime())) {
+      return undefined;
+    }
+    return createdAt;
+  }
+
+  if (typeof createdAt === 'number' || typeof createdAt === 'string') {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
+  }
+
+  return undefined;
+}
+
+function formatObserverLines(
+  lines: ObserverFormattedLine[],
+  context: ObserverFormattingContext = {},
+): ObserverFormattedOutput {
+  const output: string[] = [];
+  let previousDate = context.previousDate;
+  let previousTime = context.previousTime;
+
+  for (const line of lines) {
+    if (line.date && line.date !== previousDate) {
+      output.push(`${line.date}:`);
+      previousDate = line.date;
+      previousTime = undefined;
+    }
+
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    previousTime = line.time || previousTime;
+  }
+
+  return {
+    text: output.join('\n'),
+    context: { previousDate, previousTime },
+  };
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -646,89 +750,138 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
-  const timestamp = formatObserverTimestamp(msg.createdAt);
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-  const timestampStr = timestamp ? ` (${timestamp})` : '';
   const attachments: ObserverInputAttachmentPart[] = [];
+  const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
-  let content = '';
+  let lines: ObserverFormattedLine[] = [];
+
+  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+    if (!body) {
+      return;
+    }
+
+    const normalizedCreatedAt = normalizeObserverCreatedAt(createdAt) ?? messageCreatedAt;
+    lines.push({
+      date: formatObserverDate(normalizedCreatedAt),
+      time: formatObserverTime(normalizedCreatedAt),
+      title,
+      body,
+    });
+  };
+
   if (typeof msg.content === 'string') {
-    content = maybeTruncate(msg.content, maxLen);
+    pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    content = msg.content.parts
-      .map(part => {
-        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
-        if (part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
-          if (inv.state === 'result') {
-            const { value: resultForObserver } = resolveToolResultValue(
-              part as { providerMetadata?: Record<string, any> },
-              inv.result,
-            );
-            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
-            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
-          }
-          const argsStr = JSON.stringify(inv.args, null, 2);
-          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+    msg.content.parts.forEach(part => {
+      const partCreatedAt = normalizeObserverCreatedAt((part as { createdAt?: unknown }).createdAt) ?? messageCreatedAt;
+
+      if (part.type === 'text') {
+        pushLine(role, maybeTruncate(part.text, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (part.type === 'tool-invocation') {
+        const inv = part.toolInvocation;
+        if (inv.state === 'result') {
+          const { value: resultForObserver } = resolveToolResultValue(
+            part as { providerMetadata?: Record<string, any> },
+            inv.result,
+          );
+          pushLine(
+            `Tool Result ${inv.toolName}`,
+            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            partCreatedAt,
+          );
+          return;
         }
 
-        const partType = (part as { type?: string }).type;
-        if (partType === 'reasoning') {
-          // Include reasoning content only when it's not obscured/encrypted
-          const reasoning = (part as { reasoning?: string }).reasoning;
-          if (reasoning) return maybeTruncate(reasoning, maxLen);
-          return '';
+        pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+        return;
+      }
+
+      const partType = (part as { type?: string }).type;
+      if (partType === 'reasoning') {
+        const reasoning = (part as { reasoning?: string }).reasoning;
+        if (!reasoning) {
+          return;
         }
-        if (partType === 'image' || partType === 'file') {
-          const attachment = part as ObserverAttachmentPart;
-          const inputAttachment = toObserverInputAttachmentPart(attachment);
-          if (inputAttachment) {
-            attachments.push(inputAttachment);
-          }
-          return formatObserverAttachmentPlaceholder(attachment, counter);
+        pushLine('Reasoning', maybeTruncate(reasoning, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (partType === 'image' || partType === 'file') {
+        const attachment = part as ObserverAttachmentPart;
+        const inputAttachment = toObserverInputAttachmentPart(attachment);
+        if (inputAttachment) {
+          attachments.push(inputAttachment);
         }
-        if (partType?.startsWith('data-')) return '';
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
+        pushLine(
+          partType === 'image' ? 'Image' : 'File',
+          formatObserverAttachmentPlaceholder(attachment, counter),
+          partCreatedAt,
+        );
+      }
+    });
   } else if (msg.content?.content) {
-    content = maybeTruncate(msg.content.content, maxLen);
+    pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
   }
 
-  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
-  if (!content && attachments.length === 0) {
-    return { text: '', attachments };
+  if (lines.length === 0 && attachments.length === 0) {
+    return { lines: [], attachments };
   }
 
   return {
-    text: `**${role}${timestampStr}:**\n${content}`,
+    lines,
     attachments,
   };
 }
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages
-    .map(msg => formatObserverMessage(msg, counter, options).text)
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  const sections: string[] = [];
+  let context: ObserverFormattingContext = {};
+
+  for (const message of messages) {
+    const formatted = formatObserverMessage(message, counter, options);
+    if (formatted.lines.length === 0) {
+      continue;
+    }
+
+    const rendered = formatObserverLines(formatted.lines, context);
+    if (!rendered.text) {
+      continue;
+    }
+
+    sections.push(rendered.text);
+    context = rendered.context;
+  }
+
+  return sections.join('\n');
+}
+
+function appendFormattedObserverMessage(
+  content: any[],
+  formatted: ObserverFormattedMessage,
+  context: ObserverFormattingContext,
+): ObserverFormattingContext {
+  const rendered = formatObserverLines(formatted.lines, context);
+  if (rendered.text) {
+    content.push({ type: 'text', text: rendered.text });
+  }
+  content.push(...formatted.attachments);
+  return rendered.context;
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  let visibleCount = 0;
+  let context: ObserverFormattingContext = {};
   messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter, options);
-    if (!formatted.text && formatted.attachments.length === 0) return;
-    if (visibleCount > 0) {
-      content.push({ type: 'text', text: '\n\n---\n\n' });
-    }
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    visibleCount++;
+    if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+    context = appendFormattedObserverMessage(content, formatted, context);
   });
 
   return {
@@ -785,19 +938,16 @@ export function buildMultiThreadObserverHistoryMessage(
     if (!messages || messages.length === 0) return;
 
     const threadContent: any[] = [];
-    let visibleCount = 0;
+    let context: ObserverFormattingContext = {};
+    let hasVisibleContent = false;
     messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter, options);
-      if (!formatted.text && formatted.attachments.length === 0) return;
-      if (visibleCount > 0) {
-        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
-      }
-      threadContent.push({ type: 'text', text: formatted.text });
-      threadContent.push(...formatted.attachments);
-      visibleCount++;
+      if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+      context = appendFormattedObserverMessage(threadContent, formatted, context);
+      hasVisibleContent = true;
     });
 
-    if (visibleCount === 0) return;
+    if (!hasVisibleContent) return;
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
     content.push(...threadContent);
@@ -816,8 +966,9 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   wasTruncated?: boolean,
+  includeThreadTitle?: boolean,
 ): string {
   let prompt = '';
 
@@ -831,7 +982,9 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
-      if (!metadata?.currentTask && !metadata?.suggestedResponse) {
+      const hasRelevantMetadata =
+        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
+      if (!hasRelevantMetadata) {
         return '';
       }
 
@@ -841,6 +994,9 @@ export function buildMultiThreadObserverTaskPrompt(
       }
       if (metadata.suggestedResponse) {
         lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
+      }
+      if (includeThreadTitle && metadata.threadTitle) {
+        lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
       }
       return lines.join('\n');
     })
@@ -853,11 +1009,13 @@ export function buildMultiThreadObserverTaskPrompt(
       prompt += `Previous observations were truncated for context budget reasons.\n`;
       prompt += `The main agent still has full memory context outside this observer window.\n`;
     }
-    prompt += `Use each thread's prior current-task and suggested-response as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
+    const titleHint = includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use each thread's prior current-task, suggested-response${titleHint} as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
-  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, and suggested-response.\n\n`;
+  const titleInstruction = includeThreadTitle ? ', and thread-title' : '';
+  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, suggested-response${titleInstruction}.\n\n`;
   prompt += `Example output format:\n`;
   prompt += `<observations>\n`;
   prompt += `<thread id="thread1">\n`;
@@ -865,12 +1023,14 @@ export function buildMultiThreadObserverTaskPrompt(
   prompt += `* 🔴 (14:30) User prefers direct answers\n`;
   prompt += `<current-task>Working on feature X</current-task>\n`;
   prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Feature X implementation</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `<thread id="thread2">\n`;
   prompt += `Date: Dec 5, 2025\n`;
   prompt += `* 🔴 (09:15) User asked about deployment\n`;
   prompt += `<current-task>Discussing deployment options</current-task>\n`;
   prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Deployment setup</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `</observations>`;
 
@@ -884,12 +1044,13 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
+  includeThreadTitle?: boolean,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
 }
 
 /**
@@ -948,6 +1109,14 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
+    // Extract and remove thread-title
+    let threadTitle: string | undefined;
+    const threadTitleMatch = threadContent.match(/<thread-title>([\s\S]*?)<\/thread-title>/i);
+    if (threadTitleMatch?.[1]) {
+      threadTitle = threadTitleMatch[1].trim();
+      observations = observations.replace(/<thread-title>[\s\S]*?<\/thread-title>/i, '');
+    }
+
     // Clean up observations and apply line truncation
     observations = sanitizeObservationLines(observations.trim());
 
@@ -955,6 +1124,7 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations,
       currentTask,
       suggestedContinuation,
+      threadTitle,
       rawOutput: threadContent,
     });
   }
@@ -974,7 +1144,9 @@ export function buildObserverTaskPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
     wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
   },
 ): string {
   let prompt = '';
@@ -993,6 +1165,9 @@ export function buildObserverTaskPrompt(
   if (options?.priorSuggestedResponse) {
     priorMetadataLines.push(`- prior suggested-response: ${options.priorSuggestedResponse}`);
   }
+  if (options?.includeThreadTitle && options?.priorThreadTitle) {
+    priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
+  }
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
@@ -1000,14 +1175,20 @@ export function buildObserverTaskPrompt(
       prompt += `Previous observations were truncated for context budget reasons.\n`;
       prompt += `The main agent still has full memory context outside this observer window.\n`;
     }
-    prompt += `Use the prior current-task and suggested-response as continuity hints, then update them based on the new messages.\n\n---\n\n`;
+    const titleHint = options?.includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use the prior current-task, suggested-response${titleHint} as continuity hints, then update them based on the new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
+  // Add thread title guidance (independent of continuation hints)
+  if (options?.includeThreadTitle) {
+    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
+  }
+
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
   }
 
   return prompt;
@@ -1024,7 +1205,9 @@ export function buildObserverPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
     wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1055,6 +1238,7 @@ export function parseObserverOutput(output: string): ObserverResult {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    threadTitle: parsed.threadTitle || undefined,
     rawOutput: output,
   };
 }
@@ -1066,6 +1250,7 @@ interface ParsedMemorySection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
+  threadTitle: string;
 }
 
 /**
@@ -1077,6 +1262,7 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
+    threadTitle: '',
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -1107,6 +1293,14 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
+  }
+
+  // Extract <thread-title> content (first match only)
+  // Opening tag must be at the start of a line; closing tag can be on the same line
+  // (titles are short, so LLMs typically output them on a single line)
+  const threadTitleMatch = content.match(/^[ \t]*<thread-title>([\s\S]*?)<\/thread-title>/im);
+  if (threadTitleMatch?.[1]) {
+    result.threadTitle = threadTitleMatch[1].trim();
   }
 
   return result;
@@ -1244,7 +1438,7 @@ export function extractCurrentTask(observations: string): string | null {
  * The full format is preserved in storage for analysis.
  */
 export function optimizeObservationsForContext(observations: string): string {
-  let optimized = observations;
+  let optimized = stripEphemeralAnchorIds(observations);
 
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');

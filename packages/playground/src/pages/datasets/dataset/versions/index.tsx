@@ -15,7 +15,9 @@ import {
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -54,6 +56,16 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
@@ -69,7 +81,7 @@ function DatasetCompareVersionsPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
+            <Crumb as={Link} to="/evaluation?tab=datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -96,7 +108,7 @@ function DatasetCompareVersionsPage() {
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/evaluation/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
@@ -105,13 +117,13 @@ function DatasetCompareVersionsPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
+          <Crumb as={Link} to="/evaluation?tab=datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -138,7 +150,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
+              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
 import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   const client = useMastraClient();
@@ -12,14 +12,26 @@ export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   });
 };
 
-export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published' }) => {
+export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published'; enabled?: boolean }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
+  const { enabled = true, ...queryOptions } = options ?? {};
 
   return useQuery({
-    queryKey: ['stored-agent', agentId, options?.status, requestContext],
-    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext, options) : null),
-    enabled: Boolean(agentId),
+    queryKey: ['stored-agent', agentId, queryOptions.status, requestContext],
+    queryFn: async () => {
+      if (!agentId) return null;
+      try {
+        return await client.getStoredAgent(agentId).details(requestContext, queryOptions);
+      } catch (error) {
+        // 404 is expected for code-only agents that haven't been stored yet
+        if (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    enabled: Boolean(agentId) && enabled,
   });
 };
 
@@ -34,8 +46,8 @@ export const useStoredAgentMutations = (agentId?: string) => {
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
     onSuccess: () => {
       // Invalidate both stored-agents list and the merged agents list
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 
@@ -46,12 +58,12 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       // Invalidate lists
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
       // Invalidate specific agent details
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
   });
@@ -63,12 +75,12 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       // Invalidate lists
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
       // Invalidate specific agent details
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
   });

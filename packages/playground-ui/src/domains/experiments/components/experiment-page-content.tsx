@@ -1,21 +1,21 @@
 'use client';
 
+import type { DatasetExperimentResult } from '@mastra/client-js';
+import type { ExperimentStatus } from '@mastra/core/storage';
 import { useState, useMemo } from 'react';
-import { DatasetExperimentResult } from '@mastra/client-js';
 
-import { Columns } from '@/ds/components/Columns/columns';
-import { Column } from '@/ds/components/Columns/column';
-import { MultiColumn } from '@/ds/components/Columns/multi-column';
-import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentResultPanel } from './experiment-result-panel';
 import { ExperimentResultSpanPane } from './experiment-result-span-pane';
 import { ExperimentResultTracePanel } from './experiment-result-trace-panel';
-import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentResultsList } from './experiment-results-list';
+import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
-import type { ExperimentStatus } from '@mastra/core/storage';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { Column } from '@/ds/components/Columns/column';
+import { Columns } from '@/ds/components/Columns/columns';
+import { MultiColumn } from '@/ds/components/Columns/multi-column';
+import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 
 export type ExperimentPageContentProps = {
   experimentId: string;
@@ -147,7 +147,7 @@ export function ExperimentPageContent({
     () => [
       { name: 'itemId', label: 'Item ID', size: '5rem' },
       { name: 'status', label: 'Status', size: '3rem' },
-      ...(!featuredResultId ? [{ name: 'input', label: 'Input', size: '1fr' }] : []),
+      { name: 'input', label: 'Input', size: '1fr' },
       ...(!featuredResultId ? scorerIds.map(id => ({ name: id, label: id, size: '1fr' })) : []),
     ],
     [featuredResultId, scorerIds],
@@ -165,7 +165,7 @@ export function ExperimentPageContent({
       </TabContent>
 
       <TabContent value="results" className="grid overflow-hidden mt-5">
-        <Columns className={featuredResult ? 'grid-cols-[auto_1fr]' : undefined}>
+        <Columns className={featuredResult ? 'grid-cols-[1fr_2fr]' : undefined}>
           {/* List column - always visible */}
           <Column>
             <ExperimentResultsList

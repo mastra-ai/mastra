@@ -1,22 +1,22 @@
+import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
-import { PlusIcon, XIcon } from 'lucide-react';
-
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { Icon, ToolsIcon } from '@/ds/icons';
-import { Button } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Section } from '@/ds/components/Section';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { IntegrationToolsSection } from '@/domains/tool-providers/components';
-import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import type { RuleGroup } from '@/lib/rule-engine';
-import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { SubSectionRoot } from '@/ds/components/Section/section-root';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
+import { IntegrationToolsSection } from '@/domains/tool-providers/components';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { Button } from '@/ds/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { Icon, ToolsIcon } from '@/ds/icons';
+import type { RuleGroup } from '@/lib/rule-engine';
+
 import { cn } from '@/lib/utils';
 
 export function ToolsPage() {
@@ -134,14 +134,14 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-surface2">
         <EntityContent>
-          <EntityName className="!text-ui-md !leading-ui-md font-medium">{tool.label}</EntityName>
+          <EntityName className="text-ui-md! leading-ui-md! font-medium">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={readOnly}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline focus:outline-1 focus:outline-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-white',
+                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
                 !readOnly && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -163,7 +163,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -198,7 +198,7 @@ export function ToolsPage() {
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
+                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
                     >
                       <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
                       {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}

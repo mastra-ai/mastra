@@ -1,15 +1,15 @@
-import { usePlaygroundStore } from '@/store/playground-store';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import { useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
-import { Txt } from '@/ds/components/Txt';
-import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { useAgent } from '../hooks/use-agent';
-import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { toast } from '@/lib/toast';
-import { useEffect } from 'react';
+import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import ToolExecutor from '@/domains/tools/components/ToolExecutor';
+import { Txt } from '@/ds/components/Txt';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { toast } from '@/lib/toast';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface AgentToolPanelProps {
   toolId: string;

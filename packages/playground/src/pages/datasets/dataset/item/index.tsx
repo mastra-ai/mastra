@@ -23,7 +23,9 @@ import {
   Column,
   Notice,
   PermissionDenied,
+  SessionExpired,
   is403ForbiddenError,
+  is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
@@ -182,7 +184,7 @@ function DatasetItemPage() {
       await deleteItem.mutateAsync({ datasetId, itemId });
       toast.success('Item deleted successfully');
       setDeleteDialogOpen(false);
-      void navigate(`/datasets/${datasetId}`);
+      void navigate(`/evaluation/datasets/${datasetId}`);
     } catch (error) {
       toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -204,6 +206,16 @@ function DatasetItemPage() {
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (
@@ -236,13 +248,13 @@ function DatasetItemPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
+            <Crumb as={Link} to="/evaluation?tab=datasets">
               <Icon>
                 <DatabaseIcon />
               </Icon>
               Datasets
             </Crumb>
-            <Crumb as={Link} to={`/datasets/${datasetId}`}>
+            <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
               {dataset?.name}
             </Crumb>
             <Crumb isCurrent as="span">
@@ -343,7 +355,9 @@ function DatasetItemPage() {
                     onClose={() => {}}
                     onVersionSelect={handleVersionSelect}
                     onCompareVersionsClick={(versionIds: string[]) => {
-                      void navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
+                      void navigate(
+                        `/evaluation/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`,
+                      );
                     }}
                     activeVersion={selectedVersion?.datasetVersion ?? null}
                   />
