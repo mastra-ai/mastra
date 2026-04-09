@@ -98,6 +98,34 @@ export function cleanupProfileLockFiles(
 }
 
 // =============================================================================
+// Process Group Cleanup
+// =============================================================================
+
+/**
+ * Kill a browser process and its children by sending SIGKILL to the process group.
+ *
+ * When Chrome/Chromium is launched, it spawns child processes (GPU, renderer,
+ * network, storage, crashpad handlers). If the main process exits uncleanly,
+ * these children can become orphaned. Killing the process group ensures all
+ * related processes are cleaned up.
+ *
+ * @param pid - The PID of the main browser process. If undefined, this is a no-op.
+ * @param logger - Optional logger for debug output.
+ */
+export function killProcessGroup(
+  pid: number | undefined,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (pid == null) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+    logger?.debug?.(`Killed process group for PID ${pid}`);
+  } catch {
+    // ESRCH = process already gone — expected
+  }
+}
+
+// =============================================================================
 // Status & Lifecycle Types
 // =============================================================================
 

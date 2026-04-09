@@ -9,7 +9,7 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID, killProcessGroup } from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -24,7 +24,7 @@ import type { ActInput, ExtractInput, ObserveInput, NavigateInput, TabsInput } f
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
-import { patchProfileExitType } from './utils';
+import { getStagehandChromePid, patchProfileExitType } from './utils';
 
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
@@ -237,10 +237,15 @@ export class StagehandBrowser extends MastraBrowser {
    * Listens to both context and page close events for robust detection.
    */
   private setupCloseListenerForSharedScope(stagehand: Stagehand): void {
+    // Capture Chrome PID while the browser is alive. On manual close the main
+    // process dies but children (GPU, renderer, network, storage) can linger.
+    const chromePid = getStagehandChromePid(stagehand);
+
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
+      killProcessGroup(chromePid, this.logger);
       this.handleBrowserDisconnected();
     };
 
@@ -277,10 +282,13 @@ export class StagehandBrowser extends MastraBrowser {
    * Uses CDP Target.targetDestroyed events to detect when all pages are gone.
    */
   private setupCloseListenerForThread(stagehand: Stagehand, threadId: string): void {
+    const chromePid = getStagehandChromePid(stagehand);
+
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
+      killProcessGroup(chromePid, this.logger);
       this.handleThreadBrowserDisconnected(threadId);
     };
 

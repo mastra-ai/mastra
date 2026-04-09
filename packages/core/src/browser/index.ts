@@ -2,7 +2,7 @@
 // MastraBrowser Base Class
 // ============================================================================
 
-export { MastraBrowser, cleanupProfileLockFiles } from './browser';
+export { MastraBrowser, cleanupProfileLockFiles, killProcessGroup } from './browser';
 export type {
   BrowserStatus,
   BrowserLifecycleHook,

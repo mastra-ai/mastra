@@ -1,9 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { patchProfileExitType } from '../utils';
+import { getStagehandChromePid, patchProfileExitType } from '../utils';
 
 describe('patchProfileExitType', () => {
   let profileDir: string;
@@ -78,3 +77,30 @@ describe('patchProfileExitType', () => {
     expect(readFileSync(join(dir, 'Preferences'), 'utf-8')).toBe('not json');
   });
 });
+
+describe('getStagehandChromePid', () => {
+  it('extracts PID from chrome.process.pid', () => {
+    const stagehand = { state: { kind: 'LOCAL', chrome: { process: { pid: 12345 } } } };
+    expect(getStagehandChromePid(stagehand as any)).toBe(12345);
+  });
+
+  it('falls back to chrome.pid', () => {
+    const stagehand = { state: { kind: 'LOCAL', chrome: { pid: 67890 } } };
+    expect(getStagehandChromePid(stagehand as any)).toBe(67890);
+  });
+
+  it('returns undefined for BROWSERBASE env', () => {
+    const stagehand = { state: { kind: 'BROWSERBASE', sessionId: 'abc' } };
+    expect(getStagehandChromePid(stagehand as any)).toBeUndefined();
+  });
+
+  it('returns undefined for UNINITIALIZED state', () => {
+    const stagehand = { state: { kind: 'UNINITIALIZED' } };
+    expect(getStagehandChromePid(stagehand as any)).toBeUndefined();
+  });
+
+  it('returns undefined when state is missing', () => {
+    expect(getStagehandChromePid({} as any)).toBeUndefined();
+  });
+});
+

@@ -1,8 +1,8 @@
 import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { cleanupProfileLockFiles } from './browser';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { cleanupProfileLockFiles, killProcessGroup } from './browser';
 
 describe('cleanupProfileLockFiles', () => {
   let profileDir: string;
@@ -64,5 +64,26 @@ describe('cleanupProfileLockFiles', () => {
 
   it('handles empty string', () => {
     expect(() => cleanupProfileLockFiles('')).not.toThrow();
+  });
+});
+
+describe('killProcessGroup', () => {
+  it('does nothing for undefined PID', () => {
+    expect(() => killProcessGroup(undefined)).not.toThrow();
+  });
+
+  it('calls process.kill with negative PID for process group', () => {
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    killProcessGroup(12345);
+    expect(killSpy).toHaveBeenCalledWith(-12345, 'SIGKILL');
+    killSpy.mockRestore();
+  });
+
+  it('does not throw when process.kill fails', () => {
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('ESRCH');
+    });
+    expect(() => killProcessGroup(12345)).not.toThrow();
+    killSpy.mockRestore();
   });
 });

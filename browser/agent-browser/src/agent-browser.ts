@@ -1,4 +1,4 @@
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID, killProcessGroup } from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -196,7 +196,7 @@ export class AgentBrowser extends MastraBrowser {
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.killOrphanedProcesses(browserPid);
+        killProcessGroup(browserPid, this.logger);
         this.handleBrowserDisconnected();
       };
 
@@ -218,24 +218,6 @@ export class AgentBrowser extends MastraBrowser {
       }
     } catch {
       // Ignore errors setting up close listener
-    }
-  }
-
-  /**
-   * Kill orphaned Chrome child processes after manual/external close.
-   *
-   * When the user closes the browser window, the main Chrome process exits but
-   * child processes (GPU, renderer, network, storage, crashpad) can survive as
-   * orphans. We kill the entire process group via `process.kill(-pid)` — the
-   * same technique chrome-launcher uses.
-   */
-  private killOrphanedProcesses(pid: number | undefined): void {
-    if (!pid) return;
-    try {
-      // Negative PID = kill the entire process group
-      process.kill(-pid, 'SIGKILL');
-    } catch {
-      // Process group may already be gone — that's fine
     }
   }
 
@@ -346,7 +328,7 @@ export class AgentBrowser extends MastraBrowser {
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.killOrphanedProcesses(browserPid);
+        killProcessGroup(browserPid, this.logger);
         this.handleThreadBrowserDisconnected(threadId);
       };
 

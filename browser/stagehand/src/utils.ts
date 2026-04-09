@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { Stagehand } from '@browserbasehq/stagehand';
+
 /**
  * Patch Chrome's Preferences file to set exit_type to "Normal".
  *
@@ -10,10 +12,7 @@ import { join } from 'node:path';
  *
  * Safe to call even if the file doesn't exist or isn't valid JSON.
  */
-export function patchProfileExitType(
-  profilePath: string,
-  logger?: { debug?: (message: string) => void },
-): void {
+export function patchProfileExitType(profilePath: string, logger?: { debug?: (message: string) => void }): void {
   if (!profilePath) return;
 
   const prefsPath = join(profilePath, 'Default', 'Preferences');
@@ -29,3 +28,25 @@ export function patchProfileExitType(
     // Preferences file may not exist yet or be malformed — ignore
   }
 }
+
+/**
+ * Extract the Chrome process PID from a Stagehand instance.
+ *
+ * Stagehand stores the chrome-launcher result in `state.chrome` after init.
+ * The PID is at `chrome.process?.pid ?? chrome.pid`. This isn't part of
+ * Stagehand's public API, so we access it via `as any`.
+ *
+ * Returns undefined if the PID can't be found (e.g. BROWSERBASE env, not yet init'd).
+ */
+export function getStagehandChromePid(stagehand: Stagehand): number | undefined {
+  try {
+    const state = (stagehand as any).state;
+    if (state?.kind !== 'LOCAL' || !state.chrome) return undefined;
+    const pid = state.chrome.process?.pid ?? state.chrome.pid;
+    return typeof pid === 'number' && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+
