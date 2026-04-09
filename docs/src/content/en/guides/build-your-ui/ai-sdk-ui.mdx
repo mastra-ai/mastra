@@ -404,7 +404,8 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | Data Part Type | Source | Description |
 | - | - | - |
 | `tool-{toolKey}` | AI SDK built-in | Tool invocation with states: `input-available`, `output-available`, `output-error` |
-| `data-workflow` | `workflowRoute()` | Workflow execution with step inputs, outputs, and status |
+| `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
+| `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the step that just changed |
 | `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
 | `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
@@ -523,11 +524,11 @@ The tool part type follows the pattern `tool-{toolKey}`, where `toolKey` is the 
 
 ### Rendering workflow data
 
-When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts that contain the workflow's execution state, including step statuses and outputs.
+When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the step that just completed or suspended. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
 
 <Tabs>
   <TabItem value="backend" label="Backend">
-    Define a workflow with multiple steps that will emit `data-workflow` parts as it executes.
+    Define a workflow with multiple steps that will emit `data-workflow` and `data-workflow-step` parts as it executes.
 
     ```typescript title="src/mastra/workflows/activities-workflow.ts"
     import { createStep, createWorkflow } from '@mastra/core/workflows'
@@ -602,7 +603,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 
   <TabItem value="frontend" label="Frontend">
-    Check for `data-workflow` parts and render each step's status and output using the `WorkflowDataPart` type for type safety.
+    Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that just changed, also read `data-workflow-step` parts.
 
     ```typescript title="src/components/workflow-chat.tsx" {3,5,45-47}
     import { useChat } from '@ai-sdk/react'

@@ -79,6 +79,17 @@ export type WorkflowDataPart = {
   };
 };
 
+export type WorkflowStepDataPart = {
+  type: 'data-workflow-step' | 'data-tool-workflow-step';
+  id: string;
+  data: {
+    name: string;
+    status: WorkflowRunStatus;
+    stepId: string;
+    step: StepResult;
+  };
+};
+
 export type NetworkDataPart = {
   type: 'data-network' | 'data-tool-network';
   id: string;
@@ -101,6 +112,72 @@ export type AgentDataPart = {
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
 type ConvertMastraChunkToAISDK = <OUTPUT>(args: { chunk: ChunkType<OUTPUT>; mode?: 'generate' | 'stream' }) => any;
+
+type BufferedWorkflowState = {
+  name: string;
+  steps: Record<string, StepResult>;
+};
+
+function cloneWorkflowStep(step: StepResult, includeOutput: boolean): StepResult {
+  return {
+    name: step.name,
+    status: step.status,
+    input: step.input,
+    output: includeOutput ? step.output : null,
+    suspendPayload: step.suspendPayload,
+    resumePayload: step.resumePayload,
+  };
+}
+
+function serializeWorkflowSteps(
+  steps: Record<string, StepResult>,
+  { includeOutputs }: { includeOutputs: boolean },
+): Record<string, StepResult> {
+  return Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, cloneWorkflowStep(step, includeOutputs)]));
+}
+
+function createWorkflowDataPart(args: {
+  current: BufferedWorkflowState;
+  isNested?: boolean;
+  runId: string;
+  status: WorkflowRunStatus;
+  includeOutputs?: boolean;
+  output?: WorkflowDataPart['data']['output'];
+}): WorkflowDataPart {
+  const { current, isNested, runId, status, includeOutputs = false, output = null } = args;
+
+  return {
+    type: isNested ? 'data-tool-workflow' : 'data-workflow',
+    id: runId,
+    data: {
+      name: current.name,
+      status,
+      steps: serializeWorkflowSteps(current.steps, { includeOutputs }),
+      output,
+    },
+  };
+}
+
+function createWorkflowStepDataPart(args: {
+  current: BufferedWorkflowState;
+  isNested?: boolean;
+  runId: string;
+  status: WorkflowRunStatus;
+  stepId: string;
+}): WorkflowStepDataPart {
+  const { current, isNested, runId, status, stepId } = args;
+
+  return {
+    type: isNested ? 'data-tool-workflow-step' : 'data-workflow-step',
+    id: `${runId}:${stepId}`,
+    data: {
+      name: current.name,
+      status,
+      stepId,
+      step: cloneWorkflowStep(current.steps[stepId]!, true),
+    },
+  };
+}
 
 export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
   convertMastraChunkToAISDK: ConvertMastraChunkToAISDK,
@@ -125,6 +202,7 @@ export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
       }
     | UI_CHUNK
     | WorkflowDataPart
+    | WorkflowStepDataPart
     | ChunkType
     | ToolAgentChunkType
     | ToolWorkflowChunkType
@@ -152,12 +230,14 @@ export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
         },
         convertMastraChunkToAISDK,
       );
-      if (Array.isArray(transformed)) {
-        for (const c of transformed) {
-          if (c) controller.enqueue(c as UI_CHUNK);
+      if (transformed) {
+        if (Array.isArray(transformed)) {
+          for (const item of transformed) {
+            controller.enqueue(item as UI_CHUNK);
+          }
+        } else {
+          controller.enqueue(transformed as UI_CHUNK);
         }
-      } else if (transformed) {
-        controller.enqueue(transformed as UI_CHUNK);
       }
     },
   });
@@ -641,13 +721,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
 
 export function transformWorkflow<OUTPUT>(
   payload: ChunkType<OUTPUT>,
-  bufferedWorkflows: Map<
-    string,
-    {
-      name: string;
-      steps: Record<string, StepResult>;
-    }
-  >,
+  bufferedWorkflows: Map<string, BufferedWorkflowState>,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
   streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
@@ -659,16 +733,12 @@ export function transformWorkflow<OUTPUT>(
         name: payload.payload.workflowId,
         steps: {},
       });
-      return {
-        type: isNested ? 'data-tool-workflow' : 'data-workflow',
-        id: payload.runId,
-        data: {
-          name: bufferedWorkflows.get(payload.runId!)!.name,
-          status: 'running',
-          steps: bufferedWorkflows.get(payload.runId!)!.steps,
-          output: null,
-        },
-      } as const;
+      return createWorkflowDataPart({
+        current: bufferedWorkflows.get(payload.runId!)!,
+        isNested,
+        runId: payload.runId!,
+        status: 'running',
+      });
     case 'workflow-step-start': {
       const current = bufferedWorkflows.get(payload.runId!) || { name: '', steps: {} };
       current.steps[payload.payload.id] = {
@@ -680,16 +750,12 @@ export function transformWorkflow<OUTPUT>(
         resumePayload: null,
       };
       bufferedWorkflows.set(payload.runId!, current);
-      return {
-        type: isNested ? 'data-tool-workflow' : 'data-workflow',
-        id: payload.runId,
-        data: {
-          name: current.name,
-          status: 'running',
-          steps: current.steps,
-          output: null,
-        },
-      } as const;
+      return createWorkflowDataPart({
+        current,
+        isNested,
+        runId: payload.runId!,
+        status: 'running',
+      });
     }
     case 'workflow-step-result': {
       const current = bufferedWorkflows.get(payload.runId!);
@@ -699,16 +765,21 @@ export function transformWorkflow<OUTPUT>(
         status: payload.payload.status,
         output: payload.payload.output ?? null,
       };
-      return {
-        type: isNested ? 'data-tool-workflow' : 'data-workflow',
-        id: payload.runId,
-        data: {
-          name: current.name,
+      return [
+        createWorkflowDataPart({
+          current,
+          isNested,
+          runId: payload.runId!,
           status: 'running',
-          steps: current.steps,
-          output: null,
-        },
-      } as const;
+        }),
+        createWorkflowStepDataPart({
+          current,
+          isNested,
+          runId: payload.runId!,
+          status: 'running',
+          stepId: payload.payload.id,
+        }),
+      ] as const;
     }
     case 'workflow-step-suspended': {
       const current = bufferedWorkflows.get(payload.runId!);
@@ -720,30 +791,33 @@ export function transformWorkflow<OUTPUT>(
         resumePayload: payload.payload.resumePayload ?? null,
         output: null,
       } satisfies StepResult;
-      return {
-        type: isNested ? 'data-tool-workflow' : 'data-workflow',
-        id: payload.runId,
-        data: {
-          name: current.name,
+      return [
+        createWorkflowDataPart({
+          current,
+          isNested,
+          runId: payload.runId!,
           status: 'suspended',
-          steps: current.steps,
-          output: null,
-        },
-      } as const;
+        }),
+        createWorkflowStepDataPart({
+          current,
+          isNested,
+          runId: payload.runId!,
+          status: 'suspended',
+          stepId: payload.payload.id,
+        }),
+      ] as const;
     }
     case 'workflow-finish': {
       const current = bufferedWorkflows.get(payload.runId!);
       if (!current) return null;
-      return {
-        type: isNested ? 'data-tool-workflow' : 'data-workflow',
-        id: payload.runId,
-        data: {
-          name: current.name,
-          steps: current.steps,
-          output: payload.payload.output ?? null,
-          status: payload.payload.workflowStatus,
-        },
-      } as const;
+      return createWorkflowDataPart({
+        current,
+        isNested,
+        runId: payload.runId!,
+        status: payload.payload.workflowStatus,
+        includeOutputs: true,
+        output: payload.payload.output ?? null,
+      });
     }
     case 'workflow-step-output': {
       const output = payload.payload.output;
@@ -812,7 +886,7 @@ export function transformWorkflow<OUTPUT>(
   }
 }
 
-type TransformNetworkResult = InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType;
+type TransformNetworkResult = InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | WorkflowStepDataPart;
 
 export function transformNetwork(
   payload: NetworkChunkType,
@@ -1207,8 +1281,11 @@ export function transformNetwork(
 
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
         const result = transformWorkflow(payload.payload as WorkflowStreamEvent, step[PRIMITIVE_CACHE_SYMBOL]);
-        if (result && 'data' in result) {
-          const data = result.data;
+        const workflowResult = Array.isArray(result)
+          ? result.find(item => item.type === 'data-workflow' || item.type === 'data-tool-workflow')
+          : result;
+        if (workflowResult && 'data' in workflowResult) {
+          const data = workflowResult.data;
           step.task = data;
 
           if (data.name && step.task) {
@@ -1217,7 +1294,7 @@ export function transformNetwork(
         }
 
         bufferedNetworks.set(payload.runId!, current);
-        return {
+        const networkChunk = {
           type: isNested ? 'data-tool-network' : 'data-network',
           id: payload.runId!,
           data: {
@@ -1225,6 +1302,10 @@ export function transformNetwork(
             status: 'running',
           },
         } as const;
+        if (Array.isArray(result)) {
+          return [networkChunk, ...result];
+        }
+        return networkChunk;
       }
 
       // return the chunk as is if it's not a known type
