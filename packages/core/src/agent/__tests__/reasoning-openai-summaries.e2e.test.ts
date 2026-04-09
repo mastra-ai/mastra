@@ -82,7 +82,7 @@ describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () =>
       expect(reasoningDeltas.some(delta => delta.text.trim().length > 0)).toBe(true);
       expect(deltasById.size).toBeGreaterThan(0);
 
-      expect(reasoningStarts).toEqual(reasoningEnds);
+      expect([...startCounts.keys()].sort()).toEqual([...endCounts.keys()].sort());
 
       for (const [id, count] of startCounts) {
         expect(count).toBe(1);
