@@ -8,9 +8,11 @@ import { describe, beforeAll, afterAll } from 'vitest';
 import { setupStreamingMemoryTest } from './shared/streaming-memory';
 import { setupUseChatV4, setupUseChatV5Plus } from './shared/useChat';
 import { transformRequest } from './transform-request';
-import { memory } from './v4/mastra/agents/weather';
+import { createWeatherMemory as createWeatherMemoryV4 } from './v4/mastra/agents/weather';
 import { weatherTool as weatherToolV4 } from './v4/mastra/tools/weather';
+import { createWeatherMemory as createWeatherMemoryV5 } from './v5/mastra/agents/weather';
 import { weatherTool as weatherToolV5 } from './v5/mastra/tools/weather';
+import { createWeatherMemory as createWeatherMemoryV6 } from './v6/mastra/agents/weather';
 import { weatherTool as weatherToolV6 } from './v6/mastra/tools/weather';
 
 const RECORDING_NAME = 'memory-integration-tests-src-streaming-memory';
@@ -32,8 +34,9 @@ describe('v4', () => {
   setupUseChatV4();
   setupStreamingMemoryTest({
     model: openai('gpt-4o'),
-    memory,
     tools: { get_weather: weatherToolV4 },
+    createMemory: dbPath => createWeatherMemoryV4({ dbPath }),
+    createIsolatedMemory: dbPath => createWeatherMemoryV4({ dbPath, semanticRecall: false, workingMemory: false }),
   });
 });
 
@@ -48,8 +51,9 @@ describe('v5', () => {
   setupUseChatV5Plus({ useChatFunc: useChatV5, version: 'v5' });
   setupStreamingMemoryTest({
     model: 'openai/gpt-4o',
-    memory,
     tools: { get_weather: weatherToolV5 },
+    createMemory: dbPath => createWeatherMemoryV5({ dbPath }),
+    createIsolatedMemory: dbPath => createWeatherMemoryV5({ dbPath, semanticRecall: false, workingMemory: false }),
   });
 });
 
@@ -64,7 +68,8 @@ describe('v6', () => {
   setupUseChatV5Plus({ useChatFunc: useChatV6, version: 'v6' });
   setupStreamingMemoryTest({
     model: openaiV6('gpt-4o'),
-    memory,
     tools: { get_weather: weatherToolV6 },
+    createMemory: dbPath => createWeatherMemoryV6({ dbPath }),
+    createIsolatedMemory: dbPath => createWeatherMemoryV6({ dbPath, semanticRecall: false, workingMemory: false }),
   });
 });
