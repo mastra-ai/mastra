@@ -405,13 +405,14 @@ async function processOutputStream<OUTPUT = undefined>({
         });
 
         reasoningBuffers.delete(chunk.payload.id);
+        const nextProviderOptions = Array.from(reasoningBuffers.values()).at(-1)?.providerMetadata;
 
         // Reset reasoning state - clear providerOptions to prevent reasoning metadata
         // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
           isReasoning: reasoningBuffers.size > 0,
           reasoningBuffers,
-          providerOptions: reasoningBuffers.size > 0 ? runState.state.providerOptions : undefined,
+          providerOptions: nextProviderOptions,
         });
 
         safeEnqueue(controller, chunk);

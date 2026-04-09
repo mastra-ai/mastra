@@ -7478,6 +7478,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
+                          "text": "I'm thinking...",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
                           "text": "aworld!",
                           "type": "text",
                         },
@@ -7521,6 +7526,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7596,6 +7606,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               {
                                 "providerOptions": undefined,
                                 "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
@@ -7675,6 +7690,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
+                          "text": "I'm thinking...",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
                           "text": "aworld!",
                           "type": "text",
                         },
@@ -7718,6 +7738,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7793,6 +7818,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               {
                                 "providerOptions": undefined,
                                 "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
