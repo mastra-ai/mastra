@@ -453,6 +453,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'reasoning-start': {
+      if (!sendReasoning) {
+        return;
+      }
       return {
         type: 'reasoning-start',
         id: part.id,
@@ -473,6 +476,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'reasoning-end': {
+      if (!sendReasoning) {
+        return;
+      }
       return {
         type: 'reasoning-end',
         id: part.id,
