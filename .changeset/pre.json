@@ -125,5 +125,12 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_core-15214-dependencies",
+    "@mastra_playground-ui-15085-dependencies",
+    "green-birds-knock",
+    "lovely-moles-camp",
+    "stale-worlds-happen",
+    "strong-pillows-admire"
+  ]
 }
