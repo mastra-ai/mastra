@@ -1,8 +1,8 @@
 The Theme Park agent can use tools, hold context, and plan a real park day. Once something like this is in front of real users, safety becomes a practical concern. Users won't always behave the way you expect, and some will actively try to manipulate or jailbreak the agent.
 
-In this lesson, you'll add input guardrails using two processors: `PromptInjectionDetector`, which blocks prompt injection, jailbreak attempts, and system override tries before the model ever sees the message, and `ModerationProcessor`, which screens incoming messages for hate and harassment. You'll test both in Studio by sending a normal request first, then a hostile one, and confirming the bad input gets blocked before the agent reasons over it.
+In this lesson, you'll add input-stage guardrails using two processors: `PromptInjectionDetector`, which intercepts prompt injection, jailbreak attempts, and system override tries before the model ever sees the message, and `ModerationProcessor`, which screens incoming messages for hate and harassment at the input stage.
 
-This matters because memory in Mastra already uses processors under the hood to retrieve and persist context. Adding your own processor slots into that same pipeline. If a message gets blocked at the input stage, the LLM never gets called, and nothing from that request gets written to memory.
+Both processors operate exclusively at the input stage and run before the LLM is invoked. Adding your own processor slots into that same pipeline. When a message is blocked at the input stage, the LLM is never called, and nothing from that request gets written to memory.
 
 > "The model never gets pulled off task because the request does not make it through the input processor."
 >
