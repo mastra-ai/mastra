@@ -94,6 +94,8 @@ function createPrefillErrorModel(responseText: string) {
   return { model, getCallCount: () => callCount, getReceivedPrompts: () => receivedPrompts };
 }
 
+const ANTHROPIC_PREFILL_RETRY_REMINDER = '<system-reminder>&lt;continue&gt;</system-reminder>';
+
 describe('PrefillErrorHandler Recovery', () => {
   describe('generate()', () => {
     it('should recover from prefill error by appending <continue> and retrying', async () => {
@@ -157,18 +159,39 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(result.text).toBe('Recovery successful!');
       expect(getCallCount()).toBe(2); // First call failed, second succeeded
 
-      // Verify the retry prompt contains a <continue> user message
+      // Verify the retry prompt contains the synthetic prefill-retry system reminder
       const retryPrompt = getReceivedPrompts()[1];
       expect(retryPrompt).toBeDefined();
 
-      // Find the <continue> message in the retry prompt
-      const hasContinueMessage = retryPrompt.some(
+      const hasRetryReminderMessage = retryPrompt.some(
         (msg: any) =>
           msg.role === 'user' &&
           Array.isArray(msg.content) &&
-          msg.content.some((part: any) => part.type === 'text' && part.text === '<continue>'),
+          msg.content.some((part: any) => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
       );
-      expect(hasContinueMessage).toBe(true);
+      expect(hasRetryReminderMessage).toBe(true);
+
+      const visibleMessages = await mockMemory.recall({ threadId, resourceId });
+      expect(
+        visibleMessages.messages.some(
+          message =>
+            message.role === 'user' &&
+            message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+        ),
+      ).toBe(false);
+
+      const rawMessages = await mockMemory.recall({ threadId, resourceId, includeSystemReminders: true });
+      const retryReminderMessage = rawMessages.messages.find(
+        message =>
+          message.role === 'user' &&
+          message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+      );
+      expect(retryReminderMessage).toBeDefined();
+      expect(retryReminderMessage?.content.metadata).toEqual({
+        systemReminder: {
+          type: 'anthropic-prefill-processor-retry',
+        },
+      });
     });
 
     it('should NOT retry for non-prefill API errors', async () => {
@@ -280,15 +303,15 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(fullText).toBe('Stream recovery!');
       expect(getCallCount()).toBe(2);
 
-      // Verify <continue> message was in the retry prompt
+      // Verify the synthetic prefill-retry system reminder was in the retry prompt
       const retryPrompt = getReceivedPrompts()[1];
-      const hasContinueMessage = retryPrompt.some(
+      const hasRetryReminderMessage = retryPrompt.some(
         (msg: any) =>
           msg.role === 'user' &&
           Array.isArray(msg.content) &&
-          msg.content.some((part: any) => part.type === 'text' && part.text === '<continue>'),
+          msg.content.some((part: any) => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
       );
-      expect(hasContinueMessage).toBe(true);
+      expect(hasRetryReminderMessage).toBe(true);
     });
 
     it('should only retry once even if the error persists', async () => {

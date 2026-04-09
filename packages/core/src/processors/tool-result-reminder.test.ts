@@ -192,7 +192,7 @@ describe('AgentsMDInjector', () => {
     ]);
     const injectedReminder = messageList.get.all.db().at(-1);
     expect(injectedReminder?.content.metadata).toEqual({
-      dynamicAgentsMdReminder: {
+      systemReminder: {
         path: '/repo/src/agents/nested/AGENTS.md',
         type: 'dynamic-agents-md',
       },

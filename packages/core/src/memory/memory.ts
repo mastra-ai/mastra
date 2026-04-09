@@ -98,7 +98,7 @@ export const memoryDefaultOptions = {
   },
 } satisfies MemoryConfigInternal;
 
-const SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -122,7 +122,7 @@ export function isSystemReminderMessage(message: MastraDBMessage): boolean {
   }
 
   const metadata = message.content.metadata;
-  if (isRecord(metadata) && SYSTEM_REMINDER_METADATA_KEY in metadata) {
+  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
     return true;
   }
 

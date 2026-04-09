@@ -9,10 +9,9 @@ import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
 const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
 const REMINDER_TYPE = 'dynamic-agents-md';
-const REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 type ReminderMessageMetadata = {
-  [REMINDER_METADATA_KEY]?: {
+  systemReminder?: {
     path?: string;
     type?: string;
   };
@@ -142,7 +141,7 @@ function extractReminderPath(messageText: string): string | undefined {
 
 function getReminderMetadata(instructionPath: string): ReminderMessageMetadata {
   return {
-    [REMINDER_METADATA_KEY]: {
+    systemReminder: {
       path: instructionPath,
       type: REMINDER_TYPE,
     },
@@ -155,7 +154,7 @@ function extractReminderPathFromMetadata(message: MastraDBMessage): string | und
     return undefined;
   }
 
-  const reminderMetadata = metadata[REMINDER_METADATA_KEY];
+  const reminderMetadata = metadata.systemReminder;
   if (!isRecord(reminderMetadata)) {
     return undefined;
   }

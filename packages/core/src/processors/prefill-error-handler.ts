@@ -55,7 +55,17 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
         role: 'user' as const,
         content: {
           format: 2 as const,
-          parts: [{ type: 'text' as const, text: '<continue>' }],
+          parts: [
+            {
+              type: 'text' as const,
+              text: '<system-reminder>&lt;continue&gt;</system-reminder>',
+            },
+          ],
+          metadata: {
+            systemReminder: {
+              type: 'anthropic-prefill-processor-retry',
+            },
+          },
         },
         createdAt: new Date(),
       },
