@@ -184,6 +184,10 @@ export const ValueWithCopyBtn: Story = {
       <DataKeysAndValues.ValueWithCopyBtn copyValue="abc123def456">abc123def456</DataKeysAndValues.ValueWithCopyBtn>
       <DataKeysAndValues.Key>Span ID</DataKeysAndValues.Key>
       <DataKeysAndValues.ValueWithCopyBtn copyValue="span-001-xyz">span-001-xyz</DataKeysAndValues.ValueWithCopyBtn>
+      <DataKeysAndValues.Key>API Key</DataKeysAndValues.Key>
+      <DataKeysAndValues.ValueWithCopyBtn copyValue="sk-1234" copyTooltip="Copy API key">
+        sk-1234
+      </DataKeysAndValues.ValueWithCopyBtn>
     </DataKeysAndValues>
   ),
 };
