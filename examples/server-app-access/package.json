@@ -12,7 +12,7 @@
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/hono": "latest",
-    "hono": "^4.11.3",
+    "hono": "^4.12.12",
     "zod": "^4.3.6"
   },
   "devDependencies": {
