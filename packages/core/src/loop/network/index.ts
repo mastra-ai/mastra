@@ -496,7 +496,15 @@ export async function createNetworkLoop({
     verboseIntrospection?: boolean;
   };
   onStepFinish?: (event: any) => Promise<void> | void;
-  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  onError?: ({
+    error,
+    provider,
+    modelId,
+  }: {
+    error: Error | string;
+    provider?: string;
+    modelId?: string;
+  }) => Promise<void> | void;
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
 }) {

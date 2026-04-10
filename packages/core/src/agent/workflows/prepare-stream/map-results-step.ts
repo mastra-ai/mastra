@@ -17,19 +17,6 @@ import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-function getUpstreamErrorMetadata(error: APICallError): { provider?: string; modelId?: string } {
-  const { data } = error;
-
-  if (!data || typeof data !== 'object') {
-    return {};
-  }
-
-  const provider = 'provider' in data && typeof data.provider === 'string' ? data.provider : undefined;
-  const modelId = 'modelId' in data && typeof data.modelId === 'string' ? data.modelId : undefined;
-
-  return { provider, modelId };
-}
-
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
@@ -299,9 +286,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
         onError: async (errorInfo: Parameters<NonNullable<InnerAgentExecutionOptions<OUTPUT>['onError']>>[0]) => {
-          const { error } = errorInfo;
+          const { error, provider, modelId } = errorInfo;
           const isUpstreamError = APICallError.isInstance(error);
-          const { provider, modelId } = isUpstreamError ? getUpstreamErrorMetadata(error) : {};
           const streamError = getErrorFromUnknown(error, { supportSerialization: false });
 
           if (isUpstreamError) {

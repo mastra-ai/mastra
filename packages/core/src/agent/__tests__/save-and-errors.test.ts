@@ -1286,7 +1286,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(caughtError.message).toMatch(/Simulated stream error/);
       });
 
-      it('should log upstream stream errors with provider and model metadata from APICallError.data', async () => {
+      it('should pass resolved model metadata through onError for stream failures', async () => {
         if (version === 'v1') return;
 
         const upstreamError = new APICallError({
@@ -1294,13 +1294,11 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent',
           requestBodyValues: {},
           statusCode: 504,
-          data: {
-            provider: 'google.vertex',
-            modelId: 'gemini-2.5-pro',
-          },
         });
 
         const errorModel = new MockLanguageModelV2({
+          provider: 'google-vertex',
+          modelId: 'gemini-2.5-pro',
           doGenerate() {
             throw upstreamError;
           },
@@ -1323,10 +1321,14 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         agent.__setLogger(logger);
 
         let caughtError: Error | string | null = null;
+        let caughtProvider: string | undefined;
+        let caughtModelId: string | undefined;
 
         const stream = await agent.stream('Hello', {
-          onError: ({ error }) => {
+          onError: ({ error, provider, modelId }) => {
             caughtError = error;
+            caughtProvider = provider;
+            caughtModelId = modelId;
           },
           modelSettings: {
             maxRetries: 0,
@@ -1338,12 +1340,14 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         } catch {}
 
         expect(caughtError).toBe(upstreamError);
+        expect(caughtProvider).toBe('google-vertex');
+        expect(caughtModelId).toBe('gemini-2.5-pro');
         expect(logger.error).toHaveBeenCalledWith(
-          'Upstream LLM API error from google.vertex (model: gemini-2.5-pro)',
+          'Upstream LLM API error from google-vertex (model: gemini-2.5-pro)',
           expect.objectContaining({
             error: upstreamError,
             runId: expect.any(String),
-            provider: 'google.vertex',
+            provider: 'google-vertex',
             modelId: 'gemini-2.5-pro',
           }),
         );

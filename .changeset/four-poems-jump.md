@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed agent streaming errors to log upstream provider details correctly and end agent traces when the stream fails.
+Fixed agent streaming errors to use `onError` for logging, preserve resolved model metadata, and end agent traces when the stream fails.
