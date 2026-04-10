@@ -75,10 +75,7 @@ export interface CostContext {
  * pricing/model fields travel in `costContext`.
  */
 export interface ExportedMetric {
-  /**
-   * Unique identifier for this metric event, generated at emission time.
-   * Acts as a de-duplication key in downstream OLAP stores.
-   */
+  /** Unique identifier for this metric event, generated at emission time */
   metricId: string;
 
   /** When the metric was recorded */

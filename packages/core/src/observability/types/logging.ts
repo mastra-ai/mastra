@@ -35,11 +35,7 @@ export interface LoggerContext {
  * Signal identity stays on the top-level `traceId` / `spanId` fields.
  */
 export interface ExportedLog {
-  /**
-   * Unique identifier for this log event, generated at emission time.
-   * Aligns with the OpenTelemetry `log.record.uid` semantic convention
-   * and acts as a de-duplication key in downstream OLAP stores.
-   */
+  /** Unique identifier for this log event, generated at emission time */
   logId: string;
 
   /** When the log was emitted */

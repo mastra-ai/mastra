@@ -62,10 +62,7 @@ export interface FeedbackInput {
  * User-defined metadata is inherited from the span/trace receiving feedback.
  */
 export interface ExportedFeedback {
-  /**
-   * Unique identifier for this feedback event, generated at emission time.
-   * Acts as a de-duplication key in downstream OLAP stores.
-   */
+  /** Unique identifier for this feedback event, generated at emission time */
   feedbackId: string;
 
   /** When the feedback was recorded */
