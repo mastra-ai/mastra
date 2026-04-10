@@ -1,13 +1,10 @@
 {
   "name": "@internal/browser-test-utils",
   "version": "0.0.1",
-  "description": "Integration tests for browser providers (Stagehand, AgentBrowser)",
+  "description": "Test utilities for browser providers (Stagehand, AgentBrowser)",
   "type": "module",
   "main": "src/index.ts",
   "private": true,
-  "scripts": {
-    "test": "vitest run"
-  },
   "exports": {
     ".": "./src/index.ts"
   },
@@ -19,9 +16,7 @@
     "vitest": "*"
   },
   "devDependencies": {
-    "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/stagehand": "workspace:*",
     "vitest": "catalog:"
   }
 }

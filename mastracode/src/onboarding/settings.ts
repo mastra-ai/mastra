@@ -676,6 +676,59 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
+/** Marker file name to track which provider last used a profile. */
+const PROFILE_PROVIDER_MARKER = '.mastra-provider';
+
+/**
+ * Check which provider last used a profile directory.
+ * Returns the provider name if the marker exists, undefined otherwise.
+ */
+export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(markerPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    if (content === 'stagehand' || content === 'agent-browser') {
+      return content;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write the provider marker to a profile directory.
+ * Creates the directory if it doesn't exist.
+ */
+export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(profilePath)) {
+    mkdirSync(profilePath, { recursive: true });
+  }
+  writeFileSync(markerPath, provider, 'utf-8');
+}
+
+/**
+ * Check if a profile has a provider mismatch.
+ * Returns the existing provider if there's a mismatch, undefined otherwise.
+ */
+export function checkProfileProviderMismatch(
+  profilePath: string | undefined,
+  targetProvider: BrowserProvider,
+): BrowserProvider | undefined {
+  if (!profilePath) {
+    return undefined;
+  }
+  const existingProvider = getProfileProvider(profilePath);
+  if (existingProvider && existingProvider !== targetProvider) {
+    return existingProvider;
+  }
+  return undefined;
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -687,6 +740,11 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
   }
 
   const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+
+  // Write provider marker to profile directory (if using a profile)
+  if (profile) {
+    setProfileProvider(profile, provider);
+  }
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');

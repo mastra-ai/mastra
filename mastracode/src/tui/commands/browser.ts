@@ -3,7 +3,12 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
-import { createBrowserFromSettings, loadSettings, saveSettings } from '../../onboarding/settings.js';
+import {
+  checkProfileProviderMismatch,
+  createBrowserFromSettings,
+  loadSettings,
+  saveSettings,
+} from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -98,6 +103,36 @@ function askText(ctx: SlashCommandContext, question: string, defaultValue?: stri
 }
 
 /**
+ * Check for provider mismatch in profile and prompt for confirmation.
+ * Returns true if we should proceed, false if user cancelled.
+ */
+async function checkAndConfirmProviderMismatch(
+  ctx: SlashCommandContext,
+  profile: string | undefined,
+  targetProvider: BrowserProvider,
+): Promise<boolean> {
+  if (!profile) return true;
+
+  const existingProvider = checkProfileProviderMismatch(profile, targetProvider);
+  if (!existingProvider) return true;
+
+  const targetLabel = targetProvider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
+  const existingLabel = existingProvider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
+
+  ctx.showInfo(
+    `⚠️  Warning: This profile was last used by ${existingLabel}, but you're now using ${targetLabel}.\n` +
+      'Using the same profile across different providers can cause compatibility issues.',
+  );
+
+  const proceed = await askInline(ctx, 'Continue anyway?', [
+    { label: 'No', description: 'Cancel and use a different profile' },
+    { label: 'Yes', description: 'Proceed (may cause issues)' },
+  ]);
+
+  return proceed === 'Yes';
+}
+
+/**
  * Apply browser settings to all mode agents and track the active settings.
  */
 function applyBrowserToAgents(
@@ -157,7 +192,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  cdpUrl <url>         - CDP WebSocket URL\n\n' +
           'Use "clear" as value to remove a setting.\n\n' +
           'Examples:\n' +
-          '  /browser set profile ~/.mastracode/browser-profile\n' +
+          '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
           '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n' +
           '  /browser set profile clear',
       );
@@ -296,6 +331,14 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (arg === 'on' || arg === 'enable') {
     const nextBrowser = { ...settings.browser, enabled: true };
+
+    // Check for provider mismatch in profile
+    const shouldProceed = await checkAndConfirmProviderMismatch(ctx, nextBrowser.profile, nextBrowser.provider);
+    if (!shouldProceed) {
+      ctx.showInfo('Browser enable cancelled.');
+      return;
+    }
+
     try {
       const browserInstance = await createBrowserFromSettings(nextBrowser);
       applyBrowserToAgents(ctx, browserInstance, nextBrowser);
@@ -560,7 +603,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
 
       if (useProfile === 'Yes') {
-        const profilePath = await askText(ctx, 'Profile directory path:', profile || '~/.mastracode/browser-profile');
+        const defaultProfile = `~/.mastracode/browser-profile-${provider}`;
+        const profilePath = await askText(ctx, 'Profile directory path:', profile || defaultProfile);
         if (profilePath === null) {
           ctx.showInfo('Browser setup cancelled.');
           return;
@@ -589,6 +633,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     stagehand: stagehandSettings,
     agentBrowser: storageState ? { storageState } : undefined,
   };
+
+  // Check for provider mismatch in profile
+  const shouldProceed = await checkAndConfirmProviderMismatch(ctx, profile, provider);
+  if (!shouldProceed) {
+    ctx.showInfo('Browser setup cancelled.');
+    return;
+  }
 
   // Apply browser to agents first, then persist on success
   try {

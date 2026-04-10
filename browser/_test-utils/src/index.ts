@@ -1,6 +1,5 @@
 export {
   createProviderTests,
-  createCrossProviderTests,
   createHeadlessSwitchingTests,
   getActiveConfigs,
   getSystemChromePath,
