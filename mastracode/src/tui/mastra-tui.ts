@@ -180,7 +180,8 @@ export class MastraTUI {
     // so the editor stays responsive for queued follow-ups.
     while (true) {
       const userInput = await this.getUserInput();
-      if (!userInput.trim()) continue;
+      // allow space as transparent continue (for recovering from api errors manually)
+      if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
         // Handle slash commands
