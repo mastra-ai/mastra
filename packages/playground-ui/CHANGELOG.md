@@ -1,5 +1,41 @@
 # @mastra/playground-ui
 
+## 22.1.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15085](https://github.com/mastra-ai/mastra/pull/15085))
+  - Updated dependency [`@assistant-ui/react@^0.12.22` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.22) (from `^0.12.21`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+
+- Added ValueLink, ValueWithTooltip, and ValueWithCopyBtn variants to DataKeysAndValues component ([#15208](https://github.com/mastra-ai/mastra/pull/15208))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`30a189b`](https://github.com/mastra-ai/mastra/commit/30a189bdd92c4f875a2a6e5d8498ee7fa547bde6), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+  - @mastra/ai-sdk@1.3.4-alpha.0
+  - @mastra/client-js@1.13.4-alpha.0
+  - @mastra/react@0.2.26-alpha.0
+
+## 22.1.1
+
+### Patch Changes
+
+- Added a read-only warning hint below the system prompt on the agent Overview sidebar when @mastra/editor is not configured, guiding users to install it for editing capabilities ([#15176](https://github.com/mastra-ai/mastra/pull/15176))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
+- Fixed integration tools (Composio, Arcade) not saving when added to code-defined agents in the Agent Editor ([#15185](https://github.com/mastra-ai/mastra/pull/15185))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+  - @mastra/client-js@1.13.3
+  - @mastra/react@0.2.25
+
 ## 22.1.1-alpha.2
 
 ### Patch Changes

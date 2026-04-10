@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 1.24.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15214](https://github.com/mastra-ai/mastra/pull/15214))
+  - Updated dependency [`chat@^4.24.0` ↗︎](https://www.npmjs.com/package/chat/v/4.24.0) (from `^4.23.0`, in `dependencies`)
+
+- Fixed gateway model detection to use duck typing instead of instanceof check, preventing potential failures from cross-package module resolution issues. Propagates `gatewayId` through the AISDKV5LanguageModel wrapper so duck-type detection works even when models are re-wrapped. ([#15168](https://github.com/mastra-ai/mastra/pull/15168))
+
+## 1.24.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91))
+
+- Fixed subagent writing observations to the parent agent's memory thread. When a parent agent spawns a subagent via `createSubagentTool`, the subagent now receives its own isolated request context with `threadId` and `resourceId` cleared, preventing it from corrupting the parent's observation history. ([#15103](https://github.com/mastra-ai/mastra/pull/15103))
+
 ## 1.24.1-alpha.1
 
 ### Patch Changes
