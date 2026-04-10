@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { defaultOptionsSchema } from './default-options';
+import type { JsonSerialized } from './json-serialized';
 import { serializedMemoryConfigSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
 import { workspaceSnapshotConfigSchema } from './stored-workspaces';
@@ -453,3 +454,16 @@ export {
   toolConfigSchema,
   toolsConfigSchema,
 };
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type StoredAgentResponse = JsonSerialized<z.infer<typeof storedAgentSchema>>;
+export type ListStoredAgentsParams = z.input<typeof listStoredAgentsQuerySchema>;
+export type ListStoredAgentsResponse = JsonSerialized<z.infer<typeof listStoredAgentsResponseSchema>>;
+export type CreateStoredAgentParams = z.input<typeof createStoredAgentBodySchema>;
+export type UpdateStoredAgentParams = z.input<typeof updateStoredAgentBodySchema>;
+export type DeleteStoredAgentResponse = z.infer<typeof deleteStoredAgentResponseSchema>;
+export type PreviewInstructionsParams = z.input<typeof previewInstructionsBodySchema>;
+export type PreviewInstructionsResponse = z.infer<typeof previewInstructionsResponseSchema>;

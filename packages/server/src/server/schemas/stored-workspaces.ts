@@ -150,3 +150,17 @@ export const deleteStoredWorkspaceResponseSchema = z.object({
 });
 
 export { snapshotConfigSchema as workspaceSnapshotConfigSchema };
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type StoredWorkspaceResponse = JsonSerialized<z.infer<typeof storedWorkspaceSchema>>;
+export type ListStoredWorkspacesParams = z.input<typeof listStoredWorkspacesQuerySchema>;
+export type ListStoredWorkspacesResponse = JsonSerialized<z.infer<typeof listStoredWorkspacesResponseSchema>>;
+export type CreateStoredWorkspaceParams = z.input<typeof createStoredWorkspaceBodySchema>;
+export type UpdateStoredWorkspaceParams = z.input<typeof updateStoredWorkspaceBodySchema>;
+export type DeleteStoredWorkspaceResponse = z.infer<typeof deleteStoredWorkspaceResponseSchema>;
+export type WorkspaceSnapshotConfig = z.input<typeof snapshotConfigSchema>;

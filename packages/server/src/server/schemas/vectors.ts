@@ -76,3 +76,10 @@ export const listEmbeddersResponseSchema = z.object({
     }),
   ),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type ListVectorsResponse = z.infer<typeof listVectorsResponseSchema>;
+export type ListEmbeddersResponse = z.infer<typeof listEmbeddersResponseSchema>;

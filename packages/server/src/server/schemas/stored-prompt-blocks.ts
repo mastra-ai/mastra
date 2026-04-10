@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
+import type { JsonSerialized } from './json-serialized';
 import { ruleGroupSchema } from './rule-group';
 
 // ============================================================================
@@ -109,3 +110,14 @@ export const deleteStoredPromptBlockResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type StoredPromptBlockResponse = JsonSerialized<z.infer<typeof storedPromptBlockSchema>>;
+export type ListStoredPromptBlocksParams = z.input<typeof listStoredPromptBlocksQuerySchema>;
+export type ListStoredPromptBlocksResponse = JsonSerialized<z.infer<typeof listStoredPromptBlocksResponseSchema>>;
+export type CreateStoredPromptBlockParams = z.input<typeof createStoredPromptBlockBodySchema>;
+export type UpdateStoredPromptBlockParams = z.input<typeof updateStoredPromptBlockBodySchema>;
+export type DeleteStoredPromptBlockResponse = z.infer<typeof deleteStoredPromptBlockResponseSchema>;

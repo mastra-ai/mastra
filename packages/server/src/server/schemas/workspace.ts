@@ -463,3 +463,34 @@ export const skillsShUpdateResponseSchema = z.object({
     }),
   ),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+// Workspace types
+export type WorkspaceInfoResponse = z.infer<typeof workspaceInfoResponseSchema>;
+export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>;
+export type WorkspaceFileEntry = z.infer<typeof fileEntrySchema>;
+export type WorkspaceFsReadResponse = z.infer<typeof fsReadResponseSchema>;
+export type WorkspaceFsWriteResponse = z.infer<typeof fsWriteResponseSchema>;
+export type WorkspaceFsListResponse = z.infer<typeof fsListResponseSchema>;
+export type WorkspaceFsDeleteResponse = z.infer<typeof fsDeleteResponseSchema>;
+export type WorkspaceFsMkdirResponse = z.infer<typeof fsMkdirResponseSchema>;
+export type WorkspaceFsStatResponse = z.infer<typeof fsStatResponseSchema>;
+export type WorkspaceSearchResult = z.infer<typeof searchResultSchema>;
+export type WorkspaceSearchParams = z.input<typeof searchQuerySchema>;
+export type WorkspaceSearchResponse = z.infer<typeof searchResponseSchema>;
+export type WorkspaceIndexParams = z.input<typeof indexBodySchema>;
+export type WorkspaceIndexResponse = z.infer<typeof indexResponseSchema>;
+
+// Skill types
+export type SkillSource = z.infer<typeof skillSourceSchema>;
+export type SkillMetadata = z.infer<typeof skillMetadataSchema>;
+export type Skill = z.infer<typeof skillSchema>;
+export type ListSkillsResponse = z.infer<typeof listSkillsResponseSchema>;
+export type SkillSearchResult = z.infer<typeof skillSearchResultSchema>;
+export type SearchSkillsParams = z.input<typeof searchSkillsQuerySchema>;
+export type SearchSkillsResponse = z.infer<typeof searchSkillsResponseSchema>;
+export type ListSkillReferencesResponse = z.infer<typeof listReferencesResponseSchema>;
+export type GetSkillReferenceResponse = z.infer<typeof skillReferenceResponseSchema>;

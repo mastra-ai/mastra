@@ -109,3 +109,15 @@ export const executeProcessorResponseSchema = z.object({
   tripwire: tripwireSchema.optional(),
   error: z.string().optional(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type ProcessorConfiguration = z.infer<typeof processorConfigurationSchema>;
+export type GetProcessorResponse = z.infer<typeof serializedProcessorSchema>;
+export type GetProcessorDetailResponse = z.infer<typeof serializedProcessorDetailSchema>;
+export type ExecuteProcessorParams = z.input<typeof executeProcessorBodySchema>;
+export type ExecuteProcessorResponse = JsonSerialized<z.infer<typeof executeProcessorResponseSchema>>;

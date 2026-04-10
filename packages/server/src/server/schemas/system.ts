@@ -15,3 +15,4 @@ export const systemPackagesResponseSchema = z.object({
 
 export type MastraPackage = z.infer<typeof mastraPackageSchema>;
 export type SystemPackagesResponse = z.infer<typeof systemPackagesResponseSchema>;
+export type GetSystemPackagesResponse = SystemPackagesResponse;

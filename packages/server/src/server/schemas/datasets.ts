@@ -631,3 +631,27 @@ export const clusterFailuresResponseSchema = z.object({
     )
     .optional(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type DatasetItem = JsonSerialized<z.infer<typeof datasetItemResponseSchema>>;
+export type DatasetRecord = JsonSerialized<z.infer<typeof datasetResponseSchema>>;
+export type DatasetExperiment = JsonSerialized<z.infer<typeof experimentResponseSchema>>;
+export type CreateDatasetParams = z.input<typeof createDatasetBodySchema>;
+export type UpdateDatasetBody = z.input<typeof updateDatasetBodySchema>;
+export type AddItemBody = z.input<typeof addItemBodySchema>;
+export type UpdateItemBody = z.input<typeof updateItemBodySchema>;
+export type TriggerExperimentBody = z.input<typeof triggerExperimentBodySchema>;
+export type CompareExperimentsBody = z.input<typeof compareExperimentsBodySchema>;
+export type UpdateExperimentResultBody = z.input<typeof updateExperimentResultBodySchema>;
+export type BatchInsertItemsBody = z.input<typeof batchInsertItemsBodySchema>;
+export type BatchDeleteItemsBody = z.input<typeof batchDeleteItemsBodySchema>;
+export type GenerateItemsBody = z.input<typeof generateItemsBodySchema>;
+export type GeneratedItem = z.infer<typeof generateItemsResponseSchema>['items'][number];
+export type DatasetItemVersionResponse = JsonSerialized<z.infer<typeof itemVersionResponseSchema>>;
+export type DatasetVersionResponse = JsonSerialized<z.infer<typeof datasetVersionResponseSchema>>;
+export type CompareExperimentsResponse = z.infer<typeof comparisonResponseSchema>;

@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import type { JsonSerialized } from './json-serialized';
 import { ruleGroupSchema } from './rule-group';
 import {
   listVersionsQuerySchema,
@@ -74,3 +75,14 @@ export const deletePromptBlockVersionResponseSchema = deleteVersionResponseSchem
 export const comparePromptBlockVersionsResponseSchema = createCompareVersionsResponseSchema(promptBlockVersionSchema);
 
 export { versionDiffEntrySchema };
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type PromptBlockVersionResponse = JsonSerialized<z.infer<typeof promptBlockVersionSchema>>;
+export type ListPromptBlockVersionsParams = z.input<typeof listPromptBlockVersionsQuerySchema>;
+export type ListPromptBlockVersionsResponse = JsonSerialized<z.infer<typeof listPromptBlockVersionsResponseSchema>>;
+export type CreatePromptBlockVersionParams = z.input<typeof createPromptBlockVersionBodySchema>;
+export type ActivatePromptBlockVersionResponse = z.infer<typeof activatePromptBlockVersionResponseSchema>;
+export type DeletePromptBlockVersionResponse = z.infer<typeof deletePromptBlockVersionResponseSchema>;

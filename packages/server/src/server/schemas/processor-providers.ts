@@ -38,3 +38,10 @@ export const getProcessorProviderResponseSchema = z.object({
   availablePhases: z.array(processorPhaseSchema),
   configSchema: z.record(z.string(), z.unknown()),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type GetProcessorProvidersResponse = z.infer<typeof getProcessorProvidersResponseSchema>;
+export type GetProcessorProviderResponse = z.infer<typeof getProcessorProviderResponseSchema>;

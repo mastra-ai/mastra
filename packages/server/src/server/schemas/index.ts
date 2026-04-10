@@ -1,3 +1,6 @@
+// JSON serialization utility type (Date → string for JSON transport)
+export * from './json-serialized';
+
 // Route contract utility types for type inference
 export type {
   InferPathParams,
@@ -87,4 +90,12 @@ export {
   listProcessorsResponseSchema,
   executeProcessorBodySchema,
   executeProcessorResponseSchema,
+} from './processors';
+
+export type {
+  ProcessorConfiguration,
+  GetProcessorResponse,
+  GetProcessorDetailResponse,
+  ExecuteProcessorParams,
+  ExecuteProcessorResponse,
 } from './processors';

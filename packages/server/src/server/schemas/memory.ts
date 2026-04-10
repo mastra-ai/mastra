@@ -624,3 +624,14 @@ export const awaitBufferStatusBodySchema = z.object({
 export const awaitBufferStatusResponseSchema = z.object({
   record: observationalMemoryRecordSchema.nullable(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type GetObservationalMemoryResponse = z.infer<typeof getObservationalMemoryResponseSchema>;
+export type AwaitBufferStatusResponse = z.infer<typeof awaitBufferStatusResponseSchema>;
+export type GetMemoryStatusResponse = JsonSerialized<z.infer<typeof memoryStatusResponseSchema>>;
+export type GetMemoryConfigResponseExtended = z.infer<typeof memoryConfigResponseSchema>;

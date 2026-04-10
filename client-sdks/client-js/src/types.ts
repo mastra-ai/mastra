@@ -44,134 +44,6 @@ import type {
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type {
-  // Stored Agents
-  storedAgentSchema,
-  listStoredAgentsResponseSchema,
-  createStoredAgentBodySchema,
-  updateStoredAgentBodySchema,
-  deleteStoredAgentResponseSchema,
-  listStoredAgentsQuerySchema,
-  // Stored Scorers
-  storedScorerSchema,
-  listStoredScorersResponseSchema,
-  createStoredScorerBodySchema,
-  updateStoredScorerBodySchema,
-  deleteStoredScorerResponseSchema,
-  listStoredScorersQuerySchema,
-  // Stored MCP Clients
-  storedMCPClientSchema,
-  listStoredMCPClientsResponseSchema,
-  createStoredMCPClientBodySchema,
-  updateStoredMCPClientBodySchema,
-  deleteStoredMCPClientResponseSchema,
-  listStoredMCPClientsQuerySchema,
-  // Stored Skills
-  storedSkillSchema,
-  listStoredSkillsResponseSchema,
-  createStoredSkillBodySchema,
-  updateStoredSkillBodySchema,
-  deleteStoredSkillResponseSchema,
-  listStoredSkillsQuerySchema,
-  // Stored Prompt Blocks
-  storedPromptBlockSchema,
-  listStoredPromptBlocksResponseSchema,
-  createStoredPromptBlockBodySchema,
-  updateStoredPromptBlockBodySchema,
-  deleteStoredPromptBlockResponseSchema,
-  listStoredPromptBlocksQuerySchema,
-  // Agent Versions
-  agentVersionSchema,
-  listVersionsQuerySchema,
-  listVersionsResponseSchema,
-  createVersionBodySchema,
-  activateVersionResponseSchema,
-  deleteVersionResponseSchema,
-  versionDiffEntrySchema,
-  compareVersionsResponseSchema,
-  // Scorer Versions
-  scorerVersionSchema,
-  listScorerVersionsQuerySchema,
-  listScorerVersionsResponseSchema,
-  createScorerVersionBodySchema,
-  activateScorerVersionResponseSchema,
-  deleteScorerVersionResponseSchema,
-  compareScorerVersionsResponseSchema,
-  // Prompt Block Versions
-  promptBlockVersionSchema,
-  listPromptBlockVersionsQuerySchema,
-  listPromptBlockVersionsResponseSchema,
-  createPromptBlockVersionBodySchema,
-  activatePromptBlockVersionResponseSchema,
-  deletePromptBlockVersionResponseSchema,
-  // System
-  systemPackagesResponseSchema,
-  // Processors
-  processorSerializedSchema,
-  processorConfigurationSchema,
-  serializedProcessorDetailSchema,
-  executeProcessorBodySchema,
-  executeProcessorResponseSchema,
-  // Processor Providers
-  getProcessorProvidersResponseSchema,
-  getProcessorProviderResponseSchema,
-  // Tool Providers
-  listToolProvidersResponseSchema,
-  listToolProviderToolkitsResponseSchema,
-  listToolProviderToolsQuerySchema,
-  listToolProviderToolsResponseSchema,
-  getToolProviderToolSchemaResponseSchema,
-  // Vectors & Embedders
-  listVectorsResponseSchema,
-  listEmbeddersResponseSchema,
-  // Workspace
-  workspaceSnapshotConfigSchema,
-  workspaceInfoResponseSchema,
-  listWorkspacesResponseSchema,
-  fsReadResponseSchema,
-  fsWriteResponseSchema,
-  fsListResponseSchema,
-  fsDeleteResponseSchema,
-  fsMkdirResponseSchema,
-  fsStatResponseSchema,
-  searchResponseSchema,
-  searchQuerySchema,
-  indexResponseSchema,
-  searchResultSchema,
-  indexBodySchema,
-  fileEntrySchema,
-  // Skills (workspace)
-  skillSourceSchema,
-  skillMetadataSchema,
-  skillSchema,
-  listSkillsResponseSchema,
-  skillSearchResultSchema,
-  searchSkillsQuerySchema,
-  searchSkillsResponseSchema,
-  skillReferenceResponseSchema,
-  listReferencesResponseSchema,
-  // Memory
-  memoryStatusResponseSchema,
-  memoryConfigResponseSchema,
-  getObservationalMemoryResponseSchema,
-  awaitBufferStatusResponseSchema,
-  // Datasets
-  datasetResponseSchema,
-  datasetItemResponseSchema,
-  experimentResponseSchema,
-  createDatasetBodySchema,
-  updateDatasetBodySchema,
-  addItemBodySchema,
-  updateItemBodySchema,
-  triggerExperimentBodySchema,
-  compareExperimentsBodySchema,
-  comparisonResponseSchema,
-  itemVersionResponseSchema,
-  batchInsertItemsBodySchema,
-  batchDeleteItemsBodySchema,
-  datasetVersionResponseSchema,
-  updateExperimentResultBodySchema,
-  generateItemsBodySchema,
-  generateItemsResponseSchema,
   ResponseInputMessage,
   ResponseTextFormat,
   ResponseTextConfig,
@@ -180,18 +52,146 @@ import type {
   ResponseOutputItem,
   ConversationItem,
   ConversationDeleted,
+  // Stored Agents
+  StoredAgentResponse,
+  ListStoredAgentsParams,
+  ListStoredAgentsResponse,
+  CreateStoredAgentParams,
+  UpdateStoredAgentParams,
+  DeleteStoredAgentResponse,
+  // Stored Scorers
+  StoredScorerResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  UpdateStoredScorerParams,
+  DeleteStoredScorerResponse,
+  // Stored MCP Clients
+  StoredMCPClientResponse,
+  ListStoredMCPClientsParams,
+  ListStoredMCPClientsResponse,
+  CreateStoredMCPClientParams,
+  UpdateStoredMCPClientParams,
+  DeleteStoredMCPClientResponse,
+  // Stored Skills
+  StoredSkillResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  UpdateStoredSkillParams,
+  DeleteStoredSkillResponse,
+  // Stored Prompt Blocks
+  StoredPromptBlockResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  UpdateStoredPromptBlockParams,
+  DeleteStoredPromptBlockResponse,
+  // Stored Workspaces
+  WorkspaceSnapshotConfig,
+  // Agent Versions
+  AgentVersionResponse,
+  ListAgentVersionsParams,
+  ListAgentVersionsResponse,
+  CreateAgentVersionParams,
+  ActivateAgentVersionResponse,
+  DeleteAgentVersionResponse,
+  VersionDiff,
+  CompareVersionsResponse,
+  // Scorer Versions
+  ScorerVersionResponse,
+  ListScorerVersionsParams,
+  ListScorerVersionsResponse,
+  CreateScorerVersionParams,
+  ActivateScorerVersionResponse,
+  DeleteScorerVersionResponse,
+  CompareScorerVersionsResponse,
+  // Prompt Block Versions
+  PromptBlockVersionResponse,
+  ListPromptBlockVersionsParams,
+  ListPromptBlockVersionsResponse,
+  CreatePromptBlockVersionParams,
+  ActivatePromptBlockVersionResponse,
+  DeletePromptBlockVersionResponse,
+  // System
+  GetSystemPackagesResponse,
+  // Workspace
+  WorkspaceInfoResponse,
+  ListWorkspacesResponse,
+  WorkspaceFileEntry,
+  WorkspaceFsReadResponse,
+  WorkspaceFsWriteResponse,
+  WorkspaceFsListResponse,
+  WorkspaceFsDeleteResponse,
+  WorkspaceFsMkdirResponse,
+  WorkspaceFsStatResponse,
+  WorkspaceSearchResult,
+  WorkspaceSearchParams,
+  WorkspaceSearchResponse,
+  WorkspaceIndexParams,
+  WorkspaceIndexResponse,
+  // Skills
+  SkillSource,
+  SkillMetadata,
+  Skill,
+  ListSkillsResponse,
+  SkillSearchResult,
+  SearchSkillsParams,
+  SearchSkillsResponse,
+  ListSkillReferencesResponse,
+  GetSkillReferenceResponse,
+  // Processors
+  ProcessorConfiguration,
+  GetProcessorResponse,
+  GetProcessorDetailResponse,
+  ExecuteProcessorParams,
+  ExecuteProcessorResponse,
+  // Processor Providers
+  GetProcessorProvidersResponse,
+  GetProcessorProviderResponse,
+  // Tool Providers
+  ListToolProvidersResponse,
+  ListToolProviderToolkitsResponse,
+  ListToolProviderToolsParams,
+  ListToolProviderToolsResponse,
+  GetToolProviderToolSchemaResponse,
+  // Vectors & Embedders
+  ListVectorsResponse,
+  ListEmbeddersResponse,
+  // Memory
+  GetObservationalMemoryResponse,
+  AwaitBufferStatusResponse,
+  GetMemoryStatusResponse,
+  GetMemoryConfigResponseExtended,
+  // Datasets
+  DatasetItem,
+  DatasetRecord,
+  DatasetExperiment,
+  CreateDatasetParams,
+  UpdateDatasetBody,
+  AddItemBody,
+  UpdateItemBody,
+  TriggerExperimentBody,
+  CompareExperimentsBody,
+  UpdateExperimentResultBody,
+  BatchInsertItemsBody,
+  BatchDeleteItemsBody,
+  GenerateItemsBody,
+  GeneratedItem,
+  DatasetItemVersionResponse,
+  DatasetVersionResponse,
+  CompareExperimentsResponse,
 } from '@mastra/server/schemas';
 import type { JSONSchema7 } from 'json-schema';
-import type { z } from 'zod';
 import type { ZodSchema } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
-import type { JsonSerialized } from './serialization';
 
 export type { ZodSchema };
 export type ZodSchemaVersions = ZodSchema | ZodTypeV4;
 
 // ============================================================================
-// Server Schema Imports (for type derivation)
+// ============================================================================
+// Client Types
 // ============================================================================
 
 export interface ClientOptions {
@@ -1156,7 +1156,7 @@ export interface StoredAgentSkillConfig {
  */
 export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: z.input<typeof workspaceSnapshotConfigSchema> };
+  | { type: 'inline'; config: WorkspaceSnapshotConfig };
 
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
@@ -1168,23 +1168,14 @@ export type StoredAgentRuleGroup = RuleGroup;
 export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
-/**
- * Stored agent data returned from API.
- * Derived from server's storedAgentSchema with Date→string serialization for JSON transport.
- */
-export type StoredAgentResponse = JsonSerialized<z.infer<typeof storedAgentSchema>>;
-
-/**
- * Parameters for listing stored agents.
- * Derived from server's listStoredAgentsQuerySchema.
- */
-export type ListStoredAgentsParams = z.input<typeof listStoredAgentsQuerySchema>;
-
-/**
- * Response for listing stored agents.
- * Derived from server's listStoredAgentsResponseSchema with Date→string serialization.
- */
-export type ListStoredAgentsResponse = JsonSerialized<z.infer<typeof listStoredAgentsResponseSchema>>;
+export type {
+  StoredAgentResponse,
+  ListStoredAgentsParams,
+  ListStoredAgentsResponse,
+  CreateStoredAgentParams,
+  UpdateStoredAgentParams,
+  DeleteStoredAgentResponse,
+};
 
 /**
  * Parameters for cloning an agent to a stored agent
@@ -1202,73 +1193,23 @@ export interface CloneAgentParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-/**
- * Parameters for creating a stored agent.
- * Derived from server's createStoredAgentBodySchema.
- */
-export type CreateStoredAgentParams = z.input<typeof createStoredAgentBodySchema>;
+export type {
+  StoredScorerResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  UpdateStoredScorerParams,
+  DeleteStoredScorerResponse,
+};
 
-/**
- * Parameters for updating a stored agent.
- * Derived from server's updateStoredAgentBodySchema.
- */
-export type UpdateStoredAgentParams = z.input<typeof updateStoredAgentBodySchema>;
-
-/**
- * Response for deleting a stored agent.
- * Derived from server's deleteStoredAgentResponseSchema.
- */
-export type DeleteStoredAgentResponse = z.infer<typeof deleteStoredAgentResponseSchema>;
-
-// ============================================================================
-// Stored Scorer Definition Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Stored scorer definition data returned from API.
- * Derived from server's storedScorerSchema with Date→string serialization.
- */
-export type StoredScorerResponse = JsonSerialized<z.infer<typeof storedScorerSchema>>;
-
-/**
- * Parameters for listing stored scorer definitions.
- * Derived from server's listStoredScorersQuerySchema.
- */
-export type ListStoredScorersParams = z.input<typeof listStoredScorersQuerySchema>;
-
-/**
- * Response for listing stored scorer definitions.
- * Derived from server's listStoredScorersResponseSchema with Date→string serialization.
- */
-export type ListStoredScorersResponse = JsonSerialized<z.infer<typeof listStoredScorersResponseSchema>>;
-
-/**
- * Parameters for creating a stored scorer definition.
- * Derived from server's createStoredScorerBodySchema.
- */
-export type CreateStoredScorerParams = z.input<typeof createStoredScorerBodySchema>;
-
-/**
- * Parameters for updating a stored scorer definition.
- * Derived from server's updateStoredScorerBodySchema.
- */
-export type UpdateStoredScorerParams = z.input<typeof updateStoredScorerBodySchema>;
-
-/**
- * Response for deleting a stored scorer definition.
- * Derived from server's deleteStoredScorerResponseSchema.
- */
-export type DeleteStoredScorerResponse = z.infer<typeof deleteStoredScorerResponseSchema>;
-
-// ============================================================================
-// Stored MCP Client Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Stored MCP client data returned from API.
- * Derived from server's storedMCPClientSchema with Date→string serialization.
- */
-export type StoredMCPClientResponse = JsonSerialized<z.infer<typeof storedMCPClientSchema>>;
+export type {
+  StoredMCPClientResponse,
+  ListStoredMCPClientsParams,
+  ListStoredMCPClientsResponse,
+  CreateStoredMCPClientParams,
+  UpdateStoredMCPClientParams,
+  DeleteStoredMCPClientResponse,
+};
 
 /**
  * MCP server configuration (stdio or http transport).
@@ -1276,63 +1217,16 @@ export type StoredMCPClientResponse = JsonSerialized<z.infer<typeof storedMCPCli
  */
 export type StoredMCPServerConfig = StoredMCPClientResponse['servers'][string];
 
-/**
- * Parameters for listing stored MCP clients.
- * Derived from server's listStoredMCPClientsQuerySchema.
- */
-export type ListStoredMCPClientsParams = z.input<typeof listStoredMCPClientsQuerySchema>;
-
-/**
- * Response for listing stored MCP clients.
- * Derived from server's listStoredMCPClientsResponseSchema with Date→string serialization.
- */
-export type ListStoredMCPClientsResponse = JsonSerialized<z.infer<typeof listStoredMCPClientsResponseSchema>>;
-
-/**
- * Parameters for creating a stored MCP client.
- * Derived from server's createStoredMCPClientBodySchema.
- */
-export type CreateStoredMCPClientParams = z.input<typeof createStoredMCPClientBodySchema>;
-
-/**
- * Parameters for updating a stored MCP client.
- * Derived from server's updateStoredMCPClientBodySchema.
- */
-export type UpdateStoredMCPClientParams = z.input<typeof updateStoredMCPClientBodySchema>;
-
-/**
- * Response for deleting a stored MCP client.
- * Derived from server's deleteStoredMCPClientResponseSchema.
- */
-export type DeleteStoredMCPClientResponse = z.infer<typeof deleteStoredMCPClientResponseSchema>;
-
-// ============================================================================
-// Agent Version Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Agent version data returned from API.
- * Derived from server's agentVersionSchema with Date→string serialization.
- */
-export type AgentVersionResponse = JsonSerialized<z.infer<typeof agentVersionSchema>>;
-
-/**
- * Parameters for listing agent versions.
- * Derived from server's listVersionsQuerySchema.
- */
-export type ListAgentVersionsParams = z.input<typeof listVersionsQuerySchema>;
-
-/**
- * Response for listing agent versions.
- * Derived from server's listVersionsResponseSchema with Date→string serialization.
- */
-export type ListAgentVersionsResponse = JsonSerialized<z.infer<typeof listVersionsResponseSchema>>;
-
-/**
- * Parameters for creating an agent version.
- * Derived from server's createVersionBodySchema.
- */
-export type CreateAgentVersionParams = z.input<typeof createVersionBodySchema>;
+export type {
+  AgentVersionResponse,
+  ListAgentVersionsParams,
+  ListAgentVersionsResponse,
+  CreateAgentVersionParams,
+  ActivateAgentVersionResponse,
+  DeleteAgentVersionResponse,
+  VersionDiff,
+  CompareVersionsResponse,
+};
 
 /**
  * Response for creating an agent version.
@@ -1340,12 +1234,6 @@ export type CreateAgentVersionParams = z.input<typeof createVersionBodySchema>;
 export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
-
-/**
- * Response for activating an agent version.
- * Derived from server's activateVersionResponseSchema.
- */
-export type ActivateAgentVersionResponse = z.infer<typeof activateVersionResponseSchema>;
 
 /**
  * Response for restoring an agent version.
@@ -1356,71 +1244,17 @@ export interface RestoreAgentVersionResponse {
   version: AgentVersionResponse;
 }
 
-/**
- * Response for deleting an agent version.
- * Derived from server's deleteVersionResponseSchema.
- */
-export type DeleteAgentVersionResponse = z.infer<typeof deleteVersionResponseSchema>;
-
-/**
- * Version diff entry.
- * Derived from server's versionDiffEntrySchema.
- */
-export type VersionDiff = z.infer<typeof versionDiffEntrySchema>;
-
 export type AgentVersionDiff = VersionDiff;
 
-/**
- * Response for comparing agent versions.
- * Derived from server's compareVersionsResponseSchema with Date→string serialization.
- */
-export type CompareVersionsResponse = JsonSerialized<z.infer<typeof compareVersionsResponseSchema>>;
-
-// ============================================================================
-// Scorer Version Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Scorer version data returned from API.
- * Derived from server's scorerVersionSchema with Date→string serialization.
- */
-export type ScorerVersionResponse = JsonSerialized<z.infer<typeof scorerVersionSchema>>;
-
-/**
- * Parameters for listing scorer versions.
- * Derived from server's listScorerVersionsQuerySchema.
- */
-export type ListScorerVersionsParams = z.input<typeof listScorerVersionsQuerySchema>;
-
-/**
- * Response for listing scorer versions.
- * Derived from server's listScorerVersionsResponseSchema with Date→string serialization.
- */
-export type ListScorerVersionsResponse = JsonSerialized<z.infer<typeof listScorerVersionsResponseSchema>>;
-
-/**
- * Parameters for creating a scorer version.
- * Derived from server's createScorerVersionBodySchema.
- */
-export type CreateScorerVersionParams = z.input<typeof createScorerVersionBodySchema>;
-
-/**
- * Response for activating a scorer version.
- * Derived from server's activateScorerVersionResponseSchema.
- */
-export type ActivateScorerVersionResponse = z.infer<typeof activateScorerVersionResponseSchema>;
-
-/**
- * Response for deleting a scorer version.
- * Derived from server's deleteScorerVersionResponseSchema.
- */
-export type DeleteScorerVersionResponse = z.infer<typeof deleteScorerVersionResponseSchema>;
-
-/**
- * Response for comparing scorer versions.
- * Derived from server's compareScorerVersionsResponseSchema with Date→string serialization.
- */
-export type CompareScorerVersionsResponse = JsonSerialized<z.infer<typeof compareScorerVersionsResponseSchema>>;
+export type {
+  ScorerVersionResponse,
+  ListScorerVersionsParams,
+  ListScorerVersionsResponse,
+  CreateScorerVersionParams,
+  ActivateScorerVersionResponse,
+  DeleteScorerVersionResponse,
+  CompareScorerVersionsResponse,
+};
 
 /**
  * Response for listing agent model providers.
@@ -1444,13 +1278,7 @@ export interface Provider {
   models: string[];
 }
 
-// ============================================================================
-// System Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-// MastraPackage is exported from @mastra/server/schemas via re-export in index.ts
-
-export type GetSystemPackagesResponse = z.infer<typeof systemPackagesResponseSchema>;
+export type { GetSystemPackagesResponse };
 
 // ============================================================================
 // Workspace Types
@@ -1475,147 +1303,34 @@ export interface WorkspaceSafety {
   readOnly: boolean;
 }
 
-/**
- * Response for getting workspace info.
- * Derived from server's workspaceInfoResponseSchema.
- */
-export type WorkspaceInfoResponse = z.infer<typeof workspaceInfoResponseSchema>;
+export type {
+  WorkspaceInfoResponse,
+  ListWorkspacesResponse,
+  WorkspaceFileEntry,
+  WorkspaceFsReadResponse,
+  WorkspaceFsWriteResponse,
+  WorkspaceFsListResponse,
+  WorkspaceFsDeleteResponse,
+  WorkspaceFsMkdirResponse,
+  WorkspaceFsStatResponse,
+  WorkspaceSearchResult,
+  WorkspaceSearchParams,
+  WorkspaceSearchResponse,
+  WorkspaceIndexParams,
+  WorkspaceIndexResponse,
+};
 
-/**
- * Response for listing all workspaces.
- * Derived from server's listWorkspacesResponseSchema.
- */
-export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>;
-
-/**
- * File entry in directory listing.
- * Derived from server's fileEntrySchema.
- */
-export type WorkspaceFileEntry = z.infer<typeof fileEntrySchema>;
-
-/**
- * Response for reading a file.
- * Derived from server's fsReadResponseSchema.
- */
-export type WorkspaceFsReadResponse = z.infer<typeof fsReadResponseSchema>;
-
-/**
- * Response for writing a file.
- * Derived from server's fsWriteResponseSchema.
- */
-export type WorkspaceFsWriteResponse = z.infer<typeof fsWriteResponseSchema>;
-
-/**
- * Response for listing files.
- * Derived from server's fsListResponseSchema.
- */
-export type WorkspaceFsListResponse = z.infer<typeof fsListResponseSchema>;
-
-/**
- * Response for deleting a file.
- * Derived from server's fsDeleteResponseSchema.
- */
-export type WorkspaceFsDeleteResponse = z.infer<typeof fsDeleteResponseSchema>;
-
-/**
- * Response for creating a directory.
- * Derived from server's fsMkdirResponseSchema.
- */
-export type WorkspaceFsMkdirResponse = z.infer<typeof fsMkdirResponseSchema>;
-
-/**
- * Response for getting file stats.
- * Derived from server's fsStatResponseSchema.
- */
-export type WorkspaceFsStatResponse = z.infer<typeof fsStatResponseSchema>;
-
-/**
- * Workspace search result.
- * Derived from server's searchResultSchema.
- */
-export type WorkspaceSearchResult = z.infer<typeof searchResultSchema>;
-
-/**
- * Parameters for searching workspace content.
- * Derived from server's searchQuerySchema.
- */
-export type WorkspaceSearchParams = z.input<typeof searchQuerySchema>;
-
-/**
- * Response for searching workspace.
- * Derived from server's searchResponseSchema.
- */
-export type WorkspaceSearchResponse = z.infer<typeof searchResponseSchema>;
-
-/**
- * Parameters for indexing content.
- * Derived from server's indexBodySchema.
- */
-export type WorkspaceIndexParams = z.input<typeof indexBodySchema>;
-
-/**
- * Response for indexing content.
- * Derived from server's indexResponseSchema.
- */
-export type WorkspaceIndexResponse = z.infer<typeof indexResponseSchema>;
-
-// ============================================================================
-// Skills Types
-// ============================================================================
-
-/**
- * Skill source type indicating where the skill comes from.
- * Derived from server's skillSourceSchema.
- */
-export type SkillSource = z.infer<typeof skillSourceSchema>;
-
-/**
- * Skill metadata (without instructions content).
- * Derived from server's skillMetadataSchema.
- */
-export type SkillMetadata = z.infer<typeof skillMetadataSchema>;
-
-/**
- * Full skill data including instructions and file paths.
- * Derived from server's skillSchema.
- */
-export type Skill = z.infer<typeof skillSchema>;
-
-/**
- * Response for listing skills.
- * Derived from server's listSkillsResponseSchema.
- */
-export type ListSkillsResponse = z.infer<typeof listSkillsResponseSchema>;
-
-/**
- * Skill search result.
- * Derived from server's skillSearchResultSchema.
- */
-export type SkillSearchResult = z.infer<typeof skillSearchResultSchema>;
-
-/**
- * Parameters for searching skills.
- * Derived from server's searchSkillsQuerySchema.
- */
-export type SearchSkillsParams = z.input<typeof searchSkillsQuerySchema>;
-
-/**
- * Response for searching skills.
- * Derived from server's searchSkillsResponseSchema.
- */
-export type SearchSkillsResponse = z.infer<typeof searchSkillsResponseSchema>;
-
-/**
- * Response for listing skill references.
- * Derived from server's listReferencesResponseSchema.
- */
-export type ListSkillReferencesResponse = z.infer<typeof listReferencesResponseSchema>;
-
-/**
- * Response for getting skill reference content.
- * Derived from server's skillReferenceResponseSchema.
- */
-export type GetSkillReferenceResponse = z.infer<typeof skillReferenceResponseSchema>;
+export type {
+  SkillSource,
+  SkillMetadata,
+  Skill,
+  ListSkillsResponse,
+  SkillSearchResult,
+  SearchSkillsParams,
+  SearchSkillsResponse,
+  ListSkillReferencesResponse,
+  GetSkillReferenceResponse,
+};
 
 // ============================================================================
 // Stored Skill Types
@@ -1632,41 +1347,14 @@ export interface StoredSkillFileNode {
   children?: StoredSkillFileNode[];
 }
 
-/**
- * Stored skill data returned from API.
- * Derived from server's storedSkillSchema with Date→string serialization.
- */
-export type StoredSkillResponse = JsonSerialized<z.infer<typeof storedSkillSchema>>;
-
-/**
- * Parameters for listing stored skills.
- * Derived from server's listStoredSkillsQuerySchema.
- */
-export type ListStoredSkillsParams = z.input<typeof listStoredSkillsQuerySchema>;
-
-/**
- * Response for listing stored skills.
- * Derived from server's listStoredSkillsResponseSchema with Date→string serialization.
- */
-export type ListStoredSkillsResponse = JsonSerialized<z.infer<typeof listStoredSkillsResponseSchema>>;
-
-/**
- * Parameters for creating a stored skill.
- * Derived from server's createStoredSkillBodySchema.
- */
-export type CreateStoredSkillParams = z.input<typeof createStoredSkillBodySchema>;
-
-/**
- * Parameters for updating a stored skill.
- * Derived from server's updateStoredSkillBodySchema.
- */
-export type UpdateStoredSkillParams = z.input<typeof updateStoredSkillBodySchema>;
-
-/**
- * Response for deleting a stored skill.
- * Derived from server's deleteStoredSkillResponseSchema.
- */
-export type DeleteStoredSkillResponse = z.infer<typeof deleteStoredSkillResponseSchema>;
+export type {
+  StoredSkillResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  UpdateStoredSkillParams,
+  DeleteStoredSkillResponse,
+};
 
 // ============================================================================
 // Processor Types
@@ -1677,35 +1365,13 @@ export type DeleteStoredSkillResponse = z.infer<typeof deleteStoredSkillResponse
  */
 export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
 
-/**
- * Configuration of how a processor is attached to an agent.
- * Derived from server's processorConfigurationSchema.
- */
-export type ProcessorConfiguration = z.infer<typeof processorConfigurationSchema>;
-
-/**
- * Processor in list response.
- * Derived from server's processorSerializedSchema (renamed from serializedProcessorSchema).
- */
-export type GetProcessorResponse = z.infer<typeof processorSerializedSchema>;
-
-/**
- * Detailed processor response.
- * Derived from server's serializedProcessorDetailSchema.
- */
-export type GetProcessorDetailResponse = z.infer<typeof serializedProcessorDetailSchema>;
-
-/**
- * Parameters for executing a processor.
- * Derived from server's executeProcessorBodySchema.
- */
-export type ExecuteProcessorParams = z.input<typeof executeProcessorBodySchema>;
-
-/**
- * Response from processor execution.
- * Derived from server's executeProcessorResponseSchema with Date→string serialization.
- */
-export type ExecuteProcessorResponse = JsonSerialized<z.infer<typeof executeProcessorResponseSchema>>;
+export type {
+  ProcessorConfiguration,
+  GetProcessorResponse,
+  GetProcessorDetailResponse,
+  ExecuteProcessorParams,
+  ExecuteProcessorResponse,
+};
 
 /**
  * Processor tripwire result.
@@ -1731,11 +1397,12 @@ export interface GetObservationalMemoryParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-/**
- * Response for observational memory endpoint.
- * Derived from server's getObservationalMemoryResponseSchema.
- */
-export type GetObservationalMemoryResponse = z.infer<typeof getObservationalMemoryResponseSchema>;
+export type {
+  GetObservationalMemoryResponse,
+  AwaitBufferStatusResponse,
+  GetMemoryStatusResponse,
+  GetMemoryConfigResponseExtended,
+};
 
 /**
  * Parameters for awaiting buffer status
@@ -1747,89 +1414,17 @@ export interface AwaitBufferStatusParams {
   requestContext?: RequestContext;
 }
 
-/**
- * Response for buffer status endpoint.
- * Derived from server's awaitBufferStatusResponseSchema.
- */
-export type AwaitBufferStatusResponse = z.infer<typeof awaitBufferStatusResponseSchema>;
+export type { ListVectorsResponse, ListEmbeddersResponse };
 
-/**
- * Extended memory status response with OM info.
- * Derived from server's memoryStatusResponseSchema with Date→string serialization.
- */
-export type GetMemoryStatusResponse = JsonSerialized<z.infer<typeof memoryStatusResponseSchema>>;
+export type {
+  ListToolProvidersResponse,
+  ListToolProviderToolkitsResponse,
+  ListToolProviderToolsParams,
+  ListToolProviderToolsResponse,
+  GetToolProviderToolSchemaResponse,
+};
 
-/**
- * Extended memory config response with OM config.
- * Derived from server's memoryConfigResponseSchema.
- */
-export type GetMemoryConfigResponseExtended = z.infer<typeof memoryConfigResponseSchema>;
-
-// ============================================================================
-// Vector & Embedder Types
-// ============================================================================
-
-/**
- * Response for listing available vector stores.
- * Derived from server's listVectorsResponseSchema.
- */
-export type ListVectorsResponse = z.infer<typeof listVectorsResponseSchema>;
-
-/**
- * Response for listing available embedding models.
- * Derived from server's listEmbeddersResponseSchema.
- */
-export type ListEmbeddersResponse = z.infer<typeof listEmbeddersResponseSchema>;
-
-// ============================================================================
-// Tool Provider Types
-// ============================================================================
-
-/**
- * Response for listing tool providers.
- * Derived from server's listToolProvidersResponseSchema.
- */
-export type ListToolProvidersResponse = z.infer<typeof listToolProvidersResponseSchema>;
-
-/**
- * Response for listing tool provider toolkits.
- * Derived from server's listToolProviderToolkitsResponseSchema.
- */
-export type ListToolProviderToolkitsResponse = z.infer<typeof listToolProviderToolkitsResponseSchema>;
-
-/**
- * Parameters for listing tool provider tools.
- * Derived from server's listToolProviderToolsQuerySchema.
- */
-export type ListToolProviderToolsParams = z.input<typeof listToolProviderToolsQuerySchema>;
-
-/**
- * Response for listing tool provider tools.
- * Derived from server's listToolProviderToolsResponseSchema.
- */
-export type ListToolProviderToolsResponse = z.infer<typeof listToolProviderToolsResponseSchema>;
-
-/**
- * Response for getting tool provider tool schema.
- * Derived from server's getToolProviderToolSchemaResponseSchema.
- */
-export type GetToolProviderToolSchemaResponse = z.infer<typeof getToolProviderToolSchemaResponseSchema>;
-
-// ============================================================================
-// Processor Provider Types
-// ============================================================================
-
-/**
- * Response for listing processor providers.
- * Derived from server's getProcessorProvidersResponseSchema.
- */
-export type GetProcessorProvidersResponse = z.infer<typeof getProcessorProvidersResponseSchema>;
-
-/**
- * Response for getting a single processor provider.
- * Derived from server's getProcessorProviderResponseSchema.
- */
-export type GetProcessorProviderResponse = z.infer<typeof getProcessorProviderResponseSchema>;
+export type { GetProcessorProvidersResponse, GetProcessorProviderResponse };
 
 // ============================================================================
 // Error Types
@@ -1876,23 +1471,25 @@ export class MastraClientError extends Error {
 // Dataset Types
 // ============================================
 
-/**
- * Dataset item response.
- * Derived from server's datasetItemResponseSchema with Date→string serialization.
- */
-export type DatasetItem = JsonSerialized<z.infer<typeof datasetItemResponseSchema>>;
-
-/**
- * Dataset record response.
- * Derived from server's datasetResponseSchema with Date→string serialization.
- */
-export type DatasetRecord = JsonSerialized<z.infer<typeof datasetResponseSchema>>;
-
-/**
- * Dataset experiment response.
- * Derived from server's experimentResponseSchema with Date→string serialization.
- */
-export type DatasetExperiment = JsonSerialized<z.infer<typeof experimentResponseSchema>>;
+export type {
+  DatasetItem,
+  DatasetRecord,
+  DatasetExperiment,
+  GeneratedItem,
+  DatasetItemVersionResponse,
+  DatasetVersionResponse,
+  CompareExperimentsResponse,
+  CreateDatasetParams,
+  UpdateDatasetBody,
+  AddItemBody,
+  UpdateItemBody,
+  BatchInsertItemsBody,
+  BatchDeleteItemsBody,
+  GenerateItemsBody,
+  TriggerExperimentBody,
+  CompareExperimentsBody,
+  UpdateExperimentResultBody,
+};
 
 /**
  * Dataset experiment result response.
@@ -1927,171 +1524,79 @@ export interface DatasetExperimentResult {
 
 /**
  * Parameters for updating an experiment result.
- * Includes datasetId, experimentId, resultId for routing + body fields from server's updateExperimentResultBodySchema.
+ * Includes datasetId, experimentId, resultId for routing + body fields.
  */
 export type UpdateExperimentResultParams = {
   datasetId: string;
   experimentId: string;
   resultId: string;
-} & z.input<typeof updateExperimentResultBodySchema>;
-
-/**
- * Parameters for creating a dataset.
- * Derived from server's createDatasetBodySchema.
- */
-export type CreateDatasetParams = z.input<typeof createDatasetBodySchema>;
+} & UpdateExperimentResultBody;
 
 /**
  * Parameters for updating a dataset.
- * Includes datasetId for routing + body fields from server's updateDatasetBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type UpdateDatasetParams = { datasetId: string } & z.input<typeof updateDatasetBodySchema>;
+export type UpdateDatasetParams = { datasetId: string } & UpdateDatasetBody;
 
 /**
  * Parameters for adding a dataset item.
- * Includes datasetId for routing + body fields from server's addItemBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type AddDatasetItemParams = { datasetId: string } & z.input<typeof addItemBodySchema>;
+export type AddDatasetItemParams = { datasetId: string } & AddItemBody;
 
 /**
  * Parameters for updating a dataset item.
- * Includes datasetId and itemId for routing + body fields from server's updateItemBodySchema.
+ * Includes datasetId and itemId for routing + body fields.
  */
-export type UpdateDatasetItemParams = { datasetId: string; itemId: string } & z.input<typeof updateItemBodySchema>;
+export type UpdateDatasetItemParams = { datasetId: string; itemId: string } & UpdateItemBody;
 
 /**
  * Parameters for batch inserting dataset items.
- * Includes datasetId for routing + body fields from server's batchInsertItemsBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type BatchInsertDatasetItemsParams = { datasetId: string } & z.input<typeof batchInsertItemsBodySchema>;
+export type BatchInsertDatasetItemsParams = { datasetId: string } & BatchInsertItemsBody;
 
 /**
  * Parameters for batch deleting dataset items.
- * Includes datasetId for routing + body fields from server's batchDeleteItemsBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type BatchDeleteDatasetItemsParams = { datasetId: string } & z.input<typeof batchDeleteItemsBodySchema>;
+export type BatchDeleteDatasetItemsParams = { datasetId: string } & BatchDeleteItemsBody;
 
 /**
  * Parameters for generating dataset items via AI.
- * Includes datasetId for routing + body fields from server's generateItemsBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type GenerateDatasetItemsParams = { datasetId: string } & z.input<typeof generateItemsBodySchema>;
-
-/**
- * A generated dataset item.
- * Derived from server's generateItemsResponseSchema.
- */
-export type GeneratedItem = z.infer<typeof generateItemsResponseSchema>['items'][number];
+export type GenerateDatasetItemsParams = { datasetId: string } & GenerateItemsBody;
 
 /**
  * Parameters for triggering a dataset experiment.
- * Includes datasetId for routing + body fields from server's triggerExperimentBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type TriggerDatasetExperimentParams = { datasetId: string } & z.input<typeof triggerExperimentBodySchema>;
+export type TriggerDatasetExperimentParams = { datasetId: string } & TriggerExperimentBody;
 
 /**
  * Parameters for comparing experiments.
- * Includes datasetId for routing + body fields from server's compareExperimentsBodySchema.
+ * Includes datasetId for routing + body fields.
  */
-export type CompareExperimentsParams = { datasetId: string } & z.input<typeof compareExperimentsBodySchema>;
+export type CompareExperimentsParams = { datasetId: string } & CompareExperimentsBody;
 
-/**
- * Dataset item version response.
- * Derived from server's itemVersionResponseSchema with Date→string serialization.
- */
-export type DatasetItemVersionResponse = JsonSerialized<z.infer<typeof itemVersionResponseSchema>>;
+export type {
+  StoredPromptBlockResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  UpdateStoredPromptBlockParams,
+  DeleteStoredPromptBlockResponse,
+};
 
-/**
- * Dataset version response.
- * Derived from server's datasetVersionResponseSchema with Date→string serialization.
- */
-export type DatasetVersionResponse = JsonSerialized<z.infer<typeof datasetVersionResponseSchema>>;
-
-/**
- * Response for comparing experiments.
- * Derived from server's comparisonResponseSchema.
- */
-export type CompareExperimentsResponse = z.infer<typeof comparisonResponseSchema>;
-
-// ============================================================================
-// Stored Prompt Block Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Stored prompt block data returned from API.
- * Derived from server's storedPromptBlockSchema with Date→string serialization.
- */
-export type StoredPromptBlockResponse = JsonSerialized<z.infer<typeof storedPromptBlockSchema>>;
-
-/**
- * Parameters for listing stored prompt blocks.
- * Derived from server's listStoredPromptBlocksQuerySchema.
- */
-export type ListStoredPromptBlocksParams = z.input<typeof listStoredPromptBlocksQuerySchema>;
-
-/**
- * Response for listing stored prompt blocks.
- * Derived from server's listStoredPromptBlocksResponseSchema with Date→string serialization.
- */
-export type ListStoredPromptBlocksResponse = JsonSerialized<z.infer<typeof listStoredPromptBlocksResponseSchema>>;
-
-/**
- * Parameters for creating a stored prompt block.
- * Derived from server's createStoredPromptBlockBodySchema.
- */
-export type CreateStoredPromptBlockParams = z.input<typeof createStoredPromptBlockBodySchema>;
-
-/**
- * Parameters for updating a stored prompt block.
- * Derived from server's updateStoredPromptBlockBodySchema.
- */
-export type UpdateStoredPromptBlockParams = z.input<typeof updateStoredPromptBlockBodySchema>;
-
-/**
- * Response for deleting a stored prompt block.
- * Derived from server's deleteStoredPromptBlockResponseSchema.
- */
-export type DeleteStoredPromptBlockResponse = z.infer<typeof deleteStoredPromptBlockResponseSchema>;
-
-// ============================================================================
-// Prompt Block Version Types (derived from @mastra/server/schemas)
-// ============================================================================
-
-/**
- * Prompt block version data returned from API.
- * Derived from server's promptBlockVersionSchema with Date→string serialization.
- */
-export type PromptBlockVersionResponse = JsonSerialized<z.infer<typeof promptBlockVersionSchema>>;
-
-/**
- * Parameters for listing prompt block versions.
- * Derived from server's listPromptBlockVersionsQuerySchema.
- */
-export type ListPromptBlockVersionsParams = z.input<typeof listPromptBlockVersionsQuerySchema>;
-
-/**
- * Response for listing prompt block versions.
- * Uses listPromptBlockVersionsResponseSchema with Date→string serialization.
- */
-export type ListPromptBlockVersionsResponse = JsonSerialized<z.infer<typeof listPromptBlockVersionsResponseSchema>>;
-
-/**
- * Parameters for creating a prompt block version.
- * Derived from server's createPromptBlockVersionBodySchema.
- */
-export type CreatePromptBlockVersionParams = z.input<typeof createPromptBlockVersionBodySchema>;
-
-/**
- * Response for activating a prompt block version.
- * Derived from server's activatePromptBlockVersionResponseSchema.
- */
-export type ActivatePromptBlockVersionResponse = z.infer<typeof activatePromptBlockVersionResponseSchema>;
-
-/**
- * Response for deleting a prompt block version.
- * Derived from server's deletePromptBlockVersionResponseSchema.
- */
-export type DeletePromptBlockVersionResponse = z.infer<typeof deletePromptBlockVersionResponseSchema>;
+export type {
+  PromptBlockVersionResponse,
+  ListPromptBlockVersionsParams,
+  ListPromptBlockVersionsResponse,
+  CreatePromptBlockVersionParams,
+  ActivatePromptBlockVersionResponse,
+  DeletePromptBlockVersionResponse,
+};
 
 export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 

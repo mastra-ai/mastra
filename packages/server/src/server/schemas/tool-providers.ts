@@ -71,3 +71,13 @@ export const listToolProviderToolsResponseSchema = z.object({
 });
 
 export const getToolProviderToolSchemaResponseSchema = z.record(z.string(), z.unknown());
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type ListToolProvidersResponse = z.infer<typeof listToolProvidersResponseSchema>;
+export type ListToolProviderToolkitsResponse = z.infer<typeof listToolProviderToolkitsResponseSchema>;
+export type ListToolProviderToolsParams = z.input<typeof listToolProviderToolsQuerySchema>;
+export type ListToolProviderToolsResponse = z.infer<typeof listToolProviderToolsResponseSchema>;
+export type GetToolProviderToolSchemaResponse = z.infer<typeof getToolProviderToolSchemaResponseSchema>;

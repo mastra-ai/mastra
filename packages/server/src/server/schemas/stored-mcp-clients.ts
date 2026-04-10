@@ -108,3 +108,16 @@ export const deleteStoredMCPClientResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type StoredMCPClientResponse = JsonSerialized<z.infer<typeof storedMCPClientSchema>>;
+export type ListStoredMCPClientsParams = z.input<typeof listStoredMCPClientsQuerySchema>;
+export type ListStoredMCPClientsResponse = JsonSerialized<z.infer<typeof listStoredMCPClientsResponseSchema>>;
+export type CreateStoredMCPClientParams = z.input<typeof createStoredMCPClientBodySchema>;
+export type UpdateStoredMCPClientParams = z.input<typeof updateStoredMCPClientBodySchema>;
+export type DeleteStoredMCPClientResponse = z.infer<typeof deleteStoredMCPClientResponseSchema>;

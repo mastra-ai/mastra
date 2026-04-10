@@ -127,3 +127,18 @@ export const publishStoredSkillBodySchema = z.object({
 });
 
 export const publishStoredSkillResponseSchema = storedSkillSchema;
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+import type { JsonSerialized } from './json-serialized';
+
+export type StoredSkillResponse = JsonSerialized<z.infer<typeof storedSkillSchema>>;
+export type ListStoredSkillsParams = z.input<typeof listStoredSkillsQuerySchema>;
+export type ListStoredSkillsResponse = JsonSerialized<z.infer<typeof listStoredSkillsResponseSchema>>;
+export type CreateStoredSkillParams = z.input<typeof createStoredSkillBodySchema>;
+export type UpdateStoredSkillParams = z.input<typeof updateStoredSkillBodySchema>;
+export type DeleteStoredSkillResponse = z.infer<typeof deleteStoredSkillResponseSchema>;
+export type PublishStoredSkillParams = z.input<typeof publishStoredSkillBodySchema>;
+export type PublishStoredSkillResponse = JsonSerialized<z.infer<typeof publishStoredSkillResponseSchema>>;

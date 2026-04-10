@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
+import type { JsonSerialized } from './json-serialized';
 import { modelConfigSchema } from './stored-agents';
 
 // ============================================================================
@@ -143,3 +144,14 @@ export const deleteStoredScorerResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type StoredScorerResponse = JsonSerialized<z.infer<typeof storedScorerSchema>>;
+export type ListStoredScorersParams = z.input<typeof listStoredScorersQuerySchema>;
+export type ListStoredScorersResponse = JsonSerialized<z.infer<typeof listStoredScorersResponseSchema>>;
+export type CreateStoredScorerParams = z.input<typeof createStoredScorerBodySchema>;
+export type UpdateStoredScorerParams = z.input<typeof updateStoredScorerBodySchema>;
+export type DeleteStoredScorerResponse = z.infer<typeof deleteStoredScorerResponseSchema>;

@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { defaultOptionsSchema } from './default-options';
+import type { JsonSerialized } from './json-serialized';
 import { serializedMemoryConfigSchema } from './memory-config';
 import {
   scorerConfigSchema,
@@ -150,3 +151,16 @@ export const restoreVersionResponseSchema = agentVersionSchema.describe(
 export const compareVersionsResponseSchema: ReturnType<
   typeof createCompareVersionsResponseSchema<typeof agentVersionSchema>
 > = createCompareVersionsResponseSchema(agentVersionSchema);
+
+// ============================================================================
+// Inferred Types
+// ============================================================================
+
+export type AgentVersionResponse = JsonSerialized<z.infer<typeof agentVersionSchema>>;
+export type ListAgentVersionsParams = z.input<typeof listVersionsQuerySchema>;
+export type ListAgentVersionsResponse = JsonSerialized<z.infer<typeof listVersionsResponseSchema>>;
+export type CreateAgentVersionParams = z.input<typeof createVersionBodySchema>;
+export type ActivateAgentVersionResponse = z.infer<typeof activateVersionResponseSchema>;
+export type DeleteAgentVersionResponse = z.infer<typeof deleteVersionResponseSchema>;
+export type VersionDiff = z.infer<typeof versionDiffEntrySchema>;
+export type CompareVersionsResponse = JsonSerialized<z.infer<typeof compareVersionsResponseSchema>>;
