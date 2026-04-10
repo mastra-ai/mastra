@@ -475,7 +475,7 @@ const mastra = new Mastra({
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
 
-By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/mastra-cloud/overview), it also sets this option to `true`.
+By default, `mastra build` sets this option to `true`.
 
 Here's an overview of what the different values mean:
 
@@ -577,10 +577,13 @@ export const mastra = new Mastra({
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
+      mapUserToResourceId: user => user.id,
     }),
   },
 })
 ```
+
+The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
 
 ### server.bodySizeLimit
 
