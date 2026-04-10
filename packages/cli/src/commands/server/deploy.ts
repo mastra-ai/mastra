@@ -136,7 +136,8 @@ export async function readEnvVars(
 /*  Resolve org                                                       */
 /* ------------------------------------------------------------------ */
 
-async function resolveOrg(
+/** @internal – exported for testing only */
+export async function resolveOrg(
   token: string,
   projectConfig: { organizationId?: string } | null,
   flagOrg?: string,
