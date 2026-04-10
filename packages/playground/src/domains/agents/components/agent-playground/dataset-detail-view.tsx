@@ -27,6 +27,7 @@ import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutati
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import type { UpdateDatasetItemParams } from '@mastra/client-js';
 
 interface DatasetDetailViewProps {
   agentId: string;
@@ -645,7 +646,7 @@ function ExpandedItemEditor({
         itemId: item.id,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
-        expectedTrajectory: parsedTrajectory,
+        expectedTrajectory: parsedTrajectory as UpdateDatasetItemParams['expectedTrajectory'],
       });
       toast.success('Item updated');
       setIsEditing(false);

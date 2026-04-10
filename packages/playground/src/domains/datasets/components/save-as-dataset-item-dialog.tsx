@@ -19,6 +19,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import type { AddDatasetItemParams } from '@mastra/client-js';
 
 type SaveAsDatasetItemDialogProps = {
   initialInput: string;
@@ -120,7 +121,7 @@ export function SaveAsDatasetItemDialog({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
-        expectedTrajectory: parsedTrajectory,
+        expectedTrajectory: parsedTrajectory as AddDatasetItemParams['expectedTrajectory'],
         ...(source ? { source } : {}),
       });
 

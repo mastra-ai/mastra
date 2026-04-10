@@ -4,6 +4,7 @@ import { Button, CodeEditor, IconButton, Label, SideDialog, Txt, toast } from '@
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import type { AddDatasetItemParams } from '@mastra/client-js';
 
 export type BulkTraceItem = {
   input: string;
@@ -99,7 +100,7 @@ export function BulkTraceReviewDialog({
       parsed.push({
         input: parsedInput,
         groundTruth: parsedGroundTruth,
-        expectedTrajectory: parsedTrajectory,
+        expectedTrajectory: parsedTrajectory as AddDatasetItemParams['expectedTrajectory'],
         ...(item.source ? { source: item.source } : {}),
       });
     }

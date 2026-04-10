@@ -1,4 +1,4 @@
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import {
   AlertDialog,
   Button,
@@ -135,7 +135,7 @@ export function ItemDetailDialog({
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
-        expectedTrajectory: parsedTrajectory,
+        expectedTrajectory: parsedTrajectory as UpdateDatasetItemParams['expectedTrajectory'],
       });
 
       toast.success('Item updated successfully');

@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import type { AddDatasetItemParams } from '@mastra/client-js';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -110,7 +111,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         datasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
-        expectedTrajectory: parsedTrajectory,
+        expectedTrajectory: parsedTrajectory as AddDatasetItemParams['expectedTrajectory'],
       });
 
       toast.success('Item added successfully');
