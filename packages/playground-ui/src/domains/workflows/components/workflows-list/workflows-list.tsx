@@ -1,21 +1,16 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { NoWorkflowsInfo } from './no-workflows-info';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
 
 export interface WorkflowsListProps {
   workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
 }
 
-export function WorkflowsList({ workflows, isLoading, error, search = '' }: WorkflowsListProps) {
+export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsListProps) {
   const { paths } = useLinkComponent();
 
   const workflowData = useMemo(
@@ -33,18 +28,6 @@ export function WorkflowsList({ workflows, isLoading, error, search = '' }: Work
       wf => wf.name?.toLowerCase().includes(term) || wf.description?.toLowerCase().includes(term),
     );
   }, [workflowData, search]);
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="workflows" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load workflows" message={error.message} />;
-  }
-
-  if (workflowData.length === 0 && !isLoading) {
-    return <NoWorkflowsInfo />;
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto" />;

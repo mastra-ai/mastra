@@ -1,13 +1,16 @@
 import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
 import {
-  MainHeader,
   LogsList,
   LogsToolbar,
   isValidLogsDatePreset,
   useLogsFilters,
-  EntityListPageLayout,
+  NoDataPageLayout,
+  NoLogsInfo,
+  PageLayout,
+  PageHeader,
   PermissionDenied,
   SessionExpired,
+  ErrorState,
   is403ForbiddenError,
   is401UnauthorizedError,
 } from '@mastra/playground-ui';
@@ -107,52 +110,46 @@ export default function Logs() {
 
   if (logsError && is401UnauthorizedError(logsError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <LogsIcon /> Logs
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
     );
   }
 
   if (logsError && is403ForbiddenError(logsError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <LogsIcon /> Logs
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="logs" />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <PermissionDenied resource="logs" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (logsError) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <ErrorState title="Failed to load logs" message={logsError?.message ?? 'Unknown error'} />
+      </NoDataPageLayout>
+    );
+  }
+
+  const hasActiveFilters = searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h';
+
+  if (logs.length === 0 && !isLoadingLogs && !hasActiveFilters) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <NoLogsInfo />
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <EntityListPageLayout className="max-w-none">
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <LogsIcon /> Logs
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <LogsIcon /> Logs
+          </PageHeader.Title>
+        </PageHeader>
 
         <LogsToolbar
           onSearchChange={setSearchQuery}
@@ -170,9 +167,9 @@ export default function Logs() {
             handleTimePeriodChange('24h');
           }}
           isLoading={isLoadingLogs}
-          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
+          hasActiveFilters={hasActiveFilters}
         />
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
       <LogsList
         logs={filteredLogs}
@@ -180,13 +177,11 @@ export default function Logs() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
-        error={logsError instanceof Error ? logsError : null}
-        hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
         featuredLogId={featuredLogId}
         featuredTraceId={featuredTraceId}
         featuredSpanId={featuredSpanId}
         onFeaturedChange={handleFeaturedChange}
       />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

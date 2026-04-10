@@ -1,24 +1,19 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { NoToolsInfo } from './no-tools-info';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
 
 export interface ToolsListProps {
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
 }
 
-export function ToolsList({ tools, agents, isLoading, error, search = '' }: ToolsListProps) {
+export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListProps) {
   const { paths } = useLinkComponent();
 
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
@@ -27,18 +22,6 @@ export function ToolsList({ tools, agents, isLoading, error, search = '' }: Tool
     () => toolData.filter(tool => tool.id.toLowerCase().includes(search.toLowerCase())),
     [toolData, search],
   );
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="tools" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load tools" message={error.message} />;
-  }
-
-  if (toolData.length === 0 && !isLoading) {
-    return <NoToolsInfo />;
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto" />;
