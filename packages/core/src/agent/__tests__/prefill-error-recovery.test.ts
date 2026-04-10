@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
 import { Agent } from '../agent';
@@ -202,6 +202,45 @@ describe('PrefillErrorHandler Recovery', () => {
           type: 'anthropic-prefill-processor-retry',
         },
       });
+    });
+
+    it('should still run processAPIError after the retry cap is reached without retrying again', async () => {
+      let callCount = 0;
+      const seenRetryCounts: number[] = [];
+      const exhaustedHandler = vi.fn(async ({ retryCount }: { retryCount: number }) => {
+        seenRetryCounts.push(retryCount);
+        return { retry: true };
+      });
+
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          throw new APICallError({
+            message:
+              'This model does not support assistant message prefill. The conversation must end with a user message.',
+            url: 'https://api.anthropic.com/v1/messages',
+            requestBodyValues: {},
+            statusCode: 400,
+            isRetryable: false,
+          });
+        },
+      });
+
+      const agent = new Agent({
+        id: 'prefill-test-retry-cap',
+        name: 'Prefill Test Retry Cap',
+        instructions: 'You are a test agent',
+        model: [{ model, maxRetries: 0 }],
+        errorProcessors: [{ id: 'retry-cap-observer', processAPIError: exhaustedHandler }],
+      });
+
+      await expect(agent.generate('Continue the conversation', { maxProcessorRetries: 1 })).rejects.toThrow(
+        'This model does not support assistant message prefill. The conversation must end with a user message.',
+      );
+
+      expect(callCount).toBe(2);
+      expect(seenRetryCounts).toEqual([0, 1]);
+      expect(exhaustedHandler).toHaveBeenCalledTimes(2);
     });
 
     it('should NOT retry for non-prefill API errors', async () => {

@@ -1181,48 +1181,45 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               const currentRetryCount = inputData.processorRetryCount || 0;
               const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+              const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
+                ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                : undefined;
 
-              if (canRetryError) {
-                const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
-                  ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
-                  : undefined;
+              const errorResult = await processorRunner.runProcessAPIError({
+                error,
+                messages: messageList.get.all.db(),
+                messageList,
+                stepNumber: inputData.output?.steps?.length || 0,
+                steps: inputData.output?.steps || [],
+                retryCount: currentRetryCount,
+                requestContext,
+                writer: apiErrorWriter,
+                messageId: currentMessageId,
+                rotateResponseMessageId: () => {
+                  currentMessageId = _internal?.generateId?.() ?? generateId();
+                  return currentMessageId;
+                },
+              });
 
-                const errorResult = await processorRunner.runProcessAPIError({
-                  error,
-                  messages: messageList.get.all.db(),
-                  messageList,
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  steps: inputData.output?.steps || [],
-                  retryCount: currentRetryCount,
-                  requestContext,
-                  writer: apiErrorWriter,
-                  messageId: currentMessageId,
-                  rotateResponseMessageId: () => {
-                    currentMessageId = _internal?.generateId?.() ?? generateId();
-                    return currentMessageId;
-                  },
+              if (errorResult.retry && canRetryError) {
+                // Signal retry - store on runState so it's handled after the callback returns
+                runState.setState({
+                  hasErrored: false,
+                  apiError: undefined,
                 });
 
-                if (errorResult.retry) {
-                  // Signal retry - store on runState so it's handled after the callback returns
-                  runState.setState({
-                    hasErrored: false,
-                    apiError: undefined,
-                  });
-
-                  // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
-                  // The retry will be handled by the processAPIError handling below
-                  return {
-                    outputStream,
-                    callBail: false,
-                    runState,
-                    stepTools: currentStep.tools,
-                    stepWorkspace: currentStep.workspace,
-                    processAPIErrorRetry: {
-                      retry: true,
-                    },
-                  };
-                }
+                // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
+                // The retry will be handled by the processAPIError handling below
+                return {
+                  outputStream,
+                  callBail: false,
+                  runState,
+                  stepTools: currentStep.tools,
+                  stepWorkspace: currentStep.workspace,
+                  processAPIErrorRetry: {
+                    retry: true,
+                  },
+                };
               }
 
               throw error;
@@ -1300,46 +1297,43 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         const currentRetryCount = inputData.processorRetryCount || 0;
         const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+        const processorRunner = new ProcessorRunner({
+          inputProcessors: inputProcessors || [],
+          outputProcessors: outputProcessors || [],
+          errorProcessors: errorProcessors || [],
+          logger: logger || new ConsoleLogger({ level: 'error' }),
+          agentName: agentId || 'unknown',
+          processorStates,
+        });
 
-        if (canRetryError) {
-          const processorRunner = new ProcessorRunner({
-            inputProcessors: inputProcessors || [],
-            outputProcessors: outputProcessors || [],
-            errorProcessors: errorProcessors || [],
-            logger: logger || new ConsoleLogger({ level: 'error' }),
-            agentName: agentId || 'unknown',
-            processorStates,
+        const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
+          ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+          : undefined;
+
+        const errorResult = await processorRunner.runProcessAPIError({
+          error: runState.state.apiError,
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: inputData.output?.steps?.length || 0,
+          steps: inputData.output?.steps || [],
+          retryCount: currentRetryCount,
+          requestContext,
+          writer: apiErrorWriter2,
+          messageId: currentMessageId,
+          rotateResponseMessageId: () => {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+            return currentMessageId;
+          },
+        });
+
+        if (errorResult.retry && canRetryError) {
+          apiErrorRetryResult = errorResult;
+          // Clear error state for retry
+          runState.setState({
+            hasErrored: false,
+            apiError: undefined,
+            deferredErrorChunk: undefined,
           });
-
-          const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
-            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
-            : undefined;
-
-          const errorResult = await processorRunner.runProcessAPIError({
-            error: runState.state.apiError,
-            messages: messageList.get.all.db(),
-            messageList,
-            stepNumber: inputData.output?.steps?.length || 0,
-            steps: inputData.output?.steps || [],
-            retryCount: currentRetryCount,
-            requestContext,
-            writer: apiErrorWriter2,
-            messageId: currentMessageId,
-            rotateResponseMessageId: () => {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
-              return currentMessageId;
-            },
-          });
-
-          if (errorResult.retry) {
-            apiErrorRetryResult = errorResult;
-            // Clear error state for retry
-            runState.setState({
-              hasErrored: false,
-              apiError: undefined,
-              deferredErrorChunk: undefined,
-            });
-          }
         }
       }
 

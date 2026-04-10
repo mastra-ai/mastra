@@ -70,7 +70,7 @@ The six processor methods run at different points in the agent execution lifecyc
 | - | - | - |
 | `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
 | `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
-| `processAPIError` | When an LLM API call fails with a non-retryable error | Handle API rejections, modify messages and retry |
+| `processAPIError` | When an LLM API call fails | Inspect API rejections, optionally mutate state/messages, and request a retry |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
 | `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
