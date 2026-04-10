@@ -3812,6 +3812,84 @@ describe('Supervisor Pattern - Output processor propagation in streaming delegat
   });
 });
 
+describe('Supervisor Pattern - Client tools forwarded to sub-agents', () => {
+  it('should include parent client tools in delegated sub-agent model calls', async () => {
+    const subAgentToolSets: any[] = [];
+
+    const subAgent = new Agent({
+      id: 'color-agent',
+      name: 'color-agent',
+      description: 'Updates app colors',
+      instructions: 'Use available client tools when needed.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ tools }) => {
+          subAgentToolSets.push(tools);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [{ type: 'text' as const, text: 'Ready to change the color.' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'client-tool-supervisor',
+      name: 'client-tool-supervisor',
+      instructions: 'Delegate color updates to the color agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'delegate-color-agent',
+                  toolName: 'agent-colorAgent',
+                  input: JSON.stringify({ prompt: 'Change the color to red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { colorAgent: subAgent },
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({
+              color: z.string(),
+            }),
+          },
+        },
+      },
+    });
+
+    await supervisor.generate('Change the color to red', { maxSteps: 5 });
+
+    expect(subAgentToolSets).toHaveLength(1);
+    expect(subAgentToolSets[0].map((tool: any) => tool.name ?? tool.toolName)).toContain('changeColor');
+  });
+});
+
 describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {
   it('should not pass tool_call or tool_result content parts from the parent to the sub-agent model', async () => {
     // Scenario: Supervisor delegates to a sub-agent that has its own tools.

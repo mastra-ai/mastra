@@ -867,6 +867,9 @@ export async function createNetworkLoop({
         { role: 'user' as const, content: inputData.prompt },
       ];
 
+      // Forward parent agent's client tools so sub-agents can request them.
+      const clientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
+
       // We set lastMessages: 0 to prevent loading messages from the network's thread
       // (which contains isNetwork JSON and completion feedback). We still pass
       // threadId/resourceId so working memory tools function correctly.
@@ -874,6 +877,7 @@ export async function createNetworkLoop({
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
+            clientTools,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -889,6 +893,7 @@ export async function createNetworkLoop({
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
+            clientTools,
             memory: {
               thread: threadId,
               resource: resourceId,

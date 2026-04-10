@@ -2908,6 +2908,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    clientTools,
     ...rest
   }: {
     runId?: string;
@@ -2917,6 +2918,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    clientTools?: ToolsInput;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -3252,6 +3254,7 @@ export class Agent<
                   ? await agent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      clientTools,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -3268,6 +3271,7 @@ export class Agent<
                     })
                   : await agent.generate(messagesForSubAgent, {
                       requestContext,
+                      clientTools,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -3362,6 +3366,7 @@ export class Agent<
                   ? await agent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      clientTools,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -3380,6 +3385,7 @@ export class Agent<
                     })
                   : await agent.stream(messagesForSubAgent, {
                       requestContext,
+                      clientTools,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4097,6 +4103,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      clientTools,
     });
 
     const workflowTools = await this.listWorkflowTools({
