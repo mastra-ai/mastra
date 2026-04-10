@@ -175,11 +175,12 @@ import type {
 } from '@mastra/server/schemas';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-import type { ZodSchema, ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodSchema } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { JsonSerialized } from './serialization';
 
-export type ZodSchemaVersions = ZodSchemaV3 | ZodTypeV4;
+export type { ZodSchema };
+export type ZodSchemaVersions = ZodSchema | ZodTypeV4;
 
 // ============================================================================
 // Server Schema Imports (for type derivation)
