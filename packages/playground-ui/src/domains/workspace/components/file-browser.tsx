@@ -571,33 +571,3 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
   );
 }
 
-// =============================================================================
-// Workspace Not Configured Component
-// =============================================================================
-
-export function WorkspaceNotConfigured() {
-  return (
-    <div className="grid place-items-center py-16">
-      <div className="flex flex-col items-center text-center max-w-md">
-        <div className="p-4 rounded-full bg-surface4 mb-4">
-          <Folder className="h-8 w-8 text-neutral3" />
-        </div>
-        <h2 className="text-lg font-medium text-neutral6 mb-2">Workspace Not Configured</h2>
-        <p className="text-sm text-neutral4 mb-6">
-          No workspace is configured. Add a workspace to your Mastra configuration to manage files, skills, and enable
-          semantic search.
-        </p>
-        <Button
-          size="lg"
-          variant="default"
-          as="a"
-          href="https://mastra.ai/en/docs/workspace/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn about Workspaces
-        </Button>
-      </div>
-    </div>
-  );
-}

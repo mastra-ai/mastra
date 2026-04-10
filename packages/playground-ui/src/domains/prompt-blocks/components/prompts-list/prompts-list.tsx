@@ -1,22 +1,17 @@
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
 import { CheckIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { NoPromptBlocksInfo } from './no-prompt-blocks-info';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
 
 export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
 }
 
-export function PromptsList({ promptBlocks, isLoading, error, search = '' }: PromptsListProps) {
+export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsListProps) {
   const { paths } = useLinkComponent();
 
   const filteredData = useMemo(() => {
@@ -25,18 +20,6 @@ export function PromptsList({ promptBlocks, isLoading, error, search = '' }: Pro
       block => block.name?.toLowerCase().includes(term) || block.description?.toLowerCase().includes(term),
     );
   }, [promptBlocks, search]);
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="prompt blocks" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load prompt blocks" message={error.message} />;
-  }
-
-  if (promptBlocks.length === 0 && !isLoading) {
-    return <NoPromptBlocksInfo />;
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto" />;

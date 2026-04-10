@@ -1,12 +1,8 @@
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
-import { NoProcessorsInfo } from './no-processors-info';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
@@ -14,11 +10,10 @@ const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'output
 export interface ProcessorsListProps {
   processors: Record<string, ProcessorInfo>;
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
 }
 
-export function ProcessorsList({ processors, isLoading, error, search = '' }: ProcessorsListProps) {
+export function ProcessorsList({ processors, isLoading, search = '' }: ProcessorsListProps) {
   const { paths } = useLinkComponent();
 
   const processorData = useMemo(
@@ -30,18 +25,6 @@ export function ProcessorsList({ processors, isLoading, error, search = '' }: Pr
     const term = search.toLowerCase();
     return processorData.filter(p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term));
   }, [processorData, search]);
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="processors" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load processors" message={error.message} />;
-  }
-
-  if (processorData.length === 0 && !isLoading) {
-    return <NoProcessorsInfo />;
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
