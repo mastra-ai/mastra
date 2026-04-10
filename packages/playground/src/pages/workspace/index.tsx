@@ -26,6 +26,7 @@ import {
   is401UnauthorizedError,
   PermissionDenied,
   SessionExpired,
+  ErrorState,
   // Skills.sh
   AddSkillDialog,
   useInstallSkill,
@@ -332,6 +333,16 @@ export default function Workspace() {
     return (
       <NoDataPageLayout title="Workspace" icon={<Folder />}>
         <WorkspaceNotSupported />
+      </NoDataPageLayout>
+    );
+  }
+
+  // Surface any other backend/runtime errors from workspace or workspace info requests
+  const genericError = workspacesError || workspaceInfoError;
+  if (genericError) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
       </NoDataPageLayout>
     );
   }

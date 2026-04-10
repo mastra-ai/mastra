@@ -357,7 +357,7 @@ export default function Traces() {
     );
   }
 
-  if (TracesError) {
+  if (TracesError && allTraces.length === 0) {
     return (
       <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
         <ErrorState title="Failed to load traces" message={error?.error ?? 'Unknown error'} />

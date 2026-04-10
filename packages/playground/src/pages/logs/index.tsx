@@ -132,7 +132,9 @@ export default function Logs() {
     );
   }
 
-  if (logs.length === 0 && !isLoadingLogs) {
+  const hasActiveFilters = searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h';
+
+  if (logs.length === 0 && !isLoadingLogs && !hasActiveFilters) {
     return (
       <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
         <NoLogsInfo />
@@ -165,7 +167,7 @@ export default function Logs() {
             handleTimePeriodChange('24h');
           }}
           isLoading={isLoadingLogs}
-          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
+          hasActiveFilters={hasActiveFilters}
         />
       </PageLayout.TopArea>
 
@@ -175,7 +177,6 @@ export default function Logs() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
-        hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
         featuredLogId={featuredLogId}
         featuredTraceId={featuredTraceId}
         featuredSpanId={featuredSpanId}

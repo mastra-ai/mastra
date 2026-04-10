@@ -19,11 +19,12 @@ import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Tools() {
-  const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
+  const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
 
   const isLoading = isLoadingAgents || isLoadingTools;
+  const error = toolsError || agentsError;
 
   if (error && is401UnauthorizedError(error)) {
     return (
