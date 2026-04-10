@@ -352,20 +352,36 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     return;
   }
 
-  // /browser clear [field] - reset all or specific setting
+  // /browser clear [field] - reset all or specific setting (preserves enabled state)
   if (arg === 'clear') {
     const field = args[1]?.toLowerCase();
 
     if (!field) {
-      // Clear all - reset to defaults
+      // Clear all - reset to defaults but preserve enabled state
+      const wasEnabled = settings.browser.enabled;
       settings.browser = {
-        enabled: false,
+        enabled: wasEnabled,
         provider: 'stagehand',
         headless: true,
         viewport: { width: 1280, height: 720 },
       };
       saveSettings(settings);
-      applyBrowserToAgents(ctx, undefined);
+      // If it was enabled, we need to recreate the browser with new settings
+      if (wasEnabled) {
+        try {
+          const browserInstance = await createBrowserFromSettings(settings.browser);
+          applyBrowserToAgents(ctx, browserInstance, settings.browser);
+        } catch (err) {
+          // If recreation fails, disable and report
+          settings.browser.enabled = false;
+          saveSettings(settings);
+          applyBrowserToAgents(ctx, undefined);
+          ctx.showError(`Browser settings reset, but failed to restart: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
+      } else {
+        applyBrowserToAgents(ctx, undefined);
+      }
       ctx.showInfo('Browser settings reset to defaults.');
       return;
     }

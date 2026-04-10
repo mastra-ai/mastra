@@ -166,11 +166,7 @@ function killProcess(pid: number): void {
 }
 
 function configLabel(config: BrowserTestConfig): string {
-  const parts = [
-    config.scope,
-    config.profile ? 'profile' : 'no-profile',
-    config.headless ? 'headless' : 'headed',
-  ];
+  const parts = [config.scope, config.profile ? 'profile' : 'no-profile', config.headless ? 'headless' : 'headed'];
   return parts.join(', ');
 }
 
@@ -299,8 +295,6 @@ export function createProviderTests(factory: BrowserFactory) {
     }
   });
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Same-Provider Headless↔Headed Switching Tests

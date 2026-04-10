@@ -4,7 +4,8 @@
  * Tests all combinations of scope × profile × headless × close-type.
  * Set BROWSER_TEST_HEADED=1 to include headed tests.
  */
-import { createProviderTests, type BrowserFactory } from '@internal/browser-test-utils';
+import { createProviderTests } from '@internal/browser-test-utils';
+import type { BrowserFactory } from '@internal/browser-test-utils';
 import { StagehandBrowser } from '../index';
 import { getStagehandChromePid } from '../utils';
 
