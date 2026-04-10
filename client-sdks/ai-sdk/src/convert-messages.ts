@@ -6,11 +6,18 @@ function isSystemReminderUIMessage(message: {
   role?: string;
   parts?: Array<{ type?: string; text?: string }>;
   content?: unknown;
+  metadata?: Record<string, unknown>;
 }) {
+  // Check metadata first — processors stamp systemReminder or legacy dynamicAgentsMdReminder
+  if (message.metadata?.systemReminder || message.metadata?.dynamicAgentsMdReminder) {
+    return true;
+  }
+
   if (message.role !== 'user') {
     return false;
   }
 
+  // Fall back to text inspection for backward compatibility
   if (Array.isArray(message.parts)) {
     return message.parts.some(
       part => part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),

@@ -707,7 +707,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           callBail?: boolean;
           stepTools?: TOOLS;
           stepWorkspace?: Workspace;
-          processAPIErrorRetry?: { retry: boolean; feedback?: string };
+          processAPIErrorRetry?: { retry: boolean };
         }>(
           models,
           logger,
@@ -719,12 +719,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // don't persist across steps - each step starts fresh with original system messages
           if (initialSystemMessages) {
             messageList.replaceAllSystemMessages(initialSystemMessages);
-          }
-
-          // Add processor retry feedback from previous iteration AFTER the reset
-          // This feedback was passed through workflow state to survive the system message reset
-          if (inputData.processorRetryFeedback) {
-            messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
           const currentStep: {
@@ -1189,6 +1183,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
 
               if (canRetryError) {
+                const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
+                  ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                  : undefined;
+
                 const errorResult = await processorRunner.runProcessAPIError({
                   error,
                   messages: messageList.get.all.db(),
@@ -1197,6 +1195,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   steps: inputData.output?.steps || [],
                   retryCount: currentRetryCount,
                   requestContext,
+                  writer: apiErrorWriter,
                 });
 
                 if (errorResult.retry) {
@@ -1216,7 +1215,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     stepWorkspace: currentStep.workspace,
                     processAPIErrorRetry: {
                       retry: true,
-                      feedback: errorResult.feedback,
                     },
                   };
                 }
@@ -1292,7 +1290,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // This covers two cases:
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
       // 2. Last model: error came as a stream chunk, run processAPIError now
-      let apiErrorRetryResult: { retry: boolean; feedback?: string } | undefined = processAPIErrorRetry;
+      let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         const currentRetryCount = inputData.processorRetryCount || 0;
@@ -1307,6 +1305,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             processorStates,
           });
 
+          const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
+            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            : undefined;
+
           const errorResult = await processorRunner.runProcessAPIError({
             error: runState.state.apiError,
             messages: messageList.get.all.db(),
@@ -1315,6 +1317,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData.output?.steps || [],
             retryCount: currentRetryCount,
             requestContext,
+            writer: apiErrorWriter2,
           });
 
           if (errorResult.retry) {
@@ -1336,10 +1339,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         // Remove any partial response messages from the messageList
         messageList.removeByIds([outputStream.messageId]);
-
-        const retryFeedbackText = apiErrorRetryResult.feedback
-          ? `[Processor Feedback] ${apiErrorRetryResult.feedback}`
-          : undefined;
 
         const messages = {
           all: messageList.get.all.aiV5.model(),
@@ -1369,7 +1368,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           messages,
           processorRetryCount: currentProcessorRetryCount + 1,
-          processorRetryFeedback: retryFeedbackText,
         };
       }
 
@@ -1543,13 +1541,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.removeByIds([outputStream.messageId]);
       }
 
-      // Build retry feedback text if retrying
-      // This will be passed through workflow state to survive the system message reset
-      const retryFeedbackText =
-        shouldRetry && processOutputStepTripwire
-          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
-          : undefined;
-
       const messages = {
         all: messageList.get.all.aiV5.model(),
         user: messageList.get.input.aiV5.model(),
@@ -1607,8 +1598,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messages,
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
-        // Pass retry feedback through workflow state to survive system message reset
-        processorRetryFeedback: retryFeedbackText,
       };
     },
   });

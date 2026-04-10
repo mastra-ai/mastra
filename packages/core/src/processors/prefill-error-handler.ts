@@ -67,7 +67,7 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
       const chunk: SystemReminderChunk = {
         type: 'data-system-reminder',
         data: {
-          message: 'Retrying after Anthropic prefill error',
+          message: '<system-reminder>continue</system-reminder>',
           reminderType: 'anthropic-prefill-processor-retry',
         },
         transient: true,

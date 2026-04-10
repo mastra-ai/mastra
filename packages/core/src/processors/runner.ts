@@ -1287,7 +1287,7 @@ export class ProcessorRunner {
    * Called when an LLM API call fails with a non-retryable error.
    * Iterates through both input and output processors.
    *
-   * @returns { retry: boolean; feedback?: string } indicating whether to retry the LLM call
+   * @returns { retry: boolean } indicating whether to retry the LLM call
    */
   async runProcessAPIError(
     args: {
@@ -1300,7 +1300,7 @@ export class ProcessorRunner {
       retryCount?: number;
       writer?: ProcessorStreamWriter;
     } & Partial<ObservabilityContext>,
-  ): Promise<{ retry: boolean; feedback?: string }> {
+  ): Promise<{ retry: boolean }> {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
@@ -1371,16 +1371,32 @@ export class ProcessorRunner {
         const mutations = messageList.stopRecording();
 
         processorSpan?.end({
-          output: { retry: result?.retry ?? false, feedback: result?.feedback },
+          output: { retry: result?.retry ?? false },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
 
         if (result?.retry) {
-          return { retry: true, feedback: result.feedback };
+          return { retry: true };
         }
       } catch (processorError) {
         // Stop recording on error
         messageList.stopRecording();
+
+        if (processorError instanceof TripWire) {
+          processorSpan?.error({
+            error: processorError,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: {
+                reason: processorError.message,
+                retry: processorError.options?.retry,
+                metadata: processorError.options?.metadata,
+              },
+            },
+          });
+          throw processorError;
+        }
+
         processorSpan?.error({ error: processorError as Error, endSpan: true });
         this.logger.error(
           `[Agent:${this.agentName}] - Request error processor ${processor.id} failed:`,

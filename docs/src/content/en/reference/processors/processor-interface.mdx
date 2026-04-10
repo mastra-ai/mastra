@@ -479,6 +479,25 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
     description: 'Function to abort processing.',
     isOptional: false,
   },
+  {
+    name: 'writer',
+    type: 'ProcessorStreamWriter',
+    description:
+      'Stream writer for emitting custom data chunks during streaming. Use `writer.custom()` to send transient UI signals.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Request context passed through from the agent call.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Signal for cancelling the operation.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -491,12 +510,6 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
     type: 'boolean',
     description: 'Whether to retry the LLM call after applying modifications.',
     isOptional: false,
-  },
-  {
-    name: 'feedback',
-    type: 'string',
-    description: 'Optional feedback message to include as system context on retry.',
-    isOptional: true,
   },
 ]}
 />

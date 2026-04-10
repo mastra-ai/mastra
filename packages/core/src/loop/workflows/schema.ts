@@ -81,11 +81,6 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
    * Used to enforce maxProcessorRetries limit.
    */
   processorRetryCount?: number;
-  /**
-   * Feedback message from processor to be added as system message on retry.
-   * This is passed through workflow state so it survives the system message reset.
-   */
-  processorRetryFeedback?: string;
 }
 
 // Zod schemas for common types used in validation
@@ -150,7 +145,6 @@ export const llmIterationOutputSchema = z.object({
   }),
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
-  processorRetryFeedback: z.string().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
 });
 

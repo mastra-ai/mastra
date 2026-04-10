@@ -201,24 +201,24 @@ describe('PrefillErrorHandler Recovery', () => {
 
       await mockMemory.createThread({ threadId, resourceId });
 
-      // A model that always throws a different kind of error
+      // A model that always throws a non-prefill, non-retryable error
       const model = new MockLanguageModelV2({
         doGenerate: async () => {
           throw new APICallError({
-            message: 'Rate limit exceeded',
+            message: 'Invalid request body',
             url: 'https://api.anthropic.com/v1/messages',
             requestBodyValues: {},
-            statusCode: 429,
-            isRetryable: true,
+            statusCode: 400,
+            isRetryable: false,
           });
         },
         doStream: async () => {
           throw new APICallError({
-            message: 'Rate limit exceeded',
+            message: 'Invalid request body',
             url: 'https://api.anthropic.com/v1/messages',
             requestBodyValues: {},
-            statusCode: 429,
-            isRetryable: true,
+            statusCode: 400,
+            isRetryable: false,
           });
         },
       });
@@ -231,7 +231,7 @@ describe('PrefillErrorHandler Recovery', () => {
         memory: mockMemory,
       });
 
-      // Rate limit error should NOT be caught by PrefillErrorHandler
+      // Non-prefill error should NOT be caught by PrefillErrorHandler
       await expect(
         agent.generate('Hello', {
           memory: {
@@ -239,7 +239,7 @@ describe('PrefillErrorHandler Recovery', () => {
             resource: resourceId,
           },
         }),
-      ).rejects.toThrow('Rate limit exceeded');
+      ).rejects.toThrow('Invalid request body');
     });
   });
 
@@ -394,11 +394,13 @@ describe('PrefillErrorHandler Recovery', () => {
       // Should have attempted twice: first call fails, retry fails, then gives up
       // PrefillErrorHandler returns void on retryCount > 0, so it only retries once
       // The stream should eventually error out after exhausting retries
+      let didThrow = false;
       try {
         await result.text;
       } catch {
-        // Expected — the error surfaces after retries are exhausted
+        didThrow = true;
       }
+      expect(didThrow).toBe(true);
       expect(callCount).toBe(2);
     });
   });

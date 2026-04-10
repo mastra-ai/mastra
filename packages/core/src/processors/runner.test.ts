@@ -2048,7 +2048,7 @@ describe('ProcessorRunner', () => {
 
   describe('runProcessAPIError', () => {
     it('should call processAPIError on processors that implement it', async () => {
-      const processAPIError = vi.fn().mockReturnValue({ retry: true, feedback: 'Fixed the issue' });
+      const processAPIError = vi.fn().mockReturnValue({ retry: true });
       const processor: Processor = {
         id: 'error-handler',
         name: 'Error Handler',
@@ -2082,7 +2082,7 @@ describe('ProcessorRunner', () => {
           retryCount: 0,
         }),
       );
-      expect(result).toEqual({ retry: true, feedback: 'Fixed the issue' });
+      expect(result).toEqual({ retry: true });
     });
 
     it('should skip processors that do not implement processAPIError', async () => {
@@ -2150,8 +2150,8 @@ describe('ProcessorRunner', () => {
     });
 
     it('should stop at the first processor that signals retry', async () => {
-      const processAPIError1 = vi.fn().mockReturnValue({ retry: true, feedback: 'First' });
-      const processAPIError2 = vi.fn().mockReturnValue({ retry: true, feedback: 'Second' });
+      const processAPIError1 = vi.fn().mockReturnValue({ retry: true });
+      const processAPIError2 = vi.fn().mockReturnValue({ retry: true });
 
       runner = new ProcessorRunner({
         inputProcessors: [
@@ -2176,7 +2176,7 @@ describe('ProcessorRunner', () => {
 
       expect(processAPIError1).toHaveBeenCalledTimes(1);
       expect(processAPIError2).not.toHaveBeenCalled();
-      expect(result).toEqual({ retry: true, feedback: 'First' });
+      expect(result).toEqual({ retry: true });
     });
 
     it('should check both input and output processors', async () => {
@@ -2217,6 +2217,9 @@ describe('ProcessorRunner', () => {
       });
 
       messageList.add(createMessage('hello', 'user'), 'user');
+
+      // Reset mockLogger.error to avoid false positives from earlier tests
+      vi.mocked(mockLogger.error).mockClear();
 
       const result = await runner.runProcessAPIError({
         error: new Error('API error'),
