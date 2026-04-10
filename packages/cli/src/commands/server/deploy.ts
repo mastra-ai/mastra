@@ -201,7 +201,7 @@ async function resolveProject(
 
 export async function serverDeployAction(
   dir: string | undefined,
-  opts: { org?: string; project?: string; yes?: boolean; config?: string; debug?: boolean },
+  opts: { org?: string; project?: string; yes?: boolean; config?: string; skipBuild?: boolean; debug?: boolean },
 ) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -282,7 +282,11 @@ export async function serverDeployAction(
   // Step 6: Build + Zip + Upload + Poll
   const s = p.spinner();
 
-  await runBuild(targetDir, { debug: opts.debug });
+  if (opts.skipBuild) {
+    p.log.step('Skipping build (--skip-build)');
+  } else {
+    await runBuild(targetDir, { debug: opts.debug });
+  }
 
   // Verify build output exists
   const outputEntry = join(targetDir, '.mastra', 'output', 'index.mjs');
