@@ -6,7 +6,8 @@ import { useLinkComponent } from '@/lib/framework';
 
 export const NoPromptBlocksInfo = () => {
   const { Link, paths } = useLinkComponent();
-  const { isCmsAvailable } = useIsCmsAvailable();
+  const { isCmsAvailable, isLoading } = useIsCmsAvailable();
+  const canCreate = !isLoading && isCmsAvailable;
 
   return (
     <div className="flex h-full items-center justify-center">
@@ -14,7 +15,7 @@ export const NoPromptBlocksInfo = () => {
         iconSlot={<CircleSlashIcon />}
         titleSlot="No Prompts yet"
         descriptionSlot={
-          isCmsAvailable ? (
+          canCreate ? (
             <>
               Create a reusable prompt block and reference it <br />
               in your agent instructions.
@@ -28,7 +29,7 @@ export const NoPromptBlocksInfo = () => {
         }
         actionSlot={
           <div className="flex flex-col items-center gap-2">
-            {isCmsAvailable && (
+            {canCreate && (
               <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
                 <Plus />
                 Create Prompt

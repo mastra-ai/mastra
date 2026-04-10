@@ -11,7 +11,6 @@ export function PageHeaderRoot({ children, className }: PageHeaderRootProps) {
     <header
       className={cn(
         'w-full grid',
-        // 'PAGE_HEADER_ROOT border border-dashed border-orange-400',
         className,
       )}
     >
