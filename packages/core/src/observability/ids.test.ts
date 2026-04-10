@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { generateSignalId } from './ids';
 
 describe('generateSignalId', () => {
-  it('returns a non-empty string', () => {
+  it('returns a valid UUID v4 string', () => {
     const id = generateSignalId();
-    expect(typeof id).toBe('string');
-    expect(id.length).toBeGreaterThan(0);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   });
 
   it('returns a unique id on each call', () => {
