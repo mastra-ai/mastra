@@ -7,7 +7,7 @@ packages:
 
 # S3Filesystem
 
-Stores files in Amazon S3 or S3-compatible storage services like Cloudflare R2, MinIO, and DigitalOcean Spaces.
+Stores files in Amazon S3 or S3-compatible storage services like Cloudflare R2, MinIO, DigitalOcean Spaces, and Tigris.
 
 :::info
 
@@ -74,6 +74,23 @@ const filesystem = new S3Filesystem({
 })
 ```
 
+### Tigris
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+const filesystem = new S3Filesystem({
+  bucket: 'my-bucket',
+  region: 'auto',
+  endpoint: 'https://t3.storage.dev',
+  accessKeyId: process.env.TIGRIS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.TIGRIS_SECRET_ACCESS_KEY,
+  forcePathStyle: false,
+})
+```
+
+Tigris uses virtual-hosted-style addressing, so `forcePathStyle` must be set to `false` (the default is `true` when a custom endpoint is provided). Create credentials from the [Tigris Dashboard](https://console.tigris.dev/) — access keys are prefixed `tid_` and secrets `tsec_`.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -110,7 +127,7 @@ const filesystem = new S3Filesystem({
   {
     name: 'endpoint',
     type: 'string',
-    description: 'Custom endpoint URL for S3-compatible storage (R2, MinIO, etc.)',
+    description: 'Custom endpoint URL for S3-compatible storage (R2, MinIO, Tigris, etc.)',
     isOptional: true,
   },
   {
