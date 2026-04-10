@@ -1269,6 +1269,7 @@ export function MastraRuntimeProvider({
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
     messages: isSupportedModel ? vnextmessages : legacyMessages,
+    convertMessage: (message: ThreadMessageLike) => message,
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,
