@@ -4,12 +4,8 @@
  * A filesystem implementation backed by Azure Blob Storage.
  */
 
-import {
-  BlobServiceClient,
-  StorageSharedKeyCredential,
-  type ContainerClient,
-  type RestError,
-} from '@azure/storage-blob';
+import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
+import type { ContainerClient, RestError } from '@azure/storage-blob';
 
 import type {
   FileContent,

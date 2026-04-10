@@ -276,7 +276,7 @@ if (hasAzureCredentials) {
     capabilities: {
       supportsAppend: true,
       supportsBinaryFiles: true,
-      supportsMounting: true,
+      supportsMounting: false,
       supportsForceDelete: true,
       supportsOverwrite: true,
       supportsConcurrency: true,
