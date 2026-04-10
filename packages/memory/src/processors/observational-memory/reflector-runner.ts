@@ -192,6 +192,11 @@ export class ReflectorRunner {
     let reflectedTokens = 0;
     let attemptNumber = 0;
 
+    // Track the best (smallest) non-degenerate result seen across all attempts.
+    // Used as fallback when all attempts fail or produce degenerate output.
+    let bestNonDegenerateObservations: string | null = null;
+    let bestNonDegenerateTokenCount = Infinity;
+
     while (currentLevel <= maxLevel) {
       attemptNumber++;
       const isRetry = attemptNumber > 1;
@@ -282,6 +287,11 @@ export class ReflectorRunner {
         reflectedTokens = originalTokens;
       } else {
         reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+        // Track the best (smallest) non-degenerate result for fallback.
+        if (reflectedTokens < bestNonDegenerateTokenCount) {
+          bestNonDegenerateTokenCount = reflectedTokens;
+          bestNonDegenerateObservations = parsed.observations;
+        }
       }
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
@@ -328,8 +338,22 @@ export class ReflectorRunner {
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
     }
 
+    // If the final parsed output is degenerate (empty), fall back to the best non-degenerate
+    // result seen during the retry loop. If no non-degenerate result was ever obtained, fall
+    // back to the original observations to avoid silently wiping out memory.
+    const finalObservations =
+      parsed.degenerate || !parsed.observations
+        ? (bestNonDegenerateObservations ?? observations)
+        : parsed.observations;
+
+    if (parsed.degenerate || !parsed.observations) {
+      omDebug(
+        `[OM:callReflector] all attempts resulted in degenerate output; using ${bestNonDegenerateObservations ? `best non-degenerate result (${bestNonDegenerateTokenCount} tokens)` : 'original observations as fallback'}`,
+      );
+    }
+
     return {
-      observations: parsed.observations,
+      observations: finalObservations,
       suggestedContinuation: parsed.suggestedContinuation,
       usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
     };
