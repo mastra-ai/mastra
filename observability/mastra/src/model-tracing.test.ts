@@ -721,7 +721,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('MODEL_STEP span input extraction', () => {
-    it('should extract messages array from OpenAI-format request body', async () => {
+    it('should extract a shallow message preview from OpenAI-format request body', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -760,11 +760,10 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      // Should contain only the messages array, not the entire request
       expect(stepSpans[0]!.input).toEqual(messages);
     });
 
-    it('should extract contents array from Google/Gemini-format request body', async () => {
+    it('should extract a shallow message preview from Google/Gemini-format request body', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -799,7 +798,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual(contents);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'user', content: 'Hello' }]);
     });
 
     it('should handle undefined request body gracefully', async () => {
@@ -902,6 +901,163 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans[0]!.input).toEqual(messages);
     });
 
+    it('should collapse nested structured message content to a shallow preview', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      { type: 'text', text: 'Describe this image. ' },
+                      { type: 'image', image: 'base64-image' },
+                    ],
+                  },
+                  {
+                    role: 'assistant',
+                    content: [
+                      {
+                        type: 'tool-call',
+                        toolName: 'analyze_image',
+                        args: {
+                          nested: {
+                            deeper: {
+                              value: 'png',
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'user', content: 'Describe this image. [image]' },
+        { role: 'assistant', content: '[tool: analyze_image]' },
+      ]);
+    });
+
+    it('should preserve OpenAI tool call names in shallow previews', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_123',
+                        type: 'function',
+                        function: {
+                          name: 'get_weather',
+                          arguments: '{"city":"Austin"}',
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'assistant', content: '[tool: get_weather]' }]);
+    });
+
+    it('should summarize unrecognized request bodies instead of storing the full parsed object', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                prompt: {
+                  nested: {
+                    data: {
+                      value: 'hello',
+                    },
+                  },
+                },
+                temperature: 0.7,
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual({
+        model: 'gpt-4o',
+        keys: ['model', 'prompt', 'temperature'],
+      });
+    });
+
     it('should update step input when step-start arrives after startStep()', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
@@ -936,7 +1092,6 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      // updateStep should also extract messages
       expect(stepSpans[0]!.input).toEqual(messages);
     });
   });
