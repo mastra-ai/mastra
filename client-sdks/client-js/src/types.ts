@@ -172,6 +172,14 @@ import type {
   updateExperimentResultBodySchema,
   generateItemsBodySchema,
   generateItemsResponseSchema,
+  ResponseInputMessage,
+  ResponseTextFormat,
+  ResponseTextConfig,
+  ResponseUsage,
+  ResponseTool,
+  ResponseOutputItem,
+  ConversationItem,
+  ConversationDeleted,
 } from '@mastra/server/schemas';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
@@ -223,26 +231,7 @@ export type ResponseInputTextPart = {
   text: string;
 };
 
-export type ResponseInputMessage = {
-  role: 'system' | 'developer' | 'user' | 'assistant';
-  content: string | ResponseInputTextPart[];
-};
-
-export type ResponseTextFormat =
-  | {
-      type: 'json_object';
-    }
-  | {
-      type: 'json_schema';
-      name: string;
-      description?: string;
-      schema: Record<string, unknown>;
-      strict?: boolean;
-    };
-
-export type ResponseTextConfig = {
-  format: ResponseTextFormat;
-};
+export type { ResponseInputMessage, ResponseTextFormat, ResponseTextConfig };
 
 export type ResponseOutputText = {
   type: 'output_text';
@@ -275,26 +264,7 @@ export type ResponseOutputFunctionCallOutput = {
   output: string;
 };
 
-export type ResponseUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  input_tokens_details?: {
-    cached_tokens: number;
-  };
-  output_tokens_details?: {
-    reasoning_tokens: number;
-  };
-};
-
-export type ResponseTool = {
-  type: 'function';
-  name: string;
-  description?: string;
-  parameters?: unknown;
-};
-
-export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+export type { ResponseUsage, ResponseTool, ResponseOutputItem };
 
 export type ConversationItemInputText = {
   type: 'input_text';
@@ -309,7 +279,7 @@ export type ConversationItemMessage = {
   content: Array<ConversationItemInputText | ResponseOutputText>;
 };
 
-export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+export type { ConversationItem };
 
 export type ConversationItemsPage = {
   object: 'list';
@@ -382,11 +352,7 @@ export type Conversation = {
   thread: StorageThreadType;
 };
 
-export type ConversationDeleted = {
-  id: string;
-  object: 'conversation.deleted';
-  deleted: true;
-};
+export type { ConversationDeleted };
 
 export type CreateConversationParams = {
   agent_id: string;
