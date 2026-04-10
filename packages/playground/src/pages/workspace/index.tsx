@@ -589,7 +589,7 @@ export default function Workspace() {
           )}
 
           {/* Show default tab if only one is available */}
-          {!hasFilesystem && !hasSkills && (
+          {!hasFilesystem && !hasSkills && !isLoadingInfo && (
             <div className="py-12 text-center text-neutral4">
               <p>No workspace capabilities are configured.</p>
             </div>
