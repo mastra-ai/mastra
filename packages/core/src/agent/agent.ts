@@ -4903,6 +4903,7 @@ export class Agent<
       routingAgent: this,
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
+        clientTools: mergedOptions?.clientTools,
         memory: mergedOptions?.memory,
       } as unknown as AgentExecutionOptions<OUTPUT>,
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
@@ -4979,6 +4980,7 @@ export class Agent<
       routingAgent: this,
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
+        clientTools: mergedOptions?.clientTools,
         memory: mergedOptions?.memory,
       },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),

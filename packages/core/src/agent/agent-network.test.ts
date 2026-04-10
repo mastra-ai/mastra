@@ -6505,13 +6505,12 @@ describe('Agent - network - client tools forwarded to sub-agents', () => {
   it('should forward parent client tools to sub-agents during network execution', async () => {
     const memory = new MockMemory();
 
-    const subAgentToolSets: any[] = [];
+    const subAgentStreamToolSets: any[] = [];
 
     // Sub-agent model emits a client tool call. The important regression check is
     // that the parent network's clientTools are included in the sub-agent model call.
     const subAgentMockModel = new MockLanguageModelV2({
-      doGenerate: async ({ tools }) => {
-        subAgentToolSets.push(tools);
+      doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls' as const,
@@ -6528,7 +6527,7 @@ describe('Agent - network - client tools forwarded to sub-agents', () => {
         };
       },
       doStream: async ({ tools }) => {
-        subAgentToolSets.push(tools);
+        subAgentStreamToolSets.push(tools);
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -6607,6 +6606,121 @@ describe('Agent - network - client tools forwarded to sub-agents', () => {
       model: routingMockModel,
       agents: { colorSubAgent: subAgent },
       memory,
+    });
+
+    const anStream = await networkAgent.network('Change the color to red', {
+      memory: {
+        thread: 'client-tools-subagent-thread',
+        resource: 'client-tools-subagent-resource',
+      },
+      clientTools: {
+        changeColor: {
+          id: 'changeColor',
+          description: 'Change the color on the client side',
+          inputSchema: z.object({
+            color: z.string().describe('The color to change to'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+          }),
+        },
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const status = await anStream.status;
+    expect(status).toBe('success');
+    expect(subAgentStreamToolSets).toHaveLength(1);
+    const toolNames = subAgentStreamToolSets[0].map((tool: any) => tool.name ?? tool.toolName);
+    expect(toolNames.filter((name: string) => name === 'changeColor')).toHaveLength(1);
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'agent-execution-event-tool-call',
+        payload: expect.objectContaining({
+          payload: expect.objectContaining({
+            toolName: 'changeColor',
+            args: { color: 'red' },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should forward parent default client tools to sub-agents during network execution', async () => {
+    const memory = new MockMemory();
+    const subAgentStreamToolSets: any[] = [];
+
+    const subAgent = new Agent({
+      id: 'default-color-sub-agent',
+      name: 'Default Color Sub Agent',
+      description: 'A sub-agent that changes colors using client tools',
+      instructions: 'Use the changeColor tool to change colors.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ tools }) => {
+          subAgentStreamToolSets.push(tools);
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'id-0', delta: 'Done' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+            ]),
+          };
+        },
+      }),
+      memory,
+    });
+
+    const routingDelegateResponse = JSON.stringify({
+      primitiveId: 'colorSubAgent',
+      primitiveType: 'agent',
+      prompt: 'Change the color to blue',
+      selectionReason: 'Delegating color change to sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Color has been changed to blue',
+      completionReason: 'Sub-agent completed the color change',
+    });
+
+    let routingCallCount = 0;
+    const networkAgent = new Agent({
+      id: 'default-client-tools-subagent-test',
+      name: 'Default Client Tools Sub-Agent Test Network',
+      instructions: 'Delegate color changes to sub-agents',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          routingCallCount++;
+          const text = routingCallCount === 1 ? routingDelegateResponse : completionResponse;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          routingCallCount++;
+          const text = routingCallCount === 1 ? routingDelegateResponse : completionResponse;
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'id-0', delta: text },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      agents: { colorSubAgent: subAgent },
+      memory,
       defaultOptions: {
         clientTools: {
           changeColor: {
@@ -6624,31 +6738,20 @@ describe('Agent - network - client tools forwarded to sub-agents', () => {
       },
     });
 
-    const anStream = await networkAgent.network('Change the color to red', {
+    const anStream = await networkAgent.network('Change the color to blue', {
       memory: {
-        thread: 'client-tools-subagent-thread',
-        resource: 'client-tools-subagent-resource',
+        thread: 'default-client-tools-subagent-thread',
+        resource: 'default-client-tools-subagent-resource',
       },
     });
 
-    const chunks: any[] = [];
-    for await (const chunk of anStream) {
-      chunks.push(chunk);
+    for await (const _chunk of anStream) {
     }
 
     const status = await anStream.status;
     expect(status).toBe('success');
-    expect(subAgentToolSets[0].map((tool: any) => tool.name ?? tool.toolName)).toContain('changeColor');
-    expect(chunks).toContainEqual(
-      expect.objectContaining({
-        type: 'agent-execution-event-tool-call',
-        payload: expect.objectContaining({
-          payload: expect.objectContaining({
-            toolName: 'changeColor',
-            args: { color: 'red' },
-          }),
-        }),
-      }),
-    );
+    expect(subAgentStreamToolSets).toHaveLength(1);
+    const toolNames = subAgentStreamToolSets[0].map((tool: any) => tool.name ?? tool.toolName);
+    expect(toolNames.filter((name: string) => name === 'changeColor')).toHaveLength(1);
   });
 });

@@ -3886,7 +3886,9 @@ describe('Supervisor Pattern - Client tools forwarded to sub-agents', () => {
     await supervisor.generate('Change the color to red', { maxSteps: 5 });
 
     expect(subAgentToolSets).toHaveLength(1);
-    expect(subAgentToolSets[0].map((tool: any) => tool.name ?? tool.toolName)).toContain('changeColor');
+    const toolNames = subAgentToolSets[0].map((tool: any) => tool.name ?? tool.toolName);
+    expect(toolNames).toContain('changeColor');
+    expect(toolNames.filter((n: string) => n === 'changeColor')).toHaveLength(1);
   });
 });
 
