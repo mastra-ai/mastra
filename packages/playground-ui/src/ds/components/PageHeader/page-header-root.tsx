@@ -24,14 +24,7 @@ export interface PageHeaderRootProps {
   isLoading?: boolean;
 }
 
-export function PageHeaderRoot({
-  children,
-  className,
-  title,
-  description,
-  icon,
-  isLoading,
-}: PageHeaderRootProps) {
+export function PageHeaderRoot({ children, className, title, description, icon, isLoading }: PageHeaderRootProps) {
   const useLegacyApi = children === undefined && title !== undefined;
 
   return (
