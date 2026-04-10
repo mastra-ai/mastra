@@ -1,5 +1,11 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
+import type {
+  FeaturedIds,
+  LogsDatePreset,
+  LogLevel,
+  PropertyFilterOption,
+  PropertyFilterToken,
+} from '@mastra/playground-ui';
 import {
   MainHeader,
   LogsList,
@@ -7,7 +13,9 @@ import {
   ROOT_ENTITY_TYPE_OPTIONS,
   isValidLogsDatePreset,
   useEntityNames,
-  useLogsFilters,
+  useTags,
+  useEnvironments,
+  useServiceNames,
   EntityListPageLayout,
   PermissionDenied,
   SessionExpired,
@@ -15,18 +23,24 @@ import {
   is401UnauthorizedError,
 } from '@mastra/playground-ui';
 import { LogsIcon } from 'lucide-react';
-import { useMemo, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { useLogs } from '@/domains/logs/hooks/use-logs';
-
-const PERIOD_PARAM = 'period';
-const LOG_PARAM = 'logId';
-const TRACE_PARAM = 'traceId';
-const SPAN_PARAM = 'spanId';
-const ENTITY_TYPE_PARAM = 'entityType';
-const ENTITY_NAME_PARAM = 'entityName';
-const ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
-const ROOT_ENTITY_NAME_PARAM = 'rootEntityName';
+import {
+  applyLogsPropertyFilterTokens,
+  buildLogsListFilters,
+  createLogsPropertyFilterFields,
+  getLogsPropertyFilterTokens,
+  LOG_LEVEL_VALUES,
+  LOGS_LEVEL_PARAM,
+  LOGS_LOG_ID_PARAM,
+  LOGS_PERIOD_PARAM,
+  LOGS_PROPERTY_FILTER_FIELD_IDS,
+  LOGS_PROPERTY_FILTER_PARAM_BY_FIELD,
+  LOGS_ROOT_ENTITY_TYPE_PARAM,
+  LOGS_SPAN_ID_PARAM,
+  LOGS_TRACE_ID_PARAM,
+} from '@/domains/logs/log-filters';
 
 const PRESET_TO_MS: Record<LogsDatePreset, number> = {
   '24h': 24 * 60 * 60 * 1000,
@@ -35,37 +49,99 @@ const PRESET_TO_MS: Record<LogsDatePreset, number> = {
   '14d': 14 * 24 * 60 * 60 * 1000,
   '30d': 30 * 24 * 60 * 60 * 1000,
 };
+const INITIAL_SUGGESTION_LIMIT = 5;
+const FILTERED_SUGGESTION_LIMIT = 20;
+
+function getTokenValue(tokens: PropertyFilterToken[], fieldId: string) {
+  const token = tokens.find(candidate => candidate.fieldId === fieldId);
+  return typeof token?.value === 'string' ? token.value : undefined;
+}
 
 export default function Logs() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const urlPreset = searchParams.get(PERIOD_PARAM);
-  const datePreset = isValidLogsDatePreset(urlPreset) ? urlPreset : '24h';
-
-  const featuredLogId = searchParams.get(LOG_PARAM);
-  const featuredTraceId = searchParams.get(TRACE_PARAM);
-  const featuredSpanId = searchParams.get(SPAN_PARAM);
-  const selectedEntityType = searchParams.get(ENTITY_TYPE_PARAM) ?? undefined;
-  const selectedEntityName = searchParams.get(ENTITY_NAME_PARAM) ?? undefined;
+  const presetParam = searchParams.get(LOGS_PERIOD_PARAM);
+  const datePreset = isValidLogsDatePreset(presetParam) ? presetParam : '24h';
+  const featuredLogId = searchParams.get(LOGS_LOG_ID_PARAM);
+  const featuredTraceId = searchParams.get(LOGS_TRACE_ID_PARAM);
+  const featuredSpanId = searchParams.get(LOGS_SPAN_ID_PARAM);
   const selectedRootEntityType = ROOT_ENTITY_TYPE_OPTIONS.find(
-    option => option.entityType === searchParams.get(ROOT_ENTITY_TYPE_PARAM),
+    option => option.entityType === searchParams.get(LOGS_ROOT_ENTITY_TYPE_PARAM),
   );
-  const selectedRootEntityName = searchParams.get(ROOT_ENTITY_NAME_PARAM) ?? undefined;
-  const { data: entityNameOptions = [] } = useEntityNames({ entityType: selectedEntityType as EntityType | undefined });
-  const { data: rootEntityNameOptions = [] } = useEntityNames({
+  const selectedLevel = useMemo(() => {
+    const value = searchParams.get(LOGS_LEVEL_PARAM);
+    return value && LOG_LEVEL_VALUES.has(value as LogLevel) ? (value as LogLevel) : undefined;
+  }, [searchParams]);
+  const filterTokens = useMemo(() => getLogsPropertyFilterTokens(searchParams), [searchParams]);
+
+  const selectedEntityType = getTokenValue(filterTokens, 'entityType');
+
+  const { data: availableTags = [] } = useTags();
+  const { data: entityNameSuggestions = [] } = useEntityNames({
+    entityType: selectedEntityType as EntityType | undefined,
+  });
+  const { data: rootEntityNameSuggestions = [] } = useEntityNames({
     entityType: selectedRootEntityType?.entityType,
     rootOnly: true,
   });
+  const { data: environmentSuggestions = [] } = useEnvironments();
+  const { data: serviceNameSuggestions = [] } = useServiceNames();
 
-  const handleTimePeriodChange = useCallback(
+  const filterFields = useMemo(() => createLogsPropertyFilterFields(availableTags), [availableTags]);
+
+  const logsFilters = useMemo(() => {
+    const ms = PRESET_TO_MS[datePreset] ?? PRESET_TO_MS['24h'];
+
+    return buildLogsListFilters({
+      rootEntityType: selectedRootEntityType?.entityType,
+      level: selectedLevel,
+      start: new Date(Date.now() - ms),
+      tokens: filterTokens,
+    });
+  }, [datePreset, filterTokens, selectedLevel, selectedRootEntityType]);
+
+  const {
+    data: logs = [],
+    isLoading: isLoadingLogs,
+    error: logsError,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useLogs({ filters: logsFilters });
+
+  const loadSuggestions = useCallback(
+    async (fieldId: string, query: string): Promise<PropertyFilterOption[]> => {
+      const normalizedQuery = query.trim().toLowerCase();
+
+      const source =
+        fieldId === 'entityName'
+          ? entityNameSuggestions
+          : fieldId === 'rootEntityName'
+            ? rootEntityNameSuggestions
+            : fieldId === 'serviceName'
+              ? serviceNameSuggestions
+              : fieldId === 'environment'
+                ? environmentSuggestions
+                : [];
+
+      const values = normalizedQuery
+        ? source.filter(value => value.toLowerCase().includes(normalizedQuery)).slice(0, FILTERED_SUGGESTION_LIMIT)
+        : source.slice(0, INITIAL_SUGGESTION_LIMIT);
+
+      return values.map(value => ({ label: value, value }));
+    },
+    [entityNameSuggestions, environmentSuggestions, rootEntityNameSuggestions, serviceNameSuggestions],
+  );
+
+  const handleDatePresetChange = useCallback(
     (preset: LogsDatePreset) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
           if (preset === '24h') {
-            next.delete(PERIOD_PARAM);
+            next.delete(LOGS_PERIOD_PARAM);
           } else {
-            next.set(PERIOD_PARAM, preset);
+            next.set(LOGS_PERIOD_PARAM, preset);
           }
           return next;
         },
@@ -81,97 +157,13 @@ export default function Logs() {
         prev => {
           const next = new URLSearchParams(prev);
           for (const [field, value] of Object.entries(ids)) {
-            const param = field === 'logId' ? LOG_PARAM : field === 'traceId' ? TRACE_PARAM : SPAN_PARAM;
+            const param =
+              field === 'logId' ? LOGS_LOG_ID_PARAM : field === 'traceId' ? LOGS_TRACE_ID_PARAM : LOGS_SPAN_ID_PARAM;
             if (value) {
               next.set(param, value);
             } else {
               next.delete(param);
             }
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const logsFilters = useMemo(() => {
-    const ms = PRESET_TO_MS[datePreset];
-    if (!ms) return undefined;
-    return {
-      timestamp: { start: new Date(Date.now() - ms) },
-      ...(selectedEntityType && { entityType: selectedEntityType }),
-      ...(selectedEntityName && { entityName: selectedEntityName }),
-      ...(selectedRootEntityType && { rootEntityType: selectedRootEntityType.entityType }),
-      ...(selectedRootEntityName && { rootEntityName: selectedRootEntityName }),
-    };
-  }, [datePreset, selectedEntityName, selectedEntityType, selectedRootEntityName, selectedRootEntityType]);
-
-  const {
-    data: logs = [],
-    isLoading: isLoadingLogs,
-    error: logsError,
-    isFetchingNextPage,
-    hasNextPage,
-    setEndOfListElement,
-  } = useLogs({ filters: logsFilters });
-
-  const {
-    searchQuery,
-    setSearchQuery,
-    filterGroups,
-    filterColumns,
-    toggleComparator,
-    removeFilterGroup,
-    clearAllFilters,
-    updateFilterGroups,
-    filteredLogs,
-  } = useLogsFilters(logs as LogRecord[]);
-
-  const entityTypeOptions = useMemo(() => {
-    const uniqueEntityTypes = Array.from(new Set(logs.map(log => log.entityType).filter(Boolean))) as string[];
-    return uniqueEntityTypes.sort().map(entityType => ({
-      entityType,
-      label:
-        entityType === 'workflow_run'
-          ? 'Workflow'
-          : entityType === 'rag_ingestion'
-            ? 'Ingest'
-            : entityType
-                .split('_')
-                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-                .join(' '),
-    }));
-  }, [logs]);
-
-  const handleEntityTypeChange = useCallback(
-    (entityType?: string) => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (entityType) {
-            next.set(ENTITY_TYPE_PARAM, entityType);
-          } else {
-            next.delete(ENTITY_TYPE_PARAM);
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const handleEntityNameChange = useCallback(
-    (entityName?: string) => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (entityName) {
-            next.set(ENTITY_NAME_PARAM, entityName);
-          } else {
-            next.delete(ENTITY_NAME_PARAM);
           }
           return next;
         },
@@ -187,9 +179,9 @@ export default function Logs() {
         prev => {
           const next = new URLSearchParams(prev);
           if (option) {
-            next.set(ROOT_ENTITY_TYPE_PARAM, option.entityType);
+            next.set(LOGS_ROOT_ENTITY_TYPE_PARAM, option.entityType);
           } else {
-            next.delete(ROOT_ENTITY_TYPE_PARAM);
+            next.delete(LOGS_ROOT_ENTITY_TYPE_PARAM);
           }
           return next;
         },
@@ -199,16 +191,30 @@ export default function Logs() {
     [setSearchParams],
   );
 
-  const handleRootEntityNameChange = useCallback(
-    (entityName?: string) => {
+  const handleLevelChange = useCallback(
+    (level?: LogLevel) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (entityName) {
-            next.set(ROOT_ENTITY_NAME_PARAM, entityName);
+          if (level) {
+            next.set(LOGS_LEVEL_PARAM, level);
           } else {
-            next.delete(ROOT_ENTITY_NAME_PARAM);
+            next.delete(LOGS_LEVEL_PARAM);
           }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleFilterTokensChange = useCallback(
+    (nextTokens: PropertyFilterToken[]) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          applyLogsPropertyFilterTokens(next, nextTokens);
           return next;
         },
         { replace: true },
@@ -218,30 +224,23 @@ export default function Logs() {
   );
 
   const hasActiveFilters =
-    searchQuery.length > 0 ||
-    filterGroups.length > 0 ||
-    datePreset !== '24h' ||
-    !!selectedEntityType ||
-    !!selectedEntityName ||
-    !!selectedRootEntityType ||
-    !!selectedRootEntityName;
+    datePreset !== '24h' || !!selectedRootEntityType || !!selectedLevel || filterTokens.length > 0;
 
   const handleReset = useCallback(() => {
-    setSearchQuery('');
-    clearAllFilters();
     setSearchParams(
       prev => {
         const next = new URLSearchParams(prev);
-        next.delete(PERIOD_PARAM);
-        next.delete(ENTITY_TYPE_PARAM);
-        next.delete(ENTITY_NAME_PARAM);
-        next.delete(ROOT_ENTITY_TYPE_PARAM);
-        next.delete(ROOT_ENTITY_NAME_PARAM);
+        next.delete(LOGS_PERIOD_PARAM);
+        next.delete(LOGS_ROOT_ENTITY_TYPE_PARAM);
+        next.delete(LOGS_LEVEL_PARAM);
+        for (const fieldId of LOGS_PROPERTY_FILTER_FIELD_IDS) {
+          next.delete(LOGS_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
+        }
         return next;
       },
       { replace: true },
     );
-  }, [clearAllFilters, setSearchParams, setSearchQuery]);
+  }, [setSearchParams]);
 
   if (logsError && is401UnauthorizedError(logsError)) {
     return (
@@ -293,27 +292,17 @@ export default function Logs() {
         </MainHeader>
 
         <LogsToolbar
-          onSearchChange={setSearchQuery}
           datePreset={datePreset}
-          onDatePresetChange={handleTimePeriodChange}
-          selectedEntityType={selectedEntityType}
-          entityTypeOptions={entityTypeOptions}
-          onEntityTypeChange={handleEntityTypeChange}
-          selectedEntityName={selectedEntityName}
-          entityNameOptions={entityNameOptions}
-          onEntityNameChange={handleEntityNameChange}
+          onDatePresetChange={handleDatePresetChange}
           selectedRootEntityType={selectedRootEntityType}
           rootEntityTypeOptions={[...ROOT_ENTITY_TYPE_OPTIONS]}
           onRootEntityTypeChange={handleRootEntityTypeChange}
-          selectedRootEntityName={selectedRootEntityName}
-          rootEntityNameOptions={rootEntityNameOptions}
-          onRootEntityNameChange={handleRootEntityNameChange}
-          filterGroups={filterGroups}
-          filterColumns={filterColumns}
-          onToggleComparator={toggleComparator}
-          onRemoveFilterGroup={removeFilterGroup}
-          onClearAllFilters={clearAllFilters}
-          onFilterGroupsChange={updateFilterGroups}
+          selectedLevel={selectedLevel}
+          onLevelChange={handleLevelChange}
+          filterFields={filterFields}
+          filterTokens={filterTokens}
+          onFilterTokensChange={handleFilterTokensChange}
+          loadSuggestions={loadSuggestions}
           onReset={handleReset}
           isLoading={isLoadingLogs}
           hasActiveFilters={hasActiveFilters}
@@ -321,7 +310,7 @@ export default function Logs() {
       </EntityListPageLayout.Top>
 
       <LogsList
-        logs={filteredLogs}
+        logs={logs}
         isLoading={isLoadingLogs}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}

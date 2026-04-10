@@ -1,5 +1,13 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
+export const LOG_LEVEL_OPTIONS = [
+  { label: 'Debug', value: 'debug' },
+  { label: 'Info', value: 'info' },
+  { label: 'Warn', value: 'warn' },
+  { label: 'Error', value: 'error' },
+  { label: 'Fatal', value: 'fatal' },
+] as const satisfies readonly { label: string; value: LogLevel }[];
+
 export interface LogRecord {
   timestamp: Date | string;
   level: LogLevel;

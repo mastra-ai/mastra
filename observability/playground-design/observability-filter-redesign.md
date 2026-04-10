@@ -118,8 +118,6 @@ These appear via the shared `Filter` property-token control:
 - `Service Name` -> `filters.serviceName`
 - `Environment` -> `filters.environment`
 - `Experiment ID` -> `filters.experimentId`
-- `Target Trace ID` -> `filters.metadata.targetTraceId`
-- `Target Span ID` -> `filters.metadata.targetSpanId`
 
 ### Fields intentionally not exposed in v1 traces UI
 
@@ -182,20 +180,6 @@ Top row:
 - `Service Name` -> `filters.serviceName`
 - `Environment` -> `filters.environment`
 - `Experiment ID` -> `filters.experimentId`
-- `Target Trace ID` -> `filters.metadata.targetTraceId`
-- `Target Span ID` -> `filters.metadata.targetSpanId`
-
-### Important backend note for logs
-
-As of this design, logs do not have first-class `targetTraceId` / `targetSpanId` filter fields in `logsFilterSchema`.
-
-Confirmed in:
-
-- [logs.ts](/Users/epinzur/src/github.com/mastra-ai/mastra/packages/_internal-core/src/storage/domains/observability/logs.ts)
-
-So in v1:
-
-- `Target Trace ID` and `Target Span ID` remain metadata-backed tokens for logs
 
 ## Property Filter UX
 
@@ -217,7 +201,9 @@ This control should implement tokenized fielded search / property filtering.
 ### v1 constraints
 
 - one active token per field
-- adding the same field again replaces the previous token
+- adding the same field again is invalid
+- the existing token stays unchanged
+- the user must remove the existing token before adding another
 - avoid query-language parsing in v1
 - avoid repeated same-field predicates in v1
 
@@ -235,7 +221,6 @@ Use plain text entry for:
 
 - all ID-like fields
 - most context fields
-- metadata-backed target IDs
 
 #### Special multi-value token entry
 
@@ -277,8 +262,10 @@ Working name:
 type PropertyFilterField = {
   id: string;
   label: string;
-  kind: 'text' | 'suggested-text';
+  kind: 'text' | 'multi-select';
   placeholder?: string;
+  options?: Array<{ label: string; value: string }>;
+  supportsSuggestions?: boolean;
 };
 
 type PropertyFilterToken = {
@@ -319,30 +306,16 @@ Persist as normal query params:
 
 Persist as one query param per supported field:
 
-- `traceId=...`
-- `threadId=...`
-- `entityName=...`
-- `rootEntityName=...`
-- `userId=...`
-- `organizationId=...`
+- `filterTraceId=...`
+- `filterThreadId=...`
+- `filterEntityName=...`
+- `filterRootEntityName=...` if needed
+- `filterUserId=...`
+- `filterOrganizationId=...`
 
 For `Tags`, persist as repeated query params or an equivalent stable multi-value encoding at the page layer, then map to `filters.tags: string[]`.
 
-### Metadata-backed target IDs
-
-Expose as explicit query params at page level:
-
-- `targetTraceId=...`
-- `targetSpanId=...`
-
-Then map those into:
-
-- `filters.metadata.targetTraceId`
-- `filters.metadata.targetSpanId`
-
-before calling storage/client APIs.
-
-This gives stable URLs without inventing a parser.
+For traces/observability specifically, prefixed filter params are preferable because unprefixed params like `traceId` and `spanId` are already used for selection and deep-link state.
 
 ## Suggestions and Discovery
 
@@ -408,15 +381,14 @@ Note:
    - `Log Level`
 3. Add logs property-token field registry
 4. Map tokens into `listLogs().filters`
-5. Map `target*Id` tokens through `filters.metadata`
 
 ### Phase 4: refinement
 
 1. Add lazy suggestions for:
    - `Root Entity Name`
    - `Entity Name`
-   - maybe `Service Name`
-   - maybe `Environment`
+   - `Service Name`
+   - `Environment`
 2. Polish control clear behavior so all dedicated controls match token removal semantics
 3. Evaluate whether any remaining promoted filters should be removed from UI entirely
 

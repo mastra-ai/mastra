@@ -1,11 +1,58 @@
 import fs from 'node:fs/promises';
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
+
+const require = createRequire(import.meta.url);
+const playgroundUiPath = path.resolve(__dirname, '../playground-ui');
+const resolvePackageRoot = (packageName: string, searchPaths: string[] = [playgroundUiPath]) => {
+  const resolvedEntry = require.resolve(packageName, { paths: searchPaths });
+  let packageRoot = path.dirname(resolvedEntry);
+
+  while (true) {
+    const packageJsonPath = path.join(packageRoot, 'package.json');
+    if (require('node:fs').existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(require('node:fs').readFileSync(packageJsonPath, 'utf8')) as { name?: string };
+
+      if (packageJson.name === packageName) {
+        return packageRoot;
+      }
+    }
+
+    const parent = path.dirname(packageRoot);
+
+    if (parent === packageRoot) {
+      throw new Error(`Could not find package.json for ${packageName}`);
+    }
+
+    packageRoot = parent;
+  }
+};
+
+const reactCodeMirrorRoot = resolvePackageRoot('@uiw/react-codemirror');
+
+const resolvePackageEntry = (
+  packageName: string,
+  entryField: 'module' | 'main',
+  searchPaths: string[] = [playgroundUiPath, reactCodeMirrorRoot],
+) => {
+  const packageRoot = resolvePackageRoot(packageName, searchPaths);
+  const packageJson = JSON.parse(require('node:fs').readFileSync(path.join(packageRoot, 'package.json'), 'utf8')) as {
+    module?: string;
+    main?: string;
+  };
+  const entryPath = packageJson[entryField];
+
+  if (!entryPath) {
+    throw new Error(`Package ${packageName} does not expose a ${entryField} entry`);
+  }
+
+  return path.resolve(packageRoot, entryPath);
+};
 
 const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginOption => ({
   name: 'studio-standalone-plugin',
@@ -216,6 +263,21 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        // Keep the UIW CodeMirror wrapper on its ESM entry so Rollup doesn't
+        // build a parallel CommonJS graph alongside our direct ESM imports.
+        '@codemirror/autocomplete': resolvePackageEntry('@codemirror/autocomplete', 'module'),
+        '@codemirror/commands': resolvePackageEntry('@codemirror/commands', 'module'),
+        '@codemirror/lang-javascript': resolvePackageEntry('@codemirror/lang-javascript', 'module'),
+        '@codemirror/lang-json': resolvePackageEntry('@codemirror/lang-json', 'module'),
+        '@codemirror/lang-markdown': resolvePackageEntry('@codemirror/lang-markdown', 'module'),
+        '@codemirror/language': resolvePackageEntry('@codemirror/language', 'module'),
+        '@codemirror/language-data': resolvePackageEntry('@codemirror/language-data', 'module'),
+        '@codemirror/merge': resolvePackageEntry('@codemirror/merge', 'module'),
+        '@codemirror/search': resolvePackageEntry('@codemirror/search', 'module'),
+        '@codemirror/state': resolvePackageEntry('@codemirror/state', 'module'),
+        '@codemirror/theme-one-dark': resolvePackageEntry('@codemirror/theme-one-dark', 'module'),
+        '@codemirror/view': resolvePackageEntry('@codemirror/view', 'module'),
+        '@uiw/react-codemirror': resolvePackageEntry('@uiw/react-codemirror', 'module'),
       },
     },
     build: {

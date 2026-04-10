@@ -1,17 +1,14 @@
-import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
+import type { EntityOptions, PropertyFilterOption, PropertyFilterToken, TraceDatePreset } from '@mastra/playground-ui';
 import {
   EntityListPageLayout,
   MainHeader,
   ButtonWithTooltip,
   TracesList,
   tracesListColumns,
-  TracesTools,
-  CONTEXT_FIELD_IDS,
   TraceDialog,
+  TracesToolbar,
   parseError,
   EntryListSkeleton,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
   groupTracesByThread,
   ROOT_ENTITY_TYPE_OPTIONS,
   useEntityNames,
@@ -23,51 +20,146 @@ import {
   SessionExpired,
   is403ForbiddenError,
   is401UnauthorizedError,
+  TRACE_STATUS_OPTIONS,
+  useMastraPackages,
 } from '@mastra/playground-ui';
-
 import { BookIcon, EyeIcon } from 'lucide-react';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
+import {
+  applyTracePropertyFilterTokens,
+  buildTraceListFilters,
+  createTracePropertyFilterFields,
+  getPreservedTraceFilterParams,
+  getTracePropertyFilterTokens,
+  TRACE_PROPERTY_FILTER_FIELD_IDS,
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
+  TRACE_ROOT_ENTITY_TYPE_PARAM,
+  TRACE_STATUS_PARAM,
+  TRACE_STATUS_VALUES,
+} from '@/domains/observability/trace-filters';
+
+const TRACE_ID_PARAM = 'traceId';
+const SPAN_ID_PARAM = 'spanId';
+const TAB_PARAM = 'tab';
+const SCORE_ID_PARAM = 'scoreId';
+const INITIAL_SUGGESTION_LIMIT = 5;
+const FILTERED_SUGGESTION_LIMIT = 20;
+
+function buildSelectionPath(params: URLSearchParams) {
+  const query = params.toString();
+  return query ? `/observability?${query}` : '/observability';
+}
+
+function setSelectionParam(params: URLSearchParams, key: string, value: string | null | undefined) {
+  if (value) {
+    params.set(key, value);
+  } else {
+    params.delete(key);
+  }
+}
 
 export default function Observability() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(
     () => new Date(Date.now() - 24 * 60 * 60 * 1000),
   );
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [groupByThread, setGroupByThread] = useState<boolean>(false);
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [errorOnly, setErrorOnly] = useState<boolean>(false);
-  const [selectedMetadata, setSelectedMetadata] = useState<Record<string, string>>({});
   const [datePreset, setDatePreset] = useState<TraceDatePreset>('last-24h');
-  const [contextFilters, setContextFilters] = useState<Record<string, string>>({});
+  const { data: systemPackages, isLoading: isLoadingSystemPackages } = useMastraPackages();
+
+  const selectedTraceId = searchParams.get(TRACE_ID_PARAM) || undefined;
+  const spanId = searchParams.get(SPAN_ID_PARAM) || undefined;
+  const tab = searchParams.get(TAB_PARAM) || undefined;
+  const scoreId = searchParams.get(SCORE_ID_PARAM) || undefined;
+
+  const selectedEntityOption = useMemo(
+    () => ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM)),
+    [searchParams],
+  );
+  const selectedStatus = useMemo(() => {
+    const value = searchParams.get(TRACE_STATUS_PARAM);
+    return value && TRACE_STATUS_VALUES.has(value as 'running' | 'success' | 'error') ? value : undefined;
+  }, [searchParams]);
+  const filterTokens = useMemo(() => getTracePropertyFilterTokens(searchParams), [searchParams]);
+  const supportsRealtimeStatus = systemPackages?.observabilityRuntimeStrategy === 'realtime';
+  const statusOptions = useMemo(
+    () =>
+      isLoadingSystemPackages || supportsRealtimeStatus
+        ? TRACE_STATUS_OPTIONS
+        : TRACE_STATUS_OPTIONS.filter(option => option.value !== 'running'),
+    [isLoadingSystemPackages, supportsRealtimeStatus],
+  );
+  const effectiveSelectedStatus = useMemo(
+    () =>
+      !isLoadingSystemPackages && !supportsRealtimeStatus && selectedStatus === 'running' ? undefined : selectedStatus,
+    [isLoadingSystemPackages, selectedStatus, supportsRealtimeStatus],
+  );
+
   const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
   const { data: availableTags = [] } = useTags();
-  const { data: discoveredEntityNames = [] } = useEntityNames({
+  const { data: rootEntityNameSuggestions = [] } = useEntityNames({
     entityType: selectedEntityOption?.entityType,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [] } = useEnvironments();
   const { data: discoveredServiceNames = [] } = useServiceNames();
+  const { data: trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
 
-  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const propertyFilterFields = useMemo(() => createTracePropertyFilterFields(availableTags), [availableTags]);
+  const entityOptions: EntityOptions[] = useMemo(() => [...ROOT_ENTITY_TYPE_OPTIONS], []);
 
-  const traceId = searchParams.get('traceId');
-  const spanId = searchParams.get('spanId');
-  const spanTab = searchParams.get('tab');
-  const scoreId = searchParams.get('scoreId');
+  const loadSuggestions = useCallback(
+    async (fieldId: string, query: string): Promise<PropertyFilterOption[]> => {
+      const normalizedQuery = query.trim().toLowerCase();
 
-  const metadataFilterObj = useMemo(() => {
-    if (Object.keys(selectedMetadata).length === 0) return undefined;
-    return selectedMetadata;
-  }, [selectedMetadata]);
+      const source =
+        fieldId === 'entityName'
+          ? rootEntityNameSuggestions
+          : fieldId === 'serviceName'
+            ? discoveredServiceNames
+            : fieldId === 'environment'
+              ? discoveredEnvironments
+              : [];
+
+      const values = normalizedQuery
+        ? source.filter(value => value.toLowerCase().includes(normalizedQuery)).slice(0, FILTERED_SUGGESTION_LIMIT)
+        : source.slice(0, INITIAL_SUGGESTION_LIMIT);
+
+      return values.map(value => ({ label: value, value }));
+    },
+    [discoveredEnvironments, discoveredServiceNames, rootEntityNameSuggestions],
+  );
+
+  const traceFilters = useMemo(
+    () =>
+      buildTraceListFilters({
+        rootEntityType: selectedEntityOption?.entityType,
+        status: effectiveSelectedStatus,
+        dateFrom: selectedDateFrom,
+        dateTo: selectedDateTo,
+        tokens: filterTokens,
+      }),
+    [effectiveSelectedStatus, filterTokens, selectedDateFrom, selectedDateTo, selectedEntityOption],
+  );
+
+  useEffect(() => {
+    if (isLoadingSystemPackages || supportsRealtimeStatus || selectedStatus !== 'running') {
+      return;
+    }
+
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete(TRACE_STATUS_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [isLoadingSystemPackages, selectedStatus, setSearchParams, supportsRealtimeStatus]);
 
   const {
     data: tracesData,
@@ -75,235 +167,179 @@ export default function Observability() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-    error: TracesError,
+    error: tracesError,
     isError: isTracesError,
   } = useTraces({
-    filters: {
-      ...(selectedEntityOption && {
-        entityType: selectedEntityOption.entityType,
-      }),
-      ...(selectedDateFrom && {
-        startedAt: {
-          start: selectedDateFrom,
-        },
-      }),
-      ...(selectedDateTo && {
-        endedAt: {
-          end: selectedDateTo,
-        },
-      }),
-      ...(selectedTags.length > 0 && { tags: selectedTags }),
-      ...(errorOnly && { status: 'error' }),
-      ...(metadataFilterObj && { metadata: metadataFilterObj }),
-      ...Object.fromEntries(Object.entries(contextFilters).filter(([, v]) => v.trim())),
-    },
+    filters: traceFilters,
   });
 
-  const allTraces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
-
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-  const traces = useMemo(() => {
-    if (!deferredSearchQuery.trim()) return allTraces;
-    const q = deferredSearchQuery.trim().toLowerCase();
-    return allTraces.filter(t => {
-      if (t.traceId?.toLowerCase().includes(q)) return true;
-      if (t.name?.toLowerCase().includes(q)) return true;
-      if (t.entityId?.toLowerCase().includes(q)) return true;
-      if (t.entityName?.toLowerCase().includes(q)) return true;
-      const meta = t.metadata;
-      if (meta && typeof meta === 'object') {
-        for (const val of Object.values(meta)) {
-          if (String(val).toLowerCase().includes(q)) return true;
-        }
-      }
-      return false;
-    });
-  }, [allTraces, deferredSearchQuery]);
+  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
   const threadTitles = tracesData?.threadTitles ?? {};
-
-  // Accumulate available metadata keys/values across all loaded trace batches.
-  // Values only grow (never shrink when filters narrow results) so pickers stay populated.
-  // Uses useRef + useMemo to avoid the extra render cycle that useEffect+useState causes.
-  const metadataAccRef = useRef<Record<string, Set<string>>>({});
-  const prevMetadataResultRef = useRef<Record<string, string[]>>({});
-
-  const availableMetadata = useMemo(() => {
-    let changed = false;
-    const acc = metadataAccRef.current;
-    for (const trace of allTraces) {
-      const meta = trace.metadata;
-      if (meta && typeof meta === 'object') {
-        for (const [key, value] of Object.entries(meta)) {
-          if (value == null) continue;
-          if (!acc[key]) {
-            acc[key] = new Set();
-            changed = true;
-          }
-          const str = String(value);
-          if (!acc[key].has(str)) {
-            acc[key].add(str);
-            changed = true;
-          }
-        }
-      }
-    }
-    if (!changed) return prevMetadataResultRef.current;
-    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
-    prevMetadataResultRef.current = result;
-    return result;
-  }, [allTraces]);
-
-  const contextAccRef = useRef<Record<string, Set<string>>>({});
-  const prevContextResultRef = useRef<Record<string, string[]>>({});
-
-  const availableContextValues = useMemo(() => {
-    let changed = false;
-    const acc = contextAccRef.current;
-    for (const trace of allTraces) {
-      for (const field of CONTEXT_FIELD_IDS) {
-        const value = trace[field];
-        if (value != null && typeof value === 'string' && value.trim()) {
-          if (!acc[field]) {
-            acc[field] = new Set();
-            changed = true;
-          }
-          if (!acc[field].has(value)) {
-            acc[field].add(value);
-            changed = true;
-          }
-        }
-      }
-    }
-    // Merge in discovery API results
-    for (const env of discoveredEnvironments) {
-      if (!acc['environment']) {
-        acc['environment'] = new Set();
-        changed = true;
-      }
-      if (!acc['environment'].has(env)) {
-        acc['environment'].add(env);
-        changed = true;
-      }
-    }
-    for (const sn of discoveredServiceNames) {
-      if (!acc['serviceName']) {
-        acc['serviceName'] = new Set();
-        changed = true;
-      }
-      if (!acc['serviceName'].has(sn)) {
-        acc['serviceName'].add(sn);
-        changed = true;
-      }
-    }
-    const entityNames = new Set<string>([
-      ...allTraces
-        .map(trace => trace.entityName)
-        .filter((value): value is string => typeof value === 'string' && value.trim()),
-      ...discoveredEntityNames,
-    ]);
-    if (!changed && entityNames.size === 0) return prevContextResultRef.current;
-    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
-    result['entityName'] = Array.from(entityNames).sort();
-    prevContextResultRef.current = result;
-    return result;
-  }, [allTraces, discoveredEntityNames, discoveredEnvironments, discoveredServiceNames]);
-
-  useEffect(() => {
-    if (traceId) {
-      if (traceId !== selectedTraceId) {
-        setSelectedTraceId(traceId);
-      }
-      setDialogIsOpen(true);
-      return;
-    }
-
-    if (selectedTraceId) {
-      setSelectedTraceId(undefined);
-    }
-
-    if (dialogIsOpen) {
-      setDialogIsOpen(false);
-    }
-  }, [dialogIsOpen, selectedTraceId, traceId]);
-
-  const entityOptions: EntityOptions[] = useMemo(() => [...ROOT_ENTITY_TYPE_OPTIONS], []);
-
-  // Sync URL entity to state
-  const entityName = searchParams.get('entity');
-  const matchedEntityOption = entityOptions.find(option => option.entityType === entityName);
-  if (matchedEntityOption?.entityType !== selectedEntityOption?.entityType) {
-    setSelectedEntityOption(matchedEntityOption);
-  } else if (!matchedEntityOption && selectedEntityOption) {
-    setSelectedEntityOption(undefined);
-  }
-
-  const handleReset = () => {
-    setSelectedTraceId(undefined);
-    setSearchParams({});
-    setSelectedEntityOption(undefined);
-    setDialogIsOpen(false);
-    setSelectedDateFrom(undefined);
-    setSelectedDateTo(undefined);
-    setGroupByThread(false);
-    setSearchQuery('');
-    setSelectedTags([]);
-    setErrorOnly(false);
-    setSelectedMetadata({});
-    setDatePreset('last-24h');
-    setContextFilters({});
-    metadataAccRef.current = {};
-    prevMetadataResultRef.current = {};
-    contextAccRef.current = {};
-    prevContextResultRef.current = {};
-  };
-
-  const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
-    if (type === 'from') {
-      return setSelectedDateFrom(value);
-    }
-
-    setSelectedDateTo(value);
-  };
-
-  const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    setSelectedEntityOption(option);
-    if (option) {
-      setSearchParams({ entity: option.entityType });
-    } else {
-      setSearchParams({});
-    }
-  };
-
-  const handleTraceClick = (id: string) => {
-    if (id === selectedTraceId) {
-      void navigate('/observability');
-      return;
-    }
-
-    void navigate(`/observability?traceId=${encodeURIComponent(id)}`);
-  };
-
-  const error = isTracesError ? parseError(TracesError) : undefined;
 
   const orderedTraceEntries = useMemo(() => {
     if (!groupByThread) {
       return traces.map(item => ({ id: item.traceId }));
     }
-    const { groups, ungrouped } = groupTracesByThread(traces);
-    const ordered: { id: string }[] = [];
-    for (const group of groups) {
-      for (const trace of group.traces) {
-        ordered.push({ id: trace.traceId });
-      }
-    }
-    for (const trace of ungrouped) {
-      ordered.push({ id: trace.traceId });
-    }
-    return ordered;
-  }, [traces, groupByThread]);
 
-  // 401 check - session expired, needs re-authentication
-  if (TracesError && is401UnauthorizedError(TracesError)) {
+    const { groups, ungrouped } = groupTracesByThread(traces);
+    return [
+      ...groups.flatMap(group => group.traces.map(trace => ({ id: trace.traceId }))),
+      ...ungrouped.map(trace => ({ id: trace.traceId })),
+    ];
+  }, [groupByThread, traces]);
+
+  const selectedTraceIndex = useMemo(
+    () => orderedTraceEntries.findIndex(entry => entry.id === selectedTraceId),
+    [orderedTraceEntries, selectedTraceId],
+  );
+
+  const buildTraceSelectionParams = useCallback(
+    (overrides?: { traceId?: string | null; spanId?: string | null; tab?: string | null; scoreId?: string | null }) => {
+      const params = getPreservedTraceFilterParams(searchParams);
+
+      setSelectionParam(params, TRACE_ID_PARAM, overrides?.traceId === undefined ? selectedTraceId : overrides.traceId);
+      setSelectionParam(params, SPAN_ID_PARAM, overrides?.spanId === undefined ? spanId : overrides.spanId);
+      setSelectionParam(params, TAB_PARAM, overrides?.tab === undefined ? tab : overrides.tab);
+      setSelectionParam(params, SCORE_ID_PARAM, overrides?.scoreId === undefined ? scoreId : overrides.scoreId);
+
+      return params;
+    },
+    [scoreId, searchParams, selectedTraceId, spanId, tab],
+  );
+
+  const handleTraceClick = useCallback(
+    (traceId: string) => {
+      const params =
+        traceId === selectedTraceId
+          ? getPreservedTraceFilterParams(searchParams)
+          : buildTraceSelectionParams({ traceId, spanId: null, tab: null, scoreId: null });
+
+      setSearchParams(params, { replace: true });
+    },
+    [buildTraceSelectionParams, searchParams, selectedTraceId, setSearchParams],
+  );
+
+  const handleSelectedEntityChange = useCallback(
+    (option: EntityOptions | undefined) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (option) {
+            next.set(TRACE_ROOT_ENTITY_TYPE_PARAM, option.entityType);
+          } else {
+            next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleStatusChange = useCallback(
+    (status?: 'running' | 'success' | 'error') => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (status) {
+            next.set(TRACE_STATUS_PARAM, status);
+          } else {
+            next.delete(TRACE_STATUS_PARAM);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleFilterTokensChange = useCallback(
+    (nextTokens: PropertyFilterToken[]) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          applyTracePropertyFilterTokens(next, nextTokens);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleReset = useCallback(() => {
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
+        next.delete(TRACE_STATUS_PARAM);
+        for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
+          next.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+    setSelectedDateFrom(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    setSelectedDateTo(undefined);
+    setDatePreset('last-24h');
+    setGroupByThread(false);
+  }, [setSearchParams]);
+
+  const handleDateChange = useCallback((value: Date | undefined, type: 'from' | 'to') => {
+    if (type === 'from') {
+      setSelectedDateFrom(value);
+      return;
+    }
+
+    setSelectedDateTo(value);
+  }, []);
+
+  const handleNextTrace = useCallback(() => {
+    if (selectedTraceIndex < 0 || selectedTraceIndex >= orderedTraceEntries.length - 1) return;
+
+    const nextTraceId = orderedTraceEntries[selectedTraceIndex + 1]?.id;
+    if (!nextTraceId) return;
+
+    setSearchParams(buildTraceSelectionParams({ traceId: nextTraceId, spanId: null, tab: null, scoreId: null }), {
+      replace: true,
+    });
+  }, [buildTraceSelectionParams, orderedTraceEntries, selectedTraceIndex, setSearchParams]);
+
+  const handlePreviousTrace = useCallback(() => {
+    if (selectedTraceIndex <= 0) return;
+
+    const previousTraceId = orderedTraceEntries[selectedTraceIndex - 1]?.id;
+    if (!previousTraceId) return;
+
+    setSearchParams(buildTraceSelectionParams({ traceId: previousTraceId, spanId: null, tab: null, scoreId: null }), {
+      replace: true,
+    });
+  }, [buildTraceSelectionParams, orderedTraceEntries, selectedTraceIndex, setSearchParams]);
+
+  const computeTraceLink = useCallback(
+    (traceId: string, spanId?: string, tab?: string) => {
+      const params = getPreservedTraceFilterParams(searchParams);
+      setSelectionParam(params, TRACE_ID_PARAM, traceId);
+      setSelectionParam(params, SPAN_ID_PARAM, spanId ?? null);
+      setSelectionParam(params, TAB_PARAM, tab ?? null);
+      params.delete(SCORE_ID_PARAM);
+      return buildSelectionPath(params);
+    },
+    [searchParams],
+  );
+
+  const error = isTracesError ? parseError(tracesError) : undefined;
+  const filtersApplied =
+    !!selectedEntityOption ||
+    !!selectedStatus ||
+    filterTokens.length > 0 ||
+    datePreset !== 'last-24h' ||
+    !!selectedDateTo;
+
+  if (tracesError && is401UnauthorizedError(tracesError)) {
     return (
       <EntityListPageLayout>
         <EntityListPageLayout.Top>
@@ -335,8 +371,7 @@ export default function Observability() {
     );
   }
 
-  // 403 check - permission denied for traces
-  if (TracesError && is403ForbiddenError(TracesError)) {
+  if (tracesError && is403ForbiddenError(tracesError)) {
     return (
       <EntityListPageLayout>
         <EntityListPageLayout.Top>
@@ -368,27 +403,6 @@ export default function Observability() {
     );
   }
 
-  const filtersApplied =
-    !!selectedEntityOption ||
-    selectedDateFrom ||
-    selectedDateTo ||
-    searchQuery.trim() ||
-    selectedTags.length > 0 ||
-    errorOnly ||
-    Object.keys(selectedMetadata).length > 0 ||
-    Object.values(contextFilters).some(v => v.trim());
-
-  const toNextTrace = getToNextEntryFn({
-    entries: orderedTraceEntries,
-    id: selectedTraceId,
-    update: setSelectedTraceId,
-  });
-  const toPreviousTrace = getToPreviousEntryFn({
-    entries: orderedTraceEntries,
-    id: selectedTraceId,
-    update: setSelectedTraceId,
-  });
-
   return (
     <>
       <EntityListPageLayout className="grid-rows-[auto_1fr] overflow-y-auto">
@@ -414,32 +428,26 @@ export default function Observability() {
             </MainHeader.Column>
           </MainHeader>
 
-          <TracesTools
+          <TracesToolbar
             onEntityChange={handleSelectedEntityChange}
             onReset={handleReset}
             selectedEntity={selectedEntityOption}
             entityOptions={entityOptions}
-            onDateChange={handleDataChange}
+            selectedStatus={effectiveSelectedStatus}
+            statusOptions={statusOptions}
+            onStatusChange={handleStatusChange}
+            onDateChange={handleDateChange}
             selectedDateFrom={selectedDateFrom}
             selectedDateTo={selectedDateTo}
             isLoading={isTracesLoading}
             groupByThread={groupByThread}
             onGroupByThreadChange={setGroupByThread}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedTags={selectedTags}
-            availableTags={availableTags}
-            onTagsChange={setSelectedTags}
-            errorOnly={errorOnly}
-            onErrorOnlyChange={setErrorOnly}
-            selectedMetadata={selectedMetadata}
-            availableMetadata={availableMetadata}
-            onMetadataChange={setSelectedMetadata}
             datePreset={datePreset}
             onDatePresetChange={setDatePreset}
-            contextFilters={contextFilters}
-            availableContextValues={availableContextValues}
-            onContextFiltersChange={setContextFilters}
+            filterFields={propertyFilterFields}
+            filterTokens={filterTokens}
+            onFilterTokensChange={handleFilterTokensChange}
+            loadSuggestions={loadSuggestions}
           />
         </EntityListPageLayout.Top>
 
@@ -460,22 +468,22 @@ export default function Observability() {
           />
         )}
       </EntityListPageLayout>
+
       <TraceDialog
-        traceSpans={Trace?.spans}
+        traceSpans={trace?.spans}
         traceId={selectedTraceId}
-        initialSpanId={spanId || undefined}
-        initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
-        initialScoreId={scoreId || undefined}
-        traceDetails={traces.find(t => t.traceId === selectedTraceId)}
-        isOpen={dialogIsOpen}
+        initialSpanId={spanId}
+        initialSpanTab={tab === 'scores' ? 'scores' : 'details'}
+        initialScoreId={scoreId}
+        traceDetails={traces.find(item => item.traceId === selectedTraceId)}
+        isOpen={!!selectedTraceId}
         onClose={() => {
-          void navigate(`/observability`);
-          setDialogIsOpen(false);
+          setSearchParams(getPreservedTraceFilterParams(searchParams), { replace: true });
         }}
-        onNext={toNextTrace}
-        onPrevious={toPreviousTrace}
+        onNext={handleNextTrace}
+        onPrevious={handlePreviousTrace}
         isLoadingSpans={isLoadingTrace}
-        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
+        computeTraceLink={computeTraceLink}
         scorers={scorers}
         isLoadingScorers={isLoadingScorers}
       />

@@ -227,7 +227,7 @@ export function LogsList({
           </LogsDataList.Top>
 
           {logs.length === 0 ? (
-            <LogsDataList.NoMatch message="No logs match your search" />
+            <LogsDataList.NoMatch message={hasActiveFilters ? 'No logs match your filters' : 'No logs yet'} />
           ) : (
             logs.map(log => {
               const id = logIdMap.get(log)!;
