@@ -900,7 +900,7 @@ describe('Observability Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
-        score: expect.objectContaining({ ...scoreData, timestamp: expect.any(Date) }),
+        score: expect.objectContaining({ ...scoreData, scoreId: expect.any(String), timestamp: expect.any(Date) }),
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
@@ -1074,7 +1074,11 @@ describe('Observability Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
-        feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
+        feedback: expect.objectContaining({
+          ...feedbackData,
+          feedbackId: expect.any(String),
+          timestamp: expect.any(Date),
+        }),
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
