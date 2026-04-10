@@ -570,4 +570,3 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
     </div>
   );
 }
-

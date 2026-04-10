@@ -7,14 +7,5 @@ export interface PageHeaderRootProps {
 }
 
 export function PageHeaderRoot({ children, className }: PageHeaderRootProps) {
-  return (
-    <header
-      className={cn(
-        'w-full grid',
-        className,
-      )}
-    >
-      {children}
-    </header>
-  );
+  return <header className={cn('w-full grid', className)}>{children}</header>;
 }
