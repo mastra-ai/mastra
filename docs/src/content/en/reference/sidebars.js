@@ -310,7 +310,10 @@ const sidebars = {
             {
               type: 'category',
               label: 'Bridges',
-              items: [{ type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' }],
+              items: [
+                { type: 'doc', id: 'observability/tracing/bridges/datadog', label: 'DatadogBridge' },
+                { type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' },
+              ],
             },
             {
               type: 'category',
