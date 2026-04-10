@@ -2453,7 +2453,8 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'kimi-k2.5',
     'minimax-m2-5',
-    'zai-glm-5',
+    'qwen-3-6-plus',
+    'zai-glm-5-1',
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
@@ -3559,10 +3560,11 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-1',
     'essentialai/Rnj-1-Instruct',
+    'google/gemma-4-31B-it',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'moonshotai/Kimi-K2.5',
     'openai/gpt-oss-120b',
-    'zai-org/GLM-5',
+    'zai-org/GLM-5.1',
   ];
   readonly 'qihang-ai': readonly [
     'claude-haiku-4-5-20251001',
