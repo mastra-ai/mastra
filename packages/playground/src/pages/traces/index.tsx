@@ -1,8 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import type { EntityOptions, TraceDatePreset, SpanTab } from '@mastra/playground-ui';
 import {
-  EntityListPageLayout,
-  MainHeader,
   TracesToolbar,
   ButtonWithTooltip,
   CONTEXT_FIELD_IDS,
@@ -13,8 +11,12 @@ import {
   useTags,
   useEnvironments,
   useServiceNames,
+  NoDataPageLayout,
+  PageLayout,
+  PageHeader,
   PermissionDenied,
   SessionExpired,
+  ErrorState,
   is403ForbiddenError,
   is401UnauthorizedError,
 } from '@mastra/playground-ui';
@@ -340,40 +342,26 @@ export default function Traces() {
   // 401 check - session expired
   if (TracesError && is401UnauthorizedError(TracesError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <EyeIcon /> Traces
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
     );
   }
 
   // 403 check
   if (TracesError && is403ForbiddenError(TracesError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <EyeIcon /> Traces
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="traces" />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <PermissionDenied resource="traces" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (TracesError) {
+    return (
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <ErrorState title="Failed to load traces" message={error?.error ?? 'Unknown error'} />
+      </NoDataPageLayout>
     );
   }
 
@@ -388,15 +376,17 @@ export default function Traces() {
     Object.values(contextFilters).some(v => v.trim());
 
   return (
-    <EntityListPageLayout className="max-w-none">
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title isLoading={isTracesLoading}>
-              <EyeIcon /> Traces
-            </MainHeader.Title>
-          </MainHeader.Column>
-          <MainHeader.Column className="flex justify-end gap-2">
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isTracesLoading}>
+                <EyeIcon /> Traces
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
             <ButtonWithTooltip
               as="a"
               href="https://mastra.ai/en/docs/observability/tracing/overview"
@@ -407,8 +397,8 @@ export default function Traces() {
             >
               <BookIcon />
             </ButtonWithTooltip>
-          </MainHeader.Column>
-        </MainHeader>
+          </PageLayout.Column>
+        </PageLayout.Row>
 
         <TracesToolbar
           onEntityChange={handleSelectedEntityChange}
@@ -437,7 +427,7 @@ export default function Traces() {
           availableContextValues={availableContextValues}
           onContextFiltersChange={setContextFilters}
         />
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
       <ObservabilityTracesList
         traces={traces}
@@ -445,7 +435,6 @@ export default function Traces() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
-        error={error?.error}
         filtersApplied={Boolean(filtersApplied)}
         selectedTraceId={traceIdParam}
         initialSpanId={spanIdParam}
@@ -458,6 +447,6 @@ export default function Traces() {
         groupByThread={groupByThread}
         threadTitles={threadTitles}
       />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

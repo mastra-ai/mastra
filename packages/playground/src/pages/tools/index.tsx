@@ -2,9 +2,16 @@ import {
   ToolsIcon,
   ButtonWithTooltip,
   ToolsList,
+  NoToolsInfo,
   ListSearch,
-  MainHeader,
-  EntityListPageLayout,
+  NoDataPageLayout,
+  PageLayout,
+  PageHeader,
+  PermissionDenied,
+  SessionExpired,
+  ErrorState,
+  is401UnauthorizedError,
+  is403ForbiddenError,
   useAgents,
   useTools,
 } from '@mastra/playground-ui';
@@ -12,22 +19,57 @@ import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Tools() {
-  const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
+  const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
 
   const isLoading = isLoadingAgents || isLoadingTools;
+  const error = toolsError || agentsError;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <PermissionDenied resource="tools" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <ErrorState title="Failed to load tools" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(tools).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <NoToolsInfo />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <EntityListPageLayout>
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title isLoading={isLoading}>
-              <ToolsIcon /> Tools
-            </MainHeader.Title>
-          </MainHeader.Column>
-          <MainHeader.Column className="flex justify-end gap-2">
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <ToolsIcon /> Tools
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
             <ButtonWithTooltip
               as="a"
               href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
@@ -37,21 +79,14 @@ export default function Tools() {
             >
               <BookIcon />
             </ButtonWithTooltip>
-          </MainHeader.Column>
-        </MainHeader>
+          </PageLayout.Column>
+        </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
         </div>
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
-      <ToolsList
-        tools={tools}
-        agents={agentsRecord}
-        isLoading={isLoading}
-        error={error}
-        search={search}
-        onSearch={setSearch}
-      />
-    </EntityListPageLayout>
+      <ToolsList tools={tools} agents={agentsRecord} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }
