@@ -2,10 +2,8 @@ import type { SpanRecord } from '@mastra/core/storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LogRecord } from '../types';
 import { LogDetails } from './log-details';
-import { NoLogsInfo } from './no-logs-info';
 import { SpanDetails } from './span-details';
 import { TraceDetails } from './trace-details';
-import { ErrorState } from '@/ds/components/ErrorState';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 import { cn } from '@/lib/utils';
 
@@ -44,8 +42,6 @@ export interface LogsListProps {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
-  error?: Error | null;
-  hasActiveFilters?: boolean;
   featuredLogId?: string | null;
   featuredTraceId?: string | null;
   featuredSpanId?: string | null;
@@ -58,8 +54,6 @@ export function LogsList({
   isFetchingNextPage,
   hasNextPage,
   setEndOfListElement,
-  error,
-  hasActiveFilters,
   featuredLogId: controlledLogId,
   featuredTraceId: controlledTraceId,
   featuredSpanId: controlledSpanId,
@@ -197,14 +191,6 @@ export function LogsList({
     updateFeatured({ logId: null });
   }, [updateFeatured]);
 
-  if (error) {
-    return <ErrorState title="Failed to load logs" message={error.message} />;
-  }
-
-  if (logs.length === 0 && !isLoading && !hasActiveFilters) {
-    return <NoLogsInfo />;
-  }
-
   if (isLoading) {
     return <LogsDataListSkeleton columns={COLUMNS} />;
   }
@@ -213,7 +199,7 @@ export function LogsList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="h-full overflow-auto">
         <LogsDataList columns={COLUMNS} className="min-w-0">

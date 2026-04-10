@@ -1,12 +1,9 @@
 import {
   useStudioConfig,
   StudioConfigForm,
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  Icon,
+  PageLayout,
+  PageHeader,
   SettingsIcon,
-  MainContentContent,
   SelectField,
   usePlaygroundStore,
 } from '@mastra/playground-ui';
@@ -30,42 +27,40 @@ export const StudioSettingsPage = () => {
   }, [theme]);
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <SettingsIcon />
-          </Icon>
-          Settings
-        </HeaderTitle>
-      </Header>
-      <MainContentContent>
-        <div className="max-w-2xl mx-auto w-full mt-8 space-y-8">
-          <section className="rounded-lg border border-border1 bg-surface3 p-4">
-            <div className="space-y-3">
-              <h2 className="text-icon6 font-medium">Theme</h2>
-              <SelectField
-                name="theme"
-                label="Theme mode"
-                value={selectedTheme}
-                onValueChange={value => {
-                  const nextTheme = value as 'dark' | 'light' | 'system';
-                  selectedThemeRef.current = nextTheme;
-                  setSelectedTheme(nextTheme);
-                }}
-                options={THEME_OPTIONS.map(option => ({ ...option }))}
-              />
-            </div>
-          </section>
+    <PageLayout width="narrow">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <SettingsIcon /> Settings
+          </PageHeader.Title>
+        </PageHeader>
+      </PageLayout.TopArea>
 
-          <StudioConfigForm
-            initialConfig={{ baseUrl, headers, apiPrefix }}
-            onSave={() => {
-              setTheme(selectedThemeRef.current);
-            }}
-          />
-        </div>
-      </MainContentContent>
-    </MainContentLayout>
+      <PageLayout.MainArea className="grid gap-8 mt-6">
+        <section className="rounded-lg border border-border1 bg-surface3 p-4">
+          <div className="space-y-3">
+            <h2 className="text-icon6 font-medium">Theme</h2>
+            <SelectField
+              name="theme"
+              label="Theme mode"
+              value={selectedTheme}
+              onValueChange={value => {
+                const nextTheme = value as 'dark' | 'light' | 'system';
+                selectedThemeRef.current = nextTheme;
+                setSelectedTheme(nextTheme);
+              }}
+              options={THEME_OPTIONS.map(option => ({ ...option }))}
+            />
+          </div>
+        </section>
+
+        <StudioConfigForm
+          initialConfig={{ baseUrl, headers, apiPrefix }}
+          onSave={() => {
+            setTheme(selectedThemeRef.current);
+          }}
+        />
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 };
